@@ -33,10 +33,12 @@ import {
   getListInvitationsQueryKey,
   useGetComplianceScorecard,
   getGetComplianceScorecardQueryKey,
+  type ClientRisk,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -81,6 +83,7 @@ import {
   TrendingDown,
   Minus,
   X,
+  Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -91,6 +94,14 @@ import {
   riskLabel,
 } from "@/lib/format";
 import { usePageTitle } from "@/hooks/use-page-title";
+import {
+  Metric,
+  MetricStrip,
+  SegmentedControl,
+  WorkQueue,
+  WorkspaceHeader,
+  type WorkQueueItem,
+} from "@workspace/web-ui";
 
 // Receivables amounts arrive as decimal strings. NGN rows use the shared
 // naira formatter; anything else gets a plain grouped number plus its
@@ -224,7 +235,12 @@ export function gettingStartedSteps(input: {
       kind: "step",
       done: input.hasClientInvite,
     },
-    { id: "consent", label: "Client grants consent", kind: "info", done: false },
+    {
+      id: "consent",
+      label: "Client grants consent",
+      kind: "info",
+      done: false,
+    },
     {
       id: "first-invoice",
       label: "Create the first invoice",
@@ -514,7 +530,10 @@ function CoverNotePanel({
 }) {
   const { toast } = useToast();
   return (
-    <div className="rounded-md border p-3 space-y-2" data-testid={testIds.panel}>
+    <div
+      className="rounded-md border p-3 space-y-2"
+      data-testid={testIds.panel}
+    >
       <p className="text-xs font-medium text-muted-foreground">
         Cover note for {periodLabel} —{" "}
         {source === "clerk"
@@ -640,7 +659,10 @@ function VatPackCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         {pack.rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-vat-pack-empty">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-vat-pack-empty"
+          >
             No invoices were accepted by the rails in {pack.monthLabel}.
           </p>
         ) : (
@@ -651,14 +673,19 @@ function VatPackCard() {
                   <th className="py-2 pr-3 font-medium">Client</th>
                   <th className="py-2 pr-3 font-medium text-right">Accepted</th>
                   <th className="py-2 pr-3 font-medium text-right">Total</th>
-                  <th className="py-2 pr-3 font-medium text-right">Output VAT</th>
+                  <th className="py-2 pr-3 font-medium text-right">
+                    Output VAT
+                  </th>
                   <th className="py-2 pr-3 font-medium text-right">Credits</th>
                   <th className="py-2 font-medium text-right">Net VAT</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {pack.rows.map((r) => (
-                  <tr key={r.clientPartyId} data-testid={`row-vat-${r.clientPartyId}`}>
+                  <tr
+                    key={r.clientPartyId}
+                    data-testid={`row-vat-${r.clientPartyId}`}
+                  >
                     <td className="py-2 pr-3">{r.clientName}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {r.acceptedCount}
@@ -745,7 +772,10 @@ function VatPositionCard() {
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
           <span>Net VAT position — {position.monthLabel}</span>
-          <Select value={position.monthStart} onValueChange={(m) => setMonth(m)}>
+          <Select
+            value={position.monthStart}
+            onValueChange={(m) => setMonth(m)}
+          >
             <SelectTrigger
               className="h-8 w-44 text-xs"
               data-testid="select-vat-position-month"
@@ -790,7 +820,10 @@ function VatPositionCard() {
         </div>
         {position.unverified.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="table-vat-unverified-bills">
+            <table
+              className="w-full text-sm"
+              data-testid="table-vat-unverified-bills"
+            >
               <thead>
                 <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                   <th className="py-2 pr-3 font-medium">Bill</th>
@@ -877,7 +910,9 @@ function VatSettlementCard() {
               <StatTile
                 label="Settlement observed"
                 value={
-                  check.settledShare != null ? formatPct(check.settledShare) : "—"
+                  check.settledShare != null
+                    ? formatPct(check.settledShare)
+                    : "—"
                 }
                 detail={`${check.settledCount} · ${formatNaira(check.settledTotal)}`}
                 testId="tile-settlement-observed"
@@ -897,7 +932,10 @@ function VatSettlementCard() {
             </div>
             {check.unsettled.length > 0 && (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-vat-unsettled">
+                <table
+                  className="w-full text-sm"
+                  data-testid="table-vat-unsettled"
+                >
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                       <th className="py-2 pr-3 font-medium">Invoice</th>
@@ -909,7 +947,10 @@ function VatSettlementCard() {
                   </thead>
                   <tbody className="divide-y">
                     {check.unsettled.map((r) => (
-                      <tr key={r.invoiceId} data-testid={`row-unsettled-${r.invoiceId}`}>
+                      <tr
+                        key={r.invoiceId}
+                        data-testid={`row-unsettled-${r.invoiceId}`}
+                      >
                         <td className="py-2 pr-3">{r.invoiceNumber}</td>
                         <td className="py-2 pr-3">{r.clientName}</td>
                         <td className="py-2 pr-3">{r.buyerName}</td>
@@ -1011,7 +1052,10 @@ function QuarterlyReviewCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-quarterly-months">
+          <table
+            className="w-full text-sm"
+            data-testid="table-quarterly-months"
+          >
             <thead>
               <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">Month</th>
@@ -1032,7 +1076,9 @@ function QuarterlyReviewCard() {
                     {formatNaira(m.acceptedVat)}
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">
-                    {Number(m.creditVat) > 0 ? `−${formatNaira(m.creditVat)}` : "—"}
+                    {Number(m.creditVat) > 0
+                      ? `−${formatNaira(m.creditVat)}`
+                      : "—"}
                   </td>
                   <td className="py-2 text-right tabular-nums font-medium">
                     {formatNaira(m.netVat)}
@@ -1243,7 +1289,10 @@ function ComplianceScorecardCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-compliance-scorecard">
+          <table
+            className="w-full text-sm"
+            data-testid="table-compliance-scorecard"
+          >
             <thead>
               <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">Client</th>
@@ -1253,7 +1302,9 @@ function ComplianceScorecardCard() {
                 <th className="py-2 pr-3 font-medium text-right">
                   Days to stamp
                 </th>
-                <th className="py-2 pr-3 font-medium text-right">Overdue now</th>
+                <th className="py-2 pr-3 font-medium text-right">
+                  Overdue now
+                </th>
                 <th className="py-2 font-medium text-right">
                   Unverified bills
                 </th>
@@ -1334,8 +1385,8 @@ function ClerkAdoptionCard() {
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Last {report.windowDays} days: {report.totals.extractionCases}{" "}
-          documents read, {report.totals.approvedCases} approved into invoices
-          ({formatPct(report.totals.approvedShare)});{" "}
+          documents read, {report.totals.approvedCases} approved into invoices (
+          {formatPct(report.totals.approvedShare)});{" "}
           {formatPct(report.totals.keptRate)} of extracted fields kept
           unchanged. Computed from your own cases — no AI involved.
         </p>
@@ -1423,7 +1474,10 @@ function RejectionPatternsCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-rejection-patterns">
+          <table
+            className="w-full text-sm"
+            data-testid="table-rejection-patterns"
+          >
             <thead>
               <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">Code</th>
@@ -1437,7 +1491,10 @@ function RejectionPatternsCard() {
             </thead>
             <tbody className="divide-y">
               {report.rows.slice(0, 8).map((r) => (
-                <tr key={r.errorCode} data-testid={`row-rejection-${r.errorCode}`}>
+                <tr
+                  key={r.errorCode}
+                  data-testid={`row-rejection-${r.errorCode}`}
+                >
                   <td className="py-2 pr-3">
                     <span className="font-mono text-xs">{r.errorCode}</span>
                     {r.category && (
@@ -1446,7 +1503,9 @@ function RejectionPatternsCard() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{r.count}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {r.count}
+                  </td>
                   <td className="py-2 pr-3 text-right">
                     {trend(r.count, r.previousCount)}
                   </td>
@@ -1454,7 +1513,8 @@ function RejectionPatternsCard() {
                     {r.clientCount}
                   </td>
                   <td className="py-2 text-xs text-muted-foreground max-w-[22rem]">
-                    {r.fix ?? "Not in the catalogue yet — draft an entry from the catalogue page."}
+                    {r.fix ??
+                      "Not in the catalogue yet — draft an entry from the catalogue page."}
                   </td>
                 </tr>
               ))}
@@ -1475,7 +1535,7 @@ function RejectionPatternsCard() {
 // Firm-level receivables: one row per client per currency, worst-first from
 // the API. Loads independently of the portfolio query so a failure here
 // never blanks the risk view above it.
-function ReceivablesCard() {
+export function ReceivablesCard() {
   const { data, isLoading, error, refetch } = useGetFirmReceivables({
     query: { queryKey: getGetFirmReceivablesQueryKey() },
   });
@@ -1625,6 +1685,182 @@ export function PortfolioSkeleton() {
   );
 }
 
+type PortfolioView =
+  | "today"
+  | "clients"
+  | "money"
+  | "compliance"
+  | "automation"
+  | "connections";
+type ClientRiskFilter = "all" | "high" | "medium" | "low";
+type ClientSort = "risk" | "name" | "unsubmitted" | "deadline";
+
+function ClientWorkbenchTable({
+  clients,
+  totalClients,
+  search,
+  onSearchChange,
+  risk,
+  onRiskChange,
+  sort,
+  onSortChange,
+  compact = false,
+}: {
+  clients: ClientRisk[];
+  totalClients: number;
+  search: string;
+  onSearchChange: (value: string) => void;
+  risk: ClientRiskFilter;
+  onRiskChange: (value: ClientRiskFilter) => void;
+  sort: ClientSort;
+  onSortChange: (value: ClientSort) => void;
+  compact?: boolean;
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-sm font-extrabold text-slate-950">
+            {compact ? "Clients needing attention" : "Client book"}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Showing {clients.length} of {totalClients} clients
+          </p>
+        </div>
+        {!compact && (
+          <div className="grid gap-2 sm:grid-cols-[minmax(14rem,1fr)_10rem_11rem]">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                value={search}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder="Search clients"
+                className="h-9 pl-9"
+                aria-label="Search clients"
+              />
+            </div>
+            <Select value={risk} onValueChange={onRiskChange}>
+              <SelectTrigger className="h-9" aria-label="Filter by risk">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All risk levels</SelectItem>
+                <SelectItem value="high">High risk</SelectItem>
+                <SelectItem value="medium">Medium risk</SelectItem>
+                <SelectItem value="low">Low risk</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sort} onValueChange={onSortChange}>
+              <SelectTrigger className="h-9" aria-label="Sort clients">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="risk">Risk first</SelectItem>
+                <SelectItem value="deadline">Next deadline</SelectItem>
+                <SelectItem value="unsubmitted">Unsubmitted value</SelectItem>
+                <SelectItem value="name">Client name</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+      {clients.length === 0 ? (
+        <div className="px-4 py-12 text-center">
+          <p className="text-sm font-bold text-slate-900">
+            No matching clients
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Change the search or risk filter to widen the client book.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
+            <thead className="bg-slate-50 text-[11px] font-bold text-slate-500">
+              <tr>
+                <th className="px-4 py-2.5">Client</th>
+                <th className="px-3 py-2.5">Risk</th>
+                <th className="px-3 py-2.5 text-right">Unsubmitted</th>
+                <th className="px-3 py-2.5 text-right">Failed</th>
+                <th className="px-3 py-2.5 text-right">Pending</th>
+                <th className="px-3 py-2.5">Next deadline</th>
+                <th className="w-24 px-4 py-2.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {clients.map((client) => (
+                <tr
+                  key={client.clientPartyId}
+                  className="transition-colors hover:bg-teal-50/40"
+                  data-testid={`row-client-${client.clientPartyId}`}
+                >
+                  <td className="px-4 py-3">
+                    <p className="max-w-64 truncate font-bold text-slate-950">
+                      {client.legalName}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {client.totalInvoices} invoice
+                      {client.totalInvoices === 1 ? "" : "s"}
+                    </p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className={riskBadgeClasses(client.penaltyRisk)}>
+                      {riskLabel(client.penaltyRisk)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    <p className="font-semibold text-slate-900">
+                      {formatMoney(client.unsubmittedValue, "NGN")}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {client.unsubmittedCount} item
+                      {client.unsubmittedCount === 1 ? "" : "s"}
+                    </p>
+                  </td>
+                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-700">
+                    {client.failedCount}
+                  </td>
+                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-700">
+                    {client.pendingCount}
+                  </td>
+                  <td className="px-3 py-3">
+                    {client.nextDeadline ? (
+                      <>
+                        <p className="max-w-56 truncate font-medium text-slate-800">
+                          {client.nextDeadline.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {formatDate(client.nextDeadline.dueDate)}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400">
+                        No deadline
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={`/clients/${client.clientPartyId}`}>
+                        Open
+                        <ChevronRight className="size-4" aria-hidden="true" />
+                      </Link>
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PortfolioHeader({
   description,
   canImport,
@@ -1635,51 +1871,46 @@ function PortfolioHeader({
   onAddClient: () => void;
 }) {
   return (
-    <div className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
-      <div className="min-w-0">
-        <p className="text-[11px] font-extrabold uppercase text-teal-700">
-          Firm overview
-        </p>
-        <h1
-          className="mt-2 text-2xl font-extrabold text-slate-950 md:text-3xl dark:text-foreground"
-          data-testid="text-page-title"
-        >
-          Client portfolio
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-wrap gap-2">
-        <Button variant="outline" asChild>
-          <Link href="/pipeline">
-            <GitBranch className="size-4" aria-hidden="true" />
-            Onboarding
-          </Link>
-        </Button>
-        <Button
-          variant="outline"
-          onClick={onAddClient}
-          data-testid="button-add-client"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          Add client
-        </Button>
-        {canImport && (
-          <Button asChild>
-            <Link href="/clients/import">
-              <Upload className="size-4" aria-hidden="true" />
-              Import clients
+    <WorkspaceHeader
+      eyebrow="Firm command centre"
+      title="Client portfolio"
+      description={description}
+      actions={
+        <>
+          <Button variant="outline" asChild>
+            <Link href="/pipeline">
+              <GitBranch className="size-4" aria-hidden="true" />
+              Onboarding
             </Link>
           </Button>
-        )}
-      </div>
-    </div>
+          <Button
+            variant="outline"
+            onClick={onAddClient}
+            data-testid="button-add-client"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            Add client
+          </Button>
+          {canImport && (
+            <Button asChild>
+              <Link href="/clients/import">
+                <Upload className="size-4" aria-hidden="true" />
+                Import clients
+              </Link>
+            </Button>
+          )}
+        </>
+      }
+    />
   );
 }
 
 export function Portfolio() {
   usePageTitle("Client portfolio");
+  const [view, setView] = useState<PortfolioView>("today");
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientRisk, setClientRisk] = useState<ClientRiskFilter>("all");
+  const [clientSort, setClientSort] = useState<ClientSort>("risk");
   const { data: me } = useGetMe();
   const { data, isLoading, error, refetch } = useGetPortfolio();
   const canImport = (me?.capabilities ?? []).includes("clients.import");
@@ -1777,11 +2008,6 @@ export function Portfolio() {
     // The staff-prefs card renders for firm members (including its inline
     // error state), and only for them — mirror its role gate.
     isFirmMemberRole(me?.role);
-  const groups = visiblePortfolioGroups({
-    compliance: complianceOccupied,
-    connections: connectionsOccupied,
-  });
-
   // Checklist inputs, computed from data already on the page (portfolio
   // counts + the invitations list above).
   const steps = gettingStartedSteps({
@@ -1828,6 +2054,121 @@ export function Portfolio() {
     const order = { high: 0, medium: 1, low: 2 } as const;
     return order[a.penaltyRisk] - order[b.penaltyRisk];
   });
+
+  const clientNeedle = clientSearch.trim().toLowerCase();
+  const visibleClients = clients
+    .filter(
+      (client) =>
+        (clientRisk === "all" || client.penaltyRisk === clientRisk) &&
+        (!clientNeedle ||
+          client.legalName.toLowerCase().includes(clientNeedle)),
+    )
+    .sort((a, b) => {
+      if (clientSort === "name") return a.legalName.localeCompare(b.legalName);
+      if (clientSort === "unsubmitted") {
+        return Number(b.unsubmittedValue) - Number(a.unsubmittedValue);
+      }
+      if (clientSort === "deadline") {
+        const aDate = a.nextDeadline?.dueDate ?? "9999-12-31";
+        const bDate = b.nextDeadline?.dueDate ?? "9999-12-31";
+        return aDate.localeCompare(bDate);
+      }
+      const order = { high: 0, medium: 1, low: 2 } as const;
+      return order[a.penaltyRisk] - order[b.penaltyRisk];
+    });
+  const attentionClients = clients
+    .filter((client) => client.penaltyRisk !== "low")
+    .slice(0, 6);
+  const workItems: WorkQueueItem[] = [];
+  if (data.highRiskCount > 0) {
+    workItems.push({
+      id: "high-risk-clients",
+      title: `${data.highRiskCount} high-risk client${data.highRiskCount === 1 ? "" : "s"}`,
+      description:
+        "Overdue paper or repeated failures require partner attention.",
+      tone: "critical",
+      icon: <AlertTriangle className="size-4" aria-hidden="true" />,
+      action: (
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={() => {
+            setClientRisk("high");
+            setView("clients");
+          }}
+        >
+          Review clients
+        </Button>
+      ),
+    });
+  }
+  if (data.totalFailedCount > 0) {
+    workItems.push({
+      id: "failed-submissions",
+      title: `${data.totalFailedCount} failed submission${data.totalFailedCount === 1 ? "" : "s"}`,
+      description:
+        "Open the affected client records and resolve the rejection causes.",
+      tone: "critical",
+      icon: <FileWarning className="size-4" aria-hidden="true" />,
+      action: (
+        <Button size="sm" variant="outline" onClick={() => setView("clients")}>
+          Open client book
+        </Button>
+      ),
+    });
+  }
+  if (data.totalOverdueCount > 0) {
+    workItems.push({
+      id: "overdue-deadlines",
+      title: `${data.totalOverdueCount} overdue deadline${data.totalOverdueCount === 1 ? "" : "s"}`,
+      description:
+        "Prioritize the statutory work that has already crossed its due date.",
+      tone: "warning",
+      icon: <Clock className="size-4" aria-hidden="true" />,
+      action: (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setView("compliance")}
+        >
+          Open compliance
+        </Button>
+      ),
+    });
+  }
+  if (data.totalUnsubmittedCount > 0) {
+    workItems.push({
+      id: "unsubmitted-value",
+      title: `${formatNaira(data.totalUnsubmittedValue)} awaiting submission`,
+      description: `${data.totalUnsubmittedCount} invoice${data.totalUnsubmittedCount === 1 ? "" : "s"} remain outside the stamping rails.`,
+      tone: "warning",
+      icon: <ListChecks className="size-4" aria-hidden="true" />,
+      action: (
+        <Button size="sm" variant="outline" onClick={() => setView("money")}>
+          Review value
+        </Button>
+      ),
+    });
+  }
+
+  const portfolioViews: Array<{
+    value: PortfolioView;
+    label: string;
+    count?: number;
+  }> = [
+    { value: "today", label: "Today", count: workItems.length },
+    { value: "clients", label: "Clients", count: data.clientCount },
+    { value: "money", label: "Money", count: data.totalUnsubmittedCount },
+    {
+      value: "compliance",
+      label: "Compliance",
+      count: data.totalOverdueCount,
+    },
+    { value: "automation", label: "Automation" },
+  ];
+  if (connectionsOccupied) {
+    portfolioViews.push({ value: "connections", label: "Connections" });
+  }
 
   // First-run empty state: the query succeeded but the book is empty — show
   // the way in (bulk import / pipeline) instead of a wall of zeros.
@@ -1900,124 +2241,177 @@ export function Portfolio() {
         />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
+      <MetricStrip label="Firm portfolio summary">
+        <Metric
           label="Clients"
           value={String(data.clientCount)}
-          icon={Users}
+          detail="Active client book"
+          icon={<Users className="size-4" aria-hidden="true" />}
           testId="stat-clients"
         />
-        <StatTile
+        <Metric
           label="High-risk clients"
           value={String(data.highRiskCount)}
-          icon={AlertTriangle}
-          iconTone="danger"
+          detail="Partner attention"
+          icon={<AlertTriangle className="size-4" aria-hidden="true" />}
+          tone={data.highRiskCount > 0 ? "critical" : "default"}
           testId="stat-high-risk"
         />
-        <StatTile
+        <Metric
           label="Unsubmitted invoices"
           value={String(data.totalUnsubmittedCount)}
           detail={`${formatNaira(data.totalUnsubmittedValue)} awaiting submission`}
-          icon={FileWarning}
-          iconTone="warning"
+          icon={<FileWarning className="size-4" aria-hidden="true" />}
+          tone={data.totalUnsubmittedCount > 0 ? "warning" : "default"}
           testId="stat-unsubmitted"
         />
-        <StatTile
+        <Metric
           label="Overdue deadlines"
           value={String(data.totalOverdueCount)}
-          icon={Clock}
-          iconTone="danger"
+          detail="Across the firm"
+          icon={<Clock className="size-4" aria-hidden="true" />}
+          tone={data.totalOverdueCount > 0 ? "critical" : "default"}
           testId="stat-overdue"
         />
-      </div>
+      </MetricStrip>
 
-      <PortfolioAnchorRow groups={groups} />
+      <SegmentedControl<PortfolioView>
+        items={portfolioViews}
+        value={view}
+        onChange={setView}
+        label="Portfolio view"
+      />
 
-      <PortfolioSection id="clients" label="Clients">
-      <Card className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-4 text-base">
-            <span>Clients by penalty risk</span>
-            <span className="text-xs font-semibold text-muted-foreground tabular-nums">
-              {data.clientCount} total
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-3 sm:px-6">
-          <div className="divide-y">
-            {clients.map((c) => (
-              <Link
-                key={c.clientPartyId}
-                href={`/clients/${c.clientPartyId}`}
-                data-testid={`row-client-${c.clientPartyId}`}
-                className="-mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_1rem] sm:gap-4"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">
-                    {c.legalName}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {c.totalInvoices} invoices · {c.failedCount} failed ·{" "}
-                    {c.pendingCount} pending
-                    {c.nextDeadline
-                      ? ` · next: ${c.nextDeadline.title} ${formatDate(c.nextDeadline.dueDate)}`
-                      : ""}
-                    {c.unsubmittedCount > 0 && (
-                      <span className="sm:hidden tabular-nums">
-                        {" "}
-                        · {formatNaira(c.unsubmittedValue)} unsubmitted
+      {view === "today" && (
+        <>
+          <WorkQueue
+            title="Firm priorities"
+            description="Ordered by client risk, failures, statutory deadlines and unsubmitted value."
+            items={workItems}
+            emptyTitle="The firm queue is clear"
+            emptyDescription="No high-risk clients, failures or overdue deadlines need action."
+          />
+          {attentionClients.length > 0 && (
+            <ClientWorkbenchTable
+              clients={attentionClients}
+              totalClients={data.clientCount}
+              search={clientSearch}
+              onSearchChange={setClientSearch}
+              risk={clientRisk}
+              onRiskChange={setClientRisk}
+              sort={clientSort}
+              onSortChange={setClientSort}
+              compact
+            />
+          )}
+        </>
+      )}
+
+      {(view === "clients" || view === "automation") && (
+        <PortfolioSection
+          id={view === "clients" ? "clients" : "automation"}
+          label={view === "clients" ? "Clients" : "Automation & Clerk"}
+        >
+          {view === "clients" && (
+            <ClientWorkbenchTable
+              clients={visibleClients}
+              totalClients={data.clientCount}
+              search={clientSearch}
+              onSearchChange={setClientSearch}
+              risk={clientRisk}
+              onRiskChange={setClientRisk}
+              sort={clientSort}
+              onSortChange={setClientSort}
+            />
+          )}
+          {data && false && (
+            <Card className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between gap-4 text-base">
+                  <span>Clients by penalty risk</span>
+                  <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+                    {data?.clientCount ?? 0} total
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-3 sm:px-6">
+                <div className="divide-y">
+                  {clients.map((c) => (
+                    <Link
+                      key={c.clientPartyId}
+                      href={`/clients/${c.clientPartyId}`}
+                      data-testid={`row-client-${c.clientPartyId}`}
+                      className="-mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_1rem] sm:gap-4"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">
+                          {c.legalName}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {c.totalInvoices} invoices · {c.failedCount} failed ·{" "}
+                          {c.pendingCount} pending
+                          {c.nextDeadline
+                            ? ` · next: ${c.nextDeadline.title} ${formatDate(c.nextDeadline.dueDate)}`
+                            : ""}
+                          {c.unsubmittedCount > 0 && (
+                            <span className="sm:hidden tabular-nums">
+                              {" "}
+                              · {formatNaira(c.unsubmittedValue)} unsubmitted
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      {c.unsubmittedCount > 0 && (
+                        <div className="hidden sm:block text-right">
+                          <p className="text-sm font-medium tabular-nums">
+                            {formatNaira(c.unsubmittedValue)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {c.unsubmittedCount} unsubmitted
+                          </p>
+                        </div>
+                      )}
+                      <span
+                        className={riskBadgeClasses(c.penaltyRisk)}
+                        data-testid={`badge-risk-${c.clientPartyId}`}
+                      >
+                        {riskLabel(c.penaltyRisk)}
                       </span>
-                    )}
-                  </p>
+                      <ChevronRight
+                        className="hidden size-4 shrink-0 text-muted-foreground sm:block"
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  ))}
                 </div>
-                {c.unsubmittedCount > 0 && (
-                  <div className="hidden sm:block text-right">
-                    <p className="text-sm font-medium tabular-nums">
-                      {formatNaira(c.unsubmittedValue)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {c.unsubmittedCount} unsubmitted
-                    </p>
-                  </div>
-                )}
-                <span
-                  className={riskBadgeClasses(c.penaltyRisk)}
-                  data-testid={`badge-risk-${c.clientPartyId}`}
-                >
-                  {riskLabel(c.penaltyRisk)}
-                </span>
-                <ChevronRight
-                  className="hidden size-4 shrink-0 text-muted-foreground sm:block"
-                  aria-hidden="true"
-                />
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <ComplianceScorecardCard />
-      <ClerkAdoptionCard />
-      {/* The firm's standing-automation posture (round 33) sits with the
+              </CardContent>
+            </Card>
+          )}
+          {view === "clients" && <ComplianceScorecardCard />}
+          {view === "automation" && <ClerkAdoptionCard />}
+          {/* The firm's standing-automation posture (round 33) sits with the
           adoption card — both answer "what is Clerk doing across our
           clients". Self-gating: renders only with an automation footprint. */}
-      <AutomationRollupCard />
-      {/* The backtest evidence (round 36) sits directly under the rollup:
+          {view === "automation" && <AutomationRollupCard />}
+          {/* The backtest evidence (round 36) sits directly under the rollup:
           the rollup says what standing automation IS doing, the evidence
           says what the dark kinds WOULD have done — the pair a firm reads
           before lighting a flag. Self-gating on ledger footprint. */}
-      <AutomationEvidenceCard />
-      </PortfolioSection>
+          {view === "automation" && <AutomationEvidenceCard />}
+        </PortfolioSection>
+      )}
 
-      <PortfolioSection id="money" label="Money">
-        <ReceivablesCard />
-        <BillingStatementCard />
-      </PortfolioSection>
+      {view === "money" && (
+        <PortfolioSection id="money" label="Money">
+          <ReceivablesCard />
+          <BillingStatementCard />
+        </PortfolioSection>
+      )}
 
       {/* The two all-self-gating sections render only when at least one
           member card will show — otherwise a role or server build that hides
           every card would leave a bare heading behind a dead anchor chip. */}
-      {complianceOccupied && (
+      {view === "compliance" && complianceOccupied && (
         <PortfolioSection id="compliance" label="Compliance">
           <ComplianceCalendarCard />
           <VatPackCard />
@@ -2041,7 +2435,7 @@ export function Portfolio() {
         </PortfolioSection>
       )}
 
-      {connectionsOccupied && (
+      {view === "connections" && connectionsOccupied && (
         <PortfolioSection id="connections" label="Connections & delivery">
           {/* Bank-feed connections sit with the delivery surfaces. Render-on-
               success: servers without the rail (older build, feature dark →

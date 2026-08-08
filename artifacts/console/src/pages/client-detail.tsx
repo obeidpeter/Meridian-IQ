@@ -49,6 +49,9 @@ import {
   Download,
   Landmark,
   Send,
+  CalendarClock,
+  FileText,
+  ShieldCheck,
 } from "lucide-react";
 import {
   formatNaira,
@@ -58,6 +61,7 @@ import {
   severityBadgeClasses,
   humanize,
   pillClasses,
+  riskBadgeClasses,
 } from "@/lib/format";
 import { localDayIso } from "@workspace/format/notice-copy";
 import { downloadBlob, triggerDownload } from "@/lib/download";
@@ -68,6 +72,22 @@ import {
 } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
+import {
+  Metric,
+  MetricStrip,
+  SegmentedControl,
+  WorkQueue,
+  WorkspaceHeader,
+  type WorkQueueItem,
+} from "@workspace/web-ui";
+
+type ClientView =
+  | "today"
+  | "invoices"
+  | "money"
+  | "compliance"
+  | "clerk"
+  | "setup";
 
 // ---- Export & offboarding helpers -------------------------------------------
 // The data-subject export saves the server's bundle verbatim as JSON; the
@@ -109,12 +129,20 @@ export function offboardSummary(result: OffboardClientResult): string {
   const n = (count: number, one: string, many: string) =>
     `${count} ${count === 1 ? one : many}`;
   const parts = [
-    n(result.engagementsArchived, "engagement archived", "engagements archived"),
+    n(
+      result.engagementsArchived,
+      "engagement archived",
+      "engagements archived",
+    ),
     n(result.membershipsRemoved, "sign-in removed", "sign-ins removed"),
   ];
   if (result.aliasesDeleted > 0) {
     parts.push(
-      n(result.aliasesDeleted, "intake alias deleted", "intake aliases deleted"),
+      n(
+        result.aliasesDeleted,
+        "intake alias deleted",
+        "intake aliases deleted",
+      ),
     );
   }
   parts.push(
@@ -283,10 +311,10 @@ function AdvisoryBriefCard({ clientPartyId }: { clientPartyId: string }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          The month's advisory position, composed from the client's own
-          reports — statutory clocks, penalty exposure, VAT, money position
-          and books hygiene. Every number cites the report it comes from;
-          only the short adviser's note is phrased.
+          The month's advisory position, composed from the client's own reports
+          — statutory clocks, penalty exposure, VAT, money position and books
+          hygiene. Every number cites the report it comes from; only the short
+          adviser's note is phrased.
         </p>
         {!brief ? (
           <p
@@ -327,10 +355,9 @@ function AdvisoryBriefCard({ clientPartyId }: { clientPartyId: string }) {
             ))}
             <p className="text-xs text-muted-foreground">
               Covers{" "}
-              {new Date(`${brief.monthStart.slice(0, 7)}-15`).toLocaleDateString(
-                "en-NG",
-                { month: "long", year: "numeric" },
-              )}
+              {new Date(
+                `${brief.monthStart.slice(0, 7)}-15`,
+              ).toLocaleDateString("en-NG", { month: "long", year: "numeric" })}
               {brief.source === "clerk" && " · note written by Clerk"} · last
               refreshed {new Date(brief.updatedAt).toLocaleString()}
             </p>
@@ -441,8 +468,8 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
             className="text-sm text-muted-foreground"
             data-testid="text-no-collection-accounts"
           >
-            No collection accounts yet — provision one and payments sent to
-            its reference are observed as settlements automatically.
+            No collection accounts yet — provision one and payments sent to its
+            reference are observed as settlements automatically.
           </p>
         ) : (
           <div className="divide-y">
@@ -487,9 +514,9 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
               <p key={r.accountId} data-testid={`unmatched-${r.accountId}`}>
                 {r.count} inbound payment{r.count === 1 ? "" : "s"} on{" "}
                 <span className="font-mono text-xs">{r.accountReference}</span>{" "}
-                (last {formatDate(r.lastSeen)}) matched no invoice — amounts
-                are never recorded for unmatched payments; reconcile against
-                the provider statement.
+                (last {formatDate(r.lastSeen)}) matched no invoice — amounts are
+                never recorded for unmatched payments; reconcile against the
+                provider statement.
               </p>
             ))}
           </div>
@@ -541,6 +568,7 @@ export function ClientDetail() {
   const [offboardOpen, setOffboardOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [offboardNote, setOffboardNote] = useState<string | null>(null);
+  const [view, setView] = useState<ClientView>("today");
 
   const openOffboard = () => {
     setConfirmText("");
@@ -626,6 +654,55 @@ export function ClientDetail() {
 
   const { client, invoices, deadlines } = data;
   const failingIds = new Set(client.failingInvoiceIds);
+  const workItems: WorkQueueItem[] = [];
+
+  if (client.failingInvoiceIds.length > 0) {
+    workItems.push({
+      id: "failing-invoices",
+      title: `${client.failingInvoiceIds.length} invoice${client.failingInvoiceIds.length === 1 ? "" : "s"} need attention`,
+      description:
+        "Resolve failed or overdue submissions before the next filing cycle.",
+      tone: "critical",
+      icon: <AlertTriangle className="size-4" aria-hidden="true" />,
+      action: (
+        <Button size="sm" variant="outline" onClick={() => setView("invoices")}>
+          Review invoices
+        </Button>
+      ),
+    });
+  }
+
+  deadlines.slice(0, 4).forEach((deadline) => {
+    workItems.push({
+      id: `deadline-${deadline.id}`,
+      title: deadline.title,
+      description: `Due ${formatDate(deadline.dueDate)} · ${humanize(deadline.status)}`,
+      tone: deadline.severity === "critical" ? "critical" : "warning",
+      icon: <CalendarClock className="size-4" aria-hidden="true" />,
+      action: (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setView("compliance")}
+        >
+          Open filings
+        </Button>
+      ),
+    });
+  });
+
+  const views: Array<{
+    value: ClientView;
+    label: string;
+    count?: number;
+  }> = [
+    { value: "today", label: "Today", count: workItems.length },
+    { value: "invoices", label: "Invoices", count: invoices.length },
+    { value: "money", label: "Money" },
+    { value: "compliance", label: "Tax & filings", count: deadlines.length },
+    { value: "clerk", label: "Clerk" },
+    { value: "setup", label: "Setup" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -637,192 +714,215 @@ export function ClientDetail() {
         <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to portfolio
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1
-            className="text-2xl md:text-3xl font-bold"
-            data-testid="text-client-name"
-          >
-            {client.legalName}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {client.totalInvoices} invoices · {humanize(client.penaltyRisk)}{" "}
-            penalty risk
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            disabled={exportQuery.isFetching}
-            data-testid="button-export-client-data"
-          >
-            <Download
-              className={`w-4 h-4 mr-1 ${exportQuery.isFetching ? "animate-pulse" : ""}`}
-              aria-hidden="true"
-            />
-            {exportQuery.isFetching ? "Exporting…" : "Export data"}
-          </Button>
-          {canOffboardClient(me?.role) && (
+      <WorkspaceHeader
+        eyebrow="Client 360"
+        title={client.legalName}
+        titleTestId="text-client-name"
+        description={`${client.totalInvoices} invoices · ${humanize(client.penaltyRisk)} penalty risk`}
+        status={
+          <span className={riskBadgeClasses(client.penaltyRisk)}>
+            {humanize(client.penaltyRisk)} risk
+          </span>
+        }
+        actions={
+          <>
             <Button
-              variant="destructive"
-              onClick={openOffboard}
-              data-testid="button-offboard-client"
+              variant="outline"
+              onClick={handleExport}
+              disabled={exportQuery.isFetching}
+              data-testid="button-export-client-data"
             >
-              <Archive className="w-4 h-4 mr-1" aria-hidden="true" />
-              Offboard client
+              <Download
+                className={`w-4 h-4 mr-1 ${exportQuery.isFetching ? "animate-pulse" : ""}`}
+                aria-hidden="true"
+              />
+              {exportQuery.isFetching ? "Exporting…" : "Export data"}
             </Button>
-          )}
-        </div>
+            {canOffboardClient(me?.role) && (
+              <Button
+                variant="destructive"
+                onClick={openOffboard}
+                data-testid="button-offboard-client"
+              >
+                <Archive className="w-4 h-4 mr-1" aria-hidden="true" />
+                Offboard client
+              </Button>
+            )}
+          </>
+        }
+      />
+      <div>
         <span className="sr-only" aria-live="polite">
           {exportQuery.isFetching ? "Preparing the data export…" : ""}
         </span>
       </div>
 
-      {client.failingInvoiceIds.length > 0 && (
-        <Card className="border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/40">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle
-                className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0"
-                aria-hidden="true"
-              />
-              <div>
-                <p className="font-medium text-red-800 dark:text-red-300">
-                  {client.failingInvoiceIds.length} invoice
-                  {client.failingInvoiceIds.length === 1 ? "" : "s"} need
-                  attention
-                </p>
-                <p className="text-sm text-red-700 dark:text-red-400 mt-1">
-                  Failed or overdue submissions are marked "Needs action" below.
-                  The client resolves them in their MeridianIQ workspace;
-                  escalated failures also land in the operator queue with a
-                  playbook.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <MetricStrip label="Client summary">
+        <Metric
+          label="Invoices"
+          value={String(client.totalInvoices)}
+          detail="Recorded for this client"
+          icon={<FileText className="size-4" aria-hidden="true" />}
+        />
+        <Metric
+          label="Needs action"
+          value={String(client.failingInvoiceIds.length)}
+          detail="Failed or overdue submissions"
+          icon={<AlertTriangle className="size-4" aria-hidden="true" />}
+          tone={client.failingInvoiceIds.length > 0 ? "critical" : "default"}
+        />
+        <Metric
+          label="Deadlines"
+          value={String(deadlines.length)}
+          detail="Current statutory calendar"
+          icon={<CalendarClock className="size-4" aria-hidden="true" />}
+          tone={deadlines.length > 0 ? "warning" : "default"}
+        />
+        <Metric
+          label="Penalty risk"
+          value={humanize(client.penaltyRisk)}
+          detail="Current client exposure"
+          icon={<ShieldCheck className="size-4" aria-hidden="true" />}
+          tone={client.penaltyRisk === "high" ? "critical" : "default"}
+        />
+      </MetricStrip>
+
+      <SegmentedControl<ClientView>
+        items={views}
+        value={view}
+        onChange={setView}
+        label="Client workspace view"
+      />
+
+      {view === "today" && (
+        <WorkQueue
+          title="Client priorities"
+          description="Submission failures and statutory deadlines, ordered for action."
+          items={workItems}
+          emptyTitle="This client is on track"
+          emptyDescription="No failed submissions or current deadlines require attention."
+        />
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Invoices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {invoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No invoices yet.</p>
-            ) : (
-              <div className="divide-y">
-                {invoices.map((inv) => {
-                  const failing = inv.failing || failingIds.has(inv.id);
-                  return (
-                    <div
-                      key={inv.id}
-                      data-testid={`row-invoice-${inv.id}`}
-                      className={`flex items-center gap-3 py-3 -mx-2 px-2 rounded-md ${
-                        failing ? "bg-red-50 dark:bg-red-950/40" : ""
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">
-                          {inv.invoiceNumber}
-                          {failing && (
-                            <span
-                              className="ml-2 text-xs text-red-700 dark:text-red-400 font-semibold"
-                              data-testid={`flag-failing-${inv.id}`}
-                            >
-                              NEEDS ACTION
+        {(view === "today" || view === "invoices") && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Invoices</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {invoices.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No invoices yet.
+                </p>
+              ) : (
+                <div className="divide-y">
+                  {invoices.map((inv) => {
+                    const failing = inv.failing || failingIds.has(inv.id);
+                    return (
+                      <div
+                        key={inv.id}
+                        data-testid={`row-invoice-${inv.id}`}
+                        className={`flex items-center gap-3 py-3 -mx-2 px-2 rounded-md ${
+                          failing ? "bg-red-50 dark:bg-red-950/40" : ""
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
+                            {inv.invoiceNumber}
+                            {failing && (
+                              <span
+                                className="ml-2 text-xs text-red-700 dark:text-red-400 font-semibold"
+                                data-testid={`flag-failing-${inv.id}`}
+                              >
+                                NEEDS ACTION
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {inv.buyerName} · {inv.category} ·{" "}
+                            {formatDate(inv.issueDate)}
+                            <span className="sm:hidden tabular-nums">
+                              {" "}
+                              · {formatNaira(inv.grandTotal)}
                             </span>
-                          )}
+                          </p>
+                        </div>
+                        <p className="text-sm font-medium hidden sm:block tabular-nums">
+                          {formatNaira(inv.grandTotal)}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {inv.buyerName} · {inv.category} ·{" "}
-                          {formatDate(inv.issueDate)}
-                          <span className="sm:hidden tabular-nums">
-                            {" "}
-                            · {formatNaira(inv.grandTotal)}
-                          </span>
-                        </p>
+                        <span className={badgeClasses(inv.status)}>
+                          {statusLabel(inv.status)}
+                        </span>
+                        <InvoiceStatusLight invoiceId={inv.id} />
                       </div>
-                      <p className="text-sm font-medium hidden sm:block tabular-nums">
-                        {formatNaira(inv.grandTotal)}
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {view === "today" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Deadlines</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {deadlines.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No upcoming deadlines.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {deadlines.map((d) => (
+                    <div
+                      key={d.id}
+                      data-testid={`row-deadline-${d.id}`}
+                      className="border rounded-md p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-sm">{d.title}</p>
+                        <span className={severityBadgeClasses(d.severity)}>
+                          {humanize(d.status)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Due {formatDate(d.dueDate)}
                       </p>
-                      <span className={badgeClasses(inv.status)}>
-                        {statusLabel(inv.status)}
-                      </span>
-                      <InvoiceStatusLight invoiceId={inv.id} />
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Deadlines</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {deadlines.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No upcoming deadlines.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {deadlines.map((d) => (
-                  <div
-                    key={d.id}
-                    data-testid={`row-deadline-${d.id}`}
-                    className="border rounded-md p-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium text-sm">{d.title}</p>
-                      <span className={severityBadgeClasses(d.severity)}>
-                        {humanize(d.status)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Due {formatDate(d.dueDate)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Payments rail + monthly deliverable for this client. Both are
-            per-client operator surfaces; the collection-accounts card gates
-            itself render-on-success. */}
-        <CollectionAccountsCard clientPartyId={id} />
-        <CompliancePackCard clientPartyId={id} />
-        <AdvisoryBriefCard clientPartyId={id} />
+        {view === "money" && (
+          <>
+            <CollectionAccountsCard clientPartyId={id} />
+            <WhtCard clientPartyId={id} />
+          </>
+        )}
+        {view === "compliance" && (
+          <>
+            <CompliancePackCard clientPartyId={id} />
+            <ObligationsCard clientPartyId={id} />
+            <FilingsCard clientPartyId={id} />
+          </>
+        )}
+        {view === "clerk" && (
+          <>
+            <AdvisoryBriefCard clientPartyId={id} />
+            <ClerkActionsCard clientPartyId={id} />
+            <ClerkActionEffectivenessCard clientPartyId={id} />
+          </>
+        )}
         {/* Onboard with Clerk: the evidence-based onboarding checklist —
             steps settle from the record (history, statements, consent,
             duplicates, filings), skips record honest gaps. */}
-        <OnboardingCard clientPartyId={id} />
-        {/* Notice Desk: this client's tax-authority notices and their
-            response deadlines — obligations from approved Clerk notice
-            cases plus the inline paper-notice recorder. */}
-        <ObligationsCard clientPartyId={id} />
-        {/* Filing Desk: the register's other half — the calendar's returns
-            (the VAT return and PAYE remittance each period owes), not the
-            authority's notices; minted by sync and walked to filed here. */}
-        <FilingsCard clientPartyId={id} />
-        {/* WHT Desk: the withholding-credit ledger (deductions owed a
-            credit note, walked to received here) plus the period's
-            remittance schedule; renders only when the client has WHT
-            activity. */}
-        <WhtCard clientPartyId={id} />
-        {/* Proposed actions (round 22): the firm-side approval surface —
-            gates itself on the clerk_actions flag via its own query. */}
-        <ClerkActionsCard clientPartyId={id} />
-        {/* Round 29: did the approved batches work? Renders only when the
-            window holds decisions. */}
-        <ClerkActionEffectivenessCard clientPartyId={id} />
+        {view === "setup" && <OnboardingCard clientPartyId={id} />}
       </div>
 
       <Dialog
@@ -874,7 +974,9 @@ export function ClientDetail() {
             <Button
               variant="destructive"
               onClick={handleOffboard}
-              disabled={!offboardConfirmReady(confirmText) || offboard.isPending}
+              disabled={
+                !offboardConfirmReady(confirmText) || offboard.isPending
+              }
               data-testid="button-confirm-offboard"
             >
               {offboard.isPending ? "Offboarding…" : "Offboard client"}

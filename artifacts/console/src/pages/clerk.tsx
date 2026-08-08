@@ -130,6 +130,7 @@ import {
   Plus,
   PowerOff,
   Quote,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 
@@ -166,12 +167,17 @@ const BULK_APPROVE_MAX = 50;
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   const pct = Math.round(confidence * 100);
   const tone =
-    confidence >= 0.9 ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400 font-medium";
+    confidence >= 0.9
+      ? "text-muted-foreground"
+      : "text-amber-700 dark:text-amber-400 font-medium";
   return <span className={`text-xs tabular-nums ${tone}`}>{pct}%</span>;
 }
 
 // The queue's one-word status line under each intake title.
-const QUEUE_STATUS: Record<ClerkCase["status"], { label: string; cls: string }> = {
+const QUEUE_STATUS: Record<
+  ClerkCase["status"],
+  { label: string; cls: string }
+> = {
   pending: { label: "Reading…", cls: "text-muted-foreground" },
   extracted: { label: "Extracted", cls: "text-primary" },
   in_review: { label: "Review", cls: "text-primary" },
@@ -336,9 +342,7 @@ function InvoiceDecisionForm({
           <PartySuggestionChips
             suggestions={partySuggestions?.supplier ?? []}
             value={form.supplierPartyId}
-            onPick={(partyId) =>
-              setForm({ ...form, supplierPartyId: partyId })
-            }
+            onPick={(partyId) => setForm({ ...form, supplierPartyId: partyId })}
             testId="suggestions-supplier"
           />
         </PartySelect>
@@ -379,9 +383,7 @@ function InvoiceDecisionForm({
             id="apr-issue"
             type="date"
             value={form.issueDate}
-            onChange={(e) =>
-              setForm({ ...form, issueDate: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, issueDate: e.target.value })}
             data-testid="input-approve-issue-date"
           />
         </div>
@@ -391,9 +393,7 @@ function InvoiceDecisionForm({
             id="apr-due"
             type="date"
             value={form.dueDate}
-            onChange={(e) =>
-              setForm({ ...form, dueDate: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
             data-testid="input-approve-due-date"
           />
         </div>
@@ -439,33 +439,25 @@ function InvoiceDecisionForm({
               className="col-span-6"
               placeholder="Description"
               value={line.description}
-              onChange={(e) =>
-                setLine(i, { description: e.target.value })
-              }
+              onChange={(e) => setLine(i, { description: e.target.value })}
             />
             <Input
               className="col-span-2"
               placeholder="Qty"
               value={line.quantity}
-              onChange={(e) =>
-                setLine(i, { quantity: e.target.value })
-              }
+              onChange={(e) => setLine(i, { quantity: e.target.value })}
             />
             <Input
               className="col-span-2"
               placeholder="Unit price"
               value={line.unitPrice}
-              onChange={(e) =>
-                setLine(i, { unitPrice: e.target.value })
-              }
+              onChange={(e) => setLine(i, { unitPrice: e.target.value })}
             />
             <Input
               className="col-span-2"
               placeholder="VAT %"
               value={line.vatRate}
-              onChange={(e) =>
-                setLine(i, { vatRate: e.target.value })
-              }
+              onChange={(e) => setLine(i, { vatRate: e.target.value })}
             />
           </div>
         ))}
@@ -754,9 +746,7 @@ function NoticeDecisionForm({
               data: noticeDecisionFromForm(noticeForm, reason),
             })
           }
-          disabled={
-            noticeApproveDisabled(noticeForm) || decideNotice.isPending
-          }
+          disabled={noticeApproveDisabled(noticeForm) || decideNotice.isPending}
           data-testid="button-approve-notice"
         >
           Approve — record obligation
@@ -843,11 +833,11 @@ function BulkApproveDialog({
             {report ? report.results.length : candidates.length})
           </DialogTitle>
           <DialogDescription>
-            This only touches fast-lane cases — extraction succeeded,
-            pre-flight found nothing blocking and every critical field is
-            confident. Each approval creates a DRAFT invoice only; nothing
-            is submitted. The server re-checks every case and skips any
-            that no longer qualify, leaving them exactly as they were.
+            This only touches fast-lane cases — extraction succeeded, pre-flight
+            found nothing blocking and every critical field is confident. Each
+            approval creates a DRAFT invoice only; nothing is submitted. The
+            server re-checks every case and skips any that no longer qualify,
+            leaving them exactly as they were.
           </DialogDescription>
         </DialogHeader>
         {report ? (
@@ -908,8 +898,8 @@ function BulkApproveDialog({
               className="text-sm text-muted-foreground"
               data-testid="text-bulk-drained"
             >
-              The queue changed — nothing left to approve. The fast-lane
-              cases were decided or updated while this dialog was open.
+              The queue changed — nothing left to approve. The fast-lane cases
+              were decided or updated while this dialog was open.
             </p>
             <DialogFooter>
               <Button
@@ -919,10 +909,7 @@ function BulkApproveDialog({
               >
                 Close
               </Button>
-              <Button
-                disabled
-                data-testid="button-confirm-bulk-approve"
-              >
+              <Button disabled data-testid="button-confirm-bulk-approve">
                 Approve as drafts
               </Button>
             </DialogFooter>
@@ -1016,6 +1003,7 @@ export function ClerkWorkspace() {
   // `offset` is a live query; earlier pages are kept in local state and
   // re-appended below.
   const [queueKind, setQueueKind] = useState<QueueKind>("extraction");
+  const [queueSearch, setQueueSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [earlierCases, setEarlierCases] = useState<ClerkCase[]>([]);
   const caseParams: ListClerkCasesParams = {
@@ -1150,8 +1138,13 @@ export function ClerkWorkspace() {
       return next;
     });
   useEffect(() => {
-    if (selected && (selected.status === "extracted" || selected.status === "in_review")) {
-      setForm(selected.kind === "extraction" ? approveFormFromCase(selected) : null);
+    if (
+      selected &&
+      (selected.status === "extracted" || selected.status === "in_review")
+    ) {
+      setForm(
+        selected.kind === "extraction" ? approveFormFromCase(selected) : null,
+      );
       setNoticeForm(
         selected.kind === "notice" ? noticeApproveFormFromCase(selected) : null,
       );
@@ -1193,9 +1186,9 @@ export function ClerkWorkspace() {
     setForm((f) => {
       if (!f) return f;
       const supplierPartyId =
-        f.supplierPartyId || (partySuggestions.supplier[0]?.partyId ?? "");
+        f.supplierPartyId || (partySuggestions.supplier?.[0]?.partyId ?? "");
       const buyerPartyId =
-        f.buyerPartyId || (partySuggestions.buyer[0]?.partyId ?? "");
+        f.buyerPartyId || (partySuggestions.buyer?.[0]?.partyId ?? "");
       if (
         supplierPartyId === f.supplierPartyId &&
         buyerPartyId === f.buyerPartyId
@@ -1254,13 +1247,10 @@ export function ClerkWorkspace() {
         setBatchResult(null);
         setDisabledBanner(false);
         toast({
-          title:
-            kase.status === "failed"
-              ? "Reading failed"
-              : "Document read",
+          title: kase.status === "failed" ? "Reading failed" : "Document read",
           description:
             kase.status === "failed"
-              ? kase.failReason ?? "The Clerk could not read this document."
+              ? (kase.failReason ?? "The Clerk could not read this document.")
               : "Every value below still needs your eyes before anything happens.",
         });
       },
@@ -1400,7 +1390,8 @@ export function ClerkWorkspace() {
             kase.status === "failed" ? "Reading failed again" : "Document read",
           description:
             kase.status === "failed"
-              ? kase.failReason ?? "The Clerk still could not read this document."
+              ? (kase.failReason ??
+                "The Clerk still could not read this document.")
               : "Every value below still needs your eyes before anything happens.",
         });
       },
@@ -1471,7 +1462,11 @@ export function ClerkWorkspace() {
     } else if (captureText.trim()) {
       if (batchMode && !noticeCapture) {
         createCaseBatch.mutate({
-          data: { sourceType: "text", name: "pasted-text.txt", text: captureText },
+          data: {
+            sourceType: "text",
+            name: "pasted-text.txt",
+            text: captureText,
+          },
         });
         return;
       }
@@ -1517,6 +1512,54 @@ export function ClerkWorkspace() {
         .sort((a, b) => reviewEffort(a, weights) - reviewEffort(b, weights)),
     ];
   }, [cases, weights]);
+  const filteredCases = useMemo(() => {
+    const needle = queueSearch.trim().toLowerCase();
+    if (!needle) return sortedCases;
+    return sortedCases.filter((c) =>
+      [
+        c.sourceName,
+        c.status,
+        c.kind,
+        c.id,
+        ...(c.extraction?.fields.map((field) => field.value) ?? []),
+        ...(c.noticeExtraction?.fields.map((field) => field.value) ?? []),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle)),
+    );
+  }, [queueSearch, sortedCases]);
+
+  useEffect(() => {
+    if (selectedId == null && filteredCases[0]) {
+      setSelectedId(filteredCases[0].id);
+    }
+  }, [filteredCases, selectedId]);
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.matches(
+          "input, textarea, select, button, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      const current = filteredCases.findIndex((c) => c.id === selectedId);
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const next = Math.min(
+        Math.max(current < 0 ? 0 : current + direction, 0),
+        filteredCases.length - 1,
+      );
+      if (filteredCases[next]) setSelectedId(filteredCases[next].id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [filteredCases, selectedId]);
   const readyCases = useMemo(
     () => sortedCases.filter(isReadyToApprove),
     [sortedCases],
@@ -1548,7 +1591,10 @@ export function ClerkWorkspace() {
   // the operator touches anything. Fetched only while the dialog is open; a
   // failed lookup leaves that case's slots empty and the server then skips
   // the row with a named reason.
-  const bulkIds = useMemo(() => bulkCandidates.map((c) => c.id), [bulkCandidates]);
+  const bulkIds = useMemo(
+    () => bulkCandidates.map((c) => c.id),
+    [bulkCandidates],
+  );
   const { data: bulkSuggestions, isLoading: bulkSuggestionsLoading } = useQuery(
     {
       queryKey: ["clerk-bulk-party-suggestions", bulkIds],
@@ -1631,8 +1677,8 @@ export function ClerkWorkspace() {
   // Batch-aware grouping (round-8 idea #3): a bundle's segments stay together
   // under one header with per-batch progress; unbatched cases are untouched.
   const queueGroups = useMemo(
-    () => groupQueueByBatch(sortedCases),
-    [sortedCases],
+    () => groupQueueByBatch(filteredCases),
+    [filteredCases],
   );
   const hasBatchGroups = queueGroups.some((g) => g.batchId !== null);
   const { data: queueBatches } = useListClerkBatches({
@@ -1782,100 +1828,110 @@ export function ClerkWorkspace() {
         </ClerkDisabledBanner>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-1 self-start">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-base flex items-baseline gap-2">
-                  New intake
-                  <span
-                    className="text-sm font-normal text-muted-foreground"
-                    data-testid="text-open-count"
-                  >
-                    {sortedCases.filter((c) => OPEN_STATUSES.has(c.status)).length}{" "}
-                    open
-                  </span>
-                  {readyCount > 0 && (
-                    <span
-                      className="text-sm font-normal text-emerald-700 dark:text-emerald-400"
-                      data-testid="text-ready-count"
-                    >
-                      {readyCount} ready
-                    </span>
-                  )}
-                </CardTitle>
-                <Button
-                  size="sm"
-                  onClick={() => setCaptureOpen((o) => !o)}
-                  data-testid="button-new-capture"
+      <div className="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]">
+        <Card className="self-start lg:sticky lg:top-24 lg:flex lg:max-h-[calc(100vh-7rem)] lg:flex-col lg:overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-base flex items-baseline gap-2">
+              New intake
+              <span
+                className="text-sm font-normal text-muted-foreground"
+                data-testid="text-open-count"
+              >
+                {sortedCases.filter((c) => OPEN_STATUSES.has(c.status)).length}{" "}
+                open
+              </span>
+              {readyCount > 0 && (
+                <span
+                  className="text-sm font-normal text-emerald-700 dark:text-emerald-400"
+                  data-testid="text-ready-count"
                 >
-                  <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* One queue kind at a time: invoice extraction cases or
+                  {readyCount} ready
+                </span>
+              )}
+            </CardTitle>
+            <Button
+              size="sm"
+              onClick={() => setCaptureOpen((o) => !o)}
+              data-testid="button-new-capture"
+            >
+              <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={queueSearch}
+                onChange={(event) => setQueueSearch(event.target.value)}
+                placeholder="Search cases"
+                className="pl-9"
+                aria-label="Search intake cases"
+                data-testid="input-search-cases"
+              />
+            </div>
+            {/* One queue kind at a time: invoice extraction cases or
                     tax-authority notice cases (Notice Desk). The kind
                     travels to the server as the list's kind param. */}
-                <div
-                  className="flex gap-1"
-                  role="tablist"
-                  aria-label="Intake kind"
-                >
-                  <Button
-                    size="sm"
-                    role="tab"
-                    aria-selected={queueKind === "extraction"}
-                    variant={queueKind === "extraction" ? "secondary" : "ghost"}
-                    onClick={() => switchQueueKind("extraction")}
-                    data-testid="tab-kind-extraction"
-                  >
-                    Invoices
-                  </Button>
-                  <Button
-                    size="sm"
-                    role="tab"
-                    aria-selected={queueKind === "notice"}
-                    variant={queueKind === "notice" ? "secondary" : "ghost"}
-                    onClick={() => switchQueueKind("notice")}
-                    data-testid="tab-kind-notice"
-                  >
-                    Notices
-                  </Button>
-                </div>
-                {/* Queue-level fast-lane approval: only when there is a lane
+            <div className="flex gap-1" role="tablist" aria-label="Intake kind">
+              <Button
+                size="sm"
+                role="tab"
+                aria-selected={queueKind === "extraction"}
+                variant={queueKind === "extraction" ? "secondary" : "ghost"}
+                onClick={() => switchQueueKind("extraction")}
+                data-testid="tab-kind-extraction"
+              >
+                Invoices
+              </Button>
+              <Button
+                size="sm"
+                role="tab"
+                aria-selected={queueKind === "notice"}
+                variant={queueKind === "notice" ? "secondary" : "ghost"}
+                onClick={() => switchQueueKind("notice")}
+                data-testid="tab-kind-notice"
+              >
+                Notices
+              </Button>
+            </div>
+            {/* Queue-level fast-lane approval: only when there is a lane
                     to bulk (2+ ready cases loaded). Everything it can do, the
                     dialog restates: fast-lane cases only, drafts only. */}
-                {readyCount >= 2 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setBulkOpen(true)}
-                    data-testid="button-bulk-approve"
-                  >
-                    <ShieldCheck className="w-4 h-4 mr-1" aria-hidden="true" />
-                    Approve fast lane ({bulkCandidates.length})
-                  </Button>
-                )}
-                {captureOpen && (
-                  <div className="border rounded-md p-3 space-y-2">
-                    <Label htmlFor="capture-file">
-                      {noticeCapture
-                        ? "Notice document (PDF or photo)"
-                        : "Invoice document (PDF or photo)"}
-                    </Label>
-                    <Input
-                      id="capture-file"
-                      type="file"
-                      accept=".pdf,image/png,image/jpeg,image/webp"
-                      onChange={(e) => {
-                        setCaptureFile(e.target.files?.[0] ?? null);
-                        setPendingDuplicate(null);
-                      }}
-                      disabled={captureVoice != null}
-                      data-testid="input-capture-file"
-                    />
-                    {!noticeCapture && (
-                    <>
+            {readyCount >= 2 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setBulkOpen(true)}
+                data-testid="button-bulk-approve"
+              >
+                <ShieldCheck className="w-4 h-4 mr-1" aria-hidden="true" />
+                Approve fast lane ({bulkCandidates.length})
+              </Button>
+            )}
+            {captureOpen && (
+              <div className="border rounded-md p-3 space-y-2">
+                <Label htmlFor="capture-file">
+                  {noticeCapture
+                    ? "Notice document (PDF or photo)"
+                    : "Invoice document (PDF or photo)"}
+                </Label>
+                <Input
+                  id="capture-file"
+                  type="file"
+                  accept=".pdf,image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    setCaptureFile(e.target.files?.[0] ?? null);
+                    setPendingDuplicate(null);
+                  }}
+                  disabled={captureVoice != null}
+                  data-testid="input-capture-file"
+                />
+                {!noticeCapture && (
+                  <>
                     <Label htmlFor="capture-voice">
                       or a voice note (max 5 MB)
                     </Label>
@@ -1935,738 +1991,733 @@ export function ClerkWorkspace() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      English voice notes; the audio is transcribed and only
-                      the transcript is kept.
+                      English voice notes; the audio is transcribed and only the
+                      transcript is kept.
                     </p>
-                    </>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {noticeCapture
-                        ? "or paste the notice text:"
-                        : "or paste the invoice text:"}
-                    </p>
-                    <Textarea
-                      value={captureText}
-                      onChange={(e) => {
-                        setCaptureText(e.target.value);
-                        setPendingDuplicate(null);
-                      }}
-                      placeholder="INVOICE No: ..."
-                      rows={5}
-                      disabled={captureFile != null || captureVoice != null}
-                      data-testid="input-capture-text"
-                    />
-                    {/* Batch splitting works on PDFs and pasted text only —
+                  </>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {noticeCapture
+                    ? "or paste the notice text:"
+                    : "or paste the invoice text:"}
+                </p>
+                <Textarea
+                  value={captureText}
+                  onChange={(e) => {
+                    setCaptureText(e.target.value);
+                    setPendingDuplicate(null);
+                  }}
+                  placeholder="INVOICE No: ..."
+                  rows={5}
+                  disabled={captureFile != null || captureVoice != null}
+                  data-testid="input-capture-text"
+                />
+                {/* Batch splitting works on PDFs and pasted text only —
                         the checkbox greys out for images and voice notes,
                         and never shows for notice captures (a notice is one
                         document, not an invoice bundle). */}
-                    {!noticeCapture && (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="batch-toggle"
-                        checked={batchMode}
-                        onCheckedChange={(v) => setBatchMode(v === true)}
-                        disabled={
-                          captureVoice != null ||
-                          (captureFile != null && !fileIsPdf(captureFile))
-                        }
-                        data-testid="batch-toggle"
-                      />
-                      <Label
-                        htmlFor="batch-toggle"
-                        className="text-sm font-normal"
-                      >
-                        This upload contains multiple invoices
-                      </Label>
-                    </div>
-                    )}
-                    <Button
-                      className="w-full"
-                      onClick={submitCapture}
+                {!noticeCapture && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="batch-toggle"
+                      checked={batchMode}
+                      onCheckedChange={(v) => setBatchMode(v === true)}
                       disabled={
-                        createCase.isPending ||
-                        createCaseBatch.isPending ||
-                        (!captureFile &&
-                          !captureVoice &&
-                          captureText.trim().length < 10)
+                        captureVoice != null ||
+                        (captureFile != null && !fileIsPdf(captureFile))
                       }
-                      data-testid="button-run-capture"
+                      data-testid="batch-toggle"
+                    />
+                    <Label
+                      htmlFor="batch-toggle"
+                      className="text-sm font-normal"
                     >
-                      {createCaseBatch.isPending
-                        ? "Splitting…"
-                        : createCase.isPending
-                          ? captureVoice
-                            ? "Transcribing…"
-                            : "Reading…"
-                          : "Read with Clerk"}
-                    </Button>
-                    {pendingDuplicate && (
-                      <Alert data-testid="banner-duplicate-source">
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Already read this one?</AlertTitle>
-                        <AlertDescription className="space-y-2">
-                          <p>{pendingDuplicate.message}</p>
-                          <div className="flex gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                createCase.mutate({
-                                  data: {
-                                    ...pendingDuplicate.payload,
-                                    allowDuplicate: true,
-                                  },
-                                })
-                              }
-                              disabled={createCase.isPending}
-                              data-testid="button-create-anyway"
-                            >
-                              {createCase.isPending
-                                ? "Reading…"
-                                : "Create anyway"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => setPendingDuplicate(null)}
-                              data-testid="button-cancel-duplicate"
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                      This upload contains multiple invoices
+                    </Label>
                   </div>
                 )}
-                {batchResult && (
-                  <p
-                    className="text-sm text-muted-foreground"
-                    data-testid="batch-result"
-                  >
-                    Opened {batchResult.cases.length}{" "}
-                    {batchResult.cases.length === 1 ? "case" : "cases"} from{" "}
-                    {batchResult.segments}{" "}
-                    {batchResult.segments === 1 ? "invoice" : "invoices"} found
-                    {batchResult.skippedDuplicates > 0
-                      ? ` · ${batchResult.skippedDuplicates} ${
-                          batchResult.skippedDuplicates === 1
-                            ? "duplicate"
-                            : "duplicates"
-                        } skipped`
-                      : ""}
-                  </p>
-                )}
-                {/* The query carries the active tab's kind param, so no
-                    client-side kind filter is needed here. */}
-                {sortedCases.length === 0 ? (
-                  // First-run empty state: show the ways in — a single
-                  // capture, or (invoices only) a multi-invoice bundle
-                  // (same form, batch pre-ticked). Both only OPEN the form;
-                  // reading still takes the operator's click.
-                  <EmptyState
-                    icon={Inbox}
-                    title={
-                      queueKind === "notice"
-                        ? "No notices read yet"
-                        : "No documents read yet"
-                    }
-                    description={
-                      queueKind === "notice"
-                        ? "Capture a tax-authority notice — a photo, scan or pasted text — Clerk reads it and queues it here for your review."
-                        : "Capture an invoice document, voice note or pasted text — Clerk reads it and queues it here for your review."
-                    }
-                    className="py-8 px-2"
-                  >
-                    <div className="flex flex-wrap justify-center gap-2 mt-1">
-                      <Button
-                        size="sm"
-                        onClick={() => setCaptureOpen(true)}
-                        data-testid="button-empty-capture"
-                      >
-                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-                        {queueKind === "notice"
-                          ? "Capture your first notice"
-                          : "Capture your first document"}
-                      </Button>
-                      {queueKind === "extraction" && (
+                <Button
+                  className="w-full"
+                  onClick={submitCapture}
+                  disabled={
+                    createCase.isPending ||
+                    createCaseBatch.isPending ||
+                    (!captureFile &&
+                      !captureVoice &&
+                      captureText.trim().length < 10)
+                  }
+                  data-testid="button-run-capture"
+                >
+                  {createCaseBatch.isPending
+                    ? "Splitting…"
+                    : createCase.isPending
+                      ? captureVoice
+                        ? "Transcribing…"
+                        : "Reading…"
+                      : "Read with Clerk"}
+                </Button>
+                {pendingDuplicate && (
+                  <Alert data-testid="banner-duplicate-source">
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    <AlertTitle>Already read this one?</AlertTitle>
+                    <AlertDescription className="space-y-2">
+                      <p>{pendingDuplicate.message}</p>
+                      <div className="flex gap-2 flex-wrap">
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setCaptureOpen(true);
-                            setBatchMode(true);
-                          }}
-                          data-testid="button-empty-import-batch"
+                          onClick={() =>
+                            createCase.mutate({
+                              data: {
+                                ...pendingDuplicate.payload,
+                                allowDuplicate: true,
+                              },
+                            })
+                          }
+                          disabled={createCase.isPending}
+                          data-testid="button-create-anyway"
                         >
-                          Import a multi-invoice bundle
+                          {createCase.isPending ? "Reading…" : "Create anyway"}
                         </Button>
-                      )}
-                    </div>
-                  </EmptyState>
-                ) : (
-                  <div className="space-y-2">
-                    {queueGroups.map((g) => {
-                      const rows = g.cases.map((c) => {
-                      const kind = caseIntakeKind(c);
-                      const Icon = kind.icon;
-                      const status = QUEUE_STATUS[c.status];
-                      const ready = isReadyToApprove(c);
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelectedId(c.id)}
-                          aria-current={selectedId === c.id ? "true" : undefined}
-                          className={`w-full text-left flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
-                            selectedId === c.id
-                              ? "border-primary/50 ring-1 ring-primary/30 bg-muted/40"
-                              : "border-border"
-                          }`}
-                          data-testid={`row-case-${c.id}`}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setPendingDuplicate(null)}
+                          data-testid="button-cancel-duplicate"
                         >
-                          <span
-                            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
-                            aria-hidden="true"
-                          >
-                            <Icon className="h-4 w-4" />
-                          </span>
-                          <span className="flex-1 min-w-0 block">
-                            <span className="block text-xs text-muted-foreground">
-                              {kind.label} · {formatDateTime(c.createdAt)}
-                              {/* Kind badge: notices carry a distinct violet
+                          Cancel
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
+            {batchResult && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="batch-result"
+              >
+                Opened {batchResult.cases.length}{" "}
+                {batchResult.cases.length === 1 ? "case" : "cases"} from{" "}
+                {batchResult.segments}{" "}
+                {batchResult.segments === 1 ? "invoice" : "invoices"} found
+                {batchResult.skippedDuplicates > 0
+                  ? ` · ${batchResult.skippedDuplicates} ${
+                      batchResult.skippedDuplicates === 1
+                        ? "duplicate"
+                        : "duplicates"
+                    } skipped`
+                  : ""}
+              </p>
+            )}
+            {/* The query carries the active tab's kind param, so no
+                    client-side kind filter is needed here. */}
+            {filteredCases.length === 0 ? (
+              // First-run empty state: show the ways in — a single
+              // capture, or (invoices only) a multi-invoice bundle
+              // (same form, batch pre-ticked). Both only OPEN the form;
+              // reading still takes the operator's click.
+              <EmptyState
+                icon={Inbox}
+                title={
+                  queueKind === "notice"
+                    ? queueSearch
+                      ? "No matching notices"
+                      : "No notices read yet"
+                    : queueSearch
+                      ? "No matching documents"
+                      : "No documents read yet"
+                }
+                description={
+                  queueKind === "notice"
+                    ? queueSearch
+                      ? "Try a source name, reference, status or case ID."
+                      : "Capture a tax-authority notice — a photo, scan or pasted text — Clerk reads it and queues it here for your review."
+                    : queueSearch
+                      ? "Try a source name, invoice number, status or case ID."
+                      : "Capture an invoice document, voice note or pasted text — Clerk reads it and queues it here for your review."
+                }
+                className="py-8 px-2"
+              >
+                <div className="flex flex-wrap justify-center gap-2 mt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => setCaptureOpen(true)}
+                    data-testid="button-empty-capture"
+                  >
+                    <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                    {queueKind === "notice"
+                      ? "Capture your first notice"
+                      : "Capture your first document"}
+                  </Button>
+                  {queueKind === "extraction" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setCaptureOpen(true);
+                        setBatchMode(true);
+                      }}
+                      data-testid="button-empty-import-batch"
+                    >
+                      Import a multi-invoice bundle
+                    </Button>
+                  )}
+                </div>
+              </EmptyState>
+            ) : (
+              <div className="space-y-2">
+                {queueGroups.map((g) => {
+                  const rows = g.cases.map((c) => {
+                    const kind = caseIntakeKind(c);
+                    const Icon = kind.icon;
+                    const status = QUEUE_STATUS[c.status];
+                    const ready = isReadyToApprove(c);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedId(c.id)}
+                        aria-current={selectedId === c.id ? "true" : undefined}
+                        className={`w-full text-left flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
+                          selectedId === c.id
+                            ? "border-primary/50 ring-1 ring-primary/30 bg-muted/40"
+                            : "border-border"
+                        }`}
+                        data-testid={`row-case-${c.id}`}
+                      >
+                        <span
+                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                          aria-hidden="true"
+                        >
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="flex-1 min-w-0 block">
+                          <span className="block text-xs text-muted-foreground">
+                            {kind.label} · {formatDateTime(c.createdAt)}
+                            {/* Kind badge: notices carry a distinct violet
                                   marker so a statutory notice never blends
                                   in with invoice paper. */}
-                              {c.kind === "notice" && (
-                                <span
-                                  className="ml-1.5 inline-flex items-center rounded-full border border-violet-200 bg-violet-100 px-1.5 py-px text-[10px] font-medium text-violet-800 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300"
-                                  data-testid="notice-pill"
-                                >
-                                  Notice
-                                </span>
-                              )}
-                            </span>
-                            <span className="block text-sm font-semibold truncate mt-0.5">
-                              {c.sourceName ?? "Untitled"}
-                            </span>
-                            <span
-                              className={`block text-sm font-medium mt-1 ${status.cls}`}
-                            >
-                              {status.label}
-                              {ready && (
-                                <span
-                                  className="ml-1.5 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-1.5 py-px text-[10px] font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
-                                  data-testid="ready-pill"
-                                >
-                                  Ready
-                                </span>
-                              )}
-                              {c.status === "in_review" ? (
-                                <span
-                                  className="ml-1.5 text-[10px] uppercase text-muted-foreground font-normal"
-                                  data-testid={`indicator-claimed-${c.id}`}
-                                >
-                                  claimed
-                                </span>
-                              ) : null}
-                            </span>
+                            {c.kind === "notice" && (
+                              <span
+                                className="ml-1.5 inline-flex items-center rounded-full border border-violet-200 bg-violet-100 px-1.5 py-px text-[10px] font-medium text-violet-800 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300"
+                                data-testid="notice-pill"
+                              >
+                                Notice
+                              </span>
+                            )}
                           </span>
-                        </button>
-                      );
-                      });
-                      if (g.batchId === null) return rows;
-                      const batch = batchById.get(g.batchId);
-                      return (
-                        <div
-                          key={`batch-${g.batchId}`}
-                          className="space-y-2 rounded-lg border border-dashed border-border p-2"
-                          data-testid={`group-batch-${g.batchId}`}
-                        >
-                          <p className="px-1 text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">
-                              {batch?.name?.trim() || "Batch intake"}
-                            </span>
-                            {/* Counts only when the batch row resolved — a
+                          <span className="block text-sm font-semibold truncate mt-0.5">
+                            {c.sourceName ?? "Untitled"}
+                          </span>
+                          <span
+                            className={`block text-sm font-medium mt-1 ${status.cls}`}
+                          >
+                            {status.label}
+                            {ready && (
+                              <span
+                                className="ml-1.5 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-1.5 py-px text-[10px] font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+                                data-testid="ready-pill"
+                              >
+                                Ready
+                              </span>
+                            )}
+                            {c.status === "in_review" ? (
+                              <span
+                                className="ml-1.5 text-[10px] uppercase text-muted-foreground font-normal"
+                                data-testid={`indicator-claimed-${c.id}`}
+                              >
+                                claimed
+                              </span>
+                            ) : null}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  });
+                  if (g.batchId === null) return rows;
+                  const batch = batchById.get(g.batchId);
+                  return (
+                    <div
+                      key={`batch-${g.batchId}`}
+                      className="space-y-2 rounded-lg border border-dashed border-border p-2"
+                      data-testid={`group-batch-${g.batchId}`}
+                    >
+                      <p className="px-1 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {batch?.name?.trim() || "Batch intake"}
+                        </span>
+                        {/* Counts only when the batch row resolved — a
                                 batch beyond the newest-50 list must not
                                 assert "0 reviewed". */}
-                            {batch && (
-                              <>
-                                {" · "}
-                                {batch.reviewedCases} of {batch.createdCases}{" "}
-                                reviewed
-                              </>
-                            )}
-                          </p>
-                          {rows}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {(hasMoreCases || loadingMoreCases) && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={loadMoreCases}
-                    disabled={loadingMoreCases}
-                    data-testid="button-load-more-cases"
-                  >
-                    {loadingMoreCases ? "Loading…" : "Load more"}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-2 self-start">
-              <CardHeader>
-                {selected ? (
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-muted-foreground">
-                        {caseIntakeKind(selected).eyebrow}
+                        {batch && (
+                          <>
+                            {" · "}
+                            {batch.reviewedCases} of {batch.createdCases}{" "}
+                            reviewed
+                          </>
+                        )}
                       </p>
-                      <CardTitle className="text-xl mt-1 truncate">
-                        {selected.sourceName ?? "Case detail"}
-                      </CardTitle>
+                      {rows}
                     </div>
-                    <span
-                      className={pillClasses(
-                        STATUS_TONE[selected.status] ?? "slate",
-                      )}
-                    >
-                      {selected.status.replace("_", " ")}
-                    </span>
-                  </div>
-                ) : (
-                  <CardTitle className="text-base">Case detail</CardTitle>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!selected ? (
-                  <p className="text-sm text-muted-foreground">
-                    Pick a case on the left, or read a new document.
+                  );
+                })}
+              </div>
+            )}
+            {(hasMoreCases || loadingMoreCases) && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={loadMoreCases}
+                disabled={loadingMoreCases}
+                data-testid="button-load-more-cases"
+              >
+                {loadingMoreCases ? "Loading…" : "Load more"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0 self-start">
+          <CardHeader>
+            {selected ? (
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {caseIntakeKind(selected).eyebrow}
                   </p>
-                ) : (
-                  <>
-                    {/* The source, quoted: a voice note's transcript or the
+                  <CardTitle className="text-xl mt-1 truncate">
+                    {selected.sourceName ?? "Case detail"}
+                  </CardTitle>
+                </div>
+                <span
+                  className={pillClasses(
+                    STATUS_TONE[selected.status] ?? "slate",
+                  )}
+                >
+                  {selected.status.replace("_", " ")}
+                </span>
+              </div>
+            ) : (
+              <CardTitle className="text-base">Case detail</CardTitle>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selected ? (
+              <p className="text-sm text-muted-foreground">
+                Pick a case on the left, or read a new document.
+              </p>
+            ) : (
+              <>
+                {/* The source, quoted: a voice note's transcript or the
                         pasted text, with its provenance line. */}
-                    {selected.sourceText ? (
-                      <div
-                        className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
-                        data-testid="card-source-text"
+                {selected.sourceText ? (
+                  <div
+                    className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
+                    data-testid="card-source-text"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white dark:bg-teal-500"
+                        aria-hidden="true"
                       >
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white dark:bg-teal-500"
-                            aria-hidden="true"
-                          >
-                            {(() => {
-                              const Icon = caseIntakeKind(selected).icon;
-                              return <Icon className="h-4 w-4" />;
-                            })()}
-                          </span>
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-medium text-foreground">
-                              {selected.sourceDurationSec
-                                ? `${voiceDuration(selected.sourceDurationSec)} ${caseIntakeKind(selected).label.toLowerCase()}`
-                                : caseIntakeKind(selected).label}
-                            </span>{" "}
-                            · {formatDateTime(selected.createdAt)}
-                          </p>
-                        </div>
-                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
-                          {selected.sourceText}
-                        </p>
-                      </div>
-                    ) : null}
-                    {/* The captured document itself: a single photographed/
+                        {(() => {
+                          const Icon = caseIntakeKind(selected).icon;
+                          return <Icon className="h-4 w-4" />;
+                        })()}
+                      </span>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {selected.sourceDurationSec
+                            ? `${voiceDuration(selected.sourceDurationSec)} ${caseIntakeKind(selected).label.toLowerCase()}`
+                            : caseIntakeKind(selected).label}
+                        </span>{" "}
+                        · {formatDateTime(selected.createdAt)}
+                      </p>
+                    </div>
+                    <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
+                      {selected.sourceText}
+                    </p>
+                  </div>
+                ) : null}
+                {/* The captured document itself: a single photographed/
                         uploaded image rides on the case row, so it renders
                         with no extra fetch. Expanded by default — seeing the
                         paper is the whole point of the review pane. */}
-                    {selected.sourceImageB64 ? (
-                      <div
-                        className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
-                        data-testid="card-source-image"
+                {selected.sourceImageB64 ? (
+                  <div
+                    className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
+                    data-testid="card-source-image"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Document</p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setImageOpen((o) => !o)}
+                        aria-expanded={imageOpen}
+                        data-testid="button-toggle-source-image"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium">Document</p>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setImageOpen((o) => !o)}
-                            aria-expanded={imageOpen}
-                            data-testid="button-toggle-source-image"
-                          >
-                            {imageOpen ? "Collapse" : "Expand"}
-                          </Button>
-                        </div>
-                        {imageOpen && (
-                          <div className="max-h-96 overflow-auto rounded-md border bg-background">
-                            <img
-                              src={imageDataUri(selected.sourceImageB64)}
-                              alt={`Captured document for ${selected.sourceName ?? "this case"}`}
-                              className="w-full"
-                              data-testid="img-source-document"
-                            />
-                          </div>
-                        )}
+                        {imageOpen ? "Collapse" : "Expand"}
+                      </Button>
+                    </div>
+                    {imageOpen && (
+                      <div className="max-h-96 overflow-auto rounded-md border bg-background">
+                        <img
+                          src={imageDataUri(selected.sourceImageB64)}
+                          alt={`Captured document for ${selected.sourceName ?? "this case"}`}
+                          className="w-full"
+                          data-testid="img-source-document"
+                        />
                       </div>
-                    ) : null}
-                    {/* A scanned PDF has neither text nor an inline image —
+                    )}
+                  </div>
+                ) : null}
+                {/* A scanned PDF has neither text nor an inline image —
                         its rendered pages are fetched lazily, only when the
                         operator asks, and only while retention still holds
                         the document content. */}
-                    {selected.sourceType === "pdf" &&
-                    !selected.sourceText &&
-                    !selected.sourceImageB64 ? (
-                      <div
-                        className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
-                        data-testid="card-source-pages"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium">
-                            Scanned document
-                          </p>
-                          {!pagesOpen && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => setPagesOpen(true)}
-                              data-testid="button-view-source-pages"
-                            >
-                              View pages
-                            </Button>
-                          )}
-                        </div>
-                        {pagesOpen &&
-                          (sourcePagesLoading ? (
-                            <Skeleton
-                              className="h-40"
-                              data-testid="skeleton-source-pages"
+                {selected.sourceType === "pdf" &&
+                !selected.sourceText &&
+                !selected.sourceImageB64 ? (
+                  <div
+                    className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
+                    data-testid="card-source-pages"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Scanned document</p>
+                      {!pagesOpen && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setPagesOpen(true)}
+                          data-testid="button-view-source-pages"
+                        >
+                          View pages
+                        </Button>
+                      )}
+                    </div>
+                    {pagesOpen &&
+                      (sourcePagesLoading ? (
+                        <Skeleton
+                          className="h-40"
+                          data-testid="skeleton-source-pages"
+                        />
+                      ) : sourcePagesError || !sourcePages ? (
+                        <QueryError
+                          thing="the scanned pages"
+                          onRetry={() => refetchSourcePages()}
+                          detail={
+                            sourcePagesError instanceof Error
+                              ? sourcePagesError.message
+                              : undefined
+                          }
+                        />
+                      ) : sourcePages.purged ? (
+                        <p
+                          className="text-sm text-muted-foreground"
+                          data-testid="text-source-purged"
+                        >
+                          The document content has been cleared by retention.
+                        </p>
+                      ) : (
+                        <div className="max-h-96 space-y-2 overflow-auto rounded-md border bg-background p-2">
+                          {sourcePages.pages.map((page, i) => (
+                            <img
+                              key={i}
+                              src={imageDataUri(page)}
+                              alt={`Page ${i + 1} of ${selected.sourceName ?? "the scanned document"}`}
+                              className="w-full"
+                              data-testid={`img-source-page-${i + 1}`}
                             />
-                          ) : sourcePagesError || !sourcePages ? (
-                            <QueryError
-                              thing="the scanned pages"
-                              onRetry={() => refetchSourcePages()}
-                              detail={
-                                sourcePagesError instanceof Error
-                                  ? sourcePagesError.message
-                                  : undefined
-                              }
-                            />
-                          ) : sourcePages.purged ? (
-                            <p
-                              className="text-sm text-muted-foreground"
-                              data-testid="text-source-purged"
-                            >
-                              The document content has been cleared by
-                              retention.
-                            </p>
-                          ) : (
-                            <div className="max-h-96 space-y-2 overflow-auto rounded-md border bg-background p-2">
-                              {sourcePages.pages.map((page, i) => (
-                                <img
-                                  key={i}
-                                  src={imageDataUri(page)}
-                                  alt={`Page ${i + 1} of ${selected.sourceName ?? "the scanned document"}`}
-                                  className="w-full"
-                                  data-testid={`img-source-page-${i + 1}`}
-                                />
-                              ))}
-                            </div>
                           ))}
-                      </div>
-                    ) : null}
-                    {detailExtraction && (
-                      <p className="text-xs text-muted-foreground">
-                        read by {detailExtraction.model} (
-                        {detailExtraction.promptVersion})
-                      </p>
-                    )}
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+                {detailExtraction && (
+                  <p className="text-xs text-muted-foreground">
+                    read by {detailExtraction.model} (
+                    {detailExtraction.promptVersion})
+                  </p>
+                )}
 
-                    {/* What kind of notice this is, front and centre — the
+                {/* What kind of notice this is, front and centre — the
                         first thing an operator triages a notice by. The
                         extracted value is free text; the label maps
                         humanize the catalogue values and anything else
                         falls back to plain humanization. */}
-                    {selected.kind === "notice" && selected.noticeExtraction && (
-                      <div
-                        className="rounded-lg border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30"
-                        data-testid="card-notice-type"
-                      >
-                        <p className="text-xs font-semibold text-muted-foreground">
-                          Tax authority notice
-                        </p>
-                        <p
-                          className="mt-1 text-lg font-semibold"
-                          data-testid="text-notice-type"
-                        >
-                          {noticeTypeLabel(selected.noticeExtraction.noticeType)}
-                        </p>
-                      </div>
-                    )}
+                {selected.kind === "notice" && selected.noticeExtraction && (
+                  <div
+                    className="rounded-lg border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30"
+                    data-testid="card-notice-type"
+                  >
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Tax authority notice
+                    </p>
+                    <p
+                      className="mt-1 text-lg font-semibold"
+                      data-testid="text-notice-type"
+                    >
+                      {noticeTypeLabel(selected.noticeExtraction.noticeType)}
+                    </p>
+                  </div>
+                )}
 
-                    {selected.status === "failed" && (
-                      <Alert variant="destructive">
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Reading failed</AlertTitle>
-                        <AlertDescription className="space-y-2">
-                          <p>
-                            {selected.failReason ??
-                              "The Clerk could not read this document. Enter the invoice manually."}
-                          </p>
-                          {/* Retry re-runs extraction on the stored source —
+                {selected.status === "failed" && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    <AlertTitle>Reading failed</AlertTitle>
+                    <AlertDescription className="space-y-2">
+                      <p>
+                        {selected.failReason ??
+                          "The Clerk could not read this document. Enter the invoice manually."}
+                      </p>
+                      {/* Retry re-runs extraction on the stored source —
                               only failed extraction cases qualify (the server
                               409s anything else). */}
-                          {selected.kind === "extraction" && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                retryCase.mutate({ id: selected.id })
-                              }
-                              disabled={retryCase.isPending}
-                              data-testid="button-retry-case"
-                            >
-                              {retryCase.isPending ? "Retrying…" : "Retry"}
-                            </Button>
-                          )}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {selected.status === "escalated" && (
-                      <Alert>
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Escalated</AlertTitle>
-                        <AlertDescription>
-                          {selected.decisionReason ??
-                            "This case needs a human decision outside the Clerk."}
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                      {selected.kind === "extraction" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => retryCase.mutate({ id: selected.id })}
+                          disabled={retryCase.isPending}
+                          data-testid="button-retry-case"
+                        >
+                          {retryCase.isPending ? "Retrying…" : "Retry"}
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {selected.status === "escalated" && (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    <AlertTitle>Escalated</AlertTitle>
+                    <AlertDescription>
+                      {selected.decisionReason ??
+                        "This case needs a human decision outside the Clerk."}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
-                    {/* Deterministic pre-approval checks, computed by the
+                {/* Deterministic pre-approval checks, computed by the
                         server on every successful extraction. null means the
                         extraction never succeeded (or predates pre-flight) —
                         render nothing rather than a false all-clear. */}
-                    {(selected.status === "extracted" ||
-                      selected.status === "in_review") &&
-                      selected.preflight != null &&
-                      (selected.preflight.length === 0 ? (
-                        <p
-                          className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400"
-                          data-testid="preflight-clear"
-                        >
-                          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                          Pre-flight clear — nothing blocking approval
-                        </p>
-                      ) : (
-                        <div
-                          className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40"
-                          data-testid="preflight-issues"
-                        >
-                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                            Pre-flight —{" "}
-                            {selected.preflight.length === 1
-                              ? "1 issue"
-                              : `${selected.preflight.length} issues`}{" "}
-                            to resolve before approval
-                          </p>
-                          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-300">
-                            {selected.preflight.map((issue, i) => (
-                              <li key={`${issue.field}-${i}`}>
-                                {issue.message}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
+                {(selected.status === "extracted" ||
+                  selected.status === "in_review") &&
+                  selected.preflight != null &&
+                  (selected.preflight.length === 0 ? (
+                    <p
+                      className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                      data-testid="preflight-clear"
+                    >
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      Pre-flight clear — nothing blocking approval
+                    </p>
+                  ) : (
+                    <div
+                      className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40"
+                      data-testid="preflight-issues"
+                    >
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                        Pre-flight —{" "}
+                        {selected.preflight.length === 1
+                          ? "1 issue"
+                          : `${selected.preflight.length} issues`}{" "}
+                        to resolve before approval
+                      </p>
+                      <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-300">
+                        {selected.preflight.map((issue, i) => (
+                          <li key={`${issue.field}-${i}`}>{issue.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
 
-                    {detailExtraction && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5 flex items-center gap-2">
-                          Extracted fields — amber rows need checking
-                          {selected.extraction?.exemplarCaseId && (
-                            /* Provenance is navigable: selecting the exemplar
+                {detailExtraction && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5 flex items-center gap-2">
+                      Extracted fields — amber rows need checking
+                      {selected.extraction?.exemplarCaseId && (
+                        /* Provenance is navigable: selecting the exemplar
                                id drives the same by-id case fetch the queue
                                uses, so it opens even when that case has
                                scrolled off the loaded pages. */
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const id = selected.extraction?.exemplarCaseId;
-                                if (id) setSelectedId(id);
-                              }}
-                              className="normal-case rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800 transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/70"
-                              title="Extraction was guided by a previously approved invoice from the same supplier — open that case"
-                              aria-label="Open the exemplar case that guided this extraction"
-                              data-testid="badge-exemplar"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const id = selected.extraction?.exemplarCaseId;
+                            if (id) setSelectedId(id);
+                          }}
+                          className="normal-case rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800 transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/70"
+                          title="Extraction was guided by a previously approved invoice from the same supplier — open that case"
+                          aria-label="Open the exemplar case that guided this extraction"
+                          data-testid="badge-exemplar"
+                        >
+                          supplier memory
+                        </button>
+                      )}
+                    </p>
+                    <div className="divide-y text-sm">
+                      {detailExtraction.fields.map((f) => {
+                        const preflightHit = preflightFields.has(f.field);
+                        const snippetOpen = openSnippets.has(f.field);
+                        const hint =
+                          selected.kind === "extraction"
+                            ? correctionHint(f.field, queueMetrics?.corrections)
+                            : null;
+                        return (
+                          <div key={f.field}>
+                            <div
+                              className={`flex items-center gap-3 px-1 py-2.5 ${
+                                f.flagged || preflightHit
+                                  ? "bg-amber-50 dark:bg-amber-950/40 rounded-md px-2"
+                                  : ""
+                              }${
+                                preflightHit
+                                  ? " border-l-2 border-amber-400 dark:border-amber-600"
+                                  : ""
+                              }`}
+                              data-testid={`row-field-${f.field}`}
                             >
-                              supplier memory
-                            </button>
-                          )}
-                        </p>
-                        <div className="divide-y text-sm">
-                          {detailExtraction.fields.map((f) => {
-                            const preflightHit = preflightFields.has(f.field);
-                            const snippetOpen = openSnippets.has(f.field);
-                            const hint =
-                              selected.kind === "extraction"
-                                ? correctionHint(
-                                    f.field,
-                                    queueMetrics?.corrections,
-                                  )
-                                : null;
-                            return (
-                              <div key={f.field}>
-                                <div
-                                  className={`flex items-center gap-3 px-1 py-2.5 ${
-                                    f.flagged || preflightHit
-                                      ? "bg-amber-50 dark:bg-amber-950/40 rounded-md px-2"
-                                      : ""
-                                  }${
-                                    preflightHit
-                                      ? " border-l-2 border-amber-400 dark:border-amber-600"
-                                      : ""
-                                  }`}
-                                  data-testid={`row-field-${f.field}`}
-                                >
-                                  <span className="w-36 shrink-0 text-muted-foreground">
-                                    {detailFieldLabel(f.field)}
-                                  </span>
-                                  <span className="flex-1 truncate text-right font-semibold">
-                                    {f.value ?? (
-                                      <em className="text-muted-foreground font-normal">
-                                        missing
-                                      </em>
-                                    )}
-                                  </span>
-                                  {f.critical && (
-                                    <span className="text-[10px] uppercase text-muted-foreground">
-                                      critical
-                                    </span>
-                                  )}
-                                  {hint && (
-                                    <span
-                                      className="shrink-0 text-[10px] text-amber-700 dark:text-amber-400"
-                                      title="From the corrections exhaust across recent approved cases"
-                                      data-testid={`hint-${f.field}`}
-                                    >
-                                      {hint}
-                                    </span>
-                                  )}
-                                  <ConfidenceBadge confidence={f.confidence} />
-                                  {f.sourceSnippet != null && (
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleSnippet(f.field)}
-                                      aria-label="Show source text"
-                                      aria-expanded={snippetOpen}
-                                      className={`shrink-0 rounded p-0.5 transition-colors hover:text-foreground ${
-                                        snippetOpen
-                                          ? "text-foreground"
-                                          : "text-muted-foreground"
-                                      }`}
-                                      data-testid={`snippet-toggle-${f.field}`}
-                                    >
-                                      <Quote
-                                        className="h-3.5 w-3.5"
-                                        aria-hidden="true"
-                                      />
-                                    </button>
-                                  )}
-                                </div>
-                                {snippetOpen && f.sourceSnippet != null && (
-                                  <blockquote
-                                    className="mx-1 mb-2 border-l-2 border-teal-300 pl-3 text-xs italic text-muted-foreground dark:border-teal-800"
-                                    data-testid={`snippet-${f.field}`}
-                                  >
-                                    “{truncateSnippet(f.sourceSnippet)}”
-                                  </blockquote>
+                              <span className="w-36 shrink-0 text-muted-foreground">
+                                {detailFieldLabel(f.field)}
+                              </span>
+                              <span className="flex-1 truncate text-right font-semibold">
+                                {f.value ?? (
+                                  <em className="text-muted-foreground font-normal">
+                                    missing
+                                  </em>
                                 )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {selected.status === "approved" &&
-                      selected.createdInvoiceId && (
-                        <Alert data-testid="banner-draft-created">
-                          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                          <AlertTitle>Draft invoice created</AlertTitle>
-                          <AlertDescription>
-                            The invoice was created as a DRAFT. It has not been
-                            submitted — it follows the normal human submission
-                            flow.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                    {/* A notice approval's success state: the obligation the
-                        server just recorded, deadline front and centre. */}
-                    {selected.kind === "notice" && noticeObligation && (
-                      <Alert data-testid="banner-obligation-created">
-                        <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Obligation recorded</AlertTitle>
-                        <AlertDescription>
-                          Obligation recorded — response due{" "}
-                          {noticeObligation.responseDueDate}. Track and update
-                          it from the client&apos;s page.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {/* A notice case approved before this visit: the
-                        obligation itself lives on the client's page. */}
-                    {selected.kind === "notice" &&
-                      selected.status === "approved" &&
-                      !noticeObligation && (
-                        <Alert data-testid="banner-obligation-exists">
-                          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                          <AlertTitle>Notice approved</AlertTitle>
-                          <AlertDescription>
-                            An open response obligation was recorded for this
-                            notice — track it on the client&apos;s page.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                    {form && (
-                      <InvoiceDecisionForm
-                        form={form}
-                        setForm={setForm}
-                        reason={reason}
-                        setReason={setReason}
-                        firms={firms}
-                        parties={parties}
-                        partySuggestions={partySuggestions}
-                        claimControls={claimControls}
-                        caseId={selected.id}
-                        decideCase={decideCase}
-                        approveDisabled={approveDisabled}
-                        linesPreflightHit={linesPreflightHit}
-                      />
-                    )}
-
-                    {noticeForm && (
-                      <NoticeDecisionForm
-                        noticeForm={noticeForm}
-                        setNoticeForm={setNoticeForm}
-                        reason={reason}
-                        setReason={setReason}
-                        firms={firms}
-                        parties={parties}
-                        claimControls={claimControls}
-                        caseId={selected.id}
-                        decideNotice={decideNotice}
-                      />
-                    )}
-                  </>
+                              </span>
+                              {f.critical && (
+                                <span className="text-[10px] uppercase text-muted-foreground">
+                                  critical
+                                </span>
+                              )}
+                              {hint && (
+                                <span
+                                  className="shrink-0 text-[10px] text-amber-700 dark:text-amber-400"
+                                  title="From the corrections exhaust across recent approved cases"
+                                  data-testid={`hint-${f.field}`}
+                                >
+                                  {hint}
+                                </span>
+                              )}
+                              <ConfidenceBadge confidence={f.confidence} />
+                              {f.sourceSnippet != null && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSnippet(f.field)}
+                                  aria-label="Show source text"
+                                  aria-expanded={snippetOpen}
+                                  className={`shrink-0 rounded p-0.5 transition-colors hover:text-foreground ${
+                                    snippetOpen
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                  }`}
+                                  data-testid={`snippet-toggle-${f.field}`}
+                                >
+                                  <Quote
+                                    className="h-3.5 w-3.5"
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              )}
+                            </div>
+                            {snippetOpen && f.sourceSnippet != null && (
+                              <blockquote
+                                className="mx-1 mb-2 border-l-2 border-teal-300 pl-3 text-xs italic text-muted-foreground dark:border-teal-800"
+                                data-testid={`snippet-${f.field}`}
+                              >
+                                “{truncateSnippet(f.sourceSnippet)}”
+                              </blockquote>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              </CardContent>
-            </Card>
-          </div>
+
+                {selected.status === "approved" &&
+                  selected.createdInvoiceId && (
+                    <Alert data-testid="banner-draft-created">
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      <AlertTitle>Draft invoice created</AlertTitle>
+                      <AlertDescription>
+                        The invoice was created as a DRAFT. It has not been
+                        submitted — it follows the normal human submission flow.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                {/* A notice approval's success state: the obligation the
+                        server just recorded, deadline front and centre. */}
+                {selected.kind === "notice" && noticeObligation && (
+                  <Alert data-testid="banner-obligation-created">
+                    <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                    <AlertTitle>Obligation recorded</AlertTitle>
+                    <AlertDescription>
+                      Obligation recorded — response due{" "}
+                      {noticeObligation.responseDueDate}. Track and update it
+                      from the client&apos;s page.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {/* A notice case approved before this visit: the
+                        obligation itself lives on the client's page. */}
+                {selected.kind === "notice" &&
+                  selected.status === "approved" &&
+                  !noticeObligation && (
+                    <Alert data-testid="banner-obligation-exists">
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      <AlertTitle>Notice approved</AlertTitle>
+                      <AlertDescription>
+                        An open response obligation was recorded for this notice
+                        — track it on the client&apos;s page.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                {form && (
+                  <InvoiceDecisionForm
+                    form={form}
+                    setForm={setForm}
+                    reason={reason}
+                    setReason={setReason}
+                    firms={firms}
+                    parties={parties}
+                    partySuggestions={partySuggestions}
+                    claimControls={claimControls}
+                    caseId={selected.id}
+                    decideCase={decideCase}
+                    approveDisabled={approveDisabled}
+                    linesPreflightHit={linesPreflightHit}
+                  />
+                )}
+
+                {noticeForm && (
+                  <NoticeDecisionForm
+                    noticeForm={noticeForm}
+                    setNoticeForm={setNoticeForm}
+                    reason={reason}
+                    setReason={setReason}
+                    firms={firms}
+                    parties={parties}
+                    claimControls={claimControls}
+                    caseId={selected.id}
+                    decideNotice={decideNotice}
+                  />
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <BulkApproveDialog
         open={bulkOpen}

@@ -8,8 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CapabilityGate } from "@/components/capability-gate";
 import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
-import { PillToggle } from "@/components/pill-toggle";
 import { QueryError } from "@/components/query-error";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -27,7 +25,18 @@ import {
   deadlineDaysUntil,
   localDayIso,
 } from "@workspace/format/notice-copy";
-import { CalendarCheck2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarCheck2,
+  CheckCircle2,
+  Clock3,
+} from "lucide-react";
+import {
+  Metric,
+  MetricStrip,
+  SegmentedControl,
+  WorkspaceHeader,
+} from "@workspace/web-ui";
 
 // Read-only by design: the filings register is minted and walked by the firm
 // (sync, then upcoming → prepared → filed on the console's Filing Desk) —
@@ -96,13 +105,7 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
-function FilingRow({
-  filing,
-  todayIso,
-}: {
-  filing: Filing;
-  todayIso: string;
-}) {
+function FilingRow({ filing, todayIso }: { filing: Filing; todayIso: string }) {
   // Only an unfiled return escalates on its due date.
   const flag =
     filing.status === "filed" ? null : deadlineFlag(filing.dueDate, todayIso);
@@ -167,32 +170,76 @@ function FilingsContent() {
 
   // The server pins a client_user to its own party — no clientPartyId is
   // sent.
-  const params: ListFilingsParams =
-    filter === "all" ? {} : { status: filter };
+  const params: ListFilingsParams = filter === "all" ? {} : { status: filter };
   const { data, isLoading, isError, refetch } = useListFilings(params, {
     query: { queryKey: getListFilingsQueryKey(params) },
   });
   const filings = data?.filings ?? [];
+  const overdue = filings.filter(
+    (filing) =>
+      filing.status !== "filed" &&
+      deadlineFlag(filing.dueDate, todayIso) === "overdue",
+  ).length;
+  const dueSoon = filings.filter(
+    (filing) =>
+      filing.status !== "filed" &&
+      deadlineFlag(filing.dueDate, todayIso) === "due-soon",
+  ).length;
+  const prepared = filings.filter(
+    (filing) => filing.status === "prepared",
+  ).length;
+  const filed = filings.filter((filing) => filing.status === "filed").length;
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <WorkspaceHeader
+        eyebrow="Tax & filings"
         title="Filings"
-        description="The VAT returns, PAYE remittances and WHT remittances your firm tracks for each period, with their filing deadlines. Your accountant records each one as it is prepared and filed — the platform never files anything itself."
+        description="Track each period's VAT, PAYE and WHT returns from upcoming through filed."
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => (
-          <PillToggle
-            key={f.key}
-            active={filter === f.key}
-            onClick={() => setFilter(f.key)}
-            data-testid={`filter-filings-${f.key}`}
-          >
-            {f.label}
-          </PillToggle>
-        ))}
-      </div>
+      <MetricStrip label="Filing status">
+        <Metric
+          label="Overdue"
+          value={String(overdue)}
+          detail="Past the statutory due date"
+          icon={<AlertTriangle className="size-4" aria-hidden="true" />}
+          tone={overdue > 0 ? "critical" : "default"}
+        />
+        <Metric
+          label="Due soon"
+          value={String(dueSoon)}
+          detail="Within the next seven days"
+          icon={<Clock3 className="size-4" aria-hidden="true" />}
+          tone={dueSoon > 0 ? "warning" : "default"}
+        />
+        <Metric
+          label="Prepared"
+          value={String(prepared)}
+          detail="Ready for firm filing"
+          icon={<CalendarCheck2 className="size-4" aria-hidden="true" />}
+          tone="info"
+        />
+        <Metric
+          label="Filed"
+          value={String(filed)}
+          detail="Recorded as complete"
+          icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
+          tone="positive"
+        />
+      </MetricStrip>
+
+      <SegmentedControl<FilterKey>
+        items={FILTERS.map((item) => ({
+          value: item.key,
+          label: item.label,
+          count: item.key === filter ? filings.length : undefined,
+        }))}
+        value={filter}
+        onChange={setFilter}
+        label="Filing status"
+        testIdPrefix="filter-filings"
+      />
 
       {isLoading ? (
         <SkeletonList count={5} itemClassName="h-20" />

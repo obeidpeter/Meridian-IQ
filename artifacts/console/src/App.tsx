@@ -33,6 +33,10 @@ import { ClerkClaims } from "@/pages/clerk-claims";
 import { ClerkWorkspace } from "@/pages/clerk";
 import { ClerkAskPage } from "@/pages/clerk-ask";
 import { ClerkHealthPage } from "@/pages/clerk-health";
+import { Notifications } from "@/pages/notifications";
+import { FilingDesk } from "@/pages/filing-desk";
+import { CollectionsDesk } from "@/pages/collections-desk";
+import { PracticeAnalytics } from "@/pages/analytics";
 import { ClerkShell } from "@/components/clerk-shell";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
@@ -118,6 +122,22 @@ function ConsoleRoutes() {
     <Layout>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/notifications" component={Notifications} />
+        <Route path="/filing-desk">
+          <CapabilityGate capability="filing.read">
+            <FilingDesk />
+          </CapabilityGate>
+        </Route>
+        <Route path="/collections">
+          <CapabilityGate capability="console.portfolio.read">
+            <CollectionsDesk />
+          </CapabilityGate>
+        </Route>
+        <Route path="/analytics">
+          <CapabilityGate capability="console.portfolio.read">
+            <PracticeAnalytics />
+          </CapabilityGate>
+        </Route>
         {/* Static /clients/import must register before the /clients/:id param route. */}
         <Route path="/clients/import">
           <CapabilityGate capability="clients.import">

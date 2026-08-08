@@ -62,7 +62,6 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
-import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -83,6 +82,14 @@ import {
   Wallet,
 } from "lucide-react";
 import { Link } from "wouter";
+import {
+  Metric,
+  MetricStrip,
+  SegmentedControl,
+  WorkQueue,
+  WorkspaceHeader,
+  type WorkQueueItem,
+} from "@workspace/web-ui";
 import {
   formatAmount,
   formatDate,
@@ -189,7 +196,7 @@ export function showFirstInvoiceCta(
   return totalInvoices === 0;
 }
 
-function ReceivablesCard({
+export function ReceivablesCard({
   summary,
   isLoading,
   isError,
@@ -708,7 +715,11 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
 // composed into one checklist — each line computed by the same check that
 // powers its own card, so the two can never disagree. Advisory only; a
 // human closes the month.
-function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
+export function MonthEndCloseCard({
+  clientPartyId,
+}: {
+  clientPartyId: string;
+}) {
   const { data: close, isSuccess } = useGetMonthEndClose(
     { clientPartyId },
     {
@@ -1145,7 +1156,11 @@ export { ClerkActionsCard };
 // them — the compliance mirror of the unbilled card above. If any of these
 // is a sale, an e-invoice should exist for it. Deterministic advisory,
 // renders only when something needs looking at.
-function UnmatchedCreditsCard({ clientPartyId }: { clientPartyId: string }) {
+export function UnmatchedCreditsCard({
+  clientPartyId,
+}: {
+  clientPartyId: string;
+}) {
   const { data: credits, isSuccess } = useGetUnmatchedCredits(
     { clientPartyId },
     {
@@ -1292,7 +1307,7 @@ function NetPositionCard({ clientPartyId }: { clientPartyId: string }) {
 // server-side from each buyer's own payment rhythm (falling back to due
 // dates / standard terms). Deterministic, renders only when there is money
 // outstanding.
-function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
+export function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
   // Projection accuracy (round-14 idea #2): the forecast auditing itself —
   // a confidence line under the outlook when enough settlements exist.
   const { data: accuracy } = useGetProjectionAccuracy(
@@ -1385,7 +1400,7 @@ function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
 // Chase list (round-10 idea #2): the receivables most worth chasing this
 // week — ranked by days beyond each buyer's OWN expected payment date, not
 // raw age. Each row opens the invoice, where the reminder-draft button is.
-function ChaseListCard({ clientPartyId }: { clientPartyId: string }) {
+export function ChaseListCard({ clientPartyId }: { clientPartyId: string }) {
   const { data: rows, isSuccess } = useGetChaseList(
     { clientPartyId },
     {
@@ -1502,8 +1517,11 @@ function DashboardSkeleton() {
   );
 }
 
+type DashboardView = "today" | "money" | "compliance" | "clerk";
+
 export function Dashboard() {
   usePageTitle("Dashboard");
+  const [view, setView] = useState<DashboardView>("today");
   const { data: me } = useGetMe();
   // Same capability check CapabilityGate applies, minus its denial card: a
   // dashboard tile should simply be absent for roles that can't use it.
@@ -1544,16 +1562,118 @@ export function Dashboard() {
     },
   );
 
+  const agedReceivableCount =
+    receivables?.groups.reduce(
+      (total, group) => total + group.buckets.days90plus.count,
+      0,
+    ) ?? 0;
+  const workItems: WorkQueueItem[] = [];
+  if (summary?.atRiskCount) {
+    workItems.push({
+      id: "at-risk-invoices",
+      title: `${summary.atRiskCount} invoice${summary.atRiskCount === 1 ? " is" : "s are"} at risk`,
+      description: "The statutory submission window is closing or has passed.",
+      tone: "critical",
+      icon: <AlertTriangle className="size-4" aria-hidden="true" />,
+      action: (
+        <Button asChild size="sm" variant="destructive">
+          <Link href="/calendar">Review risk</Link>
+        </Button>
+      ),
+    });
+  }
+  if (summary?.failedCount) {
+    workItems.push({
+      id: "failed-submissions",
+      title: `${summary.failedCount} failed submission${summary.failedCount === 1 ? "" : "s"}`,
+      description:
+        "Review the rejection reason before sending the invoice again.",
+      tone: "critical",
+      icon: <FileText className="size-4" aria-hidden="true" />,
+      action: (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/invoices">Resolve</Link>
+        </Button>
+      ),
+    });
+  }
+  if (summary?.draftCount) {
+    workItems.push({
+      id: "draft-invoices",
+      title: `${summary.draftCount} draft invoice${summary.draftCount === 1 ? " needs" : "s need"} completion`,
+      description: "Finish, validate and submit the paper already in progress.",
+      tone: "warning",
+      icon: <FileText className="size-4" aria-hidden="true" />,
+      action: (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/invoices">Open drafts</Link>
+        </Button>
+      ),
+    });
+  }
+  if (agedReceivableCount > 0) {
+    workItems.push({
+      id: "aged-receivables",
+      title: `${agedReceivableCount} receivable${agedReceivableCount === 1 ? " is" : "s are"} more than 90 days old`,
+      description: "Prioritize the oldest balances in the collection queue.",
+      tone: "warning",
+      icon: <Wallet className="size-4" aria-hidden="true" />,
+      action: (
+        <Button size="sm" variant="outline" onClick={() => setView("money")}>
+          Open money view
+        </Button>
+      ),
+    });
+  }
+  if (summary?.nextDeadline) {
+    workItems.push({
+      id: `deadline-${summary.nextDeadline.id}`,
+      title: summary.nextDeadline.title,
+      description: `Due ${formatDate(summary.nextDeadline.dueDate)}.`,
+      tone:
+        summary.nextDeadline.severity === "critical"
+          ? "critical"
+          : summary.nextDeadline.severity === "warning"
+            ? "warning"
+            : "info",
+      icon: <CalendarCheck className="size-4" aria-hidden="true" />,
+      action: (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/calendar">View deadline</Link>
+        </Button>
+      ),
+    });
+  }
+
+  const dashboardViews: Array<{
+    value: DashboardView;
+    label: string;
+    count?: number;
+  }> = [
+    { value: "today", label: "Today", count: workItems.length },
+    { value: "money", label: "Money", count: agedReceivableCount },
+    {
+      value: "compliance",
+      label: "Compliance",
+      count: summary?.upcomingDeadlineCount ?? 0,
+    },
+  ];
+  if (canAskClerk) {
+    dashboardViews.push({ value: "clerk", label: "Clerk" });
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader
+      <WorkspaceHeader
+        eyebrow="Business command centre"
         title="Compliance overview"
-        description="Stay ahead of your filing deadlines."
-      >
-        <Button asChild>
-          <Link href="/invoices/new">New invoice</Link>
-        </Button>
-      </PageHeader>
+        description="Prioritized work, money movement and filing readiness for this business."
+        actions={
+          <Button asChild>
+            <Link href="/invoices/new">New invoice</Link>
+          </Button>
+        }
+      />
 
       <RequireClientScope thing="compliance summary">
         {isLoading ? (
@@ -1565,170 +1685,194 @@ export function Dashboard() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard
+            <MetricStrip label="Business compliance summary">
+              <Metric
                 label="Pending invoices"
                 value={String(summary?.pendingCount ?? 0)}
-                sub="Awaiting stamp"
-                icon={Clock}
-                href="/invoices"
+                detail="Awaiting stamp"
+                icon={<Clock className="size-4" aria-hidden="true" />}
+                tone={(summary?.pendingCount ?? 0) > 0 ? "info" : "default"}
               />
-              <StatCard
+              <Metric
                 label="Stamped & valid"
                 value={String(summary?.stampedCount ?? 0)}
-                sub={`${formatNaira(summary?.stampedValue)} total value`}
-                icon={CheckCircle}
-                href="/invoices"
+                detail={`${formatNaira(summary?.stampedValue)} total value`}
+                icon={<CheckCircle className="size-4" aria-hidden="true" />}
+                tone="positive"
               />
-              <StatCard
+              <Metric
                 label="Drafts"
                 value={String(summary?.draftCount ?? 0)}
-                sub="Needs completion"
-                icon={FileText}
-                href="/invoices"
+                detail="Needs completion"
+                icon={<FileText className="size-4" aria-hidden="true" />}
+                tone={(summary?.draftCount ?? 0) > 0 ? "warning" : "default"}
               />
-              <StatCard
+              <Metric
                 label="At risk"
                 value={String(summary?.atRiskCount ?? 0)}
-                sub="Needs attention"
-                icon={AlertTriangle}
-                href="/calendar"
-                danger={!!summary?.atRiskCount}
+                detail="Needs attention"
+                icon={<AlertTriangle className="size-4" aria-hidden="true" />}
+                tone={(summary?.atRiskCount ?? 0) > 0 ? "critical" : "default"}
               />
-            </div>
+            </MetricStrip>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="w-5 h-5" aria-hidden="true" /> Recent
-                    activity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {summary?.recentActivity &&
-                  summary.recentActivity.length > 0 ? (
-                    <div className="space-y-4">
-                      {summary.recentActivity.map((activity) => (
-                        <div
-                          key={activity.id}
-                          className="flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {activity.label}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(activity.at)}
-                            </p>
-                          </div>
-                          {activity.status && (
-                            <span className={badgeClasses(activity.status)}>
-                              {statusLabel(activity.status)}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground text-center py-4">
-                      No recent activity
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            <SegmentedControl<DashboardView>
+              items={dashboardViews}
+              value={view}
+              onChange={setView}
+              label="Dashboard view"
+            />
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" aria-hidden="true" /> Next
-                    deadline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {summary?.nextDeadline ? (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium">
-                          {summary.nextDeadline.title}
-                        </span>
-                        <span
-                          className={severityBadgeClasses(
-                            summary.nextDeadline.severity,
-                          )}
-                        >
-                          {severityLabel(summary.nextDeadline.severity)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(summary.nextDeadline.dueDate)}
-                      </p>
-                      <Link
-                        href="/calendar"
-                        className="text-primary text-sm mt-2 hover:underline"
-                      >
-                        View calendar
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground text-center py-4">
-                      No upcoming deadlines
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <ReceivablesCard
-                summary={receivables}
-                isLoading={receivablesLoading}
-                isError={receivablesError}
-                clientPartyId={me?.clientPartyId || ""}
-                totalInvoices={summary?.totalInvoices}
-                onRetry={() => refetchReceivables()}
+            {view === "today" && (
+              <WorkQueue
+                title="What needs attention"
+                description="Ordered by statutory risk, failed work and cash collection age."
+                items={workItems}
+                emptyTitle="Today is clear"
+                emptyDescription="There are no urgent submissions, failures or aged receivables."
               />
+            )}
 
-              {me?.clientPartyId && (
-                <PayablesCard clientPartyId={me.clientPartyId} />
-              )}
-
-              {canAskClerk && <ClerkDigestCard />}
-
-              {canSeeStatement && me?.clientPartyId && (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {view === "today" && (
                 <>
-                  <ClientStatementCard clientPartyId={me.clientPartyId} />
-                  <AdvisoryBriefCard clientPartyId={me.clientPartyId} />
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="w-5 h-5" aria-hidden="true" />{" "}
+                        Recent activity
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {summary?.recentActivity &&
+                      summary.recentActivity.length > 0 ? (
+                        <div className="space-y-4">
+                          {summary.recentActivity.map((activity) => (
+                            <div
+                              key={activity.id}
+                              className="flex items-center justify-between gap-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {activity.label}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatDate(activity.at)}
+                                </p>
+                              </div>
+                              {activity.status && (
+                                <span className={badgeClasses(activity.status)}>
+                                  {statusLabel(activity.status)}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground text-center py-4">
+                          No recent activity
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Clock className="w-5 h-5" aria-hidden="true" /> Next
+                        deadline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {summary?.nextDeadline ? (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium">
+                              {summary.nextDeadline.title}
+                            </span>
+                            <span
+                              className={severityBadgeClasses(
+                                summary.nextDeadline.severity,
+                              )}
+                            >
+                              {severityLabel(summary.nextDeadline.severity)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(summary.nextDeadline.dueDate)}
+                          </p>
+                          <Link
+                            href="/calendar"
+                            className="text-primary text-sm mt-2 hover:underline"
+                          >
+                            View calendar
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground text-center py-4">
+                          No upcoming deadlines
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {me?.clientPartyId && (
+                    <MonthEndCloseCard clientPartyId={me.clientPartyId} />
+                  )}
                 </>
               )}
 
-              {me?.clientPartyId && (
-                <MonthEndCloseCard clientPartyId={me.clientPartyId} />
+              {view === "money" && (
+                <ReceivablesCard
+                  summary={receivables}
+                  isLoading={receivablesLoading}
+                  isError={receivablesError}
+                  clientPartyId={me?.clientPartyId || ""}
+                  totalInvoices={summary?.totalInvoices}
+                  onRetry={() => refetchReceivables()}
+                />
               )}
 
-              {me?.clientPartyId && (
+              {view === "money" && me?.clientPartyId && (
+                <PayablesCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {view === "clerk" && canAskClerk && <ClerkDigestCard />}
+
+              {view === "compliance" &&
+                canSeeStatement &&
+                me?.clientPartyId && (
+                  <>
+                    <ClientStatementCard clientPartyId={me.clientPartyId} />
+                    <AdvisoryBriefCard clientPartyId={me.clientPartyId} />
+                  </>
+                )}
+
+              {view === "compliance" && me?.clientPartyId && (
                 <PenaltyExposureCard clientPartyId={me.clientPartyId} />
               )}
 
-              {me?.clientPartyId && (
+              {view === "clerk" && me?.clientPartyId && (
                 <ClerkActionsCard clientPartyId={me.clientPartyId} />
               )}
 
-              {me?.clientPartyId && (
+              {view === "money" && me?.clientPartyId && (
                 <UnbilledIncomeCard clientPartyId={me.clientPartyId} />
               )}
 
-              {me?.clientPartyId && (
+              {view === "money" && me?.clientPartyId && (
                 <UnmatchedCreditsCard clientPartyId={me.clientPartyId} />
               )}
 
-              {me?.clientPartyId && (
+              {view === "money" && me?.clientPartyId && (
                 <CashflowCard clientPartyId={me.clientPartyId} />
               )}
 
-              {me?.clientPartyId && (
+              {view === "money" && me?.clientPartyId && (
                 <NetPositionCard clientPartyId={me.clientPartyId} />
               )}
 
-              {me?.clientPartyId && (
+              {view === "money" && me?.clientPartyId && (
                 <ChaseListCard clientPartyId={me.clientPartyId} />
               )}
             </div>
