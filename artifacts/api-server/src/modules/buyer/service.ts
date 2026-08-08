@@ -202,45 +202,62 @@ export async function loadBuyerBook(
 export async function summarizeBuyerBook(
   buyerPartyId: string,
 ): Promise<BuyerInvoiceSummary> {
-  const latestState = sql<string>`COALESCE((
-    SELECT c.state::text
-      FROM confirmations c
-     WHERE c.invoice_id = ${invoicesTable.id}
-     ORDER BY c.created_at DESC, c.id DESC
-     LIMIT 1
-  ), 'none')`;
-  const rows = await getDb()
-    .select({
-      state: latestState,
-      invoiceCount: sql<number>`count(*)::int`,
-      amount: sql<string>`COALESCE(sum(${invoicesTable.grandTotal}), 0)::text`,
-    })
-    .from(invoicesTable)
-    .where(
-      and(
-        eq(invoicesTable.buyerPartyId, buyerPartyId),
-        inArray(invoicesTable.status, [...BUYER_VISIBLE_STATUSES]),
-      ),
-    )
-    .groupBy(latestState);
+  // Classify each visible invoice once, then aggregate the closed state set in
+  // one row. The materialized CTE avoids repeating the latest-lineage lookup
+  // across each FILTER and keeps the summary independent of list pagination.
+  const visibleStatuses = sql.join(
+    BUYER_VISIBLE_STATUSES.map((status) => sql`${status}`),
+    sql`, `,
+  );
+  const [row] = (
+    await getDb().execute<{
+      total: number;
+      awaiting_total: string;
+      none_count: number;
+      requested_count: number;
+      confirmed_count: number;
+      queried_count: number;
+      rejected_count: number;
+    }>(sql`
+      WITH visible AS MATERIALIZED (
+        SELECT
+          i.grand_total,
+          COALESCE((
+            SELECT c.state::text
+            FROM confirmations c
+            WHERE c.invoice_id = i.id
+            ORDER BY c.created_at DESC, c.id DESC
+            LIMIT 1
+          ), 'none') AS confirmation_state
+        FROM invoices i
+        WHERE i.buyer_party_id = ${buyerPartyId}
+          AND i.status IN (${visibleStatuses})
+      )
+      SELECT
+        COUNT(*)::int AS total,
+        COALESCE(
+          SUM(grand_total) FILTER (WHERE confirmation_state = 'requested'),
+          0
+        )::numeric(18, 2)::text AS awaiting_total,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'none'))::int AS none_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'requested'))::int AS requested_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'confirmed'))::int AS confirmed_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'queried'))::int AS queried_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'rejected'))::int AS rejected_count
+      FROM visible
+    `)
+  ).rows;
 
   const counts: BuyerInvoiceSummary["counts"] = {
-    none: 0,
-    requested: 0,
-    confirmed: 0,
-    queried: 0,
-    rejected: 0,
+    none: row?.none_count ?? 0,
+    requested: row?.requested_count ?? 0,
+    confirmed: row?.confirmed_count ?? 0,
+    queried: row?.queried_count ?? 0,
+    rejected: row?.rejected_count ?? 0,
   };
-  let awaitingTotal = "0.00";
-  for (const row of rows) {
-    if (row.state in counts) {
-      counts[row.state as BuyerConfirmationState] = row.invoiceCount;
-      if (row.state === "requested") awaitingTotal = row.amount;
-    }
-  }
   return {
-    total: Object.values(counts).reduce((sum, count) => sum + count, 0),
-    awaitingTotal,
+    total: row?.total ?? 0,
+    awaitingTotal: row?.awaiting_total ?? "0.00",
     counts,
   };
 }

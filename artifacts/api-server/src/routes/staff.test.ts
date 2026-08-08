@@ -567,8 +567,9 @@ test("the confirm-email UPDATE is compare-and-set on the stored code hash (tripw
   const whereAt = src.indexOf(".where(", updateAt);
   const returningAt = src.indexOf(".returning()", whereAt);
   const wherePredicate = src.slice(whereAt, returningAt);
-  assert.ok(
-    wherePredicate.includes("emailVerifyCodeHash, presentedHash"),
+  assert.match(
+    wherePredicate,
+    /emailVerifyCodeHash,\s*presentedHash/,
     "the stamp's WHERE must carry the presented code hash — a bare (userId, firmId) predicate re-opens the swap race",
   );
 });

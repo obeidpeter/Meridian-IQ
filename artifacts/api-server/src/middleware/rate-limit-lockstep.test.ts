@@ -55,6 +55,12 @@ const NON_MODEL_NO_CONTEXT = new Set([
   "POST /api/clerk/cases/bulk-approve",
   "POST /api/billing/payments/confirm",
   "POST /api/collections/inbound",
+  // Provider-backed creation reserves the idempotency key in a short
+  // transaction before network I/O, then finalizes in a second transaction.
+  // Neither route invokes a model; both still ride the authenticated general
+  // rate class.
+  "POST /api/billing/payments",
+  "POST /api/collection-accounts",
   // Posture round: no model call — left the request transaction because a
   // 200-row batch would hold the global audit advisory lock batch-wide
   // (modules/invoice/bulk-submit.ts commits per stage instead).

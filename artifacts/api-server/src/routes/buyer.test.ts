@@ -331,7 +331,7 @@ test("payment flags: scheduled then paid settles once via CAS, lineage append-on
   assert.equal(badAmount.status, 400);
   assert.match(
     ((await badAmount.json()) as { error: string }).error,
-    /plain decimal string/,
+    /positive decimal string/,
   );
 
   const draft = await fetch(`${base}/invoices/${invDraftId}/payment-flags`, {
