@@ -24,7 +24,17 @@ const LOGIN_MAX_FAILURES = 5;
 const ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
 const ACCOUNT_MAX_FAILURES = 50;
 const IP_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-const IP_ATTEMPT_MAX = 30;
+const DEFAULT_IP_ATTEMPT_MAX = 30;
+const configuredIpAttemptMax = Number(process.env.LOGIN_IP_ATTEMPT_MAX);
+// The override exists for trusted synthetic runners that exercise many users
+// from one loopback address. Production keeps the conservative default unless
+// an operator deliberately supplies a bounded positive override.
+const IP_ATTEMPT_MAX =
+  Number.isSafeInteger(configuredIpAttemptMax) &&
+  configuredIpAttemptMax >= DEFAULT_IP_ATTEMPT_MAX &&
+  configuredIpAttemptMax <= 1_000
+    ? configuredIpAttemptMax
+    : DEFAULT_IP_ATTEMPT_MAX;
 
 function requestIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || "unknown";

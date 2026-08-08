@@ -106,6 +106,10 @@ const api = spawn(
       NODE_ENV: "development",
       SEED_DEMO: "true",
       DEMO_PASSWORD,
+      // The suite signs in as many roles from one loopback address. Preserve
+      // the per-credential throttle assertions while preventing the aggregate
+      // production IP cap from terminating unrelated later journeys.
+      LOGIN_IP_ATTEMPT_MAX: "1000",
       // Lights the payment-confirmation machine rail (fail-closed: 404 while
       // unset). The env is read per call server-side; the integration journey
       // presents this token as x-op-token to settle its payment intent.
