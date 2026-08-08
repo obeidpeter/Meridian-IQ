@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 export interface HealthStatus {
   status: string;
@@ -844,8 +844,16 @@ export const SettlementInputSource = {
 export interface SettlementInput {
   source: SettlementInputSource;
   amount: string;
+  /** @pattern ^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$ */
   confidence?: string;
   occurredAt: string;
+  /**
+     * Stable caller-generated key reused for retries of the same settlement operation
+     * @minLength 8
+     * @maxLength 128
+     * @pattern ^[A-Za-z0-9._:-]+$
+     */
+  idempotencyKey: string;
 }
 
 export type BillSummaryPayStatus = typeof BillSummaryPayStatus[keyof typeof BillSummaryPayStatus];
@@ -892,6 +900,7 @@ export const BillPaymentFlagInputStatus = {
 
 export interface BillPaymentFlagInput {
   status: BillPaymentFlagInputStatus;
+  /** Defaults to the bill total; when status is paid, must cover the full bill total */
   amount?: string;
 }
 
@@ -3317,6 +3326,26 @@ export interface MatchDecisionResult {
   settlementEventId: string | null;
 }
 
+export type BuyerInvoiceSummaryCounts = {
+  /** @minimum 0 */
+  none: number;
+  /** @minimum 0 */
+  requested: number;
+  /** @minimum 0 */
+  confirmed: number;
+  /** @minimum 0 */
+  queried: number;
+  /** @minimum 0 */
+  rejected: number;
+};
+
+export interface BuyerInvoiceSummary {
+  /** @minimum 0 */
+  total: number;
+  awaitingTotal: string;
+  counts: BuyerInvoiceSummaryCounts;
+}
+
 export type BuyerInvoiceConfirmationState = typeof BuyerInvoiceConfirmationState[keyof typeof BuyerInvoiceConfirmationState];
 
 
@@ -3357,6 +3386,7 @@ export const PaymentFlagInputPaymentStatus = {
 export interface PaymentFlagInput {
   paymentStatus: PaymentFlagInputPaymentStatus;
   occurredAt?: string;
+  /** Defaults to the invoice total; when paymentStatus is paid, must cover the full invoice total */
   amount?: string;
 }
 
@@ -7204,6 +7234,19 @@ clientPartyId?: string;
 
 export type ListBuyerInvoicesParams = {
 confirmationState?: ListBuyerInvoicesConfirmationState;
+/**
+ * @maxLength 120
+ */
+search?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
 
 export type ListBuyerInvoicesConfirmationState = typeof ListBuyerInvoicesConfirmationState[keyof typeof ListBuyerInvoicesConfirmationState];

@@ -40,6 +40,7 @@ import {
   processInboundWhatsApp,
   resolveInboundWhatsAppSender,
 } from "./whatsapp.ts";
+import { drain } from "../pipeline/pipeline.ts";
 
 // Inbound WhatsApp intake rail. Pinned invariants (mirroring the email rail):
 //  - fail-closed gate: INBOUND_WHATSAPP_TOKEN unset → the rail is dark (404
@@ -99,13 +100,16 @@ before(async () => {
   // The resolved and capped clients ride the shared seeder (test-support.ts).
   // The resolved party STORES its number in the bare local convention — see
   // the STORED_RESOLVED comment above.
-  ({ firmId: firm1, partyId: partyResolved, userId: clientUserId } =
-    await seedInboundClient(db, {
-      firmName: `WA Firm ${SALT}`,
-      partyName: `WA Client ${SALT}`,
-      email: `wa-client-${SALT}@inbound-test.local`,
-      whatsapp: { number: STORED_RESOLVED, setByRole: "client_user" },
-    }));
+  ({
+    firmId: firm1,
+    partyId: partyResolved,
+    userId: clientUserId,
+  } = await seedInboundClient(db, {
+    firmName: `WA Firm ${SALT}`,
+    partyName: `WA Client ${SALT}`,
+    email: `wa-client-${SALT}@inbound-test.local`,
+    whatsapp: { number: STORED_RESOLVED, setByRole: "client_user" },
+  }));
   await seedInboundClient(db, {
     firmName: `WA Capped Firm ${SALT}`,
     partyName: `WA Capped ${SALT}`,
@@ -124,12 +128,22 @@ before(async () => {
   await db.insert(partiesTable).values([
     { id: partyAmbA, type: "client_business", legalName: `WA Amb A ${SALT}` },
     { id: partyAmbB, type: "client_business", legalName: `WA Amb B ${SALT}` },
-    { id: partyNoMember, type: "client_business", legalName: `WA Orphan ${SALT}` },
-    { id: partyStaffSet, type: "client_business", legalName: `WA StaffSet ${SALT}` },
+    {
+      id: partyNoMember,
+      type: "client_business",
+      legalName: `WA Orphan ${SALT}`,
+    },
+    {
+      id: partyStaffSet,
+      type: "client_business",
+      legalName: `WA StaffSet ${SALT}`,
+    },
   ]);
-  await db.insert(usersTable).values([
-    { id: staffSetUserId, email: `wa-staffset-${SALT}@inbound-test.local` },
-  ]);
+  await db
+    .insert(usersTable)
+    .values([
+      { id: staffSetUserId, email: `wa-staffset-${SALT}@inbound-test.local` },
+    ]);
   await db.insert(membershipsTable).values([
     {
       userId: staffSetUserId,
@@ -146,11 +160,27 @@ before(async () => {
   // fixture and any legacy null-provenance row must refuse even with an
   // otherwise-perfect match.
   await db.insert(alertPreferencesTable).values([
-    { clientPartyId: partyAmbA, whatsappTo: `071${runPhoneDigits}`, contactSetByRole: "client_user" },
-    { clientPartyId: partyAmbB, phone: PHONE_AMBIG, contactSetByRole: "client_user" },
-    { clientPartyId: partyNoMember, phone: PHONE_NO_MEMBER, contactSetByRole: "client_user" },
+    {
+      clientPartyId: partyAmbA,
+      whatsappTo: `071${runPhoneDigits}`,
+      contactSetByRole: "client_user",
+    },
+    {
+      clientPartyId: partyAmbB,
+      phone: PHONE_AMBIG,
+      contactSetByRole: "client_user",
+    },
+    {
+      clientPartyId: partyNoMember,
+      phone: PHONE_NO_MEMBER,
+      contactSetByRole: "client_user",
+    },
     // Staff typed this number in for the client: never a routing key.
-    { clientPartyId: partyStaffSet, whatsappTo: PHONE_STAFF_SET, contactSetByRole: "firm_staff" },
+    {
+      clientPartyId: partyStaffSet,
+      whatsappTo: PHONE_STAFF_SET,
+      contactSetByRole: "firm_staff",
+    },
   ]);
 });
 
@@ -175,7 +205,10 @@ test("token unset: the rail is dark — 404 even for a well-formed request", asy
   const res = await fetch(`${base}/api/inbound/whatsapp`, {
     method: "POST",
     headers: { ...JSON_HEADERS, "x-op-token": TOKEN },
-    body: JSON.stringify({ sender: PRESENTED_RESOLVED, attachments: [pdfAttachment("dark")] }),
+    body: JSON.stringify({
+      sender: PRESENTED_RESOLVED,
+      attachments: [pdfAttachment("dark")],
+    }),
   });
   assert.equal(res.status, 404);
 });
@@ -186,33 +219,45 @@ test("wrong or missing token: 401; malformed body: 400", async () => {
   const wrong = await fetch(`${base}/api/inbound/whatsapp`, {
     method: "POST",
     headers: { ...JSON_HEADERS, "x-op-token": "nope" },
-    body: JSON.stringify({ sender: PRESENTED_RESOLVED, attachments: [pdfAttachment("bad")] }),
+    body: JSON.stringify({
+      sender: PRESENTED_RESOLVED,
+      attachments: [pdfAttachment("bad")],
+    }),
   });
   assert.equal(wrong.status, 401);
   const missing = await fetch(`${base}/api/inbound/whatsapp`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ sender: PRESENTED_RESOLVED, attachments: [pdfAttachment("bad")] }),
+    body: JSON.stringify({
+      sender: PRESENTED_RESOLVED,
+      attachments: [pdfAttachment("bad")],
+    }),
   });
   assert.equal(missing.status, 401);
   // No media AND no text is a shape error, not anti-probe territory.
-  const empty = await fetch(`${base}/api/inbound/whatsapp?token=${TOKEN}`, {
+  const empty = await fetch(`${base}/api/inbound/whatsapp`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, "x-op-token": TOKEN },
     body: JSON.stringify({ sender: PRESENTED_RESOLVED }),
   });
   assert.equal(empty.status, 400);
+  const viaQuery = await fetch(`${base}/api/inbound/whatsapp?token=${TOKEN}`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ sender: PHONE_UNKNOWN, text: "hello" }),
+  });
+  assert.equal(viaQuery.status, 401, "secrets in URLs are never accepted");
 });
 
 test("unknown and ambiguous numbers: 202 identical to success, zero cases, masked audit", async () => {
   process.env.INBOUND_WHATSAPP_TOKEN = TOKEN;
   const base = await listen(inboundApp());
 
-  // Unknown number, text-only (short — the detached pipeline needs no
+  // Unknown number, text-only (short — the queued pipeline needs no
   // provider either way, since resolution refuses first).
-  const unknownRes = await fetch(`${base}/api/inbound/whatsapp?token=${TOKEN}`, {
+  const unknownRes = await fetch(`${base}/api/inbound/whatsapp`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, "x-op-token": TOKEN },
     body: JSON.stringify({ sender: PHONE_UNKNOWN, text: "hello" }),
   });
   assert.equal(unknownRes.status, 202);
@@ -220,26 +265,32 @@ test("unknown and ambiguous numbers: 202 identical to success, zero cases, maske
   assert.deepEqual(unknownBody, { received: 1 });
 
   // ANTI-PROBE: a resolved sender's response is byte-for-byte the same shape.
-  const resolvedRes = await fetch(`${base}/api/inbound/whatsapp?token=${TOKEN}`, {
+  const resolvedRes = await fetch(`${base}/api/inbound/whatsapp`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, "x-op-token": TOKEN },
     body: JSON.stringify({
       sender: PRESENTED_RESOLVED,
-      // Unsupported type: the detached pipeline audit-skips it, so this
+      // Unsupported type: the queued pipeline audit-skips it, so this
       // route call needs no model provider.
       attachments: [
-        { filename: `probe-${SALT}.csv`, contentType: "text/csv", contentBase64: PNG_B64 },
+        {
+          filename: `probe-${SALT}.csv`,
+          contentType: "text/csv",
+          contentBase64: PNG_B64,
+        },
       ],
     }),
   });
   assert.equal(resolvedRes.status, 202);
   assert.deepEqual(await resolvedRes.json(), unknownBody);
+  await drain();
 
   const unknownAudit = await eventually(async () => {
     const rows = await ignoredAudits();
     return rows.find(
       (r) =>
-        (r.after as { sender?: string })?.sender === `***${runPhoneDigits.slice(-4)}` &&
+        (r.after as { sender?: string })?.sender ===
+          `***${runPhoneDigits.slice(-4)}` &&
         (r.after as { reason?: string })?.reason === "no_match",
     );
   }, "unknown-number ignored audit row");
@@ -298,8 +349,14 @@ test("sender resolution normalizes BOTH sides of the comparison", async () => {
     },
   });
   // The exact stored form and the canonical form resolve identically.
-  assert.deepEqual(await resolveInboundWhatsAppSender(STORED_RESOLVED), resolved);
-  assert.deepEqual(await resolveInboundWhatsAppSender(PHONE_RESOLVED), resolved);
+  assert.deepEqual(
+    await resolveInboundWhatsAppSender(STORED_RESOLVED),
+    resolved,
+  );
+  assert.deepEqual(
+    await resolveInboundWhatsAppSender(PHONE_RESOLVED),
+    resolved,
+  );
   assert.deepEqual(await resolveInboundWhatsAppSender(PHONE_UNKNOWN), {
     ok: false,
     reason: "no_match",

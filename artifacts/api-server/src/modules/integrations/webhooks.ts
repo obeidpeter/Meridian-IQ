@@ -1,5 +1,7 @@
 import { createHmac, randomBytes, createHash } from "node:crypto";
-import { isIP } from "node:net";
+import { lookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   getDb,
@@ -57,6 +59,7 @@ const FAN_OUT_WINDOW = "24 hours";
 const MAX_DELIVERY_ATTEMPTS = 5;
 const BASE_BACKOFF_SECONDS = 30;
 const DELIVERY_TIMEOUT_MS = 5_000;
+const DNS_TIMEOUT_MS = 3_000;
 const CLAIM_BATCH = 10;
 const LAST_ERROR_MAX = 300;
 
@@ -101,10 +104,10 @@ export function vetEvents(requested: string[]): string[] {
 // literal hosts — the IPv4 ranges below, and for bracketed IPv6 literals the
 // unspecified/loopback addresses, unique-local fc00::/7, link-local
 // fe80::/10 and any v4-mapped ::ffff:… form whose embedded IPv4 falls in the
-// same private ranges (DNS-level rebinding is out of scope here —
-// pointer-only payloads bound the blast radius to "a POST arrived", and
-// redirects are never followed). Outside production plain http/loopback is
-// allowed so tests and local receivers work.
+// same private ranges. Registration resolves every address, and delivery
+// resolves again and pins the vetted address into the TLS connection, closing
+// DNS-rebinding between validation and connect. Redirects are never followed.
+// Outside production plain http/loopback is allowed for local receivers.
 const PRIVATE_HOST_RE =
   /^(localhost|127\.(\d{1,3}\.){2}\d{1,3}|0\.0\.0\.0|10\.(\d{1,3}\.){2}\d{1,3}|192\.168\.(\d{1,3}\.)\d{1,3}|172\.(1[6-9]|2\d|3[01])\.(\d{1,3}\.)\d{1,3}|169\.254\.(\d{1,3}\.)\d{1,3}|\[?::1\]?)$/i;
 
@@ -144,12 +147,19 @@ export function vetWebhookUrl(raw: string): string {
   try {
     url = new URL(raw);
   } catch {
-    throw new DomainError("INVALID_URL", "Webhook URL must be a valid URL", 400);
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new DomainError(
       "INVALID_URL",
-      "Webhook URL must use http(s)",
+      "Webhook URL must be a valid URL",
+      400,
+    );
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new DomainError("INVALID_URL", "Webhook URL must use http(s)", 400);
+  }
+  if (url.username || url.password || url.hash || raw.length > 2_048) {
+    throw new DomainError(
+      "INVALID_URL",
+      "Webhook URL must not contain credentials or a fragment",
       400,
     );
   }
@@ -157,9 +167,11 @@ export function vetWebhookUrl(raw: string): string {
     if (url.protocol !== "https:") {
       throw new DomainError("INVALID_URL", "Webhook URL must use https", 400);
     }
+    const literal = url.hostname.replace(/^\[|\]$/g, "");
     if (
       PRIVATE_HOST_RE.test(url.hostname) ||
-      isPrivateIpv6Literal(url.hostname)
+      isPrivateIpv6Literal(url.hostname) ||
+      (isIP(literal) !== 0 && !isPublicWebhookAddress(literal))
     ) {
       throw new DomainError(
         "INVALID_URL",
@@ -169,6 +181,104 @@ export function vetWebhookUrl(raw: string): string {
     }
   }
   return url.toString();
+}
+
+function isPublicIpv4(address: string): boolean {
+  const octets = address.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((part) => part < 0 || part > 255)) {
+    return false;
+  }
+  const [a, b] = octets;
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+  if (a === 100 && b >= 64 && b <= 127) return false;
+  if (a === 169 && b === 254) return false;
+  if (a === 172 && b >= 16 && b <= 31) return false;
+  if (a === 192 && (b === 0 || b === 168)) return false;
+  if (a === 192 && b === 0 && octets[2] === 2) return false;
+  if (a === 198 && (b === 18 || b === 19 || b === 51)) return false;
+  if (a === 203 && b === 0 && octets[2] === 113) return false;
+  return true;
+}
+
+export function isPublicWebhookAddress(address: string): boolean {
+  const family = isIP(address);
+  if (family === 4) return isPublicIpv4(address);
+  if (family !== 6) return false;
+  const normalized = address.toLowerCase().split("%")[0];
+  if (normalized === "::" || normalized === "::1") return false;
+  const mapped = embeddedMappedIpv4(normalized);
+  if (mapped) return isPublicIpv4(mapped);
+  const first = Number.parseInt(normalized.split(":", 1)[0] || "0", 16);
+  // Publicly routable IPv6 is allocated from 2000::/3. This conservative
+  // boundary also rejects NAT64, 6to4, unique-local, link-local, multicast,
+  // unspecified and IPv4-compatible forms that could tunnel private targets.
+  if ((first & 0xe000) !== 0x2000) return false;
+  const second = Number.parseInt(normalized.split(":")[1] || "0", 16);
+  // Reject globally scoped-looking transition, protocol-assignment and
+  // documentation prefixes. In particular, 6to4 can encode a private IPv4
+  // destination inside 2002::/16 and must never pass an SSRF boundary.
+  if (first === 0x2002) return false; // 6to4
+  if (first === 0x2001 && second <= 0x01ff) return false; // IETF protocols/Teredo
+  if (first === 0x2001 && (second & 0xfff0) === 0x0020) return false; // ORCHIDv2
+  if (first === 0x2001 && second === 0x0db8) return false; // documentation
+  if (first === 0x3fff && second <= 0x0fff) return false; // documentation
+  return true;
+}
+
+interface ResolvedWebhookTarget {
+  url: URL;
+  address: string;
+  family: 4 | 6;
+}
+
+async function resolvePublicWebhookTarget(
+  raw: string,
+): Promise<ResolvedWebhookTarget> {
+  const url = new URL(vetWebhookUrl(raw));
+  const literal = url.hostname.replace(/^\[|\]$/g, "");
+  const literalFamily = isIP(literal);
+  let addresses: Array<{ address: string; family: number }>;
+  if (literalFamily) {
+    addresses = [{ address: literal, family: literalFamily }];
+  } else {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      addresses = await Promise.race([
+        lookup(literal, { all: true, verbatim: true }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Webhook DNS lookup timed out")),
+            DNS_TIMEOUT_MS,
+          );
+          timer.unref();
+        }),
+      ]);
+    } catch {
+      throw new DomainError(
+        "INVALID_URL",
+        "Webhook host could not be resolved",
+        400,
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  if (
+    addresses.length === 0 ||
+    addresses.some((entry) => !isPublicWebhookAddress(entry.address))
+  ) {
+    throw new DomainError(
+      "INVALID_URL",
+      "Webhook URL must resolve only to public addresses",
+      400,
+    );
+  }
+  const chosen = addresses[0];
+  return {
+    url,
+    address: chosen.address,
+    family: chosen.family as 4 | 6,
+  };
 }
 
 export interface CreatedWebhook {
@@ -185,6 +295,9 @@ export async function createFirmWebhook(
   events: string[],
 ): Promise<CreatedWebhook> {
   const vettedUrl = vetWebhookUrl(url);
+  if (process.env.NODE_ENV === "production") {
+    await resolvePublicWebhookTarget(vettedUrl);
+  }
   const vettedEvents = vetEvents(events);
   const secret = `whsec_${randomBytes(24).toString("base64url")}`;
   const [row] = await getDb()
@@ -273,9 +386,7 @@ export async function listWebhookDeliveries(
 }
 
 function rowsOf<T>(result: unknown): T[] {
-  return (
-    (result as { rows?: T[] }).rows ?? (result as T[])
-  );
+  return (result as { rows?: T[] }).rows ?? (result as T[]);
 }
 
 // Operator-triggered second life for a dead delivery (contract 0.42.0): a
@@ -508,6 +619,17 @@ async function postDelivery(delivery: ClaimedDelivery): Promise<{
     createdAt: new Date(delivery.created_at).toISOString(),
   });
   try {
+    if (process.env.NODE_ENV === "production") {
+      const target = await resolvePublicWebhookTarget(delivery.url);
+      const status = await postPinnedHttps(target, body, {
+        "content-type": "application/json",
+        [SIGNATURE_HEADER]: signDeliveryBody(delivery.secret_hash, body),
+        "x-meridian-event": delivery.event_type,
+      });
+      return status >= 200 && status < 300
+        ? { ok: true, error: null }
+        : { ok: false, error: `HTTP ${status}` };
+    }
     const res = await fetch(delivery.url, {
       method: "POST",
       headers: {
@@ -527,6 +649,45 @@ async function postDelivery(delivery: ClaimedDelivery): Promise<{
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+async function postPinnedHttps(
+  target: ResolvedWebhookTarget,
+  body: string,
+  headers: Record<string, string>,
+): Promise<number> {
+  const hostname = target.url.hostname.replace(/^\[|\]$/g, "");
+  const pinnedLookup: LookupFunction = (_hostname, _options, callback) => {
+    callback(null, target.address, target.family);
+  };
+  return new Promise<number>((resolve, reject) => {
+    const request = httpsRequest(
+      {
+        protocol: "https:",
+        hostname,
+        port: target.url.port || 443,
+        method: "POST",
+        path: `${target.url.pathname}${target.url.search}`,
+        headers: {
+          ...headers,
+          "content-length": Buffer.byteLength(body).toString(),
+        },
+        servername: hostname,
+        family: target.family,
+        lookup: pinnedLookup,
+        timeout: DELIVERY_TIMEOUT_MS,
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 502);
+      },
+    );
+    request.once("timeout", () =>
+      request.destroy(new Error("Webhook delivery timed out")),
+    );
+    request.once("error", reject);
+    request.end(body);
+  });
 }
 
 // Drain due deliveries. Claim (committed) → POST (no transaction held across

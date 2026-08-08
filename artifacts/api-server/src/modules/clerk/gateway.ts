@@ -3,7 +3,8 @@ import { db, clerkInferenceCallsTable } from "@workspace/db";
 import type { z } from "zod/v4";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
-import { firmClerkUsage } from "./budget";
+import { acquireFirmClerkBudgetPermit } from "./budget";
+import type { Database } from "@workspace/db";
 
 // Inference gateway (Task #40). EVERY model call flows through here:
 //  - the clerk_ai kill switch is checked before any call leaves the platform;
@@ -230,19 +231,24 @@ export function sha256(input: string): string {
 // transcript itself is NOT stored here — it lives on the case row; the ledger
 // records provenance (model, input hash, outcome, latency) plus a length so
 // drift in transcript size is observable without retaining content twice.
-export async function recordExternalCall(input: {
-  caseId?: string | null;
-  firmId?: string | null;
-  purpose: ClerkPurpose;
-  model: string;
-  promptVersion: string;
-  inputForHash: string;
-  outcome: "ok" | "error";
-  outputChars?: number;
-  errorText?: string;
-  latencyMs: number;
-}): Promise<void> {
-  await db.insert(clerkInferenceCallsTable).values({
+export async function recordExternalCall(
+  input: {
+    caseId?: string | null;
+    firmId?: string | null;
+    purpose: ClerkPurpose;
+    model: string;
+    promptVersion: string;
+    inputForHash: string;
+    outcome: "ok" | "error";
+    outputChars?: number;
+    errorText?: string;
+    latencyMs: number;
+    promptTokens?: number | null;
+    completionTokens?: number | null;
+  },
+  ledgerDb: Database = db,
+): Promise<void> {
+  await ledgerDb.insert(clerkInferenceCallsTable).values({
     caseId: input.caseId ?? null,
     firmId: input.firmId ?? null,
     purpose: input.purpose,
@@ -255,6 +261,8 @@ export async function recordExternalCall(input: {
     outcome: input.outcome,
     errorText: input.errorText?.slice(0, 2000) ?? null,
     latencyMs: input.latencyMs,
+    promptTokens: input.promptTokens ?? null,
+    completionTokens: input.completionTokens ?? null,
   });
 }
 
@@ -262,9 +270,18 @@ export async function recordExternalCall(input: {
 // round 54): true when the firm's monthly allowance is spent. Callers keep
 // their own typed-failure objects and message strings — a refused call
 // writes NO ledger row (no call left the platform, no tokens were spent).
-async function firmBudgetExhausted(firmId: string): Promise<boolean> {
-  const usage = await firmClerkUsage(firmId);
-  return usage.usedTokens >= usage.budgetTokens;
+function estimatedTokens(chars: number): number {
+  return Math.max(1, Math.ceil(chars / 4));
+}
+
+function userContentChars(content: UserContent): number {
+  if (typeof content === "string") return content.length;
+  return content.reduce(
+    (total, part) =>
+      total +
+      (part.type === "text" ? part.text.length : part.image_url.url.length),
+    0,
+  );
 }
 
 // The identity fields every ledger row of one call shares. `model` is
@@ -283,10 +300,10 @@ interface LedgerBase {
 // Append one ledger row: the call's identity (base) plus the outcome
 // fields, which stay explicit at each call site. Writes on the raw `db` by
 // design — spend accounting must survive any ambient rollback.
-function ledgerAppender(base: LedgerBase) {
+function ledgerAppender(base: LedgerBase, ledgerDb: Database = db) {
   return (
     row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof LedgerBase>,
-  ) => db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+  ) => ledgerDb.insert(clerkInferenceCallsTable).values({ ...base, ...row });
 }
 
 // Throws CLERK_DISABLED (503) when the kill switch is off. Routes call this
@@ -311,7 +328,18 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
       // throw: every caller already has a fail-closed path for a model that
       // did not run (capture marks the case failed, digest/explain fall back
       // to template text).
-      if (params.firmId && (await firmBudgetExhausted(params.firmId))) {
+      const estimatedPromptTokens = estimatedTokens(
+        params.system.length +
+          userContentChars(params.user) +
+          JSON.stringify(params.jsonSchema).length,
+      );
+      const permit = params.firmId
+        ? await acquireFirmClerkBudgetPermit(
+            params.firmId,
+            estimatedPromptTokens + 8_192,
+          )
+        : null;
+      if (params.firmId && !permit) {
         return {
           ok: false,
           outcome: "error",
@@ -320,106 +348,114 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         };
       }
 
-      const startedAt = Date.now();
-      const base: LedgerBase = {
-        caseId: params.caseId ?? null,
-        firmId: params.firmId ?? null,
-        purpose: params.purpose,
-        // Reassigned below when a tiered provider reports the model that
-        // actually served the call.
-        model: provider.model,
-        promptVersion: params.promptVersion,
-        inputRef: sha256(params.inputForHash),
-      };
-      const ledger = ledgerAppender(base);
-
-      let raw: string;
-      let promptTokens: number | null = null;
-      let completionTokens: number | null = null;
       try {
-        const completed = await provider.complete({
-          system: params.system,
-          user: params.user,
-          schemaName: params.schemaName,
-          jsonSchema: params.jsonSchema,
+        const startedAt = Date.now();
+        const base: LedgerBase = {
+          caseId: params.caseId ?? null,
+          firmId: params.firmId ?? null,
           purpose: params.purpose,
-        });
-        if (typeof completed === "string") {
-          raw = completed;
-        } else {
-          raw = completed.content;
-          promptTokens = completed.promptTokens ?? null;
-          completionTokens = completed.completionTokens ?? null;
-          if (completed.model) base.model = completed.model;
-        }
-      } catch (err) {
-        // A tiered provider attaches the model it routed to before throwing,
-        // so a broken tier's failures cohort under ITS model, not the default.
-        if (
-          err &&
-          typeof err === "object" &&
-          typeof (err as { clerkModel?: unknown }).clerkModel === "string"
-        ) {
-          base.model = (err as { clerkModel: string }).clerkModel;
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        await ledger({
-          outputJson: null,
-          schemaValid: false,
-          outcome: "error",
-          errorText: message.slice(0, 2000),
-          latencyMs: Date.now() - startedAt,
-        });
-        return { ok: false, outcome: "error", message: "Model call failed" };
-      }
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        await ledger({
-          outputJson: { raw: raw.slice(0, 8000) },
-          schemaValid: false,
-          outcome: "invalid_discarded",
-          errorText: "Output was not valid JSON",
-          latencyMs: Date.now() - startedAt,
-          promptTokens,
-          completionTokens,
-        });
-        return {
-          ok: false,
-          outcome: "invalid_discarded",
-          message: "Model output was not valid JSON and was discarded",
+          // Reassigned below when a tiered provider reports the model that
+          // actually served the call.
+          model: provider.model,
+          promptVersion: params.promptVersion,
+          inputRef: sha256(params.inputForHash),
         };
-      }
+        const ledger = ledgerAppender(base, permit?.ledgerDb ?? db);
 
-      const validated = params.validator.safeParse(parsed);
-      if (!validated.success) {
+        let raw: string;
+        let promptTokens: number | null = estimatedPromptTokens;
+        let completionTokens: number | null = 0;
+        try {
+          const completed = await provider.complete({
+            system: params.system,
+            user: params.user,
+            schemaName: params.schemaName,
+            jsonSchema: params.jsonSchema,
+            purpose: params.purpose,
+          });
+          if (typeof completed === "string") {
+            raw = completed;
+            completionTokens = estimatedTokens(raw.length);
+          } else {
+            raw = completed.content;
+            promptTokens = completed.promptTokens ?? estimatedPromptTokens;
+            completionTokens =
+              completed.completionTokens ?? estimatedTokens(raw.length);
+            if (completed.model) base.model = completed.model;
+          }
+        } catch (err) {
+          // A tiered provider attaches the model it routed to before throwing,
+          // so a broken tier's failures cohort under ITS model, not the default.
+          if (
+            err &&
+            typeof err === "object" &&
+            typeof (err as { clerkModel?: unknown }).clerkModel === "string"
+          ) {
+            base.model = (err as { clerkModel: string }).clerkModel;
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          await ledger({
+            outputJson: null,
+            schemaValid: false,
+            outcome: "error",
+            errorText: message.slice(0, 2000),
+            latencyMs: Date.now() - startedAt,
+            promptTokens,
+            completionTokens,
+          });
+          return { ok: false, outcome: "error", message: "Model call failed" };
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          await ledger({
+            outputJson: { raw: raw.slice(0, 8000) },
+            schemaValid: false,
+            outcome: "invalid_discarded",
+            errorText: "Output was not valid JSON",
+            latencyMs: Date.now() - startedAt,
+            promptTokens,
+            completionTokens,
+          });
+          return {
+            ok: false,
+            outcome: "invalid_discarded",
+            message: "Model output was not valid JSON and was discarded",
+          };
+        }
+
+        const validated = params.validator.safeParse(parsed);
+        if (!validated.success) {
+          await ledger({
+            outputJson: parsed,
+            schemaValid: false,
+            outcome: "invalid_discarded",
+            errorText: validated.error.message.slice(0, 2000),
+            latencyMs: Date.now() - startedAt,
+            promptTokens,
+            completionTokens,
+          });
+          return {
+            ok: false,
+            outcome: "invalid_discarded",
+            message: "Model output failed schema validation and was discarded",
+          };
+        }
+
         await ledger({
           outputJson: parsed,
-          schemaValid: false,
-          outcome: "invalid_discarded",
-          errorText: validated.error.message.slice(0, 2000),
+          schemaValid: true,
+          outcome: "ok",
           latencyMs: Date.now() - startedAt,
           promptTokens,
           completionTokens,
         });
-        return {
-          ok: false,
-          outcome: "invalid_discarded",
-          message: "Model output failed schema validation and was discarded",
-        };
+        return { ok: true, data: validated.data };
+      } finally {
+        await permit?.release();
       }
-
-      await ledger({
-        outputJson: parsed,
-        schemaValid: true,
-        outcome: "ok",
-        latencyMs: Date.now() - startedAt,
-        promptTokens,
-        completionTokens,
-      });
-      return { ok: true, data: validated.data };
     },
   };
 }
@@ -498,70 +534,83 @@ export async function embedWithLedger(
   // Budget backstop, the infer() rule: firm-attributed calls only, a typed
   // failure with NO ledger row. A null-firm (platform) call has no per-firm
   // budget to check.
-  if (params.firmId && (await firmBudgetExhausted(params.firmId))) {
+  const estimatedPromptTokens = estimatedTokens(
+    params.texts.reduce((total, text) => total + text.length, 0),
+  );
+  const permit = params.firmId
+    ? await acquireFirmClerkBudgetPermit(params.firmId, estimatedPromptTokens)
+    : null;
+  if (params.firmId && !permit) {
     return {
       ok: false,
       message:
         "The firm's monthly Clerk token allowance is exhausted; the embedding call was not made.",
     };
   }
-  const startedAt = Date.now();
-  const base: LedgerBase = {
-    caseId: null,
-    firmId: params.firmId,
-    purpose: params.purpose ?? "embed_memory",
-    model: embedder.model,
-    promptVersion: params.promptVersion,
-    // One hash over the batch — auditable without retaining a second copy
-    // of the embedded text in the ledger (the infer() inputRef rule).
-    // JSON-encoded so batch boundaries hash distinctly.
-    inputRef: sha256(JSON.stringify(params.texts)),
-  };
-  const ledger = ledgerAppender(base);
   try {
-    const { vectors, promptTokens } = await embedder.embed(params.texts);
-    if (
-      vectors.length !== params.texts.length ||
-      // Length AND finiteness: a NaN/Infinity entry would survive a length
-      // check only to break the pgvector literal at insert — discarding
-      // here keeps a poisoned response from failing the store step
-      // downstream (and re-charging the firm on every retry).
-      vectors.some(
-        (v) => v.length !== params.dims || v.some((n) => !Number.isFinite(n)),
-      )
-    ) {
+    const startedAt = Date.now();
+    const base: LedgerBase = {
+      caseId: null,
+      firmId: params.firmId,
+      purpose: params.purpose ?? "embed_memory",
+      model: embedder.model,
+      promptVersion: params.promptVersion,
+      // One hash over the batch — auditable without retaining a second copy
+      // of the embedded text in the ledger (the infer() inputRef rule).
+      // JSON-encoded so batch boundaries hash distinctly.
+      inputRef: sha256(JSON.stringify(params.texts)),
+    };
+    const ledger = ledgerAppender(base, permit?.ledgerDb ?? db);
+    try {
+      const { vectors, promptTokens: providerPromptTokens } =
+        await embedder.embed(params.texts);
+      const promptTokens = providerPromptTokens ?? estimatedPromptTokens;
+      if (
+        vectors.length !== params.texts.length ||
+        // Length AND finiteness: a NaN/Infinity entry would survive a length
+        // check only to break the pgvector literal at insert — discarding
+        // here keeps a poisoned response from failing the store step
+        // downstream (and re-charging the firm on every retry).
+        vectors.some(
+          (v) => v.length !== params.dims || v.some((n) => !Number.isFinite(n)),
+        )
+      ) {
+        await ledger({
+          outputJson: null,
+          schemaValid: false,
+          outcome: "invalid_discarded",
+          errorText: `Embedding shape mismatch: ${vectors.length} vector(s), expected ${params.texts.length} of ${params.dims} dims`,
+          latencyMs: Date.now() - startedAt,
+          promptTokens,
+        });
+        return {
+          ok: false,
+          message: "Embedding response had the wrong shape and was discarded",
+        };
+      }
       await ledger({
-        outputJson: null,
-        schemaValid: false,
-        outcome: "invalid_discarded",
-        errorText: `Embedding shape mismatch: ${vectors.length} vector(s), expected ${params.texts.length} of ${params.dims} dims`,
+        // Never the vectors: the ledger records spend and outcome, the memory
+        // table is the one home of the embeddings themselves.
+        outputJson: { vectors: vectors.length },
+        schemaValid: true,
+        outcome: "ok",
         latencyMs: Date.now() - startedAt,
         promptTokens,
       });
-      return {
-        ok: false,
-        message: "Embedding response had the wrong shape and was discarded",
-      };
+      return { ok: true, vectors, model: embedder.model };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await ledger({
+        outputJson: null,
+        schemaValid: false,
+        outcome: "error",
+        errorText: message.slice(0, 2000),
+        latencyMs: Date.now() - startedAt,
+        promptTokens: estimatedPromptTokens,
+      });
+      return { ok: false, message: "Embedding call failed" };
     }
-    await ledger({
-      // Never the vectors: the ledger records spend and outcome, the memory
-      // table is the one home of the embeddings themselves.
-      outputJson: { vectors: vectors.length },
-      schemaValid: true,
-      outcome: "ok",
-      latencyMs: Date.now() - startedAt,
-      promptTokens,
-    });
-    return { ok: true, vectors, model: embedder.model };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await ledger({
-      outputJson: null,
-      schemaValid: false,
-      outcome: "error",
-      errorText: message.slice(0, 2000),
-      latencyMs: Date.now() - startedAt,
-    });
-    return { ok: false, message: "Embedding call failed" };
+  } finally {
+    await permit?.release();
   }
 }

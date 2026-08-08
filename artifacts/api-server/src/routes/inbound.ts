@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { opTokenAllows, presentedOpToken } from "../lib/op-token";
-import { logger } from "../lib/logger";
-import { processInboundEmail } from "../modules/inbound/email";
-import { processInboundWhatsApp } from "../modules/inbound/whatsapp";
+import {
+  enqueueInboundEmail,
+  enqueueInboundWhatsApp,
+} from "../modules/inbound/queue";
 
 // Inbound intake rails (machine webhooks). An email provider's inbound route
 // (e.g. a Mailgun route or an SES receipt rule + Lambda) or a WhatsApp BSP's
@@ -22,8 +23,8 @@ import { processInboundWhatsApp } from "../modules/inbound/whatsapp";
 // must not exist at all: every request 404s exactly like an unknown route
 // (the rail is dark), rather than defaulting open. Setting the env var lights
 // the rail; the shared secret then IS the credential (constant-time compare
-// via lib/op-token.ts), presented as x-op-token or ?token= — the same shapes
-// the operational endpoints accept.
+// via lib/op-token.ts), presented only in the x-op-token header so credentials
+// never enter URLs, browser history or access logs.
 
 const MAX_ATTACHMENTS = 3;
 
@@ -47,7 +48,7 @@ const InboundEmailBody = z.object({
 
 const router: IRouter = Router();
 
-router.post("/inbound/email", (req, res): void => {
+router.post("/inbound/email", async (req, res): Promise<void> => {
   const expected = process.env.INBOUND_EMAIL_TOKEN;
   if (!expected) {
     // Rail is dark: indistinguishable from a route that does not exist.
@@ -68,19 +69,16 @@ router.post("/inbound/email", (req, res): void => {
   // ANTI-PROBE: once the token and shape check out, the response is IDENTICAL
   // whether or not the sender resolves to a client — a caller who has the
   // shared secret still must not be able to enumerate which email addresses
-  // belong to platform users. Respond 202 FIRST, then do ALL resolution and
-  // capture work (multi-second vision calls included) in a detached promise;
-  // an unresolvable sender is audit-logged inside processInboundEmail and
-  // creates nothing.
+  // belong to platform users. Commit the deduplicated outbox row BEFORE the
+  // 202; a worker then performs resolution and capture. An unresolvable
+  // sender is audit-logged inside processInboundEmail and creates nothing.
+  await enqueueInboundEmail(parsed.data);
   res.status(202).json({ received: parsed.data.attachments.length });
-  processInboundEmail(parsed.data).catch((err) =>
-    logger.error({ err }, "Inbound email processing failed"),
-  );
 });
 
 // WhatsApp intake rail: same fail-closed gate (its own INBOUND_WHATSAPP_TOKEN
 // — a deployment can light one rail without the other), same anti-probe 202,
-// same detached processing. Media arrives as base64 attachments (WhatsApp
+// same durable outbox processing. Media arrives as base64 attachments (WhatsApp
 // media often has no filename — optional here, defaulted downstream); a
 // text-only message may carry the invoice details typed out, which the
 // processor routes to the text capture path when long enough to plausibly be
@@ -106,7 +104,7 @@ const InboundWhatsAppBody = z
     message: "attachments or text required",
   });
 
-router.post("/inbound/whatsapp", (req, res): void => {
+router.post("/inbound/whatsapp", async (req, res): Promise<void> => {
   const expected = process.env.INBOUND_WHATSAPP_TOKEN;
   if (!expected) {
     // Rail is dark: indistinguishable from a route that does not exist.
@@ -127,14 +125,12 @@ router.post("/inbound/whatsapp", (req, res): void => {
   // ANTI-PROBE (same posture as the email rail): the response depends only
   // on the request shape, never on whether the phone number resolves — a
   // caller holding the shared secret still must not be able to enumerate
-  // which numbers belong to platform clients. Respond 202 FIRST, then do ALL
-  // resolution and capture work in a detached promise.
+  // which numbers belong to platform clients. Commit the durable queue item
+  // before the 202; a worker performs resolution and capture afterward.
+  await enqueueInboundWhatsApp(parsed.data);
   res.status(202).json({
     received: parsed.data.attachments.length || 1,
   });
-  processInboundWhatsApp(parsed.data).catch((err) =>
-    logger.error({ err }, "Inbound whatsapp processing failed"),
-  );
 });
 
 export default router;

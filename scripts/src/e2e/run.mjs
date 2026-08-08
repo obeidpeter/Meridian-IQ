@@ -11,6 +11,7 @@
 //   BASE_PATH=/console/ PORT=1 pnpm --filter @workspace/console run build
 //   BASE_PATH=/app/ PORT=1 pnpm --filter @workspace/sme-compliance run build
 //   BASE_PATH=/buyer/ PORT=1 pnpm --filter @workspace/buyer-portal run build
+//   BASE_PATH=/penalty-calculator/ PORT=1 pnpm --filter @workspace/penalty-calculator run build
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -18,8 +19,12 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { startStaticServer, startWebhookReceiver } from "./serve.mjs";
 import { runJourneys } from "./journeys/index.mjs";
+import { DEMO_PASSWORD } from "./journeys/shared.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 const API_PORT = Number(process.env.E2E_API_PORT ?? 5100);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 8091);
 // Local receiver the integration journey registers a firm webhook against.
@@ -37,6 +42,7 @@ const REQUIRED = [
   "artifacts/console/dist/public/index.html",
   "artifacts/sme-compliance/dist/public/index.html",
   "artifacts/buyer-portal/dist/public/index.html",
+  "artifacts/penalty-calculator/dist/public/index.html",
 ];
 
 function fail(msg) {
@@ -45,18 +51,24 @@ function fail(msg) {
 }
 
 if (!process.env.DATABASE_URL) {
-  fail("DATABASE_URL must point at a scratch Postgres database (it will be seeded).");
+  fail(
+    "DATABASE_URL must point at a scratch Postgres database (it will be seeded).",
+  );
 }
 for (const rel of REQUIRED) {
   if (!existsSync(path.join(ROOT, rel))) {
-    fail(`missing build artifact ${rel} — run the builds listed at the top of run.mjs.`);
+    fail(
+      `missing build artifact ${rel} — run the builds listed at the top of run.mjs.`,
+    );
   }
 }
 
 const results = [];
 function check(name, ok, detail = "") {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`,
+  );
 }
 
 async function waitForApi(timeoutMs = 30000) {
@@ -76,28 +88,40 @@ async function waitForApi(timeoutMs = 30000) {
 // Prefer an explicitly provided browser, then the preinstalled one, then
 // playwright's own download (CI runs `playwright install chromium`).
 function browserExecutable() {
-  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) return process.env.PLAYWRIGHT_EXECUTABLE_PATH;
-  if (existsSync("/opt/pw-browsers/chromium")) return "/opt/pw-browsers/chromium";
+  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH)
+    return process.env.PLAYWRIGHT_EXECUTABLE_PATH;
+  if (existsSync("/opt/pw-browsers/chromium"))
+    return "/opt/pw-browsers/chromium";
   return undefined;
 }
 
-const api = spawn("node", ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"], {
-  cwd: ROOT,
-  env: {
-    ...process.env,
-    PORT: String(API_PORT),
-    NODE_ENV: "development",
-    // Lights the payment-confirmation machine rail (fail-closed: 404 while
-    // unset). The env is read per call server-side; the integration journey
-    // presents this token as x-op-token to settle its payment intent.
-    PAYMENT_WEBHOOK_TOKEN,
-    // Lights the inbound collection webhook (same fail-closed posture: the
-    // rail 404s while unset). The collections journey presents this token as
-    // x-op-token to settle a receivable through a collection account.
-    COLLECTION_WEBHOOK_TOKEN,
+const api = spawn(
+  "node",
+  ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
+  {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      PORT: String(API_PORT),
+      NODE_ENV: "development",
+      SEED_DEMO: "true",
+      DEMO_PASSWORD,
+      // The suite signs in as many roles from one loopback address. Preserve
+      // the per-credential throttle assertions while preventing the aggregate
+      // production IP cap from terminating unrelated later journeys.
+      LOGIN_IP_ATTEMPT_MAX: "1000",
+      // Lights the payment-confirmation machine rail (fail-closed: 404 while
+      // unset). The env is read per call server-side; the integration journey
+      // presents this token as x-op-token to settle its payment intent.
+      PAYMENT_WEBHOOK_TOKEN,
+      // Lights the inbound collection webhook (same fail-closed posture: the
+      // rail 404s while unset). The collections journey presents this token as
+      // x-op-token to settle a receivable through a collection account.
+      COLLECTION_WEBHOOK_TOKEN,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
   },
-  stdio: ["ignore", "pipe", "pipe"],
-});
+);
 let apiLog = "";
 api.stdout.on("data", (d) => (apiLog += d));
 api.stderr.on("data", (d) => (apiLog += d));
@@ -115,7 +139,9 @@ try {
     headless: true,
     executablePath: browserExecutable(),
   });
-  const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1360, height: 900 },
+  });
 
   await runJourneys(page, BASE, check, {
     hookReceiver,
@@ -124,11 +150,15 @@ try {
   });
 
   const failed = results.filter((r) => !r.ok);
-  console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
+  console.log(
+    `\n${results.length - failed.length}/${results.length} checks passed`,
+  );
   exitCode = failed.length ? 1 : 0;
 } catch (err) {
   console.error("E2E crashed:", err);
-  console.error("--- api-server log tail ---\n" + apiLog.split("\n").slice(-30).join("\n"));
+  console.error(
+    "--- api-server log tail ---\n" + apiLog.split("\n").slice(-30).join("\n"),
+  );
   exitCode = 2;
 } finally {
   await browser?.close().catch(() => {});

@@ -9,6 +9,9 @@ import {
 import { logger } from "./lib/logger";
 import { startWorker, stopWorker } from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
+import { disableProductionDemoIdentities } from "./bootstrap/security";
+import { assertSessionSigningConfigured } from "./modules/auth/session";
+import { markReady, markUnready } from "./lib/readiness";
 
 const rawPort = process.env["PORT"];
 
@@ -33,10 +36,9 @@ if (Number.isNaN(port) || port <= 0) {
 //     serialized under a session advisory lock, so concurrent Autoscale
 //     instances booting at once cannot race;
 //   - a guardrail whose target table does not exist yet (Publish has not
-//     shipped that feature's schema) is SKIPPED and retried on the next boot,
-//     instead of aborting the run;
-//   - it runs after app.listen(), never blocks the port, and any failure is
-//     logged loudly rather than taking the server down.
+//     shipped that feature's schema) is reported as a failed readiness check;
+//   - it runs after app.listen(), so liveness remains available, while every
+//     other route and the worker remain disabled until it succeeds.
 async function applyProductionGuardrails(): Promise<void> {
   try {
     const { applied, skipped } = await applyGuardrailMigrations(pool);
@@ -46,6 +48,11 @@ async function applyProductionGuardrails(): Promise<void> {
         "Guardrail migrations skipped (target relation/object missing — " +
           "expected when Publish has not yet created the table; they will " +
           "apply on a boot after that schema ships)",
+      );
+      throw new Error(
+        `Production guardrail migrations were skipped: ${skipped
+          .map((item) => `${item.version}:${item.name}`)
+          .join(", ")}`,
       );
     }
     logger.info(
@@ -60,6 +67,7 @@ async function applyProductionGuardrails(): Promise<void> {
         "or run `pnpm --filter @workspace/db run migrate` with the production " +
         "DATABASE_URL.",
     );
+    throw err;
   }
 }
 
@@ -68,8 +76,8 @@ async function applyProductionGuardrails(): Promise<void> {
 // (meridian_append_only) live in hand-written migrations (0001/0002), not the
 // Drizzle schema, so Replit's Publish schema-diff does NOT create them; the boot
 // step above (applyProductionGuardrails) is what applies them. This check never
-// blocks startup or the port; it only surfaces a missing guardrail loudly in the
-// deployment logs so tenant isolation is never silently absent.
+// blocks the liveness port, but it blocks readiness and application traffic so
+// tenant isolation is never silently absent.
 async function verifyProductionGuardrails(): Promise<void> {
   try {
     const { rows } = await pool.query(
@@ -108,6 +116,20 @@ async function verifyProductionGuardrails(): Promise<void> {
     const uncovered = (uncoveredRes.rows as { table_name: string }[])
       .map((r) => r.table_name)
       .filter((t) => t !== "audit_events");
+    const requiredIndexesRes = await pool.query<{ index_name: string }>(
+      `SELECT required.index_name
+         FROM (VALUES
+           ('settlement_events_external_reference_uq'),
+           ('outbox_events_inbound_dedupe_idx'),
+           ('clerk_cases_live_dedupe_uq'),
+           ('collection_accounts_one_active_per_client'),
+            ('payment_intents_provider_ref_uq'),
+            ('password_resets_one_pending_per_user_uq')
+         ) AS required(index_name)
+        WHERE to_regclass('public.' || required.index_name) IS NULL
+        ORDER BY required.index_name`,
+    );
+    const missingIndexes = requiredIndexesRes.rows.map((row) => row.index_name);
     // pgvector presence (round 45): migration 0038's tolerant DO block
     // downgrades a missing-extension error to a pg NOTICE nothing surfaces,
     // so THIS is the operator-visible signal. Not a security gap — the
@@ -123,9 +145,14 @@ async function verifyProductionGuardrails(): Promise<void> {
           "(migration 0038 could not create it).",
       );
     }
-    if (policies === 0 || triggers === 0 || uncovered.length > 0) {
+    if (
+      policies === 0 ||
+      triggers === 0 ||
+      uncovered.length > 0 ||
+      missingIndexes.length > 0
+    ) {
       logger.error(
-        { policies, triggers, uncovered },
+        { policies, triggers, uncovered, missingIndexes },
         "SECURITY: production tenant-isolation guardrails are MISSING or " +
           "incomplete (RLS policies / append-only triggers / uncovered " +
           "tenant-keyed tables listed above). Apply the guardrail migrations " +
@@ -134,19 +161,26 @@ async function verifyProductionGuardrails(): Promise<void> {
           "isolation is NOT fully enforced at the data layer until this is " +
           "clean.",
       );
+      throw new Error(
+        `Production guardrails incomplete: ${policies} policies, ${triggers} triggers, uncovered=${uncovered.join(",")}, missingIndexes=${missingIndexes.join(",")}`,
+      );
     } else {
-      logger.info({ policies, triggers }, "Production guardrails verified");
+      logger.info(
+        { policies, triggers, requiredIndexes: 5 },
+        "Production guardrails verified",
+      );
     }
   } catch (err) {
     logger.error({ err }, "Could not verify production guardrails");
+    throw err;
   }
 }
 
 // Repair the login role's ability to assume the restricted RLS role at startup.
 // See ensureAppRoleAssumable() in @workspace/db for why this is required in a
 // deployment (non-superuser login missing the PG16 SET membership option) and a
-// no-op in development. Never throws: a failure is logged loudly so a broken RLS
-// role surfaces in the deployment logs instead of taking the server down.
+// no-op in development. A failure blocks readiness and is retried by the
+// bootstrap loop, while the liveness endpoint remains available.
 async function ensureRlsRoleAssumable(): Promise<void> {
   try {
     const status = await ensureAppRoleAssumable();
@@ -163,18 +197,51 @@ async function ensureRlsRoleAssumable(): Promise<void> {
           "tenant-scoped request can run. Provision the production database via " +
           "Replit Publish 'overwrite data' (dev->prod copy).",
       );
+      throw new Error("Database role meridian_app is missing");
     } else {
       logger.error(
         "SECURITY: could not obtain the SET privilege on meridian_app; SET ROLE " +
           "will keep failing. The login role needs ADMIN on meridian_app.",
       );
+      throw new Error("Database role meridian_app is not assumable");
     }
   } catch (err) {
     logger.error(
       { err },
       "Could not ensure the RLS role is assumable; SET ROLE meridian_app may fail",
     );
+    throw err;
   }
+}
+
+async function bootstrapApplication(isProduction: boolean): Promise<void> {
+  if (!isProduction) {
+    const applied = await applyMigrations(pool);
+    logger.info(
+      { applied: applied.length },
+      applied.length ? "Migrations applied" : "Migrations up to date",
+    );
+    await seedPlatform();
+    return;
+  }
+
+  // Apply the guardrail migrations first (idempotent, advisory-locked), then
+  // run the read-only verification so the deploy logs state the final truth.
+  await assertSessionSigningConfigured();
+  await ensureRlsRoleAssumable();
+  await applyProductionGuardrails();
+  await verifyProductionGuardrails();
+  const disabled = await disableProductionDemoIdentities();
+  if (disabled > 0) {
+    logger.warn(
+      { disabled },
+      "Disabled copied demonstration identities in production",
+    );
+  }
+}
+
+function bootstrapRetryDelay(attempt: number): number {
+  return Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5));
 }
 
 async function main(): Promise<void> {
@@ -206,40 +273,36 @@ async function main(): Promise<void> {
 
   const isProduction = process.env.NODE_ENV === "production";
 
-  // Before anything assumes the restricted RLS role, make sure the login role can
-  // actually `SET ROLE meridian_app` (both requests and the worker depend on it).
-  // In production the non-superuser login is a member of meridian_app but lacks
-  // the PG16 "SET" membership option, so this repair is what makes login work at
-  // all; in development the superuser login already can, so it is a no-op. Done
-  // before startWorker() so the first worker loop can enter its bypass context.
-  if (isProduction) {
-    await ensureRlsRoleAssumable();
-  }
-
-  // In-process polling worker. Every loop is unref'd and swallows its own errors,
-  // so it is safe to start before the database is confirmed reachable.
-  startWorker();
-
   // Schema and seed data for PRODUCTION are owned by Replit's Publish flow (the
   // schema diff applied on publish) — NOT by the application, so demo seeding and
   // the full dev bootstrap only run outside production. The one exception is the
   // hand-written guardrail migrations (RLS, append-only triggers): Publish cannot
   // create those, so production applies them idempotently on boot below.
-  if (!isProduction) {
+  // A transient database failure must not leave a healthy process permanently
+  // wedged in an unready state. Keep liveness available, retry with bounded
+  // backoff, and start traffic/workers exactly once after every prerequisite
+  // succeeds.
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
     try {
-      const applied = await applyMigrations(pool);
+      await bootstrapApplication(isProduction);
+      startWorker();
+      markReady();
       logger.info(
-        { applied: applied.length },
-        applied.length ? "Migrations applied" : "Migrations up to date",
+        { attempt },
+        "Application bootstrap complete; instance is ready",
       );
-      await seedPlatform();
+      break;
     } catch (err) {
-      logger.error({ err }, "Bootstrap (migrate/seed) failed");
+      markUnready("bootstrap_failed");
+      const retryInMs = bootstrapRetryDelay(attempt);
+      logger.error(
+        { err, attempt, retryInMs },
+        "Bootstrap failed; API traffic and workers remain disabled; retrying",
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryInMs));
     }
-  } else {
-    // Apply the guardrail migrations first (idempotent, advisory-locked), then
-    // run the read-only verification so the deploy logs state the final truth.
-    void applyProductionGuardrails().then(() => verifyProductionGuardrails());
   }
 }
 

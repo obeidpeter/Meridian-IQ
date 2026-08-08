@@ -1,12 +1,8 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
-import {
-  getDb,
-  usersTable,
-  passwordResetsTable,
-} from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { getDb, usersTable, passwordResetsTable } from "@workspace/db";
 import identityRouter from "./identity.ts";
 import authRouter from "./auth.ts";
 import { sweepExpiredPasswordResets } from "../modules/auth/password-reset.ts";
@@ -19,7 +15,10 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
-import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // Operator-assisted password recovery (IDN-02), on the invitation rail's
 // posture: the raw token is returned once and only its sha256 stored;
@@ -32,8 +31,15 @@ const SALT = makeRunSalt();
 const operatorUserId = randomUUID();
 const subjectUserId = randomUUID();
 const subjectEmail = `lost-access-${SALT}@test.local`;
+const concurrentSubjectUserId = randomUUID();
+const concurrentSubjectEmail = `reset-race-${SALT}@test.local`;
+const expiredSubjectUserId = randomUUID();
+const retentionExpiredUserId = randomUUID();
+const retentionFreshUserId = randomUUID();
 
-const operator: Principal = crossTenantPrincipal("operator", { userId: operatorUserId });
+const operator: Principal = crossTenantPrincipal("operator", {
+  userId: operatorUserId,
+});
 
 const firmAdmin: Principal = firmPrincipal(randomUUID());
 
@@ -52,6 +58,18 @@ before(async () => {
     email: subjectEmail,
     passwordHash: await hashPassword("original-pw-123"),
   });
+  await db.insert(usersTable).values([
+    { id: concurrentSubjectUserId, email: concurrentSubjectEmail },
+    { id: expiredSubjectUserId, email: `expired-reset-${SALT}@test.local` },
+    {
+      id: retentionExpiredUserId,
+      email: `retention-expired-${SALT}@test.local`,
+    },
+    {
+      id: retentionFreshUserId,
+      email: `retention-fresh-${SALT}@test.local`,
+    },
+  ]);
 });
 
 async function issueReset(
@@ -63,7 +81,10 @@ async function issueReset(
     headers: JSON_HEADERS,
     body: JSON.stringify({ email }),
   });
-  return { status: res.status, json: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+  return {
+    status: res.status,
+    json: (await res.json().catch(() => ({}))) as Record<string, unknown>,
+  };
 }
 
 test("an operator issues a reset link; only the token's hash is stored", async () => {
@@ -110,6 +131,26 @@ test("issuing requires identity.write and an existing account", async () => {
   assert.equal(unknown.status, 404);
 });
 
+test("concurrent issuances leave exactly one pending reset", async () => {
+  const base = await listen(appFor(operator, identityRouter));
+  const results = await Promise.all([
+    issueReset(base, concurrentSubjectEmail),
+    issueReset(base, concurrentSubjectEmail),
+  ]);
+  assert.deepEqual(results.map((result) => result.status).sort(), [201, 201]);
+
+  const pending = await getDb()
+    .select({ id: passwordResetsTable.id })
+    .from(passwordResetsTable)
+    .where(
+      and(
+        eq(passwordResetsTable.userId, concurrentSubjectUserId),
+        eq(passwordResetsTable.status, "pending"),
+      ),
+    );
+  assert.equal(pending.length, 1);
+});
+
 test("redeeming sets the password, revokes sessions, and is single-use", async () => {
   const identityBase = await listen(appFor(operator, identityRouter));
   const authBase = await listen(appFor(operator, authRouter));
@@ -136,7 +177,8 @@ test("redeeming sets the password, revokes sessions, and is single-use", async (
     .where(eq(usersTable.id, subjectUserId))
     .limit(1);
   assert.ok(
-    user.passwordHash && (await verifyPassword("brand-new-pw-456", user.passwordHash)),
+    user.passwordHash &&
+      (await verifyPassword("brand-new-pw-456", user.passwordHash)),
     "new password is set and verifiable",
   );
   assert.ok(
@@ -175,12 +217,14 @@ test("expired and unknown tokens are a uniform 400", async () => {
   const expiredToken = createHash("sha256")
     .update(`expired-${SALT}`)
     .digest("hex");
-  await getDb().insert(passwordResetsTable).values({
-    userId: subjectUserId,
-    tokenHash: createHash("sha256").update(expiredToken).digest("hex"),
-    expiresAt: new Date(Date.now() - 60_000),
-    issuedByUserId: operatorUserId,
-  });
+  await getDb()
+    .insert(passwordResetsTable)
+    .values({
+      userId: expiredSubjectUserId,
+      tokenHash: createHash("sha256").update(expiredToken).digest("hex"),
+      expiresAt: new Date(Date.now() - 60_000),
+      issuedByUserId: operatorUserId,
+    });
   const expired = await fetch(`${authBase}/auth/reset-password`, {
     method: "POST",
     headers: JSON_HEADERS,
@@ -191,7 +235,10 @@ test("expired and unknown tokens are a uniform 400", async () => {
   const unknown = await fetch(`${authBase}/auth/reset-password`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ token: "f".repeat(64), password: "irrelevant-pw-2" }),
+    body: JSON.stringify({
+      token: "f".repeat(64),
+      password: "irrelevant-pw-2",
+    }),
   });
   assert.equal(unknown.status, 400);
 });
@@ -217,7 +264,7 @@ test("the retention sweep prunes only dead resets past the 30-day window", async
       },
       {
         // Never redeemed, expired a month ago: prunable.
-        userId: subjectUserId,
+        userId: retentionExpiredUserId,
         tokenHash: hashOf("expired"),
         expiresAt: new Date(monthAgo.getTime() + 60_000),
         createdAt: monthAgo,
@@ -225,13 +272,16 @@ test("the retention sweep prunes only dead resets past the 30-day window", async
       },
       {
         // Freshly issued and still live: must survive.
-        userId: subjectUserId,
+        userId: retentionFreshUserId,
         tokenHash: hashOf("fresh"),
         expiresAt: new Date(Date.now() + 60_000),
         issuedByUserId: operatorUserId,
       },
     ])
-    .returning({ id: passwordResetsTable.id, tokenHash: passwordResetsTable.tokenHash });
+    .returning({
+      id: passwordResetsTable.id,
+      tokenHash: passwordResetsTable.tokenHash,
+    });
   assert.equal(inserted.length, 3);
 
   await sweepExpiredPasswordResets();
@@ -241,7 +291,13 @@ test("the retention sweep prunes only dead resets past the 30-day window", async
       await db
         .select({ tokenHash: passwordResetsTable.tokenHash })
         .from(passwordResetsTable)
-        .where(eq(passwordResetsTable.userId, subjectUserId))
+        .where(
+          inArray(passwordResetsTable.tokenHash, [
+            hashOf("used"),
+            hashOf("expired"),
+            hashOf("fresh"),
+          ]),
+        )
     ).map((r) => r.tokenHash),
   );
   assert.ok(!survivors.has(hashOf("used")), "old used reset is pruned");

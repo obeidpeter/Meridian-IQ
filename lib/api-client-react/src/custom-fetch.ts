@@ -1,5 +1,6 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  timeoutMs?: number;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -10,6 +11,9 @@ export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
+const DEFAULT_TIMEOUT_MS = 20_000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -48,7 +52,10 @@ function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }
 
-function resolveMethod(input: RequestInfo | URL, explicitMethod?: string): string {
+function resolveMethod(
+  input: RequestInfo | URL,
+  explicitMethod?: string,
+): string {
   if (explicitMethod) return explicitMethod.toUpperCase();
   if (isRequest(input)) return input.method.toUpperCase();
   return "GET";
@@ -78,6 +85,24 @@ function resolveUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+// Credentials and the CSRF marker belong only on calls to the configured API.
+// In particular, never let an exported helper leak a mobile bearer token when
+// it is accidentally used with an arbitrary absolute URL.
+function isApiTarget(input: RequestInfo | URL): boolean {
+  const raw = resolveUrl(input);
+  if (raw.startsWith("/")) return true;
+
+  try {
+    const targetOrigin = new URL(raw).origin;
+    if (_baseUrl) return targetOrigin === new URL(_baseUrl).origin;
+    return (
+      typeof window !== "undefined" && targetOrigin === window.location.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
 function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   const headers = new Headers();
 
@@ -97,17 +122,19 @@ function getMediaType(headers: Headers): string | null {
 }
 
 function isJsonMediaType(mediaType: string | null): boolean {
-  return mediaType === "application/json" || Boolean(mediaType?.endsWith("+json"));
+  return (
+    mediaType === "application/json" || Boolean(mediaType?.endsWith("+json"))
+  );
 }
 
 function isTextMediaType(mediaType: string | null): boolean {
   return Boolean(
     mediaType &&
-      (mediaType.startsWith("text/") ||
-        mediaType === "application/xml" ||
-        mediaType === "text/xml" ||
-        mediaType.endsWith("+xml") ||
-        mediaType === "application/x-www-form-urlencoded"),
+    (mediaType.startsWith("text/") ||
+      mediaType === "application/xml" ||
+      mediaType === "text/xml" ||
+      mediaType.endsWith("+xml") ||
+      mediaType === "application/x-www-form-urlencoded"),
   );
 }
 
@@ -228,8 +255,25 @@ export class ResponseParseError extends Error {
     this.response = response;
     this.method = requestInfo.method;
     this.url = response.url || requestInfo.url;
-    this.rawBody = rawBody;
+    // Keep malformed server payloads from being retained wholesale in error
+    // telemetry or component state. The prefix is sufficient for diagnosis.
+    this.rawBody = rawBody.slice(0, 4_096);
     this.cause = cause;
+  }
+}
+
+export class ApiTimeoutError extends Error {
+  readonly name = "ApiTimeoutError";
+  readonly method: string;
+  readonly url: string;
+  readonly timeoutMs: number;
+
+  constructor(method: string, url: string, timeoutMs: number) {
+    super(`Request timed out after ${timeoutMs}ms: ${method} ${url}`);
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.method = method;
+    this.url = url;
+    this.timeoutMs = timeoutMs;
   }
 }
 
@@ -251,7 +295,10 @@ async function parseJsonBody(
   }
 }
 
-async function parseErrorBody(response: Response, method: string): Promise<unknown> {
+async function parseErrorBody(
+  response: Response,
+  method: string,
+): Promise<unknown> {
   if (hasNoBody(response, method)) {
     return null;
   }
@@ -260,7 +307,9 @@ async function parseErrorBody(response: Response, method: string): Promise<unkno
 
   // Fall back to text when blob() is unavailable (e.g. some React Native builds).
   if (mediaType && !isJsonMediaType(mediaType) && !isTextMediaType(mediaType)) {
-    return typeof response.blob === "function" ? response.blob() : response.text();
+    return typeof response.blob === "function"
+      ? response.blob()
+      : response.text();
   }
 
   const raw = await response.text();
@@ -315,7 +364,7 @@ async function parseSuccessBody(
       if (typeof response.blob !== "function") {
         throw new TypeError(
           "Blob responses are not supported in this runtime. " +
-            "Use responseType \"json\" or \"text\" instead.",
+            'Use responseType "json" or "text" instead.',
         );
       }
       return response.blob();
@@ -327,7 +376,22 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const {
+    responseType = "auto",
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    headers: headersInit,
+    ...init
+  } = options;
+
+  if (
+    !Number.isFinite(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > MAX_TIMEOUT_MS
+  ) {
+    throw new TypeError(
+      `customFetch: timeoutMs must be between 1 and ${MAX_TIMEOUT_MS}.`,
+    );
+  }
 
   const method = resolveMethod(input, init.method);
 
@@ -335,7 +399,10 @@ export async function customFetch<T = unknown>(
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
   }
 
-  const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+  const headers = mergeHeaders(
+    isRequest(input) ? input.headers : undefined,
+    headersInit,
+  );
 
   if (
     typeof init.body === "string" &&
@@ -349,41 +416,131 @@ export async function customFetch<T = unknown>(
     headers.set("accept", DEFAULT_JSON_ACCEPT);
   }
 
-  // CSRF defense (custom-header pattern). The web session cookie is
-  // SameSite=None so it rides cross-site requests; the API therefore requires
-  // this custom header on cookie-authenticated state-changing calls. A
-  // cross-site attacker cannot set a custom header on a no-preflight "simple
-  // request", and the API's CORS policy will not grant the preflight, so a
-  // forged request is rejected. Harmless on safe methods and same-origin calls.
-  if (!headers.has("x-meridian-csrf")) {
+  const requestInfo = { method, url: resolveUrl(input) };
+  const apiTarget = isApiTarget(input);
+  const controller = new AbortController();
+  const sourceSignals = [
+    init.signal,
+    isRequest(input) ? input.signal : undefined,
+  ].filter((signal): signal is AbortSignal => Boolean(signal));
+  const abortFromSource = (event: Event) => {
+    const source = event.target as AbortSignal;
+    controller.abort(source.reason);
+  };
+  for (const signal of sourceSignals) {
+    if (signal.aborted) controller.abort(signal.reason);
+    else signal.addEventListener("abort", abortFromSource, { once: true });
+  }
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error("API request timeout"));
+  }, timeoutMs);
+  let rejectCancellation: (reason?: unknown) => void = () => {};
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    rejectCancellation = reject;
+  });
+  void cancellation.catch(() => undefined);
+  const abortPendingWork = () => rejectCancellation(controller.signal.reason);
+  if (controller.signal.aborted) abortPendingWork();
+  else
+    controller.signal.addEventListener("abort", abortPendingWork, {
+      once: true,
+    });
+  const cleanup = () => {
+    clearTimeout(timeout);
+    controller.signal.removeEventListener("abort", abortPendingWork);
+    for (const signal of sourceSignals) {
+      signal.removeEventListener("abort", abortFromSource);
+    }
+  };
+  const rethrowCancellation = (error: unknown): never => {
+    cleanup();
+    if (timedOut) {
+      throw new ApiTimeoutError(method, requestInfo.url, timeoutMs);
+    }
+    throw error;
+  };
+
+  // CSRF defense (custom-header pattern). Every browser-facing unsafe API call
+  // carries the marker; safe and third-party requests avoid an unnecessary
+  // CORS preflight.
+  if (
+    apiTarget &&
+    !SAFE_METHODS.has(method) &&
+    !headers.has("x-meridian-csrf")
+  ) {
     headers.set("x-meridian-csrf", "1");
   }
 
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
-  if (_authTokenGetter && !headers.has("authorization")) {
-    const token = await _authTokenGetter();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
+  if (apiTarget && _authTokenGetter && !headers.has("authorization")) {
+    try {
+      const token = await Promise.race([
+        Promise.resolve(_authTokenGetter()),
+        cancellation,
+      ]);
+      if (token) {
+        headers.set("authorization", `Bearer ${token}`);
+      }
+    } catch (error) {
+      rethrowCancellation(error);
     }
   }
-
-  const requestInfo = { method, url: resolveUrl(input) };
 
   // Send cookies with every request so the first-party session cookie is
   // included on same-origin API calls, including when the web app runs inside a
   // cross-site iframe (the Replit preview). Any explicit override is preserved.
-  const response = await fetch(input, {
-    ...init,
-    method,
-    headers,
-    credentials: init.credentials ?? "include",
-  });
+  let response: Response;
+  try {
+    response = await Promise.race([
+      fetch(input, {
+        ...init,
+        method,
+        headers,
+        credentials: init.credentials ?? (apiTarget ? "include" : "omit"),
+        signal: controller.signal,
+      }),
+      cancellation,
+    ]);
+  } catch (err) {
+    cleanup();
+    if (timedOut) {
+      throw new ApiTimeoutError(method, requestInfo.url, timeoutMs);
+    }
+    throw err;
+  }
 
   if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
+    let errorData: unknown;
+    try {
+      errorData = await Promise.race([
+        parseErrorBody(response, method),
+        cancellation,
+      ]);
+    } catch (err) {
+      if (timedOut) {
+        throw new ApiTimeoutError(method, requestInfo.url, timeoutMs);
+      }
+      throw err;
+    } finally {
+      cleanup();
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  try {
+    return (await Promise.race([
+      parseSuccessBody(response, responseType, requestInfo),
+      cancellation,
+    ])) as T;
+  } catch (err) {
+    if (timedOut) {
+      throw new ApiTimeoutError(method, requestInfo.url, timeoutMs);
+    }
+    throw err;
+  } finally {
+    cleanup();
+  }
 }

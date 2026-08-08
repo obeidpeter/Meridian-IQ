@@ -70,12 +70,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -367,7 +362,11 @@ function DigestImpactCard() {
   }
   const bucket = (
     label: string,
-    b: { pairs: number; meanUrgentDelta: number | null; improvedShare: number | null },
+    b: {
+      pairs: number;
+      meanUrgentDelta: number | null;
+      improvedShare: number | null;
+    },
     testId: string,
   ) => (
     <div className="rounded-md border p-3" data-testid={testId}>
@@ -500,7 +499,12 @@ export function retrievalRunLine(run: {
 }
 
 export function retrievalMissLine(run: {
-  results: { key: string; expectedDoc: string; rank?: number | null; hit: boolean }[];
+  results: {
+    key: string;
+    expectedDoc: string;
+    rank?: number | null;
+    hit: boolean;
+  }[];
 }): string | null {
   const missed = run.results.filter((r) => !r.hit);
   if (missed.length === 0) return null;
@@ -570,12 +574,12 @@ function RetrievalEvalCard() {
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Embeds a fixed labeled corpus with the live embedding model and
-          scores whether each query ranks its right document first —
-          recall@k and mean reciprocal rank, computed deterministically in
-          app code. A drop means the embedding model changed or regressed;
-          the firm-memory surfaces (semantic reply exemplars, Ask memory
-          notes) inherit whatever this measures.
+          Embeds a fixed labeled corpus with the live embedding model and scores
+          whether each query ranks its right document first — recall@k and mean
+          reciprocal rank, computed deterministically in app code. A drop means
+          the embedding model changed or regressed; the firm-memory surfaces
+          (semantic reply exemplars, Ask memory notes) inherit whatever this
+          measures.
         </p>
         {!newest ? (
           <p
@@ -588,8 +592,8 @@ function RetrievalEvalCard() {
         ) : (
           <div className="space-y-1" data-testid="retrieval-eval-latest">
             <p className="text-sm">
-              Latest: {retrievalRunLine(newest)} · <code>{newest.model}</code>{" "}
-              · {formatDateTime(newest.createdAt)}
+              Latest: {retrievalRunLine(newest)} · <code>{newest.model}</code> ·{" "}
+              {formatDateTime(newest.createdAt)}
             </p>
             {retrievalMissLine(newest) && (
               <p className="text-xs text-muted-foreground">
@@ -781,7 +785,10 @@ function CanarySide({
   testId: string;
 }) {
   return (
-    <div className="rounded-md border p-3 space-y-1 text-sm" data-testid={testId}>
+    <div
+      className="rounded-md border p-3 space-y-1 text-sm"
+      data-testid={testId}
+    >
       <p className="text-xs font-medium text-muted-foreground uppercase">
         {label} · {meta}
       </p>
@@ -800,7 +807,10 @@ function CanarySide({
           {stats.injectionResisted}/{stats.injectionFixtures}
         </span>
         {stats.failures > 0 && (
-          <span className="text-muted-foreground"> · {stats.failures} failed call(s)</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · {stats.failures} failed call(s)
+          </span>
         )}
       </p>
     </div>
@@ -808,7 +818,13 @@ function CanarySide({
 }
 
 // The deterministic verdict pill plus the server's one-line reason.
-function CanaryVerdict({ verdict, reason }: { verdict: string; reason: string }) {
+function CanaryVerdict({
+  verdict,
+  reason,
+}: {
+  verdict: string;
+  reason: string;
+}) {
   return (
     <div className="flex items-center gap-2">
       <span className={pillClasses(VERDICT_TONE[verdict] ?? "slate")}>
@@ -830,8 +846,8 @@ function CanaryFootnote({
   return (
     <p className="text-xs text-muted-foreground">
       {fixtureCount} fixture(s)
-      {truncated ? " (corpus truncated to the canary cap)" : ""} ·
-      both sides ran the same corpus through the live gateway.
+      {truncated ? " (corpus truncated to the canary cap)" : ""} · both sides
+      ran the same corpus through the live gateway.
     </p>
   );
 }
@@ -881,11 +897,11 @@ function PromptCanaryCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Test a candidate extraction prompt against the incumbent over the
-          same eval corpus — twice the model calls of an evaluation run. The
-          verdict is deterministic: injection resistance may never drop, and
-          accuracy is judged outside a 2% noise band. Nothing is stored;
-          promoting a prompt is a code change.
+          Test a candidate extraction prompt against the incumbent over the same
+          eval corpus — twice the model calls of an evaluation run. The verdict
+          is deterministic: injection resistance may never drop, and accuracy is
+          judged outside a 2% noise band. Nothing is stored; promoting a prompt
+          is a code change.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -906,7 +922,11 @@ function PromptCanaryCard() {
             </p>
           )}
         </div>
+        <Label htmlFor="canary-candidate" className="sr-only">
+          Candidate system prompt
+        </Label>
         <Textarea
+          id="canary-candidate"
           value={candidate}
           onChange={(e) => {
             setCandidate(e.target.value);
@@ -928,7 +948,10 @@ function PromptCanaryCard() {
         </Button>
         {report && (
           <div className="space-y-3" data-testid="canary-report">
-            <CanaryVerdict verdict={report.verdict} reason={report.verdictReason} />
+            <CanaryVerdict
+              verdict={report.verdict}
+              reason={report.verdictReason}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               {side("incumbent", report.incumbent)}
               {side("candidate", report.candidate)}
@@ -991,11 +1014,11 @@ function ModelCanaryCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Test a candidate model against the incumbent over the same eval
-          corpus — twice the model calls of an evaluation run. The verdict is
+          Test a candidate model against the incumbent over the same eval corpus
+          — twice the model calls of an evaluation run. The verdict is
           deterministic: injection resistance may never drop, and accuracy is
-          judged outside a 2% noise band. Nothing is stored; adopting a model
-          is an env change (CLERK_MODEL_TIERS), canary first.
+          judged outside a 2% noise band. Nothing is stored; adopting a model is
+          an env change (CLERK_MODEL_TIERS), canary first.
         </p>
         <Input
           value={candidate}
@@ -1020,7 +1043,10 @@ function ModelCanaryCard() {
         </Button>
         {report && (
           <div className="space-y-3" data-testid="model-canary-report">
-            <CanaryVerdict verdict={report.verdict} reason={report.verdictReason} />
+            <CanaryVerdict
+              verdict={report.verdict}
+              reason={report.verdictReason}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               {side("incumbent", report.incumbent)}
               {side("candidate", report.candidate)}
@@ -1269,7 +1295,10 @@ function EvalCorpusCard() {
   });
 
   const fixtures = corpus?.fixtures ?? [];
-  const shown = fixtures.slice(0, visibleFixtureCount(fixtures.length, showAll));
+  const shown = fixtures.slice(
+    0,
+    visibleFixtureCount(fixtures.length, showAll),
+  );
   const rowBusy = (key: string) =>
     (retire.isPending && retire.variables?.key === key) ||
     (restore.isPending && restore.variables?.key === key);
@@ -1282,9 +1311,9 @@ function EvalCorpusCard() {
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
           Every fixture the evaluation and canaries run over, with its pass
-          history from stored runs. Retiring a grown or red-team fixture
-          removes it from every future run and canary — static fixtures ship
-          in code and stay read-only here.
+          history from stored runs. Retiring a grown or red-team fixture removes
+          it from every future run and canary — static fixtures ship in code and
+          stay read-only here.
         </p>
         {isLoading ? (
           <Skeleton className="h-24" />
@@ -1303,7 +1332,10 @@ function EvalCorpusCard() {
           </p>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground" data-testid="text-corpus-summary">
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="text-corpus-summary"
+            >
               {corpusSummary(corpus)}
             </p>
             <div className="overflow-x-auto" id="table-eval-corpus-region">
@@ -1461,8 +1493,8 @@ function EvalCorpusCard() {
             Promote a case
           </p>
           <p className="text-xs text-muted-foreground">
-            Turn a decided capture case into a grown fixture: its document
-            text becomes part of every future evaluation run and canary.
+            Turn a decided capture case into a grown fixture: its document text
+            becomes part of every future evaluation run and canary.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -1529,9 +1561,7 @@ function EvalCorpusCard() {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>
-                Retire {pendingRetire?.key}?
-              </AlertDialogTitle>
+              <AlertDialogTitle>Retire {pendingRetire?.key}?</AlertDialogTitle>
               <AlertDialogDescription>
                 Retiring this fixture removes it from every future run and
                 canary. Its past run history is kept, and you can restore it
@@ -1637,8 +1667,7 @@ export function HealthPanel() {
       onError: (e) => {
         toast({
           title: "Evaluation failed",
-          description:
-            serverErrorMessage(e) ?? "Could not run the evaluation.",
+          description: serverErrorMessage(e) ?? "Could not run the evaluation.",
           variant: "destructive",
         });
       },
@@ -1681,8 +1710,7 @@ export function HealthPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">
-          How the Clerk is behaving — case flow, refusals and inference
-          quality.
+          How the Clerk is behaving — case flow, refusals and inference quality.
         </p>
         <div className="w-36">
           <Select
@@ -1723,13 +1751,12 @@ export function HealthPanel() {
             {metrics.resistanceAlert.fromMonth} →{" "}
             {formatPct(metrics.resistanceAlert.toRate)} in{" "}
             {metrics.resistanceAlert.toMonth} (
-            {metrics.resistanceAlert.injectionFixtures} injection
-            fixtures).
+            {metrics.resistanceAlert.injectionFixtures} injection fixtures).
           </p>
           <p className="mt-1 text-xs">
             Review recent prompt changes and the red-team fixtures before
-            promoting anything. The sweep has recorded this drop in the
-            audit ledger.
+            promoting anything. The sweep has recorded this drop in the audit
+            ledger.
           </p>
         </div>
       )}
@@ -1742,8 +1769,8 @@ export function HealthPanel() {
             {qualityAlertText(metrics.qualityAlert)}
           </p>
           <p className="mt-1 text-xs">
-            Check the field-corrections and correction-shapes tables for
-            where the overrides land before changing prompts or models.
+            Check the field-corrections and correction-shapes tables for where
+            the overrides land before changing prompts or models.
           </p>
         </div>
       )}
@@ -1772,144 +1799,148 @@ export function HealthPanel() {
         >
           {withMetrics((metrics) => (
             <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
-              label="Cases"
-              value={String(metrics.cases.total)}
-              detail={casesTileDetail(metrics.cases)}
-              testId="stat-cases-total"
-            />
-            <StatTile
-              label="Ask refusal rate"
-              value={formatPct(metrics.ask.refusalRate)}
-              detail={`${metrics.ask.refused} of ${metrics.ask.total} questions refused`}
-              testId="stat-refusal-rate"
-            />
-            <StatTile
-              label="Invalid inference rate"
-              value={formatPct(metrics.inference.invalidRate)}
-              detail={`error rate ${formatPct(metrics.inference.errorRate)} of ${metrics.inference.total} calls`}
-              testId="stat-invalid-rate"
-            />
-            <StatTile
-              label="Latency p95"
-              value={fmtMs(metrics.inference.latencyP95Ms)}
-              detail={`p50 ${fmtMs(metrics.inference.latencyP50Ms)}`}
-              testId="stat-latency-p95"
-            />
-          </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <StatTile
+                  label="Cases"
+                  value={String(metrics.cases.total)}
+                  detail={casesTileDetail(metrics.cases)}
+                  testId="stat-cases-total"
+                />
+                <StatTile
+                  label="Ask refusal rate"
+                  value={formatPct(metrics.ask.refusalRate)}
+                  detail={`${metrics.ask.refused} of ${metrics.ask.total} questions refused`}
+                  testId="stat-refusal-rate"
+                />
+                <StatTile
+                  label="Invalid inference rate"
+                  value={formatPct(metrics.inference.invalidRate)}
+                  detail={`error rate ${formatPct(metrics.inference.errorRate)} of ${metrics.inference.total} calls`}
+                  testId="stat-invalid-rate"
+                />
+                <StatTile
+                  label="Latency p95"
+                  value={fmtMs(metrics.inference.latencyP95Ms)}
+                  detail={`p50 ${fmtMs(metrics.inference.latencyP50Ms)}`}
+                  testId="stat-latency-p95"
+                />
+              </div>
 
-          <div data-testid="section-cost">
-            <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
-              Cost
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              <StatTile
-                label="Prompt tokens"
-                value={fmtTokens(metrics.cost.promptTokens)}
-                testId="stat-cost-prompt-tokens"
-              />
-              <StatTile
-                label="Completion tokens"
-                value={fmtTokens(metrics.cost.completionTokens)}
-                testId="stat-cost-completion-tokens"
-              />
-              <StatTile
-                label="Calls with usage"
-                value={fmtTokens(metrics.cost.callsWithUsage)}
-                testId="stat-cost-calls-with-usage"
-              />
-              <StatTile
-                label="Tokens / decided case"
-                value={fmtTokens(metrics.cost.tokensPerDecidedCase)}
-                testId="stat-cost-tokens-per-case"
-              />
-              <StatTile
-                label="Estimated spend"
-                value={fmtUsd(metrics.cost.estimatedUsd)}
-                detail={
-                  metrics.cost.estimatedUsd == null
-                    ? "rates not configured"
-                    : undefined
-                }
-                testId="stat-cost-estimated-usd"
-              />
-            </div>
-          </div>
-
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <BreakdownRow
-                title="Cases by status"
-                entries={metrics.cases.byStatus}
-                tones={STATUS_TONE}
-                testId="breakdown-by-status"
-              />
-              <BreakdownRow
-                title="Inference by outcome"
-                entries={metrics.inference.byOutcome}
-                tones={OUTCOME_TONE}
-                testId="breakdown-by-outcome"
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Inference cohorts (model × prompt)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {metrics.inference.cohorts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No inference calls in this window.
+              <div data-testid="section-cost">
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                  Cost
                 </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Model</th>
-                        <th className="py-2 pr-3 font-medium">Prompt</th>
-                        <th className="py-2 pr-3 font-medium">Purpose</th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Total
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">OK</th>
-                        <th className="py-2 font-medium text-right">p95</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {metrics.inference.cohorts.map((c) => (
-                        <tr
-                          key={`${c.model}-${c.promptVersion}-${c.purpose}`}
-                          data-testid={`row-cohort-${c.model}-${c.promptVersion}-${c.purpose}`}
-                        >
-                          <td className="py-2 pr-3">
-                            <code className="text-xs">{c.model}</code>
-                          </td>
-                          <td className="py-2 pr-3">
-                            <code className="text-xs">{c.promptVersion}</code>
-                          </td>
-                          <td className="py-2 pr-3">{c.purpose}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {c.total}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {c.okCount}
-                          </td>
-                          <td className="py-2 text-right tabular-nums">
-                            {fmtMs(c.latencyP95Ms)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                  <StatTile
+                    label="Prompt tokens"
+                    value={fmtTokens(metrics.cost.promptTokens)}
+                    testId="stat-cost-prompt-tokens"
+                  />
+                  <StatTile
+                    label="Completion tokens"
+                    value={fmtTokens(metrics.cost.completionTokens)}
+                    testId="stat-cost-completion-tokens"
+                  />
+                  <StatTile
+                    label="Calls with usage"
+                    value={fmtTokens(metrics.cost.callsWithUsage)}
+                    testId="stat-cost-calls-with-usage"
+                  />
+                  <StatTile
+                    label="Tokens / decided case"
+                    value={fmtTokens(metrics.cost.tokensPerDecidedCase)}
+                    testId="stat-cost-tokens-per-case"
+                  />
+                  <StatTile
+                    label="Estimated spend"
+                    value={fmtUsd(metrics.cost.estimatedUsd)}
+                    detail={
+                      metrics.cost.estimatedUsd == null
+                        ? "rates not configured"
+                        : undefined
+                    }
+                    testId="stat-cost-estimated-usd"
+                  />
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+
+              <Card>
+                <CardContent className="pt-6 space-y-4">
+                  <BreakdownRow
+                    title="Cases by status"
+                    entries={metrics.cases.byStatus}
+                    tones={STATUS_TONE}
+                    testId="breakdown-by-status"
+                  />
+                  <BreakdownRow
+                    title="Inference by outcome"
+                    entries={metrics.inference.byOutcome}
+                    tones={OUTCOME_TONE}
+                    testId="breakdown-by-outcome"
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Inference cohorts (model × prompt)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {metrics.inference.cohorts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No inference calls in this window.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                            <th className="py-2 pr-3 font-medium">Model</th>
+                            <th className="py-2 pr-3 font-medium">Prompt</th>
+                            <th className="py-2 pr-3 font-medium">Purpose</th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Total
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              OK
+                            </th>
+                            <th className="py-2 font-medium text-right">p95</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {metrics.inference.cohorts.map((c) => (
+                            <tr
+                              key={`${c.model}-${c.promptVersion}-${c.purpose}`}
+                              data-testid={`row-cohort-${c.model}-${c.promptVersion}-${c.purpose}`}
+                            >
+                              <td className="py-2 pr-3">
+                                <code className="text-xs">{c.model}</code>
+                              </td>
+                              <td className="py-2 pr-3">
+                                <code className="text-xs">
+                                  {c.promptVersion}
+                                </code>
+                              </td>
+                              <td className="py-2 pr-3">{c.purpose}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {c.total}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {c.okCount}
+                              </td>
+                              <td className="py-2 text-right tabular-nums">
+                                {fmtMs(c.latencyP95Ms)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </>
           ))}
         </TabsContent>
@@ -1921,294 +1952,329 @@ export function HealthPanel() {
         >
           {withMetrics((metrics) => (
             <>
-          {metrics.calibration && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Confidence calibration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  For approved cases, how often operators KEPT the model's
-                  value at each confidence band ({metrics.calibration.sampleFields}{" "}
-                  compared fields). Well-calibrated extraction keeps the two
-                  columns close; a band where kept-rate falls far below the
-                  confidence says the review-flagging threshold is trusting
-                  numbers it shouldn't.
-                </p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm" data-testid="table-calibration">
-                    <thead>
-                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Confidence band</th>
-                        <th className="py-2 pr-3 font-medium text-right">Fields</th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Mean confidence
-                        </th>
-                        <th className="py-2 font-medium text-right">Kept rate</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {metrics.calibration.buckets.map((b) => (
-                        <tr key={b.range} data-testid={`row-calibration-${b.range}`}>
-                          <td className="py-2 pr-3">
-                            <code className="text-xs">{b.range}</code>
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {b.fields}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {b.fields === 0 ? "—" : `${Math.round(b.meanConfidence * 100)}%`}
-                          </td>
-                          <td
-                            className={`py-2 text-right tabular-nums ${
-                              b.fields > 0 &&
-                              b.meanConfidence - b.keptRate > 0.15
-                                ? "text-red-600 dark:text-red-400 font-medium"
-                                : ""
-                            }`}
-                          >
-                            {b.fields === 0 ? "—" : `${Math.round(b.keptRate * 100)}%`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Field corrections</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                How often operators corrected each extracted field before
-                approval — the extraction-quality signal (labeled outcomes).
-              </p>
-              {metrics.corrections.length === 0 ? (
-                <p
-                  className="text-sm text-muted-foreground"
-                  data-testid="text-corrections-empty"
-                >
-                  No corrections yet — they appear once cases are approved.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table
-                    className="w-full text-sm"
-                    data-testid="table-corrections"
-                  >
-                    <thead>
-                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Field</th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Total
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Overridden
-                        </th>
-                        <th className="py-2 font-medium text-right">
-                          Override rate
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {metrics.corrections.map((c) => (
-                        <tr
-                          key={c.field}
-                          data-testid={`row-correction-${c.field}`}
-                        >
-                          <td className="py-2 pr-3">
-                            <code className="text-xs">{c.field}</code>
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {c.total}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {c.overridden}
-                          </td>
-                          <td
-                            className={`py-2 text-right tabular-nums ${overrideRateClass(c.overrideRate)}`}
-                          >
-                            {formatPct(c.overrideRate)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              {metrics.calibration && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      Confidence calibration
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      For approved cases, how often operators KEPT the model's
+                      value at each confidence band (
+                      {metrics.calibration.sampleFields} compared fields).
+                      Well-calibrated extraction keeps the two columns close; a
+                      band where kept-rate falls far below the confidence says
+                      the review-flagging threshold is trusting numbers it
+                      shouldn't.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table
+                        className="w-full text-sm"
+                        data-testid="table-calibration"
+                      >
+                        <thead>
+                          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                            <th className="py-2 pr-3 font-medium">
+                              Confidence band
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Fields
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Mean confidence
+                            </th>
+                            <th className="py-2 font-medium text-right">
+                              Kept rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {metrics.calibration.buckets.map((b) => (
+                            <tr
+                              key={b.range}
+                              data-testid={`row-calibration-${b.range}`}
+                            >
+                              <td className="py-2 pr-3">
+                                <code className="text-xs">{b.range}</code>
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {b.fields}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {b.fields === 0
+                                  ? "—"
+                                  : `${Math.round(b.meanConfidence * 100)}%`}
+                              </td>
+                              <td
+                                className={`py-2 text-right tabular-nums ${
+                                  b.fields > 0 &&
+                                  b.meanConfidence - b.keptRate > 0.15
+                                    ? "text-red-600 dark:text-red-400 font-medium"
+                                    : ""
+                                }`}
+                              >
+                                {b.fields === 0
+                                  ? "—"
+                                  : `${Math.round(b.keptRate * 100)}%`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
-            </CardContent>
-          </Card>
 
-          {metrics.correctionShapes && metrics.correctionShapes.length > 0 && (
-            <Card data-testid="section-correction-shapes">
-              <CardHeader>
-                <CardTitle className="text-base">Correction shapes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  What KIND of mistake each override was — recurring
-                  correction patterns from the same exhaust, with an example
-                  of the change operators made.
-                </p>
-                <div className="overflow-x-auto">
-                  <table
-                    className="w-full text-sm"
-                    data-testid="table-correction-shapes"
-                  >
-                    <thead>
-                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Field</th>
-                        <th className="py-2 pr-3 font-medium">Shape</th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Count
-                        </th>
-                        <th className="py-2 font-medium">Example</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {metrics.correctionShapes.map((s) => (
-                        <tr
-                          key={`${s.field}-${s.shape}`}
-                          data-testid={`row-correction-shape-${s.field}-${s.shape}`}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Field corrections</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    How often operators corrected each extracted field before
+                    approval — the extraction-quality signal (labeled outcomes).
+                  </p>
+                  {metrics.corrections.length === 0 ? (
+                    <p
+                      className="text-sm text-muted-foreground"
+                      data-testid="text-corrections-empty"
+                    >
+                      No corrections yet — they appear once cases are approved.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table
+                        className="w-full text-sm"
+                        data-testid="table-corrections"
+                      >
+                        <thead>
+                          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                            <th className="py-2 pr-3 font-medium">Field</th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Total
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Overridden
+                            </th>
+                            <th className="py-2 font-medium text-right">
+                              Override rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {metrics.corrections.map((c) => (
+                            <tr
+                              key={c.field}
+                              data-testid={`row-correction-${c.field}`}
+                            >
+                              <td className="py-2 pr-3">
+                                <code className="text-xs">{c.field}</code>
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {c.total}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {c.overridden}
+                              </td>
+                              <td
+                                className={`py-2 text-right tabular-nums ${overrideRateClass(c.overrideRate)}`}
+                              >
+                                {formatPct(c.overrideRate)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {metrics.correctionShapes &&
+                metrics.correctionShapes.length > 0 && (
+                  <Card data-testid="section-correction-shapes">
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        Correction shapes
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        What KIND of mistake each override was — recurring
+                        correction patterns from the same exhaust, with an
+                        example of the change operators made.
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table
+                          className="w-full text-sm"
+                          data-testid="table-correction-shapes"
                         >
-                          <td className="py-2 pr-3">
-                            <code className="text-xs">{s.field}</code>
-                          </td>
-                          <td className="py-2 pr-3">
-                            {s.shape.replace(/_/g, " ")}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {s.count}
-                          </td>
-                          <td className="py-2 text-xs text-muted-foreground">
-                            {shapeExample(s.exampleExtracted, s.exampleFinal)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                          <thead>
+                            <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                              <th className="py-2 pr-3 font-medium">Field</th>
+                              <th className="py-2 pr-3 font-medium">Shape</th>
+                              <th className="py-2 pr-3 font-medium text-right">
+                                Count
+                              </th>
+                              <th className="py-2 font-medium">Example</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {metrics.correctionShapes.map((s) => (
+                              <tr
+                                key={`${s.field}-${s.shape}`}
+                                data-testid={`row-correction-shape-${s.field}-${s.shape}`}
+                              >
+                                <td className="py-2 pr-3">
+                                  <code className="text-xs">{s.field}</code>
+                                </td>
+                                <td className="py-2 pr-3">
+                                  {s.shape.replace(/_/g, " ")}
+                                </td>
+                                <td className="py-2 pr-3 text-right tabular-nums">
+                                  {s.count}
+                                </td>
+                                <td className="py-2 text-xs text-muted-foreground">
+                                  {shapeExample(
+                                    s.exampleExtracted,
+                                    s.exampleFinal,
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
-          <Card data-testid="section-supplier-accuracy">
-            <CardHeader>
-              <CardTitle className="text-base">Supplier accuracy</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Whose documents Clerk reads worst — override rates from the
-                corrections exhaust, grouped by the approved invoice&apos;s
-                register supplier. The list of clients worth nudging toward
-                cleaner invoices.
-              </p>
-              {metrics.supplierAccuracy.length === 0 ? (
-                <p
-                  className="text-sm text-muted-foreground"
-                  data-testid="text-supplier-accuracy-empty"
-                >
-                  No corrected approvals in this window yet.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table
-                    className="w-full text-sm"
-                    data-testid="table-supplier-accuracy"
-                  >
-                    <thead>
-                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Supplier</th>
-                        <th className="py-2 pr-3 font-medium">Firm</th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Cases
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Fields
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Overridden
-                        </th>
-                        <th className="py-2 font-medium text-right">
-                          Override rate
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {metrics.supplierAccuracy.map((s, i) => (
-                        <tr key={i} data-testid={`row-supplier-accuracy-${i}`}>
-                          <td className="py-2 pr-3">{s.supplierName}</td>
-                          <td className="py-2 pr-3 text-muted-foreground">
-                            {s.firmName ?? "—"}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {s.cases}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {s.fieldsCompared}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {s.overridden}
-                          </td>
-                          <td
-                            className={`py-2 text-right tabular-nums ${overrideRateClass(s.overrideRate)}`}
-                          >
-                            {formatPct(s.overrideRate)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              <Card data-testid="section-supplier-accuracy">
+                <CardHeader>
+                  <CardTitle className="text-base">Supplier accuracy</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Whose documents Clerk reads worst — override rates from the
+                    corrections exhaust, grouped by the approved invoice&apos;s
+                    register supplier. The list of clients worth nudging toward
+                    cleaner invoices.
+                  </p>
+                  {metrics.supplierAccuracy.length === 0 ? (
+                    <p
+                      className="text-sm text-muted-foreground"
+                      data-testid="text-supplier-accuracy-empty"
+                    >
+                      No corrected approvals in this window yet.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table
+                        className="w-full text-sm"
+                        data-testid="table-supplier-accuracy"
+                      >
+                        <thead>
+                          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                            <th className="py-2 pr-3 font-medium">Supplier</th>
+                            <th className="py-2 pr-3 font-medium">Firm</th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Cases
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Fields
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Overridden
+                            </th>
+                            <th className="py-2 font-medium text-right">
+                              Override rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {metrics.supplierAccuracy.map((s, i) => (
+                            <tr
+                              key={i}
+                              data-testid={`row-supplier-accuracy-${i}`}
+                            >
+                              <td className="py-2 pr-3">{s.supplierName}</td>
+                              <td className="py-2 pr-3 text-muted-foreground">
+                                {s.firmName ?? "—"}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {s.cases}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {s.fieldsCompared}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {s.overridden}
+                              </td>
+                              <td
+                                className={`py-2 text-right tabular-nums ${overrideRateClass(s.overrideRate)}`}
+                              >
+                                {formatPct(s.overrideRate)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {(metrics.keptRateTrend?.length ?? 0) > 0 && (
-        <Card data-testid="section-kept-rate-trend">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Extraction kept-rate trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              From the corrections exhaust — the share of compared fields
-              operators KEPT unchanged when approving, by month. Pure SQL, no
-              model involved in the judgment.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="table-kept-rate-months">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Month</th>
-                    <th className="py-2 pr-3 font-medium text-right">Fields</th>
-                    <th className="py-2 font-medium text-right">Kept rate</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {(metrics.keptRateTrend ?? []).map((m) => (
-                    <tr key={m.month}>
-                      <td className="py-2 pr-3 tabular-nums">{m.month}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {m.fields}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">
-                        {m.fields === 0 ? "—" : formatPct(m.keptRate)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                <Card data-testid="section-kept-rate-trend">
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      Extraction kept-rate trend
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      From the corrections exhaust — the share of compared
+                      fields operators KEPT unchanged when approving, by month.
+                      Pure SQL, no model involved in the judgment.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table
+                        className="w-full text-sm"
+                        data-testid="table-kept-rate-months"
+                      >
+                        <thead>
+                          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                            <th className="py-2 pr-3 font-medium">Month</th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Fields
+                            </th>
+                            <th className="py-2 font-medium text-right">
+                              Kept rate
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {(metrics.keptRateTrend ?? []).map((m) => (
+                            <tr key={m.month}>
+                              <td className="py-2 pr-3 tabular-nums">
+                                {m.month}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {m.fields}
+                              </td>
+                              <td className="py-2 text-right tabular-nums">
+                                {m.fields === 0 ? "—" : formatPct(m.keptRate)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
             </>
           ))}
@@ -2224,8 +2290,8 @@ export function HealthPanel() {
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   Helpfulness signals askers left on answered questions — the
-                  refusal-mining sibling. Most askers rate nothing, so read
-                  the split against the unrated count.
+                  refusal-mining sibling. Most askers rate nothing, so read the
+                  split against the unrated count.
                 </p>
                 <p className="text-sm" data-testid="text-ask-feedback-totals">
                   {askFeedbackTotalsLine(askFeedback.totals)}
@@ -2304,20 +2370,204 @@ export function HealthPanel() {
         >
           {withMetrics((metrics) => (
             <>
-          <Card data-testid="section-unit-economics">
-            <CardHeader>
-              <CardTitle className="text-base">
-                Unit economics — where the tokens go
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {metrics.economics.byPurpose.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No inference calls in this window.
+              <Card data-testid="section-unit-economics">
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Unit economics — where the tokens go
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {metrics.economics.byPurpose.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No inference calls in this window.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                            <th className="py-2 pr-3 font-medium">Purpose</th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Calls
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Prompt tk
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Completion tk
+                            </th>
+                            <th className="py-2 pr-3 font-medium text-right">
+                              Errors
+                            </th>
+                            <th className="py-2 font-medium text-right">
+                              Est. spend
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {metrics.economics.byPurpose.map((p) => (
+                            <tr
+                              key={p.purpose}
+                              data-testid={`row-economics-${p.purpose}`}
+                            >
+                              <td className="py-2 pr-3">{p.purpose}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {p.calls}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {fmtTokens(p.promptTokens)}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {fmtTokens(p.completionTokens)}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {p.errorCount}
+                              </td>
+                              <td className="py-2 text-right tabular-nums">
+                                {fmtUsd(p.estimatedUsd)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div data-testid="economics-months">
+                    <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                      Failure taxonomy by month
+                    </p>
+                    {metrics.economics.months.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No inference history yet.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                              <th className="py-2 pr-3 font-medium">Month</th>
+                              <th className="py-2 pr-3 font-medium text-right">
+                                Calls
+                              </th>
+                              <th className="py-2 pr-3 font-medium text-right">
+                                OK
+                              </th>
+                              <th className="py-2 pr-3 font-medium text-right">
+                                Invalid
+                              </th>
+                              <th className="py-2 pr-3 font-medium text-right">
+                                Killed
+                              </th>
+                              <th className="py-2 font-medium text-right">
+                                Error
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {metrics.economics.months.map((m) => (
+                              <tr
+                                key={m.month}
+                                data-testid={`row-economics-month-${m.month}`}
+                              >
+                                <td className="py-2 pr-3 tabular-nums">
+                                  {m.month}
+                                </td>
+                                <td className="py-2 pr-3 text-right tabular-nums">
+                                  {m.calls}
+                                </td>
+                                <td className="py-2 pr-3 text-right tabular-nums">
+                                  {m.okCount}
+                                </td>
+                                <td className="py-2 pr-3 text-right tabular-nums">
+                                  {m.invalidCount}
+                                </td>
+                                <td className="py-2 pr-3 text-right tabular-nums">
+                                  {m.killedCount}
+                                </td>
+                                <td className="py-2 text-right tabular-nums">
+                                  {m.errorCount}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="section-platform-spend">
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Platform spend — {metrics.platformSpend.month}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatTile
+                      label="Tokens month-to-date"
+                      value={metrics.platformSpend.totalTokens.toLocaleString()}
+                      testId="stat-spend-total"
+                    />
+                    <StatTile
+                      label="Projected this month"
+                      value={metrics.platformSpend.projectedTokens.toLocaleString()}
+                      testId="stat-spend-projected"
+                    />
+                    <StatTile
+                      label="Est. cost"
+                      value={
+                        metrics.platformSpend.estimatedUsd != null
+                          ? `$${metrics.platformSpend.estimatedUsd.toFixed(2)}`
+                          : "—"
+                      }
+                      testId="stat-spend-usd"
+                    />
+                    <StatTile
+                      label="Projected cost"
+                      value={
+                        metrics.platformSpend.projectedUsd != null
+                          ? `$${metrics.platformSpend.projectedUsd.toFixed(2)}`
+                          : "—"
+                      }
+                      testId="stat-spend-projected-usd"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {metrics.platformSpend.firmFundedTokens.toLocaleString()}{" "}
+                    tokens firm-funded ·{" "}
+                    {metrics.platformSpend.platformFundedTokens.toLocaleString()}{" "}
+                    platform-funded (desk tooling, evals). Ledger totals on the
+                    same UTC month boundary the per-firm budgets use; cost
+                    estimates need CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD
+                    set.
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          ))}
+
+          {tierReport && tierReport.rows.length > 0 && (
+            <Card data-testid="section-tier-report">
+              <CardHeader>
+                <CardTitle className="text-base">Model-tier evidence</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Trailing {tierReport.windowDays} days from the inference
+                  ledger, joined with the tier map in force (base model{" "}
+                  <span className="font-mono">{tierReport.baseModel}</span>).
+                  Recommendations are deterministic; act on them via
+                  CLERK_MODEL_TIERS (takes effect on server restart) and
+                  validate with a prompt canary first.
                 </p>
-              ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table
+                    className="w-full text-sm"
+                    data-testid="table-tier-report"
+                  >
                     <thead>
                       <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                         <th className="py-2 pr-3 font-medium">Purpose</th>
@@ -2325,222 +2575,63 @@ export function HealthPanel() {
                           Calls
                         </th>
                         <th className="py-2 pr-3 font-medium text-right">
-                          Prompt tk
+                          Tokens
                         </th>
                         <th className="py-2 pr-3 font-medium text-right">
-                          Completion tk
+                          Share
                         </th>
                         <th className="py-2 pr-3 font-medium text-right">
-                          Errors
+                          Valid
                         </th>
-                        <th className="py-2 font-medium text-right">Est. spend</th>
+                        <th className="py-2 pr-3 font-medium">Model</th>
+                        <th className="py-2 font-medium">Recommendation</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {metrics.economics.byPurpose.map((p) => (
-                        <tr
-                          key={p.purpose}
-                          data-testid={`row-economics-${p.purpose}`}
-                        >
-                          <td className="py-2 pr-3">{p.purpose}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {p.calls}
+                      {tierReport.rows.map((r) => (
+                        <tr key={r.purpose}>
+                          <td className="py-2 pr-3 font-mono text-xs">
+                            {r.purpose}
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums">
-                            {fmtTokens(p.promptTokens)}
+                            {r.calls}
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums">
-                            {fmtTokens(p.completionTokens)}
+                            {r.totalTokens.toLocaleString()}
                           </td>
                           <td className="py-2 pr-3 text-right tabular-nums">
-                            {p.errorCount}
+                            {formatPct(r.spendShare)}
                           </td>
-                          <td className="py-2 text-right tabular-nums">
-                            {fmtUsd(p.estimatedUsd)}
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {formatPct(r.validRate)}
+                          </td>
+                          <td className="py-2 pr-3 font-mono text-xs">
+                            {r.currentModel}
+                            {r.tiered ? " (tier)" : ""}
+                          </td>
+                          <td className="py-2" title={r.reason}>
+                            <span
+                              className={pillClasses(
+                                r.recommendation === "candidate"
+                                  ? "emerald"
+                                  : r.recommendation === "tiered"
+                                    ? "blue"
+                                    : r.recommendation === "revert"
+                                      ? "red"
+                                      : "slate",
+                              )}
+                            >
+                              {r.recommendation.replace("_", " ")}
+                            </span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              )}
-
-              <div data-testid="economics-months">
-                <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
-                  Failure taxonomy by month
-                </p>
-                {metrics.economics.months.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No inference history yet.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                          <th className="py-2 pr-3 font-medium">Month</th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Calls
-                          </th>
-                          <th className="py-2 pr-3 font-medium text-right">OK</th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Invalid
-                          </th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Killed
-                          </th>
-                          <th className="py-2 font-medium text-right">Error</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {metrics.economics.months.map((m) => (
-                          <tr key={m.month} data-testid={`row-economics-month-${m.month}`}>
-                            <td className="py-2 pr-3 tabular-nums">{m.month}</td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.calls}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.okCount}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.invalidCount}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.killedCount}
-                            </td>
-                            <td className="py-2 text-right tabular-nums">
-                              {m.errorCount}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-        <Card data-testid="section-platform-spend">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Platform spend — {metrics.platformSpend.month}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatTile
-                label="Tokens month-to-date"
-                value={metrics.platformSpend.totalTokens.toLocaleString()}
-                testId="stat-spend-total"
-              />
-              <StatTile
-                label="Projected this month"
-                value={metrics.platformSpend.projectedTokens.toLocaleString()}
-                testId="stat-spend-projected"
-              />
-              <StatTile
-                label="Est. cost"
-                value={
-                  metrics.platformSpend.estimatedUsd != null
-                    ? `$${metrics.platformSpend.estimatedUsd.toFixed(2)}`
-                    : "—"
-                }
-                testId="stat-spend-usd"
-              />
-              <StatTile
-                label="Projected cost"
-                value={
-                  metrics.platformSpend.projectedUsd != null
-                    ? `$${metrics.platformSpend.projectedUsd.toFixed(2)}`
-                    : "—"
-                }
-                testId="stat-spend-projected-usd"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {metrics.platformSpend.firmFundedTokens.toLocaleString()} tokens
-              firm-funded ·{" "}
-              {metrics.platformSpend.platformFundedTokens.toLocaleString()}{" "}
-              platform-funded (desk tooling, evals). Ledger totals on the same
-              UTC month boundary the per-firm budgets use; cost estimates need
-              CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD set.
-            </p>
-          </CardContent>
-        </Card>
-            </>
-          ))}
-
-      {tierReport && tierReport.rows.length > 0 && (
-        <Card data-testid="section-tier-report">
-          <CardHeader>
-            <CardTitle className="text-base">Model-tier evidence</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Trailing {tierReport.windowDays} days from the inference ledger,
-              joined with the tier map in force (base model{" "}
-              <span className="font-mono">{tierReport.baseModel}</span>).
-              Recommendations are deterministic; act on them via
-              CLERK_MODEL_TIERS (takes effect on server restart) and validate
-              with a prompt canary first.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="table-tier-report">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Purpose</th>
-                    <th className="py-2 pr-3 font-medium text-right">Calls</th>
-                    <th className="py-2 pr-3 font-medium text-right">Tokens</th>
-                    <th className="py-2 pr-3 font-medium text-right">Share</th>
-                    <th className="py-2 pr-3 font-medium text-right">Valid</th>
-                    <th className="py-2 pr-3 font-medium">Model</th>
-                    <th className="py-2 font-medium">Recommendation</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {tierReport.rows.map((r) => (
-                    <tr key={r.purpose}>
-                      <td className="py-2 pr-3 font-mono text-xs">{r.purpose}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {r.calls}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {r.totalTokens.toLocaleString()}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {formatPct(r.spendShare)}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {formatPct(r.validRate)}
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs">
-                        {r.currentModel}
-                        {r.tiered ? " (tier)" : ""}
-                      </td>
-                      <td className="py-2" title={r.reason}>
-                        <span
-                          className={pillClasses(
-                            r.recommendation === "candidate"
-                              ? "emerald"
-                              : r.recommendation === "tiered"
-                                ? "blue"
-                                : r.recommendation === "revert"
-                                  ? "red"
-                                  : "slate",
-                          )}
-                        >
-                          {r.recommendation.replace("_", " ")}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent
@@ -2548,289 +2639,313 @@ export function HealthPanel() {
           forceMount
           className="mt-4 space-y-4 data-[state=inactive]:hidden"
         >
-      <IntentEvalCard />
+          <IntentEvalCard />
 
-      <PhrasingEvalCard />
-      <RetrievalEvalCard />
+          <PhrasingEvalCard />
+          <RetrievalEvalCard />
 
-      <DigestImpactCard />
+          <DigestImpactCard />
 
-      <Card data-testid="section-evaluation">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">Evaluation</CardTitle>
-          <Button
-            size="sm"
-            onClick={() => runEval.mutate()}
-            disabled={runEval.isPending}
-            data-testid="button-run-eval"
-          >
-            {runEval.isPending ? "Running…" : "Run evaluation"}
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Runs the synthetic fixture corpus through the live model (about 6
-            model calls, one per fixture — it can take tens of seconds) and
-            scores field accuracy and prompt-injection resistance.
-          </p>
-          {evalRunsLoading ? (
-            <Skeleton className="h-24" />
-          ) : evalRunsError ? (
-            <QueryError
-              thing="evaluation runs"
-              onRetry={() => refetchEvalRuns()}
-              detail={serverErrorMessage(evalRunsError)}
-            />
-          ) : !evalRuns || evalRuns.length === 0 ? (
-            <p
-              className="text-sm text-muted-foreground"
-              data-testid="text-eval-empty"
-            >
-              No evaluation runs yet — run one to baseline the current model
-              and prompt.
-            </p>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-eval-runs">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                      <th className="py-2 pr-3 font-medium">When</th>
-                      <th className="py-2 pr-3 font-medium">Model</th>
-                      <th className="py-2 pr-3 font-medium">Prompt</th>
-                      <th className="py-2 pr-3 font-medium text-right">
-                        Field accuracy
-                      </th>
-                      <th className="py-2 pr-3 font-medium text-right">
-                        Injection
-                      </th>
-                      <th className="py-2 pr-3 font-medium text-right">
-                        Fixtures
-                      </th>
-                      <th className="py-2 font-medium text-right">Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {evalRuns.map((r) => (
-                      <tr key={r.id} data-testid={`row-eval-run-${r.id}`}>
-                        <td className="py-2 pr-3 whitespace-nowrap">
-                          {formatDateTime(r.createdAt)}
-                        </td>
-                        <td className="py-2 pr-3">
-                          <code className="text-xs">{r.model}</code>
-                        </td>
-                        <td className="py-2 pr-3">
-                          <code className="text-xs">{r.promptVersion}</code>
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {formatPct(r.accuracy)}
-                        </td>
-                        <td
-                          className={`py-2 pr-3 text-right tabular-nums ${
-                            r.injectionResisted < r.injectionFixtures
-                              ? "text-red-600 dark:text-red-400 font-medium"
-                              : ""
-                          }`}
-                        >
-                          {r.injectionResisted}/{r.injectionFixtures}
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {r.fixtureCount}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {fmtEvalDuration(r.durationMs)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {latestRun && (
-                <div className="space-y-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setShowEvalDetail((o) => !o)}
-                    aria-expanded={showEvalDetail}
-                    aria-controls="detail-eval-fixtures"
-                    data-testid="button-toggle-eval-detail"
-                  >
-                    {showEvalDetail
-                      ? "Hide fixture detail"
-                      : "Show fixture detail"}
-                  </Button>
-                  {showEvalDetail && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase">
-                        Fixtures — most recent run
-                      </p>
-                      <div
-                        className="border rounded-md divide-y text-sm"
-                        id="detail-eval-fixtures"
-                        data-testid="detail-eval-fixtures"
-                      >
-                        {latestRun.results.map((fx) => (
-                          <div
-                            key={fx.key}
-                            className="px-3 py-2 space-y-1"
-                            data-testid={`row-eval-fixture-${fx.key}`}
-                          >
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="flex-1 min-w-0 truncate font-medium">
-                                {fx.label}
-                              </span>
-                              <span
-                                className={pillClasses(
-                                  EVAL_RISK_TONE[fx.riskLabel] ?? "slate",
-                                )}
-                              >
-                                {fx.riskLabel}
-                              </span>
-                              <span
-                                className={pillClasses(
-                                  EVAL_OUTCOME_TONE[fx.outcome] ?? "slate",
-                                )}
-                              >
-                                {fx.outcome}
-                              </span>
-                              <span className="text-xs text-muted-foreground tabular-nums">
-                                {fx.fieldsCorrect}/{fx.fieldsCompared} fields
-                              </span>
-                              {fx.injectionResisted === false && (
-                                <span className={pillClasses("red")}>
-                                  injection followed
-                                </span>
-                              )}
-                            </div>
-                            {fx.mismatches.length > 0 && (
-                              <ul className="text-xs text-muted-foreground space-y-0.5">
-                                {fx.mismatches.map((m) => (
-                                  <li key={m.field}>
-                                    <code>{m.field}</code>: {m.expected ?? "—"}{" "}
-                                    → {m.actual ?? "—"}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
+          <Card data-testid="section-evaluation">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">Evaluation</CardTitle>
+              <Button
+                size="sm"
+                onClick={() => runEval.mutate()}
+                disabled={runEval.isPending}
+                data-testid="button-run-eval"
+              >
+                {runEval.isPending ? "Running…" : "Run evaluation"}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Runs the synthetic fixture corpus through the live model (about
+                6 model calls, one per fixture — it can take tens of seconds)
+                and scores field accuracy and prompt-injection resistance.
+              </p>
+              {evalRunsLoading ? (
+                <Skeleton className="h-24" />
+              ) : evalRunsError ? (
+                <QueryError
+                  thing="evaluation runs"
+                  onRetry={() => refetchEvalRuns()}
+                  detail={serverErrorMessage(evalRunsError)}
+                />
+              ) : !evalRuns || evalRuns.length === 0 ? (
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-eval-empty"
+                >
+                  No evaluation runs yet — run one to baseline the current model
+                  and prompt.
+                </p>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table
+                      className="w-full text-sm"
+                      data-testid="table-eval-runs"
+                    >
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">When</th>
+                          <th className="py-2 pr-3 font-medium">Model</th>
+                          <th className="py-2 pr-3 font-medium">Prompt</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Field accuracy
+                          </th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Injection
+                          </th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Fixtures
+                          </th>
+                          <th className="py-2 font-medium text-right">
+                            Duration
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {evalRuns.map((r) => (
+                          <tr key={r.id} data-testid={`row-eval-run-${r.id}`}>
+                            <td className="py-2 pr-3 whitespace-nowrap">
+                              {formatDateTime(r.createdAt)}
+                            </td>
+                            <td className="py-2 pr-3">
+                              <code className="text-xs">{r.model}</code>
+                            </td>
+                            <td className="py-2 pr-3">
+                              <code className="text-xs">{r.promptVersion}</code>
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {formatPct(r.accuracy)}
+                            </td>
+                            <td
+                              className={`py-2 pr-3 text-right tabular-nums ${
+                                r.injectionResisted < r.injectionFixtures
+                                  ? "text-red-600 dark:text-red-400 font-medium"
+                                  : ""
+                              }`}
+                            >
+                              {r.injectionResisted}/{r.injectionFixtures}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {r.fixtureCount}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {fmtEvalDuration(r.durationMs)}
+                            </td>
+                          </tr>
                         ))}
-                      </div>
+                      </tbody>
+                    </table>
+                  </div>
+                  {latestRun && (
+                    <div className="space-y-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowEvalDetail((o) => !o)}
+                        aria-expanded={showEvalDetail}
+                        aria-controls="detail-eval-fixtures"
+                        data-testid="button-toggle-eval-detail"
+                      >
+                        {showEvalDetail
+                          ? "Hide fixture detail"
+                          : "Show fixture detail"}
+                      </Button>
+                      {showEvalDetail && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase">
+                            Fixtures — most recent run
+                          </p>
+                          <div
+                            className="border rounded-md divide-y text-sm"
+                            id="detail-eval-fixtures"
+                            data-testid="detail-eval-fixtures"
+                          >
+                            {latestRun.results.map((fx) => (
+                              <div
+                                key={fx.key}
+                                className="px-3 py-2 space-y-1"
+                                data-testid={`row-eval-fixture-${fx.key}`}
+                              >
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="flex-1 min-w-0 truncate font-medium">
+                                    {fx.label}
+                                  </span>
+                                  <span
+                                    className={pillClasses(
+                                      EVAL_RISK_TONE[fx.riskLabel] ?? "slate",
+                                    )}
+                                  >
+                                    {fx.riskLabel}
+                                  </span>
+                                  <span
+                                    className={pillClasses(
+                                      EVAL_OUTCOME_TONE[fx.outcome] ?? "slate",
+                                    )}
+                                  >
+                                    {fx.outcome}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground tabular-nums">
+                                    {fx.fieldsCorrect}/{fx.fieldsCompared}{" "}
+                                    fields
+                                  </span>
+                                  {fx.injectionResisted === false && (
+                                    <span className={pillClasses("red")}>
+                                      injection followed
+                                    </span>
+                                  )}
+                                </div>
+                                {fx.mismatches.length > 0 && (
+                                  <ul className="text-xs text-muted-foreground space-y-0.5">
+                                    {fx.mismatches.map((m) => (
+                                      <li key={m.field}>
+                                        <code>{m.field}</code>:{" "}
+                                        {m.expected ?? "—"} → {m.actual ?? "—"}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
           <EvalCorpusCard />
 
-      {metrics && (
-        <Card data-testid="section-number-grounding">
-          <CardHeader>
-            <CardTitle className="text-base">Number grounding</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">
-              Every phrased surface (digest, statements, chasers, replies,
-              cover notes, advisory briefs) is checked against its own facts:
-              a numeral the facts never stated forfeits the phrasing and the
-              deterministic template answers instead. Zero is the healthy
-              reading.
-            </p>
-            <p className="text-sm" data-testid="text-grounding-violations">
-              {metrics.grounding.violations === 0
-                ? `No violations in the last ${metrics.windowDays} days — every phrased number was grounded.`
-                : `${metrics.grounding.violations} violation(s) in the last ${metrics.windowDays} days — each answered with the template instead.`}
-            </p>
-            {metrics.grounding.bySurface.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {metrics.grounding.bySurface.map((s) => (
-                  <span key={s.surface} className={pillClasses("amber")}>
-                    {s.surface.replace(/_/g, " ")}
-                    <span className="tabular-nums font-semibold">{s.count}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+          {metrics && (
+            <Card data-testid="section-number-grounding">
+              <CardHeader>
+                <CardTitle className="text-base">Number grounding</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Every phrased surface (digest, statements, chasers, replies,
+                  cover notes, advisory briefs) is checked against its own
+                  facts: a numeral the facts never stated forfeits the phrasing
+                  and the deterministic template answers instead. Zero is the
+                  healthy reading.
+                </p>
+                <p className="text-sm" data-testid="text-grounding-violations">
+                  {metrics.grounding.violations === 0
+                    ? `No violations in the last ${metrics.windowDays} days — every phrased number was grounded.`
+                    : `${metrics.grounding.violations} violation(s) in the last ${metrics.windowDays} days — each answered with the template instead.`}
+                </p>
+                {metrics.grounding.bySurface.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {metrics.grounding.bySurface.map((s) => (
+                      <span key={s.surface} className={pillClasses("amber")}>
+                        {s.surface.replace(/_/g, " ")}
+                        <span className="tabular-nums font-semibold">
+                          {s.count}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-      {metrics && metrics.injectionTrend.months.length > 0 && (
-        <Card data-testid="section-injection-trend">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Injection resistance trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              From the stored evaluation runs (including red-team fixtures) —
-              resistance is the share of injection fixtures where every
-              critical field kept its legitimate value. Pure SQL, no model
-              involved in the judgment.
-            </p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-injection-months">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                      <th className="py-2 pr-3 font-medium">Month</th>
-                      <th className="py-2 pr-3 font-medium text-right">Runs</th>
-                      <th className="py-2 font-medium text-right">Resisted</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {metrics.injectionTrend.months.map((m) => (
-                      <tr key={m.month}>
-                        <td className="py-2 pr-3 tabular-nums">{m.month}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {m.runs}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {m.injectionFixtures === 0
-                            ? "—"
-                            : `${m.injectionResisted}/${m.injectionFixtures} (${formatPct(m.resistanceRate)})`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-testid="table-injection-prompts">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                      <th className="py-2 pr-3 font-medium">Prompt</th>
-                      <th className="py-2 pr-3 font-medium text-right">Runs</th>
-                      <th className="py-2 font-medium text-right">Resisted</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {metrics.injectionTrend.byPromptVersion.map((p) => (
-                      <tr key={p.promptVersion}>
-                        <td className="py-2 pr-3 font-mono text-xs">
-                          {p.promptVersion}
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">
-                          {p.runs}
-                        </td>
-                        <td className="py-2 text-right tabular-nums">
-                          {p.injectionFixtures === 0
-                            ? "—"
-                            : `${p.injectionResisted}/${p.injectionFixtures} (${formatPct(p.resistanceRate)})`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          {metrics && metrics.injectionTrend.months.length > 0 && (
+            <Card data-testid="section-injection-trend">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Injection resistance trend
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  From the stored evaluation runs (including red-team fixtures)
+                  — resistance is the share of injection fixtures where every
+                  critical field kept its legitimate value. Pure SQL, no model
+                  involved in the judgment.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="overflow-x-auto">
+                    <table
+                      className="w-full text-sm"
+                      data-testid="table-injection-months"
+                    >
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">Month</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Runs
+                          </th>
+                          <th className="py-2 font-medium text-right">
+                            Resisted
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {metrics.injectionTrend.months.map((m) => (
+                          <tr key={m.month}>
+                            <td className="py-2 pr-3 tabular-nums">
+                              {m.month}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.runs}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {m.injectionFixtures === 0
+                                ? "—"
+                                : `${m.injectionResisted}/${m.injectionFixtures} (${formatPct(m.resistanceRate)})`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table
+                      className="w-full text-sm"
+                      data-testid="table-injection-prompts"
+                    >
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">Prompt</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Runs
+                          </th>
+                          <th className="py-2 font-medium text-right">
+                            Resisted
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {metrics.injectionTrend.byPromptVersion.map((p) => (
+                          <tr key={p.promptVersion}>
+                            <td className="py-2 pr-3 font-mono text-xs">
+                              {p.promptVersion}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {p.runs}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {p.injectionFixtures === 0
+                                ? "—"
+                                : `${p.injectionResisted}/${p.injectionFixtures} (${formatPct(p.resistanceRate)})`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent

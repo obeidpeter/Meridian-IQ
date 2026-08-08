@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 
 export * from './acceptInvitationInput';
@@ -99,6 +99,8 @@ export * from './bulkSubmitRowResultOutcome';
 export * from './buyerExposure';
 export * from './buyerInvoice';
 export * from './buyerInvoiceConfirmationState';
+export * from './buyerInvoiceSummary';
+export * from './buyerInvoiceSummaryCounts';
 export * from './buyerPaymentBehaviour';
 export * from './buyerPilot';
 export * from './buyerPilotStage';

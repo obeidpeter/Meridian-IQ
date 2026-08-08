@@ -1,17 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { useAcceptInvite } from "@workspace/api-client-react";
-import {
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  ArrowRight,
-} from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
+import { takeQuerySecret } from "@/lib/query-secret";
 
 // Map the accept-invite failure to a friendly line. `showSignIn` decides
 // whether we surface a "go to sign in" link (the account already exists).
@@ -71,7 +67,7 @@ function InviteShell({ children }: { children: React.ReactNode }) {
 
 export function AcceptInvite() {
   const accept = useAcceptInvite();
-  const token = new URLSearchParams(window.location.search).get("token");
+  const [token] = useState(() => takeQuerySecret("token"));
 
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -112,7 +108,9 @@ export function AcceptInvite() {
               className="h-5 w-5 text-destructive"
               aria-hidden="true"
             />
-            <h1 className="text-lg font-semibold">Invitation link incomplete</h1>
+            <h1 className="text-lg font-semibold">
+              Invitation link incomplete
+            </h1>
           </div>
           <p
             className="mt-2 text-sm text-muted-foreground"
@@ -158,10 +156,7 @@ export function AcceptInvite() {
   }
 
   const confirmDescribedBy =
-    [
-      showMismatch ? "invite-confirm-help" : null,
-      error ? "accept-error" : null,
-    ]
+    [showMismatch ? "invite-confirm-help" : null, error ? "accept-error" : null]
       .filter(Boolean)
       .join(" ") || undefined;
 

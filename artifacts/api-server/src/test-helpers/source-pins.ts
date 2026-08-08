@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Shared plumbing for the source-pin posture tests (the readFileSync
-// tripwires: clerk-route-posture, billing-payments-posture,
-// collections-posture). Only the fs/string mechanics live here — every
+// tripwires: auth-route-posture, clerk-route-posture,
+// billing-payments-posture, collections-posture). Only the fs/string mechanics
+// live here — every
 // assertion that pins an invariant stays in the test that owns it, against
 // the same literals as before.
 

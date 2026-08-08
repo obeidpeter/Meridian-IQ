@@ -109,7 +109,9 @@ async function verifyRow(userId: string) {
 }
 
 test("GET returns the all-off defaults for a member who never saved", async () => {
-  const base = await listen(appFor(principalFor("firm_admin", adminId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_admin", adminId), staffRouter),
+  );
   const res = await fetch(`${base}/staff/notification-preferences`);
   assert.equal(res.status, 200);
   const prefs = (await res.json()) as PrefsBody;
@@ -123,7 +125,9 @@ test("GET returns the all-off defaults for a member who never saved", async () =
 });
 
 test("PUT upserts the caller's own row and partial input merges", async () => {
-  const base = await listen(appFor(principalFor("firm_staff", staffId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_staff", staffId), staffRouter),
+  );
 
   // First save: opt in to the digest by email.
   const first = await fetch(`${base}/staff/notification-preferences`, {
@@ -184,7 +188,9 @@ test("PUT upserts the caller's own row and partial input merges", async () => {
 });
 
 test("a malformed email is rejected with 400", async () => {
-  const base = await listen(appFor(principalFor("firm_admin", adminId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_admin", adminId), staffRouter),
+  );
   const res = await fetch(`${base}/staff/notification-preferences`, {
     method: "PUT",
     headers: JSON_HEADERS,
@@ -195,7 +201,9 @@ test("a malformed email is rejected with 400", async () => {
 
 test("client_user (and other non-staff roles) are rejected with 403", async () => {
   for (const role of ["client_user", "operator", "buyer_user"] as const) {
-    const base = await listen(appFor(principalFor(role, randomUUID()), staffRouter));
+    const base = await listen(
+      appFor(principalFor(role, randomUUID()), staffRouter),
+    );
     const get = await fetch(`${base}/staff/notification-preferences`);
     assert.equal(get.status, 403, `${role} GET must be rejected`);
     const put = await fetch(`${base}/staff/notification-preferences`, {
@@ -224,7 +232,9 @@ test("a multi-firm member saves preferences per firm independently (composite ke
   // Same user, two tenants: the row key is (userId, firmId), so firm B's
   // save must neither collide with nor clobber the firm-A row, and each
   // firm's GET reads its own state.
-  const baseA = await listen(appFor(principalFor("firm_staff", staffId), staffRouter));
+  const baseA = await listen(
+    appFor(principalFor("firm_staff", staffId), staffRouter),
+  );
   const baseB = await listen(
     appFor(principalFor("firm_staff", staffId, firm2Id), staffRouter),
   );
@@ -252,7 +262,11 @@ test("a multi-firm member saves preferences per firm independently (composite ke
       email: `firm-b-${SALT}@test.example`,
     }),
   });
-  assert.equal(savedB.status, 200, "firm B's save must not 500 on firm A's row");
+  assert.equal(
+    savedB.status,
+    200,
+    "firm B's save must not 500 on firm A's row",
+  );
   const bodyB = (await savedB.json()) as PrefsBody;
   assert.deepEqual(bodyB, {
     digestEnabled: true,
@@ -299,7 +313,10 @@ function startRelay(): Promise<{
   received: Array<{ body: Record<string, unknown>; opToken: string | null }>;
   close: () => Promise<void>;
 }> {
-  const received: Array<{ body: Record<string, unknown>; opToken: string | null }> = [];
+  const received: Array<{
+    body: Record<string, unknown>;
+    opToken: string | null;
+  }> = [];
   const server: Server = createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
@@ -328,7 +345,9 @@ function startRelay(): Promise<{
 }
 
 test("request-email-verification without a saved email is a 400", async () => {
-  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_staff", verifyId), staffRouter),
+  );
   // No preference row at all yet.
   const bare = await fetch(
     `${base}/staff/notification-preferences/request-email-verification`,
@@ -351,7 +370,9 @@ test("request-email-verification without a saved email is a 400", async () => {
 
 test("a dark relay answers 202 but stores and sends nothing (no oracle)", async () => {
   delete process.env.MESSAGING_WEBHOOK_URL;
-  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_staff", verifyId), staffRouter),
+  );
   await fetch(`${base}/staff/notification-preferences`, {
     method: "PUT",
     headers: JSON_HEADERS,
@@ -361,7 +382,11 @@ test("a dark relay answers 202 but stores and sends nothing (no oracle)", async 
     `${base}/staff/notification-preferences/request-email-verification`,
     { method: "POST" },
   );
-  assert.equal(res.status, 202, "identical response whether or not a relay exists");
+  assert.equal(
+    res.status,
+    202,
+    "identical response whether or not a relay exists",
+  );
   const row = await verifyRow(verifyId);
   assert.equal(row.emailVerifyCodeHash, null, "no code stored while dark");
   assert.equal(row.emailVerifyExpiresAt, null);
@@ -394,7 +419,10 @@ test("request dispatches the raw {email, code} to the relay; confirm verifies", 
     // Only the sha256 is stored, with a future expiry.
     const pending = await verifyRow(verifyId);
     assert.equal(pending.emailVerifyCodeHash, sha256Hex(code));
-    assert.ok(!JSON.stringify(pending).includes(code) || code === "", "raw code never stored");
+    assert.ok(
+      !JSON.stringify(pending).includes(code) || code === "",
+      "raw code never stored",
+    );
     assert.ok(pending.emailVerifyExpiresAt!.getTime() > Date.now());
 
     // A wrong guess is a 400 and does not verify.
@@ -487,7 +515,9 @@ test("a concurrent address swap between read and confirm cannot stamp the new ad
     );
   // Request A's confirm arrives with the OLD code: 400, and the new address
   // stays unverified with its own pending code intact.
-  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_staff", verifyId), staffRouter),
+  );
   const res = await fetch(
     `${base}/staff/notification-preferences/confirm-email`,
     {
@@ -498,8 +528,16 @@ test("a concurrent address swap between read and confirm cannot stamp the new ad
   );
   assert.equal(res.status, 400);
   const row = await verifyRow(verifyId);
-  assert.equal(row.emailVerifiedAt, null, "the swapped-in address must not be stamped");
-  assert.equal(row.emailVerifyCodeHash, sha256Hex("222222"), "the new pending code survives");
+  assert.equal(
+    row.emailVerifiedAt,
+    null,
+    "the swapped-in address must not be stamped",
+  );
+  assert.equal(
+    row.emailVerifyCodeHash,
+    sha256Hex("222222"),
+    "the new pending code survives",
+  );
   await clearActionFailures(`everifyc:${verifyId}`);
   // Restore the pre-race address so the later address-change tests see the
   // state the earlier tests left behind (unverified is fine — they re-stamp).
@@ -521,13 +559,17 @@ test("the confirm-email UPDATE is compare-and-set on the stored code hash (tripw
   const src = readFileSync(new URL("./staff.ts", import.meta.url), "utf8");
   const confirmAt = src.indexOf("confirm-email");
   assert.ok(confirmAt >= 0);
-  const updateAt = src.indexOf(".update(staffNotificationPreferencesTable)", confirmAt);
+  const updateAt = src.indexOf(
+    ".update(staffNotificationPreferencesTable)",
+    confirmAt,
+  );
   assert.ok(updateAt >= 0, "the confirm route updates the prefs row");
   const whereAt = src.indexOf(".where(", updateAt);
   const returningAt = src.indexOf(".returning()", whereAt);
   const wherePredicate = src.slice(whereAt, returningAt);
-  assert.ok(
-    wherePredicate.includes("emailVerifyCodeHash, presentedHash"),
+  assert.match(
+    wherePredicate,
+    /emailVerifyCodeHash,\s*presentedHash/,
     "the stamp's WHERE must carry the presented code hash — a bare (userId, firmId) predicate re-opens the swap race",
   );
 });
@@ -547,7 +589,9 @@ test("an expired code is rejected", async () => {
         eq(staffNotificationPreferencesTable.firmId, firmId),
       ),
     );
-  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_staff", verifyId), staffRouter),
+  );
   const res = await fetch(
     `${base}/staff/notification-preferences/confirm-email`,
     {
@@ -556,7 +600,11 @@ test("an expired code is rejected", async () => {
       body: JSON.stringify({ code: "123456" }),
     },
   );
-  assert.equal(res.status, 400, "the right code after expiry is still rejected");
+  assert.equal(
+    res.status,
+    400,
+    "the right code after expiry is still rejected",
+  );
   assert.equal((await verifyRow(verifyId)).emailVerifiedAt, null);
 });
 
@@ -575,7 +623,9 @@ test("changing (or clearing) the email clears the verification; re-saving the sa
         eq(staffNotificationPreferencesTable.firmId, firmId),
       ),
     );
-  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const base = await listen(
+    appFor(principalFor("firm_staff", verifyId), staffRouter),
+  );
 
   // Re-saving the SAME address keeps the verified state.
   const same = await fetch(`${base}/staff/notification-preferences`, {

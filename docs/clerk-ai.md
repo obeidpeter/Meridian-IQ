@@ -107,7 +107,7 @@ review.
   shared secret (`INBOUND_EMAIL_TOKEN` unset = rail dark, 404 — unlike the
   open-by-default metrics token, this rail creates tenant work and spends
   tokens); responses byte-identical for resolved and unresolved senders (202
-  then detached processing — no email-probe oracle); sender resolved
+  durable outbox commit before the 202 — no email-probe oracle); sender resolved
   deterministically via the unique login email → `client_user` membership →
   (firm, client party, createdBy); each PDF/image attachment walks the
   ORDINARY capture path (budget pre-check, 5MB/type caps, duplicate guard
@@ -217,7 +217,7 @@ of the letter.
   currency, issueDate, responseDueDate) plus a model-classified
   `noticeType` from the closed list. `noticePreflightChecks` is pure and
   deterministic: missing criticals and impossible dates block; a
-  response deadline already in the past is an *advisory* ("overdue on
+  response deadline already in the past is an _advisory_ ("overdue on
   arrival" — reviewers must still see the case). Fail-closed exactly like
   the invoice lane: invalid output → escalated, provider error → failed.
 - **Review.** Notices render first-class in the intake queue (kind tabs) but
@@ -827,7 +827,7 @@ unchanged.
   only the offered claim/data keys and month/client option keys
   (`planJsonSchema`), the zod validator mirrors the same enums
   (`planValidator`), and ask.ts re-resolves every step against what THIS
-  asker was OFFERED — so a "data.*" pick by a firm-less asker can only be
+  asker was OFFERED — so a "data.\*" pick by a firm-less asker can only be
   a register claim, and a client asker can never reach an intent outside
   its client-safe subset even via a colliding claim key. An EMPTY steps
   array IS the refusal — the v6 key enum carries no "none"; emptiness
@@ -1101,13 +1101,13 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
 
 - **Composition, never computation**: the module contains zero predicates
   of its own. Five closed sections — statutory position (`countOpenFilings`
-  + `openFilingSamples` + `countOpenObligations`), penalty exposure
-  (`computePenaltyExposure`), VAT for the last closed month
-  (`computeVatPosition` + the statutory calendar's due date), money
-  position (`computeCashflowOutlook` + `listChaseRows`, dominant currency
-  group), books hygiene (unbilled income, missing recurring bills,
-  unmatched credits, unmatched collections) — each reusing the exact
-  compute function its cited `sourceReport` serves, all sharing one `now`.
+  - `openFilingSamples` + `countOpenObligations`), penalty exposure
+    (`computePenaltyExposure`), VAT for the last closed month
+    (`computeVatPosition` + the statutory calendar's due date), money
+    position (`computeCashflowOutlook` + `listChaseRows`, dominant currency
+    group), books hygiene (unbilled income, missing recurring bills,
+    unmatched credits, unmatched collections) — each reusing the exact
+    compute function its cited `sourceReport` serves, all sharing one `now`.
 - **One phrasing call** (digest posture): the adviser's-note lead-in only —
   purpose `advisory_brief`, prompt `advisory-brief.v1`, firm-funded,
   number-grounded against the fact lines (`buildBriefUser`), template
@@ -1226,16 +1226,16 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
 ## Reports (deterministic, on demand, nothing stored)
 
 - **Monthly VAT filing pack** (`modules/clerk/vat-pack.ts`, `GET /vat-pack`
-  + CSV export, `console.portfolio.read` + firm scope, console portfolio
-  card) — the firm-level view of accepted-in-month facts, deterministic end
-  to end.
-  - **Filing cover note** (`modules/clerk/vat-note.ts`,
+  - CSV export, `console.portfolio.read` + firm scope, console portfolio
+    card) — the firm-level view of accepted-in-month facts, deterministic end
+    to end.
+  * **Filing cover note** (`modules/clerk/vat-note.ts`,
     `POST /vat-pack/cover-note`, same gate, firm-funded) phrases the pack's
     computed facts into a note the partner edits and owns — digest posture
     with NO route budget pre-check (kill switch, missing provider, exhausted
     budget, invalid output, quiet month all answer with the deterministic
     template, and a quiet month never calls the model).
-  - **Settlement cross-check** (`modules/clerk/vat-settlement.ts`,
+  * **Settlement cross-check** (`modules/clerk/vat-settlement.ts`,
     `GET /vat-pack/settlement-check`, same gate + month discipline,
     deterministic, nothing stored) splits the pack month's accepted invoices
     — the pack's EXACT population, invoices only — by what settlement the
@@ -1244,7 +1244,7 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
     unsettled list (cap+1 truncation flag) and a note pinning the semantics:
     unsettled means UNOBSERVED, not unpaid — an assurance view, never an
     accusation.
-  - **Net VAT position** (`modules/clerk/vat-input.ts`,
+  * **Net VAT position** (`modules/clerk/vat-input.ts`,
     `GET /vat-pack/position`, same gate + month discipline, deterministic,
     nothing stored) joins the pack's output VAT to the bills ledger's input
     side: input VAT counts toward the position ONLY when the bill's NEWEST
@@ -1655,7 +1655,7 @@ discipline applies.
   unlike its dark-by-absence phrasing sibling, so the platform flags
   surface can light it; lock 731_851), an on-demand operator route +
   Clerk-health card (round 48, contract 0.74.0: `POST
-  /clerk/eval/retrieval` — NO_CONTEXT + MODEL rate class, 503 when the
+/clerk/eval/retrieval` — NO_CONTEXT + MODEL rate class, 503 when the
   embedder is unconfigured — and `GET /clerk/eval/retrieval-runs`
   feeding the console's recall/MRR trend card) and a trailing-
   baseline drop watch (`clerk.retrieval_quality.dropped`, env knobs
@@ -1864,13 +1864,13 @@ shared computation as the corresponding chart.
   bar that earned extraction/intent/phrasing their lanes; revisit if
   triage ever gates anything.
 - **Curation** (`modules/clerk/eval-curation.ts`, `GET /clerk/eval/fixtures`
-  + retire/restore, `clerk.use`, console corpus card): nullable `retired_at`
-  on grown and red-team fixtures; loaders exclude retired rows BEFORE the
-  recency cap (retirement frees a slot; canaries compose automatically
-  because they share the loaders); per-fixture pass history reconstructed
-  from the newest stored runs (field NAMES only); static fixtures never
-  retirable; red-team generation still counts retired rows against its
-  minting cap.
+  - retire/restore, `clerk.use`, console corpus card): nullable `retired_at`
+    on grown and red-team fixtures; loaders exclude retired rows BEFORE the
+    recency cap (retirement frees a slot; canaries compose automatically
+    because they share the loaders); per-fixture pass history reconstructed
+    from the newest stored runs (field NAMES only); static fixtures never
+    retirable; red-team generation still counts retired rows against its
+    minting cap.
 - **Corpus promotion** (`POST /clerk/eval/fixtures/from-case`, `clerk.use`,
   console health page promote row) mints a decided case into the corpus. A
   deterministic scrubber pseudonymizes known party names/TINs in the stored

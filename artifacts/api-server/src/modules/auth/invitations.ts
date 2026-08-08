@@ -29,7 +29,11 @@ import { firmEngagesParty, type Principal } from "./rbac";
 // buyer-rails role are never issued through the invite flow; they stay on the
 // deliberate identity.write provisioning path. The contract enum already
 // narrows the input, and this is the defense-in-depth backstop.
-const INVITABLE_ROLES = new Set<Role>(["firm_admin", "firm_staff", "client_user"]);
+const INVITABLE_ROLES = new Set<Role>([
+  "firm_admin",
+  "firm_staff",
+  "client_user",
+]);
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -290,22 +294,29 @@ export async function acceptInvitation(
     .returning({ id: invitationsTable.id });
   if (claimed.length === 0) throw invalid();
 
+  const passwordHash = await hashPassword(input.password);
   const [user] = await getDb()
     .insert(usersTable)
     .values({
       email,
       fullName: input.fullName?.trim() || null,
-      passwordHash: await hashPassword(input.password),
+      passwordHash,
     })
+    .onConflictDoNothing({ target: usersTable.email })
     .returning({ id: usersTable.id });
-  await getDb()
-    .insert(membershipsTable)
-    .values({
-      userId: user.id,
-      firmId: invite.firmId,
-      role: invite.role,
-      clientPartyId: invite.clientPartyId,
-    });
+  if (!user) {
+    throw new DomainError(
+      "EMAIL_IN_USE",
+      "An account with this email already exists",
+      409,
+    );
+  }
+  await getDb().insert(membershipsTable).values({
+    userId: user.id,
+    firmId: invite.firmId,
+    role: invite.role,
+    clientPartyId: invite.clientPartyId,
+  });
   await appendAudit({
     actorId: user.id,
     firmId: invite.firmId,

@@ -16,7 +16,9 @@ import {
 async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   // ---------- SME staff: credit note credits its original ----------
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
-  const invoicesResp = await page.request.get(BASE + "/api/invoices?status=stamped");
+  const invoicesResp = await page.request.get(
+    BASE + "/api/invoices?status=stamped",
+  );
   const stamped = (await invoicesResp.json()).filter(
     (i) =>
       i.supplierPartyId.startsWith(DEMO_CLIENT_PARTY_PREFIX) &&
@@ -25,14 +27,21 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   check("a stamped, consented invoice exists to credit", stamped.length > 0);
   if (stamped.length > 0) {
     const target = stamped[0];
-    await page.goto(BASE + `/app/invoices/${target.id}`, { waitUntil: "networkidle" });
-    await page.waitForSelector('[data-testid="button-credit-note"]', { timeout: 10000 });
+    await page.goto(BASE + `/app/invoices/${target.id}`, {
+      waitUntil: "networkidle",
+    });
+    await page.waitForSelector('[data-testid="button-credit-note"]', {
+      timeout: 10000,
+    });
     await page.getByTestId("button-credit-note").click();
     await page.getByTestId("input-adjust-reason").fill("E2E: goods returned.");
     await page.getByTestId("button-confirm-adjust").click();
-    await page.waitForSelector(`text=Credit note CN-${target.invoiceNumber} submitted`, {
-      timeout: 15000,
-    });
+    await page.waitForSelector(
+      `text=Credit note CN-${target.invoiceNumber} submitted`,
+      {
+        timeout: 15000,
+      },
+    );
     // the pipeline credits the original once the credit note stamps
     const credited = await pollUntil(
       async () => {
@@ -53,7 +62,9 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   // Dashboard renders its summary and the receivables card; the server and
   // bundle were built from the same contract, so the skew banner must be off.
   await page.goto(BASE + "/app/", { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="text-page-title"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="text-page-title"]', {
+    timeout: 15000,
+  });
   await page.waitForSelector("text=Receivables", { timeout: 15000 });
   check("SME dashboard renders the receivables card", true);
   check(
@@ -101,7 +112,9 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
       "invoice form shows the no-customers state for the seeded client",
       true,
     );
-    const parties = await (await page.request.get(BASE + "/api/parties")).json();
+    const parties = await (
+      await page.request.get(BASE + "/api/parties")
+    ).json();
     const created = await createDraftInvoice(page, BASE, {
       supplierPartyId: parties[0].id,
       buyerPartyId: parties[0].id,
@@ -133,7 +146,8 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   const meResp = await page.request.get(BASE + "/api/me");
   const me = await meResp.json();
   const recCsv = await page.request.get(
-    BASE + `/api/dashboard/receivables/export?clientPartyId=${me.clientPartyId}`,
+    BASE +
+      `/api/dashboard/receivables/export?clientPartyId=${me.clientPartyId}`,
   );
   check(
     "receivables CSV export responds for the signed-in client",
@@ -144,9 +158,13 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   // Bulk-submit entry point: the confirmation dialog opens and cancels
   // cleanly (the destructive path itself is covered by API tests).
   await page.goto(BASE + "/app/invoices", { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="button-bulk-submit"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="button-bulk-submit"]', {
+    timeout: 15000,
+  });
   await page.getByTestId("button-bulk-submit").click();
-  await page.waitForSelector("text=Submit all pending drafts?", { timeout: 10000 });
+  await page.waitForSelector("text=Submit all pending drafts?", {
+    timeout: 10000,
+  });
   await page.getByRole("button", { name: "Cancel" }).click();
   check("bulk-submit confirmation opens and cancels", true);
 
@@ -172,9 +190,12 @@ async function journeyPasswordRoundTrip(page, BASE, check) {
   await page.getByTestId("input-current-password").fill(DEMO_PASSWORD);
   await page.getByTestId("input-new-password").fill("temp-password-1");
   await page.getByTestId("button-change-password").click();
-  await page.waitForSelector('[data-testid="text-password-changed"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="text-password-changed"]', {
+    timeout: 10000,
+  });
   const oldPw = await page.request.post(BASE + "/api/auth/login", {
     data: { email: "demo.staff@meridianiq.example", password: DEMO_PASSWORD },
+    headers: CSRF,
   });
   check("old password rejected after change", oldPw.status() === 401);
   // restore
@@ -182,7 +203,9 @@ async function journeyPasswordRoundTrip(page, BASE, check) {
   await page.getByTestId("input-current-password").fill("temp-password-1");
   await page.getByTestId("input-new-password").fill(DEMO_PASSWORD);
   await page.getByTestId("button-change-password").click();
-  await page.waitForSelector('[data-testid="text-password-changed"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="text-password-changed"]', {
+    timeout: 10000,
+  });
   check("password change round-trips (restored)", true);
 }
 
@@ -214,7 +237,7 @@ async function journeyPasswordReset(page, BASE, check) {
   );
 
   // Redeem it through the landing reset page.
-  await page.goto(BASE + `/reset-password?token=${issuedBody.token}`, {
+  await page.goto(BASE + `/reset-password#token=${issuedBody.token}`, {
     waitUntil: "networkidle",
   });
   await page.waitForSelector('[data-testid="input-reset-password"]', {
@@ -230,10 +253,12 @@ async function journeyPasswordReset(page, BASE, check) {
 
   const oldPw = await page.request.post(BASE + "/api/auth/login", {
     data: { email: STAFF, password: DEMO_PASSWORD },
+    headers: CSRF,
   });
   check("old password rejected after reset", oldPw.status() === 401);
   const newPw = await page.request.post(BASE + "/api/auth/login", {
     data: { email: STAFF, password: "reset-temp-pw-1" },
+    headers: CSRF,
   });
   check("new password signs in after reset", newPw.status() === 200);
 
@@ -261,4 +286,8 @@ async function journeyPasswordReset(page, BASE, check) {
   check("second reset restores the demo password", restored.status() === 204);
 }
 
-export { journeyStaffCreditNoteAndWorkflow, journeyPasswordRoundTrip, journeyPasswordReset };
+export {
+  journeyStaffCreditNoteAndWorkflow,
+  journeyPasswordRoundTrip,
+  journeyPasswordReset,
+};

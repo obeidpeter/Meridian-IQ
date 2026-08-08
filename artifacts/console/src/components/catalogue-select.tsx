@@ -34,11 +34,12 @@ export function CatalogueSelect({
   placeholder: string;
   testId: string;
 }) {
+  const id = `${testId}-control`;
   return (
     <div className="space-y-1">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger data-testid={testId}>
+        <SelectTrigger id={id} data-testid={testId}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

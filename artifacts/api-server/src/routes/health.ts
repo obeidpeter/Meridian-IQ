@@ -4,6 +4,7 @@ import { pool } from "@workspace/db";
 import { registry } from "../lib/metrics";
 import { requireOpToken } from "../lib/op-token";
 import { logger } from "../lib/logger";
+import { getReadiness } from "../lib/readiness";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,14 @@ router.get("/healthz", (_req, res) => {
 // 503 — distinguishing "process up but DB unreachable" from healthy, which
 // /healthz cannot. Uses the raw pool (no tenant context needed).
 router.get("/readyz", async (_req, res): Promise<void> => {
+  const readiness = getReadiness();
+  if (process.env.NODE_ENV === "production" && !readiness.ready) {
+    res.status(503).json({
+      status: "unavailable",
+      reason: readiness.reason,
+    });
+    return;
+  }
   try {
     await pool.query("SELECT 1");
     res.json({ status: "ready" });
@@ -42,9 +51,13 @@ router.get("/readyz", async (_req, res): Promise<void> => {
 // metrics only — no per-tenant labels or PII — so it is safe to serve on the
 // public path like /healthz. Deployments that want scrape access closed set
 // METRICS_TOKEN (opt-in; unset keeps it open) — see lib/op-token.ts.
-router.get("/metrics", requireOpToken("METRICS_TOKEN"), async (_req, res): Promise<void> => {
-  res.set("Content-Type", registry.contentType);
-  res.end(await registry.metrics());
-});
+router.get(
+  "/metrics",
+  requireOpToken("METRICS_TOKEN"),
+  async (_req, res): Promise<void> => {
+    res.set("Content-Type", registry.contentType);
+    res.end(await registry.metrics());
+  },
+);
 
 export default router;

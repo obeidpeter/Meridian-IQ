@@ -218,11 +218,12 @@ function FirmSelect({
   onChange: (firmId: string) => void;
   testId: string;
 }) {
+  const id = `${testId}-control`;
   return (
     <div className="space-y-1">
-      <Label>Firm</Label>
+      <Label htmlFor={id}>Firm</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger data-testid={testId}>
+        <SelectTrigger id={id} data-testid={testId}>
           <SelectValue placeholder="Choose firm" />
         </SelectTrigger>
         <SelectContent>
@@ -256,11 +257,12 @@ function PartySelect({
   // notice form's client slot renders none.
   children?: ReactNode;
 }) {
+  const id = `${testId}-control`;
   return (
     <div className="space-y-1">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger data-testid={testId}>
+        <SelectTrigger id={id} data-testid={testId}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -398,7 +400,7 @@ function InvoiceDecisionForm({
           />
         </div>
         <div className="space-y-1">
-          <Label>Category</Label>
+          <Label htmlFor="apr-category">Category</Label>
           <Select
             value={form.category}
             onValueChange={(v) =>
@@ -408,7 +410,7 @@ function InvoiceDecisionForm({
               })
             }
           >
-            <SelectTrigger data-testid="select-category">
+            <SelectTrigger id="apr-category" data-testid="select-category">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -437,24 +439,28 @@ function InvoiceDecisionForm({
           >
             <Input
               className="col-span-6"
+              aria-label={`Line ${i + 1} description`}
               placeholder="Description"
               value={line.description}
               onChange={(e) => setLine(i, { description: e.target.value })}
             />
             <Input
               className="col-span-2"
+              aria-label={`Line ${i + 1} quantity`}
               placeholder="Qty"
               value={line.quantity}
               onChange={(e) => setLine(i, { quantity: e.target.value })}
             />
             <Input
               className="col-span-2"
+              aria-label={`Line ${i + 1} unit price`}
               placeholder="Unit price"
               value={line.unitPrice}
               onChange={(e) => setLine(i, { unitPrice: e.target.value })}
             />
             <Input
               className="col-span-2"
+              aria-label={`Line ${i + 1} VAT rate`}
               placeholder="VAT %"
               value={line.vatRate}
               onChange={(e) => setLine(i, { vatRate: e.target.value })}
@@ -1875,11 +1881,10 @@ export function ClerkWorkspace() {
             {/* One queue kind at a time: invoice extraction cases or
                     tax-authority notice cases (Notice Desk). The kind
                     travels to the server as the list's kind param. */}
-            <div className="flex gap-1" role="tablist" aria-label="Intake kind">
+            <div className="flex gap-1" aria-label="Intake kind">
               <Button
                 size="sm"
-                role="tab"
-                aria-selected={queueKind === "extraction"}
+                aria-pressed={queueKind === "extraction"}
                 variant={queueKind === "extraction" ? "secondary" : "ghost"}
                 onClick={() => switchQueueKind("extraction")}
                 data-testid="tab-kind-extraction"
@@ -1888,8 +1893,7 @@ export function ClerkWorkspace() {
               </Button>
               <Button
                 size="sm"
-                role="tab"
-                aria-selected={queueKind === "notice"}
+                aria-pressed={queueKind === "notice"}
                 variant={queueKind === "notice" ? "secondary" : "ghost"}
                 onClick={() => switchQueueKind("notice")}
                 data-testid="tab-kind-notice"
@@ -2002,6 +2006,7 @@ export function ClerkWorkspace() {
                     : "or paste the invoice text:"}
                 </p>
                 <Textarea
+                  aria-label={noticeCapture ? "Notice text" : "Invoice text"}
                   value={captureText}
                   onChange={(e) => {
                     setCaptureText(e.target.value);

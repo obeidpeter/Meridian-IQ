@@ -24,6 +24,7 @@ import {
   disableFirmWebhook,
   fanOutWebhookEvents,
   dispatchWebhookDeliveries,
+  isPublicWebhookAddress,
   vetWebhookUrl,
   vetEvents,
 } from "./webhooks.ts";
@@ -91,9 +92,15 @@ before(async () => {
     { id: firmA, name: `Webhook Firm A ${SALT}` },
     { id: firmB, name: `Webhook Firm B ${SALT}` },
   ]);
-  await db.insert(partiesTable).values([
-    { id: partyA, type: "client_business", legalName: `Webhook Party ${SALT}` },
-  ]);
+  await db
+    .insert(partiesTable)
+    .values([
+      {
+        id: partyA,
+        type: "client_business",
+        legalName: `Webhook Party ${SALT}`,
+      },
+    ]);
   await db.insert(invoicesTable).values([
     {
       id: invoiceA,
@@ -124,9 +131,13 @@ after(async () => {
 
 test("vetting: unknown events and bad URLs are rejected; production requires public https", () => {
   assert.throws(() => vetEvents(["invoice.stamped", "invoice.deleted"]));
-  assert.deepEqual(vetEvents(["invoice.stamped", "invoice.stamped"]), ["invoice.stamped"]);
+  assert.deepEqual(vetEvents(["invoice.stamped", "invoice.stamped"]), [
+    "invoice.stamped",
+  ]);
   assert.throws(() => vetWebhookUrl("not a url"));
   assert.throws(() => vetWebhookUrl("ftp://example.com/hook"));
+  assert.throws(() => vetWebhookUrl("https://user:pass@example.com/hook"));
+  assert.throws(() => vetWebhookUrl("https://example.com/hook#secret"));
   assert.equal(
     vetWebhookUrl("https://hooks.example.com/x"),
     "https://hooks.example.com/x",
@@ -143,7 +154,10 @@ test("vetting: unknown events and bad URLs are rejected; production requires pub
     // ([::ffff:7f00:1]) before vetting sees it — the v4-mapped loopback,
     // unspecified, unique-local and link-local literals must all refuse;
     // a genuinely public literal passes.
-    assert.throws(() => vetWebhookUrl("https://[::ffff:127.0.0.1]/x"), /public/);
+    assert.throws(
+      () => vetWebhookUrl("https://[::ffff:127.0.0.1]/x"),
+      /public/,
+    );
     assert.throws(() => vetWebhookUrl("https://[::]/x"), /public/);
     assert.throws(() => vetWebhookUrl("https://[fd00::1]/x"), /public/);
     assert.throws(() => vetWebhookUrl("https://[fe80::1]/x"), /public/);
@@ -156,36 +170,99 @@ test("vetting: unknown events and bad URLs are rejected; production requires pub
   }
 });
 
+test("address vetting rejects private, reserved, mapped and tunnel ranges", () => {
+  for (const address of [
+    "127.0.0.1",
+    "10.0.0.1",
+    "169.254.169.254",
+    "192.168.1.1",
+    "198.18.0.1",
+    "203.0.113.10",
+    "::1",
+    "::ffff:127.0.0.1",
+    "fd00::1",
+    "fe80::1",
+    "64:ff9b::a9fe:a9fe",
+    "2001::1",
+    "2001:20::1",
+    "2001:db8::1",
+    "2002:c0a8:101::1",
+    "3fff::1",
+  ]) {
+    assert.equal(isPublicWebhookAddress(address), false, address);
+  }
+  assert.equal(isPublicWebhookAddress("8.8.8.8"), true);
+  assert.equal(isPublicWebhookAddress("2606:4700:4700::1111"), true);
+});
+
 test("fan-out inserts pointer-only deliveries for subscribed active webhooks only, idempotently", async () => {
   // Register the webhooks FIRST (fan-out only picks up events newer than the
   // registration), then commit the domain events.
-  const all = await createFirmWebhook(firmA, "https://a.example.test/all", [...WEBHOOK_EVENTS]);
-  const stampedOnly = await createFirmWebhook(firmA, "https://a.example.test/stamped", ["invoice.stamped"]);
-  const inactive = await createFirmWebhook(firmA, "https://a.example.test/off", [...WEBHOOK_EVENTS]);
+  const all = await createFirmWebhook(firmA, "https://a.example.test/all", [
+    ...WEBHOOK_EVENTS,
+  ]);
+  const stampedOnly = await createFirmWebhook(
+    firmA,
+    "https://a.example.test/stamped",
+    ["invoice.stamped"],
+  );
+  const inactive = await createFirmWebhook(
+    firmA,
+    "https://a.example.test/off",
+    [...WEBHOOK_EVENTS],
+  );
   await getDb()
     .update(firmWebhooksTable)
     .set({ active: false })
     .where(eq(firmWebhooksTable.id, inactive.row.id));
-  const foreign = await createFirmWebhook(firmB, "https://b.example.test/all", [...WEBHOOK_EVENTS]);
-
-  await getDb().insert(invoiceLifecycleEventsTable).values([
-    { invoiceId: invoiceA, firmId: firmA, fromStatus: "submitted", toStatus: "stamped", actorRole: "system" },
-    { invoiceId: invoiceA, firmId: firmA, fromStatus: "stamped", toStatus: "settled", actorRole: "system" },
-    // A non-catalog transition must never fan out.
-    { invoiceId: invoiceA, firmId: firmA, fromStatus: "draft", toStatus: "validated", actorRole: "system" },
+  const foreign = await createFirmWebhook(firmB, "https://b.example.test/all", [
+    ...WEBHOOK_EVENTS,
   ]);
-  await getDb().insert(auditEventsTable).values({
-    firmId: firmA,
-    action: "statement.reconciled",
-    entityType: "bank_statement",
-    entityId: statementId,
-    after: { proposals: 1 },
-    hash: `wh-test-${SALT}`,
-    prevHash: `wh-test-${SALT}`,
-  });
+
+  await getDb()
+    .insert(invoiceLifecycleEventsTable)
+    .values([
+      {
+        invoiceId: invoiceA,
+        firmId: firmA,
+        fromStatus: "submitted",
+        toStatus: "stamped",
+        actorRole: "system",
+      },
+      {
+        invoiceId: invoiceA,
+        firmId: firmA,
+        fromStatus: "stamped",
+        toStatus: "settled",
+        actorRole: "system",
+      },
+      // A non-catalog transition must never fan out.
+      {
+        invoiceId: invoiceA,
+        firmId: firmA,
+        fromStatus: "draft",
+        toStatus: "validated",
+        actorRole: "system",
+      },
+    ]);
+  await getDb()
+    .insert(auditEventsTable)
+    .values({
+      firmId: firmA,
+      action: "statement.reconciled",
+      entityType: "bank_statement",
+      entityId: statementId,
+      after: { proposals: 1 },
+      hash: `wh-test-${SALT}`,
+      prevHash: `wh-test-${SALT}`,
+    });
 
   const inserted = await fanOutWebhookEvents();
-  assert.equal(inserted, 4, "3 events for the all-hook + 1 for the stamped-only hook");
+  assert.equal(
+    inserted,
+    4,
+    "3 events for the all-hook + 1 for the stamped-only hook",
+  );
 
   const deliveries = await getDb()
     .select()
@@ -200,12 +277,25 @@ test("fan-out inserts pointer-only deliveries for subscribed active webhooks onl
     );
   const byHook = (id: string) => deliveries.filter((d) => d.webhookId === id);
   assert.deepEqual(
-    byHook(all.row.id).map((d) => d.eventType).sort(),
+    byHook(all.row.id)
+      .map((d) => d.eventType)
+      .sort(),
     ["invoice.settled", "invoice.stamped", "statement.reconciled"],
   );
-  assert.deepEqual(byHook(stampedOnly.row.id).map((d) => d.eventType), ["invoice.stamped"]);
-  assert.equal(byHook(inactive.row.id).length, 0, "inactive hooks receive nothing");
-  assert.equal(byHook(foreign.row.id).length, 0, "another firm's events never cross");
+  assert.deepEqual(
+    byHook(stampedOnly.row.id).map((d) => d.eventType),
+    ["invoice.stamped"],
+  );
+  assert.equal(
+    byHook(inactive.row.id).length,
+    0,
+    "inactive hooks receive nothing",
+  );
+  assert.equal(
+    byHook(foreign.row.id).length,
+    0,
+    "another firm's events never cross",
+  );
 
   // SEC-12: payloads are pointer-only — entity type + id, nothing else.
   for (const d of deliveries) {
@@ -213,17 +303,29 @@ test("fan-out inserts pointer-only deliveries for subscribed active webhooks onl
     assert.equal(d.status, "pending");
     assert.equal(d.firmId, firmA);
   }
-  const stampedDelivery = byHook(all.row.id).find((d) => d.eventType === "invoice.stamped");
-  assert.deepEqual(stampedDelivery?.payload, { entityType: "invoice", entityId: invoiceA });
-  const reconciled = byHook(all.row.id).find((d) => d.eventType === "statement.reconciled");
-  assert.deepEqual(reconciled?.payload, { entityType: "bank_statement", entityId: statementId });
+  const stampedDelivery = byHook(all.row.id).find(
+    (d) => d.eventType === "invoice.stamped",
+  );
+  assert.deepEqual(stampedDelivery?.payload, {
+    entityType: "invoice",
+    entityId: invoiceA,
+  });
+  const reconciled = byHook(all.row.id).find(
+    (d) => d.eventType === "statement.reconciled",
+  );
+  assert.deepEqual(reconciled?.payload, {
+    entityType: "bank_statement",
+    entityId: statementId,
+  });
 
   // Idempotent: a second pass (concurrent sweep instance / window re-scan)
   // inserts nothing.
   assert.equal(await fanOutWebhookEvents(), 0);
 
   // A webhook registered AFTER the events never receives history.
-  const late = await createFirmWebhook(firmA, "https://a.example.test/late", [...WEBHOOK_EVENTS]);
+  const late = await createFirmWebhook(firmA, "https://a.example.test/late", [
+    ...WEBHOOK_EVENTS,
+  ]);
   assert.equal(await fanOutWebhookEvents(), 0);
   const lateRows = await getDb()
     .select()
@@ -240,8 +342,14 @@ test("fan-out inserts pointer-only deliveries for subscribed active webhooks onl
 });
 
 test("dispatch signs the body with the stored hash and marks delivered", async () => {
-  const hook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
-  assert.equal(hook.row.secretHash, sha256Hex(hook.secret), "stored hash is sha256(secret)");
+  const hook = await createFirmWebhook(firmA, `${receiverBase}/ok`, [
+    "invoice.stamped",
+  ]);
+  assert.equal(
+    hook.row.secretHash,
+    sha256Hex(hook.secret),
+    "stored hash is sha256(secret)",
+  );
   const [delivery] = await getDb()
     .insert(firmWebhookDeliveriesTable)
     .values({
@@ -292,7 +400,9 @@ test("dispatch signs the body with the stored hash and marks delivered", async (
 });
 
 test("dispatch retries with backoff and dead-letters after max attempts; disabled hooks are never claimed", async () => {
-  const hook = await createFirmWebhook(firmA, `${receiverBase}/fail`, ["invoice.settled"]);
+  const hook = await createFirmWebhook(firmA, `${receiverBase}/fail`, [
+    "invoice.settled",
+  ]);
   const [delivery] = await getDb()
     .insert(firmWebhookDeliveriesTable)
     .values({
@@ -305,18 +415,22 @@ test("dispatch retries with backoff and dead-letters after max attempts; disable
     .returning();
 
   // A pending delivery on a DISABLED hook is never claimed.
-  const disabled = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.settled"]);
+  const disabled = await createFirmWebhook(firmA, `${receiverBase}/ok`, [
+    "invoice.settled",
+  ]);
   await getDb()
     .update(firmWebhooksTable)
     .set({ active: false })
     .where(eq(firmWebhooksTable.id, disabled.row.id));
-  await getDb().insert(firmWebhookDeliveriesTable).values({
-    webhookId: disabled.row.id,
-    firmId: firmA,
-    eventType: "invoice.settled",
-    eventKey: `test:disabled:${SALT}`,
-    payload: { entityType: "invoice", entityId: invoiceA },
-  });
+  await getDb()
+    .insert(firmWebhookDeliveriesTable)
+    .values({
+      webhookId: disabled.row.id,
+      firmId: firmA,
+      eventType: "invoice.settled",
+      eventKey: `test:disabled:${SALT}`,
+      payload: { entityType: "invoice", entityId: invoiceA },
+    });
 
   captured.length = 0;
   for (let attempt = 1; attempt <= 5; attempt++) {
@@ -341,7 +455,10 @@ test("dispatch retries with backoff and dead-letters after max attempts; disable
     }
   }
   assert.equal(captured.length, 5, "exactly one POST per attempt");
-  assert.ok(captured.every((c) => c.path === "/fail"), "disabled hook never POSTed");
+  assert.ok(
+    captured.every((c) => c.path === "/fail"),
+    "disabled hook never POSTed",
+  );
 
   // Dead rows are out of the queue for good.
   await dispatchWebhookDeliveries();
@@ -391,7 +508,10 @@ test("routes: create shows the secret once, disable is CAS, deliveries list newe
   const bad = await fetch(`${base}/firm-webhooks`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ url: "https://hooks.example.test/x", events: ["invoice.paid"] }),
+    body: JSON.stringify({
+      url: "https://hooks.example.test/x",
+      events: ["invoice.paid"],
+    }),
   });
   assert.equal(bad.status, 400);
 
@@ -421,7 +541,9 @@ test("routes: create shows the secret once, disable is CAS, deliveries list newe
     headers: JSON_HEADERS,
   });
   assert.equal(cross.status, 404);
-  const crossList = await fetch(`${foreignBase}/firm-webhooks/${hook.id}/deliveries`);
+  const crossList = await fetch(
+    `${foreignBase}/firm-webhooks/${hook.id}/deliveries`,
+  );
   assert.equal(crossList.status, 404);
 
   // Deliveries list, newest first.
@@ -437,16 +559,21 @@ test("routes: create shows the secret once, disable is CAS, deliveries list newe
       createdAt: new Date(Date.now() - 60_000),
     })
     .returning();
-  await getDb().insert(firmWebhookDeliveriesTable).values({
-    webhookId: hook.id,
-    firmId: firmA,
-    eventType: "statement.reconciled",
-    eventKey: `test:list2:${SALT}`,
-    payload: { entityType: "bank_statement", entityId: statementId },
-  });
+  await getDb()
+    .insert(firmWebhookDeliveriesTable)
+    .values({
+      webhookId: hook.id,
+      firmId: firmA,
+      eventType: "statement.reconciled",
+      eventKey: `test:list2:${SALT}`,
+      payload: { entityType: "bank_statement", entityId: statementId },
+    });
   const deliveries = await fetch(`${base}/firm-webhooks/${hook.id}/deliveries`);
   assert.equal(deliveries.status, 200);
-  const items = (await deliveries.json()) as { id: string; eventType: string }[];
+  const items = (await deliveries.json()) as {
+    id: string;
+    eventType: string;
+  }[];
   assert.equal(items.length, 2);
   assert.equal(items[0].eventType, "statement.reconciled");
   assert.equal(items[1].id, early[0].id);
@@ -458,7 +585,9 @@ test("routes: create shows the secret once, disable is CAS, deliveries list newe
 
 test("retry: dead → pending requeue the dispatcher picks up; live rows, foreign firms and disabled hooks refuse", async () => {
   const base = await listen(appFor(admin, integrationsRouter));
-  const hook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
+  const hook = await createFirmWebhook(firmA, `${receiverBase}/ok`, [
+    "invoice.stamped",
+  ]);
   const [dead] = await getDb()
     .insert(firmWebhookDeliveriesTable)
     .values({
@@ -485,7 +614,9 @@ test("retry: dead → pending requeue the dispatcher picks up; live rows, foreig
   assert.equal(cross.status, 404);
 
   // A delivery id that does not live under the addressed webhook is 404 too.
-  const otherHook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
+  const otherHook = await createFirmWebhook(firmA, `${receiverBase}/ok`, [
+    "invoice.stamped",
+  ]);
   const wrongHook = await fetch(
     `${base}/firm-webhooks/${otherHook.row.id}/deliveries/${dead.id}/retry`,
     { method: "POST", headers: JSON_HEADERS },
@@ -535,7 +666,9 @@ test("retry: dead → pending requeue the dispatcher picks up; live rows, foreig
 
   // A dead row on a DISABLED endpoint cannot be requeued — the dispatcher
   // would never drain it.
-  const disabledHook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
+  const disabledHook = await createFirmWebhook(firmA, `${receiverBase}/ok`, [
+    "invoice.stamped",
+  ]);
   const [deadOnDisabled] = await getDb()
     .insert(firmWebhookDeliveriesTable)
     .values({
@@ -555,7 +688,10 @@ test("retry: dead → pending requeue the dispatcher picks up; live rows, foreig
     { method: "POST", headers: JSON_HEADERS },
   );
   assert.equal(ontoDisabled.status, 409);
-  assert.match(((await ontoDisabled.json()) as { error: string }).error, /disabled/);
+  assert.match(
+    ((await ontoDisabled.json()) as { error: string }).error,
+    /disabled/,
+  );
   const [still] = await getDb()
     .select()
     .from(firmWebhookDeliveriesTable)
@@ -565,17 +701,26 @@ test("retry: dead → pending requeue the dispatcher picks up; live rows, foreig
 });
 
 test("RLS: webhook and delivery rows are firm-isolated at the data layer", async () => {
-  const seenByB = await runRequestContext({ bypass: false, firmId: firmB }, async () => ({
-    hooks: await getDb().select({ firmId: firmWebhooksTable.firmId }).from(firmWebhooksTable),
-    deliveries: await getDb()
-      .select({ firmId: firmWebhookDeliveriesTable.firmId })
-      .from(firmWebhookDeliveriesTable),
-  }));
+  const seenByB = await runRequestContext(
+    { bypass: false, firmId: firmB },
+    async () => ({
+      hooks: await getDb()
+        .select({ firmId: firmWebhooksTable.firmId })
+        .from(firmWebhooksTable),
+      deliveries: await getDb()
+        .select({ firmId: firmWebhookDeliveriesTable.firmId })
+        .from(firmWebhookDeliveriesTable),
+    }),
+  );
   assert.ok(seenByB.hooks.every((r) => r.firmId === firmB));
   assert.ok(seenByB.deliveries.every((r) => r.firmId === firmB));
 
-  const seenByA = await runRequestContext({ bypass: false, firmId: firmA }, () =>
-    getDb().select({ firmId: firmWebhooksTable.firmId }).from(firmWebhooksTable),
+  const seenByA = await runRequestContext(
+    { bypass: false, firmId: firmA },
+    () =>
+      getDb()
+        .select({ firmId: firmWebhooksTable.firmId })
+        .from(firmWebhooksTable),
   );
   assert.ok(seenByA.length > 0, "firm A sees its own webhooks");
   assert.ok(seenByA.every((r) => r.firmId === firmA));
@@ -588,13 +733,15 @@ test("RLS: webhook and delivery rows are firm-isolated at the data layer", async
         .from(firmWebhooksTable)
         .where(eq(firmWebhooksTable.firmId, firmB))
         .limit(1);
-      await getDb().insert(firmWebhookDeliveriesTable).values({
-        webhookId: hook?.id ?? randomUUID(),
-        firmId: firmA,
-        eventType: "invoice.stamped",
-        eventKey: `test:cross:${SALT}`,
-        payload: { entityType: "invoice", entityId: invoiceA },
-      });
+      await getDb()
+        .insert(firmWebhookDeliveriesTable)
+        .values({
+          webhookId: hook?.id ?? randomUUID(),
+          firmId: firmA,
+          eventType: "invoice.stamped",
+          eventKey: `test:cross:${SALT}`,
+          payload: { entityType: "invoice", entityId: invoiceA },
+        });
     }),
   );
 });

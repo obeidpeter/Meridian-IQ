@@ -74,11 +74,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { isFeatureDisabled, errorStatus, serverErrorMessage } from "@/lib/errors";
+import {
+  isFeatureDisabled,
+  errorStatus,
+  serverErrorMessage,
+} from "@/lib/errors";
 import { EmptyState } from "@/components/empty-state";
 import { RejectionRiskCard } from "@/components/rejection-risk-card";
 import { QueryError } from "@/components/query-error";
-import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
+import { draftStorageKey, type DraftState } from "@/pages/invoice-new";
 import { LineItemRow } from "@/components/line-item-row";
 import { FieldError } from "@/components/field-error";
 import {
@@ -327,7 +331,8 @@ function ConfirmationCard({
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
-          <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer confirmation
+          <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer
+          confirmation
         </CardTitle>
         {canRequest && (
           <Button
@@ -344,8 +349,8 @@ function ConfirmationCard({
       <CardContent>
         {featureDisabled ? (
           <p className="text-sm text-muted-foreground">
-            Buyer confirmations are not yet enabled for this organization. Ask your
-            operator to enable it.
+            Buyer confirmations are not yet enabled for this organization. Ask
+            your operator to enable it.
           </p>
         ) : timeline.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -393,7 +398,8 @@ function ConfirmationCard({
                   {c.confirmingUserId && (
                     <>
                       {" "}
-                      · by <span className="font-mono">{c.confirmingUserId}</span>
+                      · by{" "}
+                      <span className="font-mono">{c.confirmingUserId}</span>
                     </>
                   )}
                 </p>
@@ -432,7 +438,9 @@ function SettlementsCard({ settlements }: { settlements: SettlementEvent[] }) {
                   </span>
                 )}
               </div>
-              <span className="font-semibold tabular-nums">{formatNaira(s.amount)}</span>
+              <span className="font-semibold tabular-nums">
+                {formatNaira(s.amount)}
+              </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {formatDateTime(s.occurredAt)}
@@ -456,21 +464,36 @@ function SubmissionTimeline({ attempts }: { attempts: SubmissionAttempt[] }) {
           .map((a) => (
             <div key={a.id} className="flex items-start gap-3 text-sm">
               {a.status === "rejected" || a.status === "error" ? (
-                <XCircle className="w-4 h-4 text-destructive mt-0.5" aria-hidden="true" />
+                <XCircle
+                  className="w-4 h-4 text-destructive mt-0.5"
+                  aria-hidden="true"
+                />
               ) : a.status === "accepted" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5" aria-hidden="true" />
+                <CheckCircle2
+                  className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5"
+                  aria-hidden="true"
+                />
               ) : (
-                <Clock className="w-4 h-4 text-muted-foreground mt-0.5" aria-hidden="true" />
+                <Clock
+                  className="w-4 h-4 text-muted-foreground mt-0.5"
+                  aria-hidden="true"
+                />
               )}
               <div>
                 <p>
                   Attempt {a.attemptNo} · {humanize(a.status)}{" "}
-                  <span className="text-muted-foreground uppercase text-xs">({a.rail})</span>
+                  <span className="text-muted-foreground uppercase text-xs">
+                    ({a.rail})
+                  </span>
                 </p>
                 {a.errorCode && (
-                  <p className="text-xs text-destructive font-mono">{a.errorCode}</p>
+                  <p className="text-xs text-destructive font-mono">
+                    {a.errorCode}
+                  </p>
                 )}
-                <p className="text-xs text-muted-foreground">{formatDate(a.createdAt)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDate(a.createdAt)}
+                </p>
               </div>
             </div>
           ))}
@@ -490,7 +513,9 @@ function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
           <div key={e.id} className="text-sm border rounded-md px-3 py-2">
             <div className="flex justify-between">
               <span className="font-medium">{humanize(e.status)}</span>
-              <span className="text-xs text-muted-foreground">{formatDate(e.createdAt)}</span>
+              <span className="text-xs text-muted-foreground">
+                {formatDate(e.createdAt)}
+              </span>
             </div>
             <p className="text-muted-foreground">{e.reason}</p>
             {e.operatorReply && (
@@ -624,15 +649,17 @@ export function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => draft.mutate({ data: { invoiceId: invoice.id } })}
+                onClick={() =>
+                  draft.mutate({ data: { invoiceId: invoice.id } })
+                }
                 disabled={draft.isPending}
               >
                 {draft.isPending ? "Redrafting…" : "Redraft"}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Review before sending — you send this from your own email;
-              nothing is sent for you.
+              Review before sending — you send this from your own email; nothing
+              is sent for you.
             </p>
           </div>
         ) : (
@@ -649,8 +676,7 @@ export function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
             </Button>
             {draft.isError && (
               <p className="text-xs text-muted-foreground">
-                Couldn&apos;t draft a reminder just now — try again in a
-                moment.
+                Couldn&apos;t draft a reminder just now — try again in a moment.
               </p>
             )}
           </div>
@@ -824,13 +850,14 @@ export function InvoiceDetail() {
   const { data: escalations } = useListEscalations(id, {
     query: { enabled: !!id, queryKey: getListEscalationsQueryKey(id) },
   });
-  const { data: confirmations, error: confirmationsError } = useListConfirmations(id, {
-    query: {
-      enabled: !!id,
-      queryKey: getListConfirmationsQueryKey(id),
-      retry: false,
-    },
-  });
+  const { data: confirmations, error: confirmationsError } =
+    useListConfirmations(id, {
+      query: {
+        enabled: !!id,
+        queryKey: getListConfirmationsQueryKey(id),
+        retry: false,
+      },
+    });
   const { data: settlements } = useListSettlements(id, {
     query: {
       enabled: !!id,
@@ -865,7 +892,9 @@ export function InvoiceDetail() {
   });
 
   const latestFailed = (attempts || [])
-    .filter((a) => (a.status === "rejected" || a.status === "error") && a.errorCode)
+    .filter(
+      (a) => (a.status === "rejected" || a.status === "error") && a.errorCode,
+    )
     .sort((a, b) => b.attemptNo - a.attemptNo)[0];
   const errorCode = latestFailed?.errorCode || undefined;
   const { data: catalogue } = useGetErrorCatalogueEntry(errorCode || "", {
@@ -897,7 +926,9 @@ export function InvoiceDetail() {
   } | null>(null);
   const [showFixErrors, setShowFixErrors] = useState(false);
   // CORE-09 adjustment dialog: cancel or credit-note, both reason-first.
-  const [adjustKind, setAdjustKind] = useState<"cancel" | "credit" | null>(null);
+  const [adjustKind, setAdjustKind] = useState<"cancel" | "credit" | null>(
+    null,
+  );
   const [adjustReason, setAdjustReason] = useState("");
   // "New from this invoice" overwrite guard: only shown when the stored
   // invoice-form draft already holds real work.
@@ -932,7 +963,8 @@ export function InvoiceDetail() {
           refreshInvoiceState();
           toast({
             title: "Validation failed",
-            description: res.errors[0]?.message || "Fix the issues and try again.",
+            description:
+              res.errors[0]?.message || "Fix the issues and try again.",
             variant: "destructive",
           });
           return;
@@ -980,7 +1012,8 @@ export function InvoiceDetail() {
     fix.lines.forEach((l, i) => {
       if (!l.description.trim())
         fixErrors[`line-${i}-desc`] = "Description required.";
-      if (!(Number(l.quantity) > 0)) fixErrors[`line-${i}-qty`] = "Qty must be > 0.";
+      if (!(Number(l.quantity) > 0))
+        fixErrors[`line-${i}-qty`] = "Qty must be > 0.";
       if (!(Number(l.unitPrice) >= 0) || l.unitPrice === "")
         fixErrors[`line-${i}-price`] = "Price required.";
     });
@@ -1031,7 +1064,9 @@ export function InvoiceDetail() {
       });
       setReason("");
       setShowEscalate(false);
-      queryClient.invalidateQueries({ queryKey: getListEscalationsQueryKey(id) });
+      queryClient.invalidateQueries({
+        queryKey: getListEscalationsQueryKey(id),
+      });
       toast({
         title: "Escalated to your firm",
         description: "An operator will pick this up.",
@@ -1090,10 +1125,13 @@ export function InvoiceDetail() {
         id,
         data: { buyerPartyId: invoice.buyerPartyId, state: "requested" },
       });
-      queryClient.invalidateQueries({ queryKey: getListConfirmationsQueryKey(id) });
+      queryClient.invalidateQueries({
+        queryKey: getListConfirmationsQueryKey(id),
+      });
       toast({
         title: "Confirmation requested",
-        description: "Your buyer will be asked to confirm receipt of this invoice.",
+        description:
+          "Your buyer will be asked to confirm receipt of this invoice.",
       });
     } catch (e) {
       toast({
@@ -1137,13 +1175,14 @@ export function InvoiceDetail() {
   // reads as empty (the form ignores it too).
   const storedDraftHasWork = (): boolean => {
     try {
-      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!me) return false;
+      const raw = sessionStorage.getItem(draftStorageKey(me.userId, me.firmId));
       if (!raw) return false;
       const d = JSON.parse(raw) as DraftState;
       return Boolean(
         d.invoiceNumber?.trim() ||
-          d.buyerPartyId ||
-          (d.lines ?? []).some((l) => l.description.trim() || l.unitPrice.trim()),
+        d.buyerPartyId ||
+        (d.lines ?? []).some((l) => l.description.trim() || l.unitPrice.trim()),
       );
     } catch {
       return false;
@@ -1152,8 +1191,11 @@ export function InvoiceDetail() {
 
   const startNewFromInvoice = () => {
     const draft = buildDraftFromInvoice();
-    if (!draft || !invoice) return;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    if (!draft || !invoice || !me) return;
+    sessionStorage.setItem(
+      draftStorageKey(me.userId, me.firmId),
+      JSON.stringify(draft),
+    );
     toast({
       title: "New invoice drafted",
       description: `Copied from ${invoice.invoiceNumber} — give it a new invoice number.`,
@@ -1203,7 +1245,8 @@ export function InvoiceDetail() {
           href="/invoices"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
+          <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to
+          vault
         </Link>
         <QueryError thing="this invoice" onRetry={() => refetch()} />
       </div>
@@ -1218,7 +1261,8 @@ export function InvoiceDetail() {
           href="/invoices"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
+          <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to
+          vault
         </Link>
         <Card data-testid="card-unknown-invoice">
           <EmptyState
@@ -1249,9 +1293,13 @@ export function InvoiceDetail() {
   // CORE-09: cancellation is allowed from any non-terminal, non-inflight state;
   // a credit note adjusts a stamped/confirmed/settled invoice. Mirrors the
   // server's lifecycle TRANSITIONS map — the server still has the final say.
-  const canCancel = ["draft", "validated", "failed", "stamped", "confirmed"].includes(
-    invoice.status,
-  );
+  const canCancel = [
+    "draft",
+    "validated",
+    "failed",
+    "stamped",
+    "confirmed",
+  ].includes(invoice.status);
   const canCredit =
     invoice.kind === "invoice" &&
     ["stamped", "confirmed", "settled"].includes(invoice.status);
@@ -1259,7 +1307,8 @@ export function InvoiceDetail() {
   const confirmationTimeline = [...(confirmations || [])].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
-  const latestConfirmation = confirmationTimeline[confirmationTimeline.length - 1];
+  const latestConfirmation =
+    confirmationTimeline[confirmationTimeline.length - 1];
   const canRequestConfirmation =
     !confirmationsDark &&
     invoice.status === "stamped" &&
@@ -1279,7 +1328,10 @@ export function InvoiceDetail() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+            <h1
+              className="text-2xl md:text-3xl font-bold"
+              data-testid="text-page-title"
+            >
               {invoice.invoiceNumber}
             </h1>
             <span className={badgeClasses(invoice.status)}>
@@ -1287,7 +1339,8 @@ export function InvoiceDetail() {
             </span>
           </div>
           <p className="text-muted-foreground mt-1">
-            Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
+            Issued {formatDate(invoice.issueDate)} · Due{" "}
+            {formatDate(invoice.dueDate)}
           </p>
           {/* WHT Desk: shown only when a human assigned a category — the
               label wording comes from the shared wht-copy catalogue. */}
@@ -1302,7 +1355,10 @@ export function InvoiceDetail() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canSubmit && (
-            <Button onClick={handleSubmit} disabled={validate.isPending || submit.isPending}>
+            <Button
+              onClick={handleSubmit}
+              disabled={validate.isPending || submit.isPending}
+            >
               <Send className="w-4 h-4 mr-2" aria-hidden="true" />
               {validate.isPending || submit.isPending
                 ? "Submitting…"
@@ -1335,7 +1391,8 @@ export function InvoiceDetail() {
               onClick={() => setAdjustKind("credit")}
               data-testid="button-credit-note"
             >
-              <Undo2 className="w-4 h-4 mr-2" aria-hidden="true" /> Issue credit note
+              <Undo2 className="w-4 h-4 mr-2" aria-hidden="true" /> Issue credit
+              note
             </Button>
           )}
           {canCancel && (
@@ -1393,7 +1450,10 @@ export function InvoiceDetail() {
         isPending={cancelInvoice.isPending || creditNote.isPending}
       />
 
-      <ComplianceStatusCard statusLight={statusLight} isLoading={statusLightLoading} />
+      <ComplianceStatusCard
+        statusLight={statusLight}
+        isLoading={statusLightLoading}
+      />
 
       {/* Maker-checker ledger: informational for client users, actionable
           for firm roles while the invoice is still submittable. */}
@@ -1409,17 +1469,22 @@ export function InvoiceDetail() {
         <Card className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base text-emerald-800 dark:text-emerald-300">
-              <ShieldCheck className="w-4 h-4" aria-hidden="true" /> FIRS stamped
+              <ShieldCheck className="w-4 h-4" aria-hidden="true" /> FIRS
+              stamped
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">IRN</span>
-              <span className="font-mono text-xs break-all text-right">{stamp.irn}</span>
+              <span className="font-mono text-xs break-all text-right">
+                {stamp.irn}
+              </span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">CSID</span>
-              <span className="font-mono text-xs break-all text-right">{stamp.csid}</span>
+              <span className="font-mono text-xs break-all text-right">
+                {stamp.csid}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -1438,7 +1503,8 @@ export function InvoiceDetail() {
         <Card className="border-destructive/30 bg-destructive/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base text-destructive">
-              <AlertTriangle className="w-4 h-4" aria-hidden="true" /> Submission failed
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" />{" "}
+              Submission failed
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -1454,15 +1520,17 @@ export function InvoiceDetail() {
                 </div>
                 {errorCode && (
                   <p className="text-xs text-muted-foreground">
-                    Reference code: <span className="font-mono">{errorCode}</span>
+                    Reference code:{" "}
+                    <span className="font-mono">{errorCode}</span>
                     {catalogue.retriable ? " · retriable" : " · not retriable"}
                   </p>
                 )}
               </>
             ) : (
               <p className="text-muted-foreground">
-                This invoice was rejected{errorCode ? ` (code ${errorCode})` : ""}. Escalate to your
-                firm for hands-on help.
+                This invoice was rejected
+                {errorCode ? ` (code ${errorCode})` : ""}. Escalate to your firm
+                for hands-on help.
               </p>
             )}
 
@@ -1476,7 +1544,9 @@ export function InvoiceDetail() {
                     <p className="font-medium">Clerk&apos;s explanation</p>
                     <span
                       className={pillClasses(
-                        explainFailure.data.source === "clerk" ? "blue" : "slate",
+                        explainFailure.data.source === "clerk"
+                          ? "blue"
+                          : "slate",
                       )}
                     >
                       {explainFailure.data.source === "clerk"
@@ -1498,7 +1568,9 @@ export function InvoiceDetail() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => explainFailure.mutate({ data: { invoiceId: id } })}
+                    onClick={() =>
+                      explainFailure.mutate({ data: { invoiceId: id } })
+                    }
                     disabled={explainFailure.isPending}
                     data-testid="button-explain-failure"
                   >
@@ -1509,8 +1581,8 @@ export function InvoiceDetail() {
                   </Button>
                   {explainFailure.isError && (
                     <p className="text-xs text-muted-foreground">
-                      Clerk couldn&apos;t add anything — the guidance above still
-                      applies.
+                      Clerk couldn&apos;t add anything — the guidance above
+                      still applies.
                     </p>
                   )}
                 </div>
@@ -1519,7 +1591,10 @@ export function InvoiceDetail() {
             {/* Fix & resubmit: edit the failed invoice's content in place
                 (PATCH keeps it failed), then resubmit (failed → submitted). */}
             {fix ? (
-              <div className="rounded-lg border bg-background p-3 space-y-3" data-testid="fix-form">
+              <div
+                className="rounded-lg border bg-background p-3 space-y-3"
+                data-testid="fix-form"
+              >
                 <p className="font-medium">
                   Correct the flagged details, then resubmit
                 </p>
@@ -1533,7 +1608,10 @@ export function InvoiceDetail() {
                 )}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
-                    <Label htmlFor="fix-invoice-number" className="flex items-center gap-2">
+                    <Label
+                      htmlFor="fix-invoice-number"
+                      className="flex items-center gap-2"
+                    >
                       Invoice number
                       {focus.includes("invoiceNumber") && (
                         <span className={pillClasses("amber")}>flagged</span>
@@ -1543,7 +1621,9 @@ export function InvoiceDetail() {
                       id="fix-invoice-number"
                       value={fix.invoiceNumber}
                       onChange={(e) =>
-                        setFix((f) => f && { ...f, invoiceNumber: e.target.value })
+                        setFix(
+                          (f) => f && { ...f, invoiceNumber: e.target.value },
+                        )
                       }
                       className="mt-1"
                     />
@@ -1554,7 +1634,10 @@ export function InvoiceDetail() {
                     )}
                   </div>
                   <div>
-                    <Label htmlFor="fix-issue-date" className="flex items-center gap-2">
+                    <Label
+                      htmlFor="fix-issue-date"
+                      className="flex items-center gap-2"
+                    >
                       Issue date
                       {focus.includes("invoice") && (
                         <span className={pillClasses("amber")}>flagged</span>
@@ -1601,13 +1684,22 @@ export function InvoiceDetail() {
                       index={i}
                       line={line}
                       onPatch={(patch) =>
-                        setFix((f) => f && { ...f, lines: updateLineAt(f.lines, i, patch) })
+                        setFix(
+                          (f) =>
+                            f && {
+                              ...f,
+                              lines: updateLineAt(f.lines, i, patch),
+                            },
+                        )
                       }
                       removable={fix.lines.length > 1}
                       onRemove={() =>
                         setFix(
                           (f) =>
-                            f && { ...f, lines: f.lines.filter((_, j) => j !== i) },
+                            f && {
+                              ...f,
+                              lines: f.lines.filter((_, j) => j !== i),
+                            },
                         )
                       }
                       errors={
@@ -1626,13 +1718,19 @@ export function InvoiceDetail() {
                     variant="ghost"
                     size="sm"
                     onClick={() =>
-                      setFix((f) => f && { ...f, lines: [...f.lines, emptyLine()] })
+                      setFix(
+                        (f) => f && { ...f, lines: [...f.lines, emptyLine()] },
+                      )
                     }
                   >
-                    <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add line
+                    <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add
+                    line
                   </Button>
                   <p className="text-right text-muted-foreground tabular-nums">
-                    Total {formatNaira(lineTotals(fix.lines).net + lineTotals(fix.lines).vat)}
+                    Total{" "}
+                    {formatNaira(
+                      lineTotals(fix.lines).net + lineTotals(fix.lines).vat,
+                    )}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -1661,13 +1759,22 @@ export function InvoiceDetail() {
             {!showEscalate ? (
               <div className="flex flex-wrap gap-2">
                 {!fix && (
-                  <Button size="sm" onClick={openFix} data-testid="button-open-fix">
+                  <Button
+                    size="sm"
+                    onClick={openFix}
+                    data-testid="button-open-fix"
+                  >
                     <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Fix &
                     resubmit
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={() => setShowEscalate(true)}>
-                  <LifeBuoy className="w-4 h-4 mr-2" aria-hidden="true" /> Escalate to my firm
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowEscalate(true)}
+                >
+                  <LifeBuoy className="w-4 h-4 mr-2" aria-hidden="true" />{" "}
+                  Escalate to my firm
                 </Button>
               </div>
             ) : (
@@ -1682,10 +1789,18 @@ export function InvoiceDetail() {
                   onChange={(e) => setReason(e.target.value)}
                 />
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleEscalate} disabled={escalate.isPending || !reason.trim()}>
+                  <Button
+                    size="sm"
+                    onClick={handleEscalate}
+                    disabled={escalate.isPending || !reason.trim()}
+                  >
                     {escalate.isPending ? "Sending…" : "Send to firm"}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowEscalate(false)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowEscalate(false)}
+                  >
                     Cancel
                   </Button>
                 </div>
@@ -1701,7 +1816,10 @@ export function InvoiceDetail() {
         </CardHeader>
         <CardContent className="space-y-2">
           {data?.lines.map((l) => (
-            <div key={l.id} className="flex justify-between text-sm border-b last:border-0 py-2">
+            <div
+              key={l.id}
+              className="flex justify-between text-sm border-b last:border-0 py-2"
+            >
               <div>
                 <p className="font-medium">{l.description}</p>
                 <p className="text-muted-foreground text-xs">
@@ -1716,7 +1834,9 @@ export function InvoiceDetail() {
           ))}
           <div className="flex justify-between pt-2 font-semibold">
             <span>Total</span>
-            <span className="tabular-nums">{formatNaira(invoice.grandTotal)}</span>
+            <span className="tabular-nums">
+              {formatNaira(invoice.grandTotal)}
+            </span>
           </div>
         </CardContent>
       </Card>

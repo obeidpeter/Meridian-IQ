@@ -2,8 +2,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "@workspace/db";
 import {
-  isLoginThrottled,
-  recordLoginFailure,
+  throttleLoginCredentials,
   clearLoginFailures,
   isActionThrottled,
   recordActionFailure,
@@ -20,33 +19,40 @@ const SALT = makeRunSalt();
 // Minimal Request stand-ins: only req.ip / req.socket.remoteAddress are read.
 function reqFrom(ip: string) {
   return { ip, socket: { remoteAddress: ip } } as unknown as Parameters<
-    typeof isLoginThrottled
+    typeof throttleLoginCredentials
   >[0];
 }
 
 before(async () => {
   // Ensure a clean slate for this run's keys (defensive; salt already isolates).
-  await pool.query("DELETE FROM login_attempts WHERE key LIKE $1", [`%${SALT}%`]);
+  await pool.query("DELETE FROM login_attempts WHERE key LIKE $1", [
+    `%${SALT}%`,
+  ]);
 });
 
 test("per email+IP: throttles after 5 failures from one source", async () => {
   const email = `ipcap-${SALT}@test.local`;
   const req = reqFrom("203.0.113.10");
   for (let i = 0; i < 5; i++) {
-    assert.equal(await isLoginThrottled(req, email), null, `attempt ${i} allowed`);
-    await recordLoginFailure(req, email);
+    assert.equal(
+      await throttleLoginCredentials(req, email),
+      null,
+      `attempt ${i + 1} allowed`,
+    );
   }
-  const wait = await isLoginThrottled(req, email);
+  const wait = await throttleLoginCredentials(req, email);
   assert.ok(wait !== null && wait > 0, "6th attempt from same IP is throttled");
 });
 
 test("a successful login clears the counters for that key", async () => {
   const email = `clear-${SALT}@test.local`;
   const req = reqFrom("203.0.113.20");
-  for (let i = 0; i < 5; i++) await recordLoginFailure(req, email);
-  assert.ok((await isLoginThrottled(req, email)) !== null);
+  for (let i = 0; i < 5; i++) {
+    assert.equal(await throttleLoginCredentials(req, email), null);
+  }
+  assert.ok((await throttleLoginCredentials(req, email)) !== null);
   await clearLoginFailures(req, email);
-  assert.equal(await isLoginThrottled(req, email), null);
+  assert.equal(await throttleLoginCredentials(req, email), null);
 });
 
 test("per-account cap holds across many distinct source IPs (distributed stuffing)", async () => {
@@ -55,10 +61,12 @@ test("per-account cap holds across many distinct source IPs (distributed stuffin
   // (each is at 5, not over), but the account cap (50/hour) is reached.
   for (let ip = 0; ip < 10; ip++) {
     const req = reqFrom(`198.51.100.${ip}`);
-    for (let i = 0; i < 5; i++) await recordLoginFailure(req, email);
+    for (let i = 0; i < 5; i++) {
+      assert.equal(await throttleLoginCredentials(req, email), null);
+    }
   }
   // A fresh IP that has never failed is still blocked by the account counter.
-  const freshWait = await isLoginThrottled(reqFrom("192.0.2.1"), email);
+  const freshWait = await throttleLoginCredentials(reqFrom("192.0.2.1"), email);
   assert.ok(
     freshWait !== null && freshWait > 0,
     "account cap blocks even an unseen IP",
@@ -66,12 +74,12 @@ test("per-account cap holds across many distinct source IPs (distributed stuffin
 });
 
 test("failures persist independently of a rolled-back request (raw pool write)", async () => {
-  // recordLoginFailure uses pool.query directly, so the row exists immediately
-  // and is visible to a separate read — the property that survives the login
-  // route's 4xx transaction rollback.
+  // The reservation uses the raw pool, so the row exists immediately and is
+  // visible to a separate read — the property that survives the login route's
+  // 4xx transaction rollback.
   const email = `persist-${SALT}@test.local`;
   const req = reqFrom("203.0.113.30");
-  await recordLoginFailure(req, email);
+  await throttleLoginCredentials(req, email);
   const { rows } = await pool.query(
     "SELECT count FROM login_attempts WHERE key = $1",
     [`${email}|203.0.113.30`],
@@ -80,18 +88,40 @@ test("failures persist independently of a rolled-back request (raw pool write)",
   assert.equal(Number(rows[0].count), 1);
 });
 
+test("concurrent credential attempts cannot overshoot the per-IP cap", async () => {
+  const email = `race-${SALT}@test.local`;
+  const req = reqFrom("203.0.113.40");
+  const waits = await Promise.all(
+    Array.from({ length: 12 }, () => throttleLoginCredentials(req, email)),
+  );
+  assert.equal(
+    waits.filter((wait) => wait === null).length,
+    5,
+    "exactly the first five atomic reservations are admitted",
+  );
+  assert.equal(waits.filter((wait) => wait !== null).length, 7);
+});
+
 test("action throttle: caps a namespaced key after 5 failures; clearing resets", async () => {
   // The generic single-key variant used by the change-password credential
   // check (key chpw:<userId>): same table, same raw-pool survival property.
   const key = `chpw:test-${SALT}`;
   for (let i = 0; i < 4; i++) {
     await recordActionFailure(key);
-    assert.equal(await isActionThrottled(key), null, `attempt ${i + 1} still allowed`);
+    assert.equal(
+      await isActionThrottled(key),
+      null,
+      `attempt ${i + 1} still allowed`,
+    );
   }
   await recordActionFailure(key);
   const wait = await isActionThrottled(key);
   assert.ok(wait !== null && wait > 0, "fifth failure trips the cap");
 
   await clearActionFailures(key);
-  assert.equal(await isActionThrottled(key), null, "success clears the counter");
+  assert.equal(
+    await isActionThrottled(key),
+    null,
+    "success clears the counter",
+  );
 });

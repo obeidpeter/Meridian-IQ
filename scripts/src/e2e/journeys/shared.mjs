@@ -4,7 +4,15 @@
 // index.mjs runs them in the load-bearing order (journeys mutate shared seed
 // state, so the run order is part of the contract).
 
-const DEMO_PASSWORD = "meridian2027";
+const DEMO_PASSWORD = "meridian-e2e-2027!";
+
+const DEMO_EMAIL_BY_TEST_ID = {
+  "button-demo-ops": "ops@meridianiq.example",
+  "button-demo-demo.admin": "demo.admin@meridianiq.example",
+  "button-demo-audit": "audit@meridianiq.example",
+  "button-demo-owner": "owner@adaezefoods.example",
+  "button-demo-demo.staff": "demo.staff@meridianiq.example",
+};
 
 // Every state-changing page.request call presents the CSRF marker header.
 const CSRF = { "x-meridian-csrf": "1" };
@@ -14,17 +22,15 @@ const CSRF = { "x-meridian-csrf": "1" };
 const DEMO_CLIENT_PARTY_ID = "22222222-2222-4222-8222-222222222222";
 const DEMO_CLIENT_PARTY_PREFIX = DEMO_CLIENT_PARTY_ID.slice(0, 8);
 
-export {
-  DEMO_PASSWORD,
-  CSRF,
-  DEMO_CLIENT_PARTY_ID,
-  DEMO_CLIENT_PARTY_PREFIX,
-};
-
+export { DEMO_PASSWORD, CSRF, DEMO_CLIENT_PARTY_ID, DEMO_CLIENT_PARTY_PREFIX };
 
 export async function signIn(page, BASE, demoTestId, waitUrl) {
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
-  await page.getByTestId(demoTestId).click();
+  const email = DEMO_EMAIL_BY_TEST_ID[demoTestId];
+  if (!email) throw new Error(`Unknown E2E identity ${demoTestId}`);
+  await page.getByTestId("input-email").fill(email);
+  await page.getByTestId("input-password").fill(DEMO_PASSWORD);
+  await page.getByTestId("button-sign-in").click();
   await page.waitForURL(waitUrl, { timeout: 20000 });
 }
 

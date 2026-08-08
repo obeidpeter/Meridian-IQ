@@ -75,19 +75,21 @@ async function seedBill(input: {
   dueDate: string | null;
 }): Promise<string> {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId: firmA,
-    supplierPartyId: vendorParty,
-    buyerPartyId: input.buyerPartyId,
-    invoiceNumber: input.invoiceNumber,
-    status: "draft",
-    issueDate: dateOffset(-4),
-    dueDate: input.dueDate,
-    grandTotal: input.grandTotal,
-    subtotal: input.grandTotal,
-    vatTotal: "0.00",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId: firmA,
+      supplierPartyId: vendorParty,
+      buyerPartyId: input.buyerPartyId,
+      invoiceNumber: input.invoiceNumber,
+      status: "draft",
+      issueDate: dateOffset(-4),
+      dueDate: input.dueDate,
+      grandTotal: input.grandTotal,
+      subtotal: input.grandTotal,
+      vatTotal: "0.00",
+    });
   return id;
 }
 
@@ -142,9 +144,24 @@ before(async () => {
     },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId: firmA, clientPartyId: clientParty, type: "retainer", title: `bills A ${SALT}` },
-    { firmId: firmA, clientPartyId: siblingParty, type: "retainer", title: `bills B ${SALT}` },
-    { firmId: firmA, clientPartyId: summaryClient, type: "retainer", title: `bills C ${SALT}` },
+    {
+      firmId: firmA,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `bills A ${SALT}`,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `bills B ${SALT}`,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: summaryClient,
+      type: "retainer",
+      title: `bills C ${SALT}`,
+    },
   ]);
   // Layer-1 consent so the RECEIVABLE control invoice can submit.
   await db.insert(consentRecordsTable).values({
@@ -220,7 +237,12 @@ before(async () => {
       invoiceNumber: `RECV-${SALT}`,
       issueDate: dateOffset(-1),
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     adminId,
@@ -309,7 +331,10 @@ test("payer flags record evidence and flip the derived payStatus without any tra
   const listStatus = async (id: string) => {
     const res = await fetch(`${base}/bills?clientPartyId=${clientParty}`);
     assert.equal(res.status, 200);
-    const rows = (await res.json()) as { invoiceId: string; payStatus: string }[];
+    const rows = (await res.json()) as {
+      invoiceId: string;
+      payStatus: string;
+    }[];
     return rows.find((r) => r.invoiceId === id)?.payStatus;
   };
 
@@ -338,6 +363,22 @@ test("payer flags record evidence and flip the derived payStatus without any tra
   assert.equal(scheduledBody.paymentStatus, "scheduled");
   assert.equal(scheduledBody.amount, "150.00", "defaults to the grand total");
   assert.equal(await listStatus(billFlagId), "scheduled");
+
+  const partialPaid = await fetch(`${base}/bills/${billFlagId}/payment-flag`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ status: "paid", amount: "149.99" }),
+  });
+  assert.equal(partialPaid.status, 400);
+  assert.match(
+    ((await partialPaid.json()) as { error: string }).error,
+    /cover the invoice total/,
+  );
+  assert.equal(
+    await listStatus(billFlagId),
+    "scheduled",
+    "a partial paid flag cannot remove the bill from payables",
+  );
 
   const paid = await fetch(`${base}/bills/${billFlagId}/payment-flag`, {
     method: "POST",
@@ -452,7 +493,11 @@ test("the payables summary buckets unpaid bills by due date with top suppliers",
     [1, 1, 0, 0],
     "due +2 is week 0, due +9 is week 1",
   );
-  assert.deepEqual(g.later, { amount: "800.00", count: 1 }, "no due date -> later");
+  assert.deepEqual(
+    g.later,
+    { amount: "800.00", count: 1 },
+    "no due date -> later",
+  );
   assert.equal(summary.topSuppliers.length, 1);
   assert.equal(summary.topSuppliers[0].supplierName, `Bills Vendor ${SALT}`);
   assert.equal(summary.topSuppliers[0].amount, "1500.00");

@@ -215,6 +215,7 @@ jobs:
           BASE_PATH=/console/ PORT=3000 pnpm --filter @workspace/console run build
           BASE_PATH=/app/ PORT=3000 pnpm --filter @workspace/sme-compliance run build
           BASE_PATH=/buyer/ PORT=3000 pnpm --filter @workspace/buyer-portal run build
+          BASE_PATH=/penalty-calculator/ PORT=3000 pnpm --filter @workspace/penalty-calculator run build
 
       - name: Push schema
         run: pnpm --filter @workspace/db run push

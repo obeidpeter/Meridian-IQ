@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
+import { takeQuerySecret } from "@/lib/query-secret";
 
 // Password recovery (IDN-02), mirroring the accept-invite page: the link an
 // operator issues carries a single-use token; redeeming it sets a new password
@@ -47,7 +48,7 @@ function ResetShell({ children }: { children: React.ReactNode }) {
 
 export function ResetPassword() {
   const reset = useResetPassword();
-  const token = new URLSearchParams(window.location.search).get("token");
+  const [token] = useState(() => takeQuerySecret("token"));
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -199,16 +200,17 @@ export function ResetPassword() {
               className="flex items-start gap-2 text-sm text-destructive"
               data-testid="text-reset-error"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <AlertCircle
+                className="mt-0.5 h-4 w-4 shrink-0"
+                aria-hidden="true"
+              />
               {error}
             </p>
           )}
           <Button
             type="submit"
             className="w-full"
-            disabled={
-              reset.isPending || password.length < 8 || !passwordsMatch
-            }
+            disabled={reset.isPending || password.length < 8 || !passwordsMatch}
             data-testid="button-set-password"
           >
             {reset.isPending ? (

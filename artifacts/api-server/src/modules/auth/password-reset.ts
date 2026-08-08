@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, lt, ne, or } from "drizzle-orm";
+import { and, eq, lt, ne, or, sql } from "drizzle-orm";
 import {
   getDb,
   passwordResetsTable,
@@ -61,28 +61,44 @@ export async function createPasswordReset(
     throw new DomainError("USER_NOT_FOUND", "No account with that email", 404);
   }
 
-  // Issuing a new reset supersedes any still-pending one for the same user, so
-  // exactly one live link exists per account at a time.
-  await getDb()
-    .update(passwordResetsTable)
-    .set({ status: "revoked" })
-    .where(
-      and(
-        eq(passwordResetsTable.userId, user.id),
-        eq(passwordResetsTable.status, "pending"),
-      ),
-    );
-
   const token = randomBytes(32).toString("hex");
-  const [row] = await getDb()
-    .insert(passwordResetsTable)
-    .values({
-      userId: user.id,
-      tokenHash: hashInviteToken(token),
-      expiresAt: new Date(Date.now() + RESET_TTL_MS),
-      issuedByUserId: principal.userId,
-    })
-    .returning();
+  const values = {
+    userId: user.id,
+    tokenHash: hashInviteToken(token),
+    expiresAt: new Date(Date.now() + RESET_TTL_MS),
+    issuedByUserId: principal.userId,
+  };
+  let row: typeof passwordResetsTable.$inferSelect | undefined;
+  // Serialize production request transactions without locking the user row:
+  // redemption may already hold the reset row before updating that user, so a
+  // user-row-first order here would create a deadlock cycle. The partial unique
+  // index and retry remain the backstop for direct calls without an ambient tx.
+  await getDb().execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`password-reset-issue:${user.id}`}, 0))`,
+  );
+  for (let attempt = 0; attempt < 3 && !row; attempt++) {
+    await getDb()
+      .update(passwordResetsTable)
+      .set({ status: "revoked" })
+      .where(
+        and(
+          eq(passwordResetsTable.userId, user.id),
+          eq(passwordResetsTable.status, "pending"),
+        ),
+      );
+    [row] = await getDb()
+      .insert(passwordResetsTable)
+      .values(values)
+      .onConflictDoNothing()
+      .returning();
+  }
+  if (!row) {
+    throw new DomainError(
+      "RESET_ISSUE_CONFLICT",
+      "A reset link is already being issued for this account",
+      409,
+    );
+  }
   await appendAudit({
     actorId: principal.userId,
     actorRole: principal.role,
@@ -128,19 +144,16 @@ export async function resetPassword(
   // Set the new password and bump the session epoch: every previously-issued
   // session token carries the old epoch and stops resolving (SEC-02) — the
   // reset doubles as compromise remediation.
+  const passwordHash = await hashPassword(password);
   const [user] = await getDb()
-    .select({ sessionEpoch: usersTable.sessionEpoch })
-    .from(usersTable)
-    .where(eq(usersTable.id, reset.userId))
-    .limit(1);
-  if (!user) throw invalid();
-  await getDb()
     .update(usersTable)
     .set({
-      passwordHash: await hashPassword(password),
-      sessionEpoch: user.sessionEpoch + 1,
+      passwordHash,
+      sessionEpoch: sql`${usersTable.sessionEpoch} + 1`,
     })
-    .where(eq(usersTable.id, reset.userId));
+    .where(eq(usersTable.id, reset.userId))
+    .returning({ id: usersTable.id });
+  if (!user) throw invalid();
 
   await appendAudit({
     actorId: reset.userId,

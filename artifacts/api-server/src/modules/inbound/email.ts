@@ -102,16 +102,15 @@ export async function resolveInboundSender(
   });
 }
 
-// The whole post-response pipeline, exported so tests can await it directly;
-// the route calls it detached (.catch(logger.error)) AFTER responding 202.
+// The outbox worker's processing pipeline, exported so tests can invoke it
+// directly. The route returns 202 only after its durable queue write commits.
 // Nothing in here may throw for a per-attachment problem: an exhausted
 // budget, a duplicate redelivery (providers redeliver on timeout) or an
 // oversized file is an audit-skip, and the remaining attachments still
 // process. The unresolvable-sender path is handled here too, so the route's
 // response can never depend on resolution. Bounded by the shared inbound
-// semaphore: at most two inbound messages (across BOTH rails) process at
-// once, the rest queue in-process (the caller's 202 already went out either
-// way).
+// semaphore: at most two inbound messages (across BOTH rails) process at once;
+// the durable outbox retains the rest until a worker can claim them.
 export async function processInboundEmail(
   input: InboundEmailInput,
   gateway?: ClerkGateway,

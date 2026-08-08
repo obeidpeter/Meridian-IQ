@@ -1,6 +1,7 @@
 import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
 import {
   getDb,
+  pool,
   runInBypassContext,
   outboxTable,
   invoicesTable,
@@ -51,7 +52,10 @@ type HandlerOutcome =
 // per-branch audit stay with the caller.
 async function markInvoiceFailed(
   invoiceId: string,
-  invoice: { firmId: string; status: (typeof invoicesTable.$inferSelect)["status"] },
+  invoice: {
+    firmId: string;
+    status: (typeof invoicesTable.$inferSelect)["status"];
+  },
   reason: string,
 ): Promise<void> {
   await getDb()
@@ -86,21 +90,23 @@ async function handleInvoiceSubmit(
   const attemptNo = event.attempts + 1;
   const { result } = await submitWithFailover(canonical, idempotencyKey);
 
-  await getDb().insert(submissionAttemptsTable).values({
-    invoiceId,
-    rail: result.rail,
-    attemptNo,
-    idempotencyKey,
-    status:
-      result.status === "accepted"
-        ? "accepted"
-        : result.status === "rejected"
-          ? "rejected"
-          : "error",
-    requestPayload: { invoiceNumber: invoice.invoiceNumber },
-    responsePayload: result.raw,
-    errorCode: result.errorCode ?? null,
-  });
+  await getDb()
+    .insert(submissionAttemptsTable)
+    .values({
+      invoiceId,
+      rail: result.rail,
+      attemptNo,
+      idempotencyKey,
+      status:
+        result.status === "accepted"
+          ? "accepted"
+          : result.status === "rejected"
+            ? "rejected"
+            : "error",
+      requestPayload: { invoiceNumber: invoice.invoiceNumber },
+      responsePayload: result.raw,
+      errorCode: result.errorCode ?? null,
+    });
 
   if (result.status === "accepted") {
     // Idempotent stamp write (INT-09): the unique(invoiceId) constraint plus
@@ -232,12 +238,14 @@ async function creditOriginal(
     entityId: originalId,
     after: { adjustmentId },
   });
-  await getDb().insert(outboxTable).values({
-    aggregateType: "invoice",
-    aggregateId: originalId,
-    type: "invoice.lifecycle_changed",
-    payload: { invoiceId: originalId, toStatus: "credited" },
-  });
+  await getDb()
+    .insert(outboxTable)
+    .values({
+      aggregateType: "invoice",
+      aggregateId: originalId,
+      type: "invoice.lifecycle_changed",
+      payload: { invoiceId: originalId, toStatus: "credited" },
+    });
 }
 
 // CORE-09 propagation: when an invoice leaves the eligible set (cancelled or
@@ -282,10 +290,7 @@ async function handleLifecycleChanged(
   return { kind: "done" };
 }
 
-const HANDLERS: Record<
-  string,
-  (e: OutboxEvent) => Promise<HandlerOutcome>
-> = {
+const HANDLERS: Record<string, (e: OutboxEvent) => Promise<HandlerOutcome>> = {
   "invoice.submit": handleInvoiceSubmit,
   "invoice.lifecycle_changed": handleLifecycleChanged,
 };
@@ -314,7 +319,9 @@ async function claimnext(): Promise<OutboxEvent | null> {
     )
     RETURNING *
   `);
-  const list = (rows as unknown as { rows?: OutboxEvent[] }).rows ?? (rows as unknown as OutboxEvent[]);
+  const list =
+    (rows as unknown as { rows?: OutboxEvent[] }).rows ??
+    (rows as unknown as OutboxEvent[]);
   return list[0] ?? null;
 }
 
@@ -353,9 +360,15 @@ async function processOne(): Promise<boolean> {
       }
       const attempts = event.attempts + 1;
       if (outcome.kind === "done") {
+        const containsInboundPayload = event.type.startsWith("inbound.");
         await getDb()
           .update(outboxTable)
-          .set({ status: "done", attempts, lockedAt: null })
+          .set({
+            status: "done",
+            attempts,
+            lockedAt: null,
+            ...(containsInboundPayload ? { payload: { redacted: true } } : {}),
+          })
           .where(eq(outboxTable.id, event.id));
       } else if (outcome.kind === "dead") {
         await getDb()
@@ -493,12 +506,14 @@ export async function reconcile(): Promise<number> {
         )
         .limit(1);
       if (live) continue;
-      await getDb().insert(outboxTable).values({
-        aggregateType: "invoice",
-        aggregateId: row.id,
-        type: "invoice.submit",
-        payload: { invoiceId: row.id },
-      });
+      await getDb()
+        .insert(outboxTable)
+        .values({
+          aggregateType: "invoice",
+          aggregateId: row.id,
+          type: "invoice.submit",
+          payload: { invoiceId: row.id },
+        });
       requeued++;
     }
     return requeued;
@@ -549,19 +564,29 @@ export async function replayDead(outboxId: string): Promise<void> {
   await runInBypassContext(async () => {
     await getDb()
       .update(outboxTable)
-      .set({ status: "pending", attempts: 0, nextAttemptAt: new Date(), lastError: null })
+      .set({
+        status: "pending",
+        attempts: 0,
+        nextAttemptAt: new Date(),
+        lastError: null,
+      })
       .where(and(eq(outboxTable.id, outboxId), eq(outboxTable.status, "dead")));
   });
 }
 
 export async function listDeadLetters(): Promise<OutboxEvent[]> {
-  return runInBypassContext(() =>
-    getDb()
+  return runInBypassContext(async () => {
+    const rows = await getDb()
       .select()
       .from(outboxTable)
       .where(eq(outboxTable.status, "dead"))
-      .orderBy(asc(outboxTable.createdAt)),
-  );
+      .orderBy(asc(outboxTable.createdAt));
+    return rows.map((row) =>
+      row.type === "inbound.email" || row.type === "inbound.whatsapp"
+        ? { ...row, payload: { redacted: true } }
+        : row,
+    );
+  });
 }
 
 let timer: NodeJS.Timeout | null = null;
@@ -622,6 +647,48 @@ let draining = false;
 let reconciling = false;
 let sweeping = false;
 
+async function withDistributedLock<T>(
+  lockId: number,
+  task: () => Promise<T>,
+): Promise<{ acquired: boolean; value?: T }> {
+  const client = await pool.connect();
+  let acquired = false;
+  let taskError: unknown;
+  let releaseError: Error | undefined;
+  try {
+    const result = await client.query<{ acquired: boolean }>(
+      "SELECT pg_try_advisory_lock($1) AS acquired",
+      [lockId],
+    );
+    acquired = result.rows[0]?.acquired === true;
+    if (!acquired) return { acquired: false };
+    return { acquired: true, value: await task() };
+  } catch (error) {
+    taskError = error;
+    throw error;
+  } finally {
+    if (acquired) {
+      try {
+        const result = await client.query<{ unlocked: boolean }>(
+          "SELECT pg_advisory_unlock($1) AS unlocked",
+          [lockId],
+        );
+        if (result.rows[0]?.unlocked !== true) {
+          throw new Error("Pipeline advisory lock was not held at release");
+        }
+      } catch (error) {
+        releaseError =
+          error instanceof Error ? error : new Error(String(error));
+        logger.error({ err: releaseError, lockId }, "advisory unlock failed");
+      }
+    }
+    // Destroy a session whose unlock failed so a session-level lock cannot be
+    // returned to the pool and strand all future sweep attempts.
+    client.release(releaseError);
+    if (!taskError && releaseError) throw releaseError;
+  }
+}
+
 // The guarded pass bodies shared by the interval loops (startWorker) and the
 // external wake-up trigger (runScheduledWorkOnce). Each skips — never overlaps
 // — when its prior run is still in flight, isolates its own errors (logged,
@@ -631,8 +698,8 @@ async function guardedSweepPass(): Promise<boolean> {
   if (sweeping) return false;
   sweeping = true;
   try {
-    await runSweepPass();
-    return true;
+    const result = await withDistributedLock(991_102, runSweepPass);
+    return result.acquired;
   } finally {
     sweeping = false;
   }
@@ -666,12 +733,14 @@ async function guardedReconcilePass(): Promise<boolean> {
   if (reconciling) return false;
   reconciling = true;
   try {
-    await reconcile();
-    if (Date.now() - lastDuplicateStampSweep >= DUPLICATE_STAMP_INTERVAL_MS) {
-      lastDuplicateStampSweep = Date.now();
-      await reconcileDuplicateStamps();
-    }
-    return true;
+    const result = await withDistributedLock(991_103, async () => {
+      await reconcile();
+      if (Date.now() - lastDuplicateStampSweep >= DUPLICATE_STAMP_INTERVAL_MS) {
+        lastDuplicateStampSweep = Date.now();
+        await reconcileDuplicateStamps();
+      }
+    });
+    return result.acquired;
   } catch (err) {
     logger.error({ err }, "pipeline reconcile sweep failed");
     return false;

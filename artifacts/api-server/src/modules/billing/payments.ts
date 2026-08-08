@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
+  runRequestContext,
   paymentIntentsTable,
   type PaymentIntent,
 } from "@workspace/db";
@@ -9,9 +10,9 @@ import { computeBillingStatement } from "../invoice/billing-statement";
 import { closedLagosMonths } from "../clerk/vat-pack";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
-import { isUniqueViolation } from "../../lib/pg-errors";
 import type { Principal } from "../auth/rbac";
 import { initProviderPayment } from "./provider";
+import { withProviderOperationLock } from "../../lib/provider-operation-lock";
 
 // Payment collection seam (Paystack-shaped, dark by default): a firm pays the
 // platform bill the billing statement already shows it. The amount is NEVER a
@@ -30,6 +31,7 @@ export async function createPaymentIntent(
   firmId: string,
   monthStart: string,
   actor: Principal,
+  signal?: AbortSignal,
 ): Promise<PaymentIntent> {
   // Closed-month discipline (the resolveClosedPeriod idiom): only a month on
   // the billing statement's own option list can be paid — the fee for an
@@ -43,80 +45,150 @@ export async function createPaymentIntent(
     );
   }
 
-  // The EXISTING fee core: tier + metered usage → base + overage, 2dp naira.
-  const statement = await computeBillingStatement(firmId, monthStart);
-  const amountNgn = statement.fee.total;
-  if (!(Number(amountNgn) > 0)) {
-    throw new DomainError(
-      "ZERO_FEE",
-      `Nothing to collect for ${statement.monthLabel}: the computed fee is ${amountNgn}`,
-      400,
-    );
-  }
-
-  // Friendly duplicate refusal BEFORE the provider is involved, so the
-  // common case never mints an orphan provider reference. The partial
-  // unique index below remains the race-proof wall.
-  const [live] = await getDb()
-    .select({ id: paymentIntentsTable.id })
-    .from(paymentIntentsTable)
-    .where(
-      and(
-        eq(paymentIntentsTable.firmId, firmId),
-        eq(paymentIntentsTable.monthStart, monthStart),
-        inArray(paymentIntentsTable.status, [...LIVE_STATUSES]),
-      ),
-    )
-    .limit(1);
-  if (live) {
-    throw new DomainError(
-      "DUPLICATE_INTENT",
-      `A live payment intent already exists for ${statement.monthLabel}`,
-      409,
-    );
-  }
-
-  const init = await initProviderPayment({ firmId, monthStart, amountNgn });
-
-  let row: PaymentIntent;
-  try {
-    [row] = await getDb()
-      .insert(paymentIntentsTable)
-      .values({
-        firmId,
-        monthStart,
-        amountNgn,
-        status: "pending",
-        providerRef: init.providerRef,
-        checkoutUrl: init.checkoutUrl,
-      })
-      .returning();
-  } catch (err) {
-    // A concurrent create lost the race to the one-live-intent index: the
-    // same 409 the pre-check gives. The 4xx rollback rule unwinds this
-    // request's work; the survivor's intent stands.
-    if (isUniqueViolation(err)) {
-      throw new DomainError(
-        "DUPLICATE_INTENT",
-        `A live payment intent already exists for ${statement.monthLabel}`,
-        409,
+  return withProviderOperationLock(
+    `billing:${firmId}:${monthStart}`,
+    async () => {
+      // The EXISTING fee core: tier + metered usage → base + overage, 2dp naira.
+      const inFirmScope = <T>(fn: () => Promise<T>) =>
+        runRequestContext({ bypass: false, firmId }, fn);
+      const statement = await inFirmScope(() =>
+        computeBillingStatement(firmId, monthStart),
       );
-    }
-    throw err;
-  }
+      const amountNgn = statement.fee.total;
+      if (!(Number(amountNgn) > 0)) {
+        throw new DomainError(
+          "ZERO_FEE",
+          `Nothing to collect for ${statement.monthLabel}: the computed fee is ${amountNgn}`,
+          400,
+        );
+      }
 
-  // Pointer-only audit (never amounts): the intent row itself carries the
-  // figures for whoever is entitled to read them.
-  await appendAudit({
-    actorId: actor.userId,
-    actorRole: actor.role,
-    firmId,
-    action: "billing.payment_intent.created",
-    entityType: "payment_intent",
-    entityId: row.id,
-    after: { status: row.status, monthStart: row.monthStart },
-  });
-  return row;
+      // Friendly duplicate refusal BEFORE the provider is involved, so the
+      // common case never mints an orphan provider reference. The partial
+      // unique index below remains the race-proof wall.
+      const reservation = await inFirmScope(async () => {
+        const [history] = await getDb()
+          .select({ count: sql<number>`count(*)::int` })
+          .from(paymentIntentsTable)
+          .where(
+            and(
+              eq(paymentIntentsTable.firmId, firmId),
+              eq(paymentIntentsTable.monthStart, monthStart),
+            ),
+          );
+        const priorCount = Number(history?.count ?? 0);
+        const [live] = await getDb()
+          .select()
+          .from(paymentIntentsTable)
+          .where(
+            and(
+              eq(paymentIntentsTable.firmId, firmId),
+              eq(paymentIntentsTable.monthStart, monthStart),
+              inArray(paymentIntentsTable.status, [...LIVE_STATUSES]),
+            ),
+          )
+          .limit(1);
+        if (live) {
+          if (live.status === "pending" && live.providerRef === null) {
+            // The reservation freezes the provider payload. Repricing a retry
+            // under the same idempotency key could make a provider return an old
+            // transaction for a new amount or reject the request as conflicting.
+            return { row: live, attemptNo: priorCount };
+          }
+          throw new DomainError(
+            "DUPLICATE_INTENT",
+            `A live payment intent already exists for ${statement.monthLabel}`,
+            409,
+          );
+        }
+
+        const [created] = await getDb()
+          .insert(paymentIntentsTable)
+          .values({
+            firmId,
+            monthStart,
+            amountNgn,
+            status: "pending",
+            providerRef: null,
+            checkoutUrl: null,
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (created) return { row: created, attemptNo: priorCount + 1 };
+        const [winner] = await getDb()
+          .select()
+          .from(paymentIntentsTable)
+          .where(
+            and(
+              eq(paymentIntentsTable.firmId, firmId),
+              eq(paymentIntentsTable.monthStart, monthStart),
+              inArray(paymentIntentsTable.status, [...LIVE_STATUSES]),
+            ),
+          )
+          .limit(1);
+        if (winner?.status === "pending" && winner.providerRef === null) {
+          return { row: winner, attemptNo: priorCount + 1 };
+        }
+        throw new DomainError(
+          "DUPLICATE_INTENT",
+          `A live payment intent already exists for ${statement.monthLabel}`,
+          409,
+        );
+      });
+
+      const init = await initProviderPayment(
+        {
+          firmId,
+          monthStart,
+          amountNgn: reservation.row.amountNgn,
+          idempotencyKey: `billing:${firmId}:${monthStart}:${reservation.attemptNo}`,
+        },
+        signal,
+      );
+      return inFirmScope(async () => {
+        const [finalized] = await getDb()
+          .update(paymentIntentsTable)
+          .set({
+            providerRef: init.providerRef,
+            checkoutUrl: init.checkoutUrl,
+          })
+          .where(
+            and(
+              eq(paymentIntentsTable.id, reservation.row.id),
+              eq(paymentIntentsTable.status, "pending"),
+              isNull(paymentIntentsTable.providerRef),
+            ),
+          )
+          .returning();
+        if (!finalized) {
+          const [current] = await getDb()
+            .select()
+            .from(paymentIntentsTable)
+            .where(eq(paymentIntentsTable.id, reservation.row.id))
+            .limit(1);
+          if (current?.providerRef) return current;
+          throw new DomainError(
+            "PAYMENT_RESERVATION_LOST",
+            "Payment reservation is no longer available",
+            409,
+          );
+        }
+
+        // Pointer-only audit (never amounts): the intent row itself carries the
+        // figures for whoever is entitled to read them.
+        await appendAudit({
+          actorId: actor.userId,
+          actorRole: actor.role,
+          firmId,
+          action: "billing.payment_intent.created",
+          entityType: "payment_intent",
+          entityId: finalized.id,
+          after: { status: finalized.status, monthStart: finalized.monthStart },
+        });
+        return finalized;
+      });
+    },
+  );
 }
 
 // The firm's intents, newest first. Bounded far above any realistic history

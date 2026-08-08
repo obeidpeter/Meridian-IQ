@@ -8,10 +8,10 @@ import { listen, closeAllServers } from "../test-helpers/route-harness.ts";
 
 // The custom-header CSRF guard (SEC-02). It is the ONLY cross-site defense —
 // the session cookie is deliberately SameSite=None for the preview iframe —
-// so its behavior is pinned here: a cookie-authenticated state-changing
-// request without the x-meridian-csrf header must be refused, everything
-// that cannot be forged cross-site must pass. Wired exactly as app.ts does:
-// cookie-parser first (the guard reads req.cookies), guard before routes.
+// so its behavior is pinned here: every browser-facing state-changing request
+// needs the x-meridian-csrf header, including login/logout and bearer clients.
+// Dedicated machine webhooks are the only exception because their non-simple
+// token headers provide the same cross-site boundary.
 
 function guardedApp() {
   const app = express();
@@ -60,27 +60,58 @@ test("safe methods pass with a cookie and no header", async () => {
   }
 });
 
-test("requests without a session cookie pass (bearer/dev-header clients)", async () => {
+test("browser-facing mutations require the header even without a cookie", async () => {
   const base = await listen(guardedApp());
-  // No cookie at all — cannot be forged cross-site (the browser attaches
-  // nothing), and bearer tokens are attacker-unreachable headers anyway.
   const bare = await fetch(`${base}/api/invoices`, { method: "POST" });
-  assert.equal(bare.status, 200);
-  // An unrelated cookie is not the session cookie.
-  const unrelated = await fetch(`${base}/api/invoices`, {
+  assert.equal(bare.status, 403);
+
+  const bearer = await fetch(`${base}/api/invoices`, {
     method: "POST",
-    headers: { cookie: "theme=dark" },
+    headers: {
+      authorization: "Bearer test-token",
+      "x-meridian-csrf": "1",
+    },
   });
-  assert.equal(unrelated.status, 200);
+  assert.equal(bearer.status, 200);
 });
 
-test("public session endpoints stay reachable with a cookie and no header", async () => {
+test("public session endpoints still require the CSRF marker", async () => {
   const base = await listen(guardedApp());
   for (const path of ["/api/auth/login", "/api/auth/logout"]) {
-    const res = await fetch(`${base}${path}`, {
+    const missing = await fetch(`${base}${path}`, {
       method: "POST",
       headers: COOKIE,
     });
-    assert.equal(res.status, 200, `${path} is on the public allowlist`);
+    assert.equal(
+      missing.status,
+      403,
+      `${path} refuses a simple cross-site POST`,
+    );
+
+    const marked = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { ...COOKIE, "x-meridian-csrf": "1" },
+    });
+    assert.equal(marked.status, 200, `${path} accepts the first-party marker`);
+  }
+});
+
+test("token-authenticated machine webhooks are exempt", async () => {
+  const base = await listen(guardedApp());
+  for (const path of [
+    "/api/inbound/email",
+    "/api/inbound/whatsapp",
+    "/api/billing/payments/confirm",
+    "/api/collections/inbound",
+  ]) {
+    const res = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "x-op-token": "machine-secret" },
+    });
+    assert.equal(
+      res.status,
+      200,
+      `${path} uses its machine credential boundary`,
+    );
   }
 });

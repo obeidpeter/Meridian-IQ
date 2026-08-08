@@ -1,5 +1,14 @@
 import { Buffer } from "node:buffer";
-import { and, asc, desc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  notInArray,
+  or,
+} from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -223,12 +232,20 @@ export async function resolveTextSource(
 ): Promise<string> {
   if (sourceType === "text") {
     if (!input.text?.trim()) {
-      throw new DomainError("BAD_UPLOAD", "text is required for a text source", 400);
+      throw new DomainError(
+        "BAD_UPLOAD",
+        "text is required for a text source",
+        400,
+      );
     }
     return input.text; // NOT trimmed — trimming would change the stored sourceText and the duplicate-detection hash
   }
   if (!input.pdfBase64) {
-    throw new DomainError("BAD_UPLOAD", "pdfBase64 is required for a pdf source", 400);
+    throw new DomainError(
+      "BAD_UPLOAD",
+      "pdfBase64 is required for a pdf source",
+      400,
+    );
   }
   const buf = decodeBase64Checked(input.pdfBase64, "PDF");
   const text = (await extractPdfText(buf)).trim();
@@ -438,7 +455,10 @@ async function runNoticeExtraction(
       promptVersion: EXTRACT_NOTICE_PROMPT_VERSION,
       model: gateway.model,
     };
-    return { noticeExtraction, preflight: noticePreflightChecks(noticeExtraction) };
+    return {
+      noticeExtraction,
+      preflight: noticePreflightChecks(noticeExtraction),
+    };
   });
 }
 
@@ -539,7 +559,13 @@ export async function retryExtraction(
       ? await findExtractionExemplar(existing.sourceText, existing.firmId)
       : null;
   const updated = notice
-    ? await runNoticeExtraction(id, user, inputForHash, gateway, existing.firmId)
+    ? await runNoticeExtraction(
+        id,
+        user,
+        inputForHash,
+        gateway,
+        existing.firmId,
+      )
     : await runExtraction(
         id,
         user,
@@ -636,7 +662,11 @@ export async function createExtractionCase(
     user = build.scan(sourceScanPagesB64);
   } else if (input.sourceType === "pdf") {
     if (!input.pdfBase64) {
-      throw new DomainError("BAD_UPLOAD", "pdfBase64 is required for a pdf source", 400);
+      throw new DomainError(
+        "BAD_UPLOAD",
+        "pdfBase64 is required for a pdf source",
+        400,
+      );
     }
     const buf = decodeBase64Checked(input.pdfBase64, "PDF");
     const text = (await extractPdfText(buf)).trim();
@@ -654,7 +684,11 @@ export async function createExtractionCase(
     }
   } else {
     if (!input.imageBase64) {
-      throw new DomainError("BAD_UPLOAD", "imageBase64 is required for an image source", 400);
+      throw new DomainError(
+        "BAD_UPLOAD",
+        "imageBase64 is required for an image source",
+        400,
+      );
     }
     const contentType = input.contentType ?? "image/png";
     if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
@@ -715,13 +749,36 @@ export async function createExtractionCase(
         sourceImageB64,
         sourceScanPagesB64,
         sourceHash,
+        dedupeKey: input.allowDuplicate
+          ? null
+          : `${ctx.firmId ?? "platform"}:${sourceHash}`,
         sourceDurationSec:
           input.sourceType === "voice" ? (input.durationSec ?? null) : null,
         firmId: ctx.firmId ?? null,
         batchId: ctx.batchId ?? null,
         createdBy: actorId,
       })
+      .onConflictDoNothing()
       .returning();
+    if (!row) {
+      const [duplicate] = await getDb()
+        .select({ id: clerkCasesTable.id, status: clerkCasesTable.status })
+        .from(clerkCasesTable)
+        .where(
+          eq(
+            clerkCasesTable.dedupeKey,
+            `${ctx.firmId ?? "platform"}:${sourceHash}`,
+          ),
+        )
+        .limit(1);
+      throw new DomainError(
+        "DUPLICATE_SOURCE",
+        duplicate
+          ? `This exact document already has a case (${duplicate.id.slice(0, 8)}..., status '${duplicate.status}'). Open that case, or resubmit with "create anyway" if this is deliberate.`
+          : "This document conflicts with an existing capture. Refresh and try again.",
+        409,
+      );
+    }
     return row;
   });
 
@@ -778,7 +835,11 @@ export function fenceDocument(text: string): string {
 // prompt never calls a notice an invoice. Shared by first-time intake and
 // retries (retryExtraction re-fences with the case's own kind).
 export function fenceNoticeDocument(text: string): string {
-  return fenceUntrusted("tax-authority notice content", "NOTICE DOCUMENT", text);
+  return fenceUntrusted(
+    "tax-authority notice content",
+    "NOTICE DOCUMENT",
+    text,
+  );
 }
 
 export function noticeImageUserContent(
@@ -796,7 +857,10 @@ export function noticeScanUserContent(pagesB64: string[]): UserContent {
 // builder (prompts.ts) with the invoice noun. Shared by first-time intake and
 // retries so the injection-hardening text for images is maintained in one
 // place.
-export function imageUserContent(contentType: string, b64: string): UserContent {
+export function imageUserContent(
+  contentType: string,
+  b64: string,
+): UserContent {
   return docImageUserContent("The invoice", contentType, b64);
 }
 
@@ -851,7 +915,10 @@ export async function listCases(filter: {
   firmId?: string;
   createdBy?: string;
 }): Promise<
-  (Omit<ClerkCase, "sourceImageB64" | "sourceText" | "sourceScanPagesB64"> & {
+  (Omit<
+    ClerkCase,
+    "sourceImageB64" | "sourceText" | "sourceScanPagesB64" | "dedupeKey"
+  > & {
     fastLaneThreshold: number;
   })[]
 > {
@@ -909,7 +976,8 @@ export async function getCase(
     .from(clerkCasesTable)
     .where(eq(clerkCasesTable.id, id))
     .limit(1);
-  if (!row) throw new DomainError("CASE_NOT_FOUND", "Clerk case not found", 404);
+  if (!row)
+    throw new DomainError("CASE_NOT_FOUND", "Clerk case not found", 404);
   const [withThreshold] = await attachFastLaneThreshold([row]);
   return withThreshold;
 }
@@ -980,7 +1048,11 @@ export async function setCaseFeedback(
 // the party-sphere arm). The provenance arm is what lets the FIRST bill from a
 // freshly created vendor party approve: a brand-new vendor has no engagement
 // and, by definition, no invoice yet.
-async function assertPartyInFirm(firmId: string, partyId: string, label: string) {
+async function assertPartyInFirm(
+  firmId: string,
+  partyId: string,
+  label: string,
+) {
   const [viaEngagement] = await getDb()
     .select({ id: engagementsTable.id })
     .from(engagementsTable)
@@ -1028,7 +1100,10 @@ async function assertPartyInFirm(firmId: string, partyId: string, label: string)
 // on (status = extracted, unclaimed) so two operators cannot both win, and the
 // claim timestamp splits decision turnaround into queue-wait and active-review
 // time (CLK-OPS-06).
-export async function claimCase(id: string, actorId: string): Promise<ClerkCase> {
+export async function claimCase(
+  id: string,
+  actorId: string,
+): Promise<ClerkCase> {
   const existing = await getCase(id);
   const [row] = await getDb()
     .update(clerkCasesTable)
@@ -1062,7 +1137,10 @@ export async function claimCase(id: string, actorId: string): Promise<ClerkCase>
 
 // Any operator may release a stuck claim (small-team reality: the holder may
 // be gone); the audit row records who did it.
-export async function releaseCase(id: string, actorId: string): Promise<ClerkCase> {
+export async function releaseCase(
+  id: string,
+  actorId: string,
+): Promise<ClerkCase> {
   const [row] = await getDb()
     .update(clerkCasesTable)
     .set({ status: "extracted", claimedBy: null, claimedAt: null })

@@ -35,6 +35,7 @@ router.post("/billing/payments", async (req, res): Promise<void> => {
     firmId,
     body.monthStart,
     req.principal,
+    req.abortSignal,
   );
   res.status(201).json(CreatePaymentIntentResponse.parse(intent));
 });
@@ -59,12 +60,12 @@ router.get("/billing/payments", async (req, res): Promise<void> => {
 // PAYMENT_WEBHOOK_TOKEN configured the rail must not exist at all — every
 // request 404s exactly like an unknown route. Setting the env var lights the
 // rail; the shared secret then IS the credential (constant-time compare via
-// lib/op-token.ts), presented as x-op-token or ?token= — the same shapes the
-// operational endpoints accept.
+// lib/op-token.ts), presented only in the x-op-token header so credentials
+// never enter URLs, browser history or access logs.
 //
 // Local (non-generated) schema: this webhook is off-contract by design.
 const ConfirmPaymentBody = z.object({
-  providerRef: z.string().min(1),
+  providerRef: z.string().min(1).max(256),
   outcome: z.enum(["confirmed", "failed"]),
 });
 

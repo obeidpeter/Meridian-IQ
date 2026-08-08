@@ -1,4 +1,4 @@
-// Static path-router for the E2E harness: serves the four built frontends the
+// Static path-router for the E2E harness: serves the five built frontends the
 // way the production origin does (SPA fallback per prefix) and proxies /api to
 // the api-server. No vite processes — the tests run against real builds.
 // Also hosts the local webhook receiver the integration-layer journey points
@@ -9,7 +9,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -28,6 +31,10 @@ const APPS = [
   { prefix: "/console", dir: "artifacts/console/dist/public" },
   { prefix: "/app", dir: "artifacts/sme-compliance/dist/public" },
   { prefix: "/buyer", dir: "artifacts/buyer-portal/dist/public" },
+  {
+    prefix: "/penalty-calculator",
+    dir: "artifacts/penalty-calculator/dist/public",
+  },
   { prefix: "", dir: "artifacts/landing/dist/public" }, // catch-all: portal at "/"
 ];
 
@@ -79,7 +86,8 @@ export function startStaticServer({ port, apiPort }) {
     try {
       const body = await readFile(filePath);
       res.writeHead(200, {
-        "content-type": MIME[path.extname(filePath)] ?? "application/octet-stream",
+        "content-type":
+          MIME[path.extname(filePath)] ?? "application/octet-stream",
         // Mirror the clickjacking defence the production vite-preview layer
         // sets (frame-ancestors allowlist), so the e2e harness can assert it.
         "content-security-policy":

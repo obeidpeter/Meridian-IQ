@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 import * as zod from 'zod';
 
@@ -1975,11 +1975,20 @@ export const CreateSettlementParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const createSettlementBodyConfidenceRegExp = new RegExp('^(?:0(?:\\.\\d{1,4})?|1(?:\\.0{1,4})?)$');
+export const createSettlementBodyIdempotencyKeyMin = 8;
+export const createSettlementBodyIdempotencyKeyMax = 128;
+
+
+export const createSettlementBodyIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9._:-]+$');
+
+
 export const CreateSettlementBody = zod.object({
   "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence', 'payer_flag']),
   "amount": zod.string(),
-  "confidence": zod.string().optional(),
-  "occurredAt": zod.coerce.date()
+  "confidence": zod.string().regex(createSettlementBodyConfidenceRegExp).optional(),
+  "occurredAt": zod.coerce.date(),
+  "idempotencyKey": zod.string().min(createSettlementBodyIdempotencyKeyMin).max(createSettlementBodyIdempotencyKeyMax).regex(createSettlementBodyIdempotencyKeyRegExp).describe('Stable caller-generated key reused for retries of the same settlement operation')
 })
 
 export const CreateSettlementResponse = zod.object({
@@ -2903,7 +2912,7 @@ export const FlagBillPaymentParams = zod.object({
 
 export const FlagBillPaymentBody = zod.object({
   "status": zod.enum(['scheduled', 'paid']),
-  "amount": zod.string().optional()
+  "amount": zod.string().optional().describe('Defaults to the bill total; when status is paid, must cover the full bill total')
 })
 
 export const FlagBillPaymentResponse = zod.object({
@@ -4739,8 +4748,21 @@ export const DeleteStatementFormatResponse = zod.void()
 /**
  * @summary Invoices addressed to the caller's buyer organization
  */
+export const listBuyerInvoicesQuerySearchMax = 120;
+
+export const listBuyerInvoicesQueryLimitDefault = 100;
+export const listBuyerInvoicesQueryLimitMax = 200;
+
+export const listBuyerInvoicesQueryOffsetDefault = 0;
+export const listBuyerInvoicesQueryOffsetMin = 0;
+
+
+
 export const ListBuyerInvoicesQueryParams = zod.object({
-  "confirmationState": zod.enum(['none', 'requested', 'confirmed', 'queried', 'rejected']).optional()
+  "confirmationState": zod.enum(['none', 'requested', 'confirmed', 'queried', 'rejected']).optional(),
+  "search": zod.coerce.string().max(listBuyerInvoicesQuerySearchMax).optional(),
+  "limit": zod.coerce.number().min(1).max(listBuyerInvoicesQueryLimitMax).default(listBuyerInvoicesQueryLimitDefault),
+  "offset": zod.coerce.number().min(listBuyerInvoicesQueryOffsetMin).default(listBuyerInvoicesQueryOffsetDefault)
 })
 
 export const ListBuyerInvoicesResponseItem = zod.object({
@@ -4761,6 +4783,59 @@ export const ListBuyerInvoicesResponse = zod.array(ListBuyerInvoicesResponseItem
 
 
 /**
+ * @summary Aggregate invoice and confirmation counts for the caller's buyer organization
+ */
+export const getBuyerInvoiceSummaryResponseTotalMin = 0;
+
+export const getBuyerInvoiceSummaryResponseCountsNoneMin = 0;
+
+export const getBuyerInvoiceSummaryResponseCountsRequestedMin = 0;
+
+export const getBuyerInvoiceSummaryResponseCountsConfirmedMin = 0;
+
+export const getBuyerInvoiceSummaryResponseCountsQueriedMin = 0;
+
+export const getBuyerInvoiceSummaryResponseCountsRejectedMin = 0;
+
+
+
+export const GetBuyerInvoiceSummaryResponse = zod.object({
+  "total": zod.number().min(getBuyerInvoiceSummaryResponseTotalMin),
+  "awaitingTotal": zod.string(),
+  "counts": zod.object({
+  "none": zod.number().min(getBuyerInvoiceSummaryResponseCountsNoneMin),
+  "requested": zod.number().min(getBuyerInvoiceSummaryResponseCountsRequestedMin),
+  "confirmed": zod.number().min(getBuyerInvoiceSummaryResponseCountsConfirmedMin),
+  "queried": zod.number().min(getBuyerInvoiceSummaryResponseCountsQueriedMin),
+  "rejected": zod.number().min(getBuyerInvoiceSummaryResponseCountsRejectedMin)
+})
+})
+
+
+/**
+ * @summary One invoice addressed to the caller's buyer organization
+ */
+export const GetBuyerInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetBuyerInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "invoiceNumber": zod.string(),
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "status": zod.string(),
+  "grandTotal": zod.string(),
+  "vatTotal": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "confirmationState": zod.enum(['none', 'requested', 'confirmed', 'queried', 'rejected']),
+  "stampValid": zod.boolean().nullish(),
+  "eligible": zod.boolean().nullish()
+})
+
+
+/**
  * @summary Buyer marks an invoice payment as scheduled or paid (BR-04)
  */
 export const FlagPaymentParams = zod.object({
@@ -4770,7 +4845,7 @@ export const FlagPaymentParams = zod.object({
 export const FlagPaymentBody = zod.object({
   "paymentStatus": zod.enum(['scheduled', 'paid']),
   "occurredAt": zod.coerce.date().optional(),
-  "amount": zod.string().optional()
+  "amount": zod.string().optional().describe('Defaults to the invoice total; when paymentStatus is paid, must cover the full invoice total')
 })
 
 export const FlagPaymentResponse = zod.object({

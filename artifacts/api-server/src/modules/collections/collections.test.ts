@@ -23,7 +23,10 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Collection accounts. Pinned invariants:
 //  - provisioning: the simulator mints a CA- reference when no relay is
@@ -56,10 +59,12 @@ const clientUser: Principal = clientPrincipal(firmA, clientParty);
 
 const WEBHOOK_TOKEN = `col-hook-${SALT}`;
 const STAMPED_NUM = `INV-CA-ST-${SALT}`;
+const PARTIAL_NUM = `INV-CA-PART-${SALT}`;
 const SUBMITTED_NUM = `INV-CA-SUB-${SALT}`;
 const DRAFT_NUM = `INV-CA-DR-${SALT}`;
 
 let stampedId: string;
+let partialId: string;
 let submittedId: string;
 let asAdmin: string;
 let asClient: string;
@@ -108,19 +113,21 @@ async function seedInvoice(
   status: "draft" | "submitted" | "stamped",
 ): Promise<string> {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId: firmA,
-    supplierPartyId: clientParty,
-    buyerPartyId: buyerParty,
-    invoiceNumber,
-    kind: "invoice",
-    status,
-    issueDate: new Date().toISOString().slice(0, 10),
-    grandTotal: "500.00",
-    subtotal: "500.00",
-    vatTotal: "0.00",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId: firmA,
+      supplierPartyId: clientParty,
+      buyerPartyId: buyerParty,
+      invoiceNumber,
+      kind: "invoice",
+      status,
+      issueDate: new Date().toISOString().slice(0, 10),
+      grandTotal: "500.00",
+      subtotal: "500.00",
+      vatTotal: "0.00",
+    });
   return id;
 }
 
@@ -147,6 +154,7 @@ before(async () => {
     title: `collections ${SALT}`,
   });
   stampedId = await seedInvoice(STAMPED_NUM, "stamped");
+  partialId = await seedInvoice(PARTIAL_NUM, "stamped");
   submittedId = await seedInvoice(SUBMITTED_NUM, "submitted");
   await seedInvoice(DRAFT_NUM, "draft");
 
@@ -225,6 +233,7 @@ test("webhook: dark without the secret (404), wrong token 401, bad body 400", as
     accountReference: account.accountReference,
     amount: "500.00",
     invoiceNumber: STAMPED_NUM,
+    reference: `POSTURE-${SALT}`,
   };
   assert.equal(
     (await post(asAdmin, "/collections/inbound", payload)).status,
@@ -251,6 +260,23 @@ test("webhook: dark without the secret (404), wrong token 401, bad body 400", as
         )
       ).status,
       400,
+    );
+    assert.equal(
+      (
+        await post(
+          asAdmin,
+          "/collections/inbound",
+          {
+            accountReference: account.accountReference,
+            amount: "0.00",
+            invoiceNumber: STAMPED_NUM,
+            reference: `ZERO-${SALT}`,
+          },
+          { "x-op-token": WEBHOOK_TOKEN },
+        )
+      ).status,
+      400,
+      "zero-value collection events are rejected",
     );
     // Nothing settled through the refusals.
     assert.equal((await eventsFor(stampedId)).length, 0);
@@ -332,6 +358,7 @@ test("webhook: a submitted receivable records the event but cannot settle yet", 
         accountReference: account.accountReference,
         amount: "500.00",
         invoiceNumber: SUBMITTED_NUM,
+        reference: `SUBMITTED-${SALT}`,
       },
       { "x-op-token": WEBHOOK_TOKEN },
     );
@@ -361,12 +388,96 @@ test("webhook: a submitted receivable records the event but cannot settle yet", 
   }
 });
 
+test("webhook: partial payments accumulate, replays do not, and settlement occurs once", async () => {
+  process.env.COLLECTION_WEBHOOK_TOKEN = WEBHOOK_TOKEN;
+  try {
+    const first = {
+      accountReference: account.accountReference,
+      amount: "200.00",
+      invoiceNumber: PARTIAL_NUM,
+      reference: `PARTIAL-A-${SALT}`,
+    };
+    assert.equal(
+      (
+        await post(asAdmin, "/collections/inbound", first, {
+          "x-op-token": WEBHOOK_TOKEN,
+        })
+      ).status,
+      202,
+    );
+    assert.equal((await eventsFor(partialId)).length, 1);
+    assert.equal(
+      (
+        await getDb()
+          .select({ status: invoicesTable.status })
+          .from(invoicesTable)
+          .where(eq(invoicesTable.id, partialId))
+      )[0].status,
+      "stamped",
+      "a partial payment cannot settle the invoice",
+    );
+
+    assert.equal(
+      (
+        await post(asAdmin, "/collections/inbound", first, {
+          "x-op-token": WEBHOOK_TOKEN,
+        })
+      ).status,
+      202,
+    );
+    assert.equal(
+      (await eventsFor(partialId)).length,
+      1,
+      "the same provider reference is recorded once",
+    );
+
+    assert.equal(
+      (
+        await post(
+          asAdmin,
+          "/collections/inbound",
+          {
+            accountReference: account.accountReference,
+            amount: "300.00",
+            invoiceNumber: PARTIAL_NUM,
+            reference: `PARTIAL-B-${SALT}`,
+          },
+          { "x-op-token": WEBHOOK_TOKEN },
+        )
+      ).status,
+      202,
+    );
+    assert.equal((await eventsFor(partialId)).length, 2);
+    assert.equal(
+      (
+        await getDb()
+          .select({ status: invoicesTable.status })
+          .from(invoicesTable)
+          .where(eq(invoicesTable.id, partialId))
+      )[0].status,
+      "settled",
+    );
+    assert.equal(
+      (
+        await getDb()
+          .select()
+          .from(invoiceLifecycleEventsTable)
+          .where(eq(invoiceLifecycleEventsTable.invoiceId, partialId))
+      ).length,
+      1,
+      "cumulative payment produces exactly one lifecycle transition",
+    );
+  } finally {
+    delete process.env.COLLECTION_WEBHOOK_TOKEN;
+  }
+});
+
 test("webhook: a replayed delivery is harmless and indistinguishable", async () => {
   process.env.COLLECTION_WEBHOOK_TOKEN = WEBHOOK_TOKEN;
   try {
-    // Exact same delivery as the settling one. The invoice is now settled,
-    // so it no longer matches the bindable statuses: the replay lands as an
-    // unmatched audit (providers redeliver; the 202 must look identical).
+    const auditsBefore = (await unmatchedAuditsFor(account.id)).length;
+    // Providers may redeliver an exact reference. The response remains
+    // indistinguishable without recording duplicate financial evidence.
     const resp = await post(
       asAdmin,
       "/collections/inbound",
@@ -374,6 +485,7 @@ test("webhook: a replayed delivery is harmless and indistinguishable", async () 
         accountReference: account.accountReference,
         amount: "500.00",
         invoiceNumber: STAMPED_NUM,
+        reference: `TRF-${SALT}`,
       },
       { "x-op-token": WEBHOOK_TOKEN },
     );
@@ -400,7 +512,11 @@ test("webhook: a replayed delivery is harmless and indistinguishable", async () 
         ),
       );
     assert.equal(settledRows.length, 1, "a single settled transition, ever");
-    assert.equal((await unmatchedAuditsFor(account.id)).length, 1);
+    assert.equal(
+      (await unmatchedAuditsFor(account.id)).length,
+      auditsBefore,
+      "a replay does not create a false unmatched alert",
+    );
   } finally {
     delete process.env.COLLECTION_WEBHOOK_TOKEN;
   }
@@ -416,6 +532,7 @@ test("webhook: an unmatchable invoice number audits and applies nothing", async 
       accountReference: account.accountReference,
       amount: "10.00",
       invoiceNumber: DRAFT_NUM,
+      reference: `UNMATCHED-${SALT}`,
     });
     assert.deepEqual(result, { applied: false });
     const audits = await unmatchedAuditsFor(account.id);
@@ -438,12 +555,7 @@ test("webhook: an unmatchable invoice number audits and applies nothing", async 
 });
 
 test("deactivate: an idempotent CAS flip", async () => {
-  const created = await post(asAdmin, "/collection-accounts", {
-    clientPartyId: clientParty,
-  });
-  assert.equal(created.status, 201);
-  deadAccount = (await created.json()) as AccountView;
-  assert.equal(deadAccount.label, null, "label is optional");
+  deadAccount = account;
 
   const first = await post(
     asAdmin,
@@ -486,6 +598,7 @@ test("webhook: deactivated and unknown references are silently ignored", async (
         accountReference: deadAccount.accountReference,
         amount: "500.00",
         invoiceNumber: STAMPED_NUM,
+        reference: `DEAD-${SALT}`,
       }),
       { applied: false },
     );
@@ -495,6 +608,7 @@ test("webhook: deactivated and unknown references are silently ignored", async (
         accountReference: `CA-${SALT.toUpperCase()}NOPE`,
         amount: "500.00",
         invoiceNumber: STAMPED_NUM,
+        reference: `UNKNOWN-${SALT}`,
       }),
       { applied: false },
     );
@@ -506,6 +620,7 @@ test("webhook: deactivated and unknown references are silently ignored", async (
         accountReference: deadAccount.accountReference,
         amount: "500.00",
         invoiceNumber: STAMPED_NUM,
+        reference: `DEAD-ROUTE-${SALT}`,
       },
       { "x-op-token": WEBHOOK_TOKEN },
     );

@@ -388,9 +388,10 @@ billing or identity, or mint further credentials. Revocation is immediate —
 a revoked or unknown key is a clean <code>401</code>, never a fall-through to
 another credential.</li>
 <li><strong>Sessions (the web apps &amp; mobile)</strong> — an HttpOnly cookie (or the same
-signed token as <code>Authorization: Bearer</code> on mobile). Cookie-authenticated
+signed token as <code>Authorization: Bearer</code> on mobile). All browser-facing
 <em>state-changing</em> requests must also send the CSRF header
-<code>x-meridian-csrf: 1</code>; Bearer requests are exempt (they carry no cookie).</li>
+<code>x-meridian-csrf: 1</code>, whether they use cookies or Bearer authentication.
+Only dedicated machine webhooks are exempt.</li>
 </ul>
 </div>
 

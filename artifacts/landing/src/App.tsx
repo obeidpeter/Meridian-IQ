@@ -45,11 +45,9 @@ import {
   EyeOff,
   ShieldOff,
   Headphones,
-  Landmark,
   LockKeyhole,
   ReceiptText,
   ScanLine,
-  UserRound,
   UsersRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -150,65 +148,6 @@ const DEFAULT_WORKSPACE: Partial<
   buyer_user: { href: "/buyer/", label: "Buyer Rails" },
   auditor: { href: "/console/audit", label: "Audit & evidence" },
 };
-
-const DEMO_ACCOUNTS: {
-  label: string;
-  shortLabel: string;
-  email: string;
-  opens: string;
-  icon: typeof FileCheck2;
-  tone: string;
-}[] = [
-  {
-    label: "SME owner (Adaeze Foods)",
-    shortLabel: "SME owner",
-    email: "owner@adaezefoods.example",
-    opens: "Compliance App and consent decisions",
-    icon: Store,
-    tone: "bg-teal-100 text-teal-800",
-  },
-  {
-    label: "SME firm staff (Adaeze Foods)",
-    shortLabel: "SME staff",
-    email: "demo.staff@meridianiq.example",
-    opens: "Daily compliance workflow",
-    icon: UserRound,
-    tone: "bg-blue-100 text-blue-800",
-  },
-  {
-    label: "Accountant (firm admin)",
-    shortLabel: "Firm admin",
-    email: "demo.admin@meridianiq.example",
-    opens: "Portfolio and firm controls",
-    icon: Building2,
-    tone: "bg-indigo-100 text-indigo-800",
-  },
-  {
-    label: "Compliance Desk operator",
-    shortLabel: "Operator",
-    email: "ops@meridianiq.example",
-    opens: "Exceptions and Clerk review",
-    icon: Headphones,
-    tone: "bg-amber-100 text-amber-900",
-  },
-  {
-    label: "Buyer finance (Zenith Retail)",
-    shortLabel: "Buyer finance",
-    email: "finance@zenithretail.example",
-    opens: "Confirmations and exposure",
-    icon: Landmark,
-    tone: "bg-cyan-100 text-cyan-900",
-  },
-  {
-    label: "Read-only auditor",
-    shortLabel: "Auditor",
-    email: "audit@meridianiq.example",
-    opens: "Read-only audit evidence",
-    icon: ShieldCheck,
-    tone: "bg-slate-200 text-slate-800",
-  },
-];
-const DEMO_PASSWORD = "meridian2027";
 
 function roleLabel(role: string): string {
   return (
@@ -385,8 +324,8 @@ function SignInPanel() {
   );
   const [totpCode, setTotpCode] = useState("");
   const [totpError, setTotpError] = useState<string | null>(null);
-  // Which sign-in is running: "form", "totp" or a demo account's email. Drives
-  // the per-button spinners without disabling the whole panel.
+  // Which sign-in step is running. Drives the per-button spinner without
+  // allowing a duplicate submission.
   const [pending, setPending] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState<{
     label: string;
@@ -703,68 +642,6 @@ function SignInPanel() {
       <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
         <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
         Role-scoped access and encrypted session cookies
-      </div>
-
-      <div className="mt-8 border-t border-slate-200 pt-6">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-sm font-bold text-slate-900">
-              Explore a demo role
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              One click opens the selected workspace.
-            </p>
-          </div>
-          <code className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
-            {DEMO_PASSWORD}
-          </code>
-        </div>
-        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-          {DEMO_ACCOUNTS.map((a) => (
-            <li key={a.email}>
-              <button
-                type="button"
-                disabled={pending !== null}
-                onClick={() => {
-                  setEmail(a.email);
-                  setPassword(DEMO_PASSWORD);
-                  void signIn(a.email, {
-                    email: a.email,
-                    password: DEMO_PASSWORD,
-                  });
-                }}
-                aria-label={`Sign in as ${a.label}`}
-                className="group grid min-h-[4.5rem] w-full grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
-                data-testid={`button-demo-${a.email.split("@")[0]}`}
-              >
-                <span
-                  className={`grid size-9 place-items-center rounded-md ${a.tone}`}
-                >
-                  {pending === a.email ? (
-                    <Loader2
-                      className="size-4 animate-spin"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <a.icon className="size-4" aria-hidden="true" />
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-slate-900">
-                    {a.shortLabel}
-                  </span>
-                  <span className="mt-0.5 block truncate text-xs text-slate-500">
-                    {a.opens}
-                  </span>
-                </span>
-                <ArrowRight
-                  className="size-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-700"
-                  aria-hidden="true"
-                />
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   );
@@ -1420,6 +1297,14 @@ function SignedInPanel({ me }: { me: Me }) {
       await logout.mutateAsync();
     } catch {
       /* best effort — the cookie may already be gone */
+    }
+    for (const storage of [window.localStorage, window.sessionStorage]) {
+      for (let index = storage.length - 1; index >= 0; index--) {
+        const key = storage.key(index);
+        if (key?.startsWith("meridianiq:invoice-draft")) {
+          storage.removeItem(key);
+        }
+      }
     }
     // Reset (not just invalidate) every cached query: data from the previous
     // account is dropped immediately and active queries — /me here — refetch,

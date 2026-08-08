@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -25,7 +25,7 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
-import { hashPassword } from "../modules/auth/session";
+import { hashPassword, PRODUCTION_DEMO_EMAILS } from "../modules/auth/session";
 
 // Release-tagged feature flags (PL-02). Everything past R0 ships dark; a dark
 // feature is unreachable until an operator flips the flag (or a per-firm
@@ -36,69 +36,206 @@ const FLAGS: {
   releaseTag: string;
   description: string;
 }[] = [
-  { key: "invoice_lifecycle", enabled: true, releaseTag: "R0", description: "Core invoice draft/validate/submit lifecycle" },
-  { key: "advisory_engagements", enabled: true, releaseTag: "R0", description: "Advisory engagement spine" },
-  { key: "consent_ledger", enabled: true, releaseTag: "R0", description: "Three-layer consent ledger" },
-  { key: "buyer_confirmations", enabled: true, releaseTag: "R1", description: "Buyer confirmation workflow" },
-  { key: "stamp_verification", enabled: true, releaseTag: "R1", description: "Public stamp verification" },
-  { key: "messaging_notifications", enabled: false, releaseTag: "R1", description: "WhatsApp/SMS/email notifications" },
-  { key: "anonymized_benchmarks", enabled: false, releaseTag: "R2", description: "Layer-2 anonymized aggregate analytics" },
+  {
+    key: "invoice_lifecycle",
+    enabled: true,
+    releaseTag: "R0",
+    description: "Core invoice draft/validate/submit lifecycle",
+  },
+  {
+    key: "advisory_engagements",
+    enabled: true,
+    releaseTag: "R0",
+    description: "Advisory engagement spine",
+  },
+  {
+    key: "consent_ledger",
+    enabled: true,
+    releaseTag: "R0",
+    description: "Three-layer consent ledger",
+  },
+  {
+    key: "buyer_confirmations",
+    enabled: true,
+    releaseTag: "R1",
+    description: "Buyer confirmation workflow",
+  },
+  {
+    key: "stamp_verification",
+    enabled: true,
+    releaseTag: "R1",
+    description: "Public stamp verification",
+  },
+  {
+    key: "messaging_notifications",
+    enabled: false,
+    releaseTag: "R1",
+    description: "WhatsApp/SMS/email notifications",
+  },
+  {
+    key: "anonymized_benchmarks",
+    enabled: false,
+    releaseTag: "R2",
+    description: "Layer-2 anonymized aggregate analytics",
+  },
   // R2 — Channel Scale and Buyer Rails v1. Shipped dark (PL-02): an operator
   // flips each flag when its gate evidence lands (or per-firm via override).
-  { key: "reconciliation", enabled: false, releaseTag: "R2", description: "Bank-statement ingestion and reconciliation v1 (SME-07, INT-05)" },
-  { key: "b2c_reporting", enabled: false, releaseTag: "R2", description: "B2C 24-hour reporting module with compliance clocks (SME-08)" },
-  { key: "buyer_rails", enabled: false, releaseTag: "R2", description: "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)" },
-  { key: "white_label", enabled: false, releaseTag: "R2", description: "White-label theming, subdomains, bulk client import, certification (CON-05)" },
-  { key: "erp_connectors", enabled: false, releaseTag: "R2", description: "ERP connector contract and first two connectors (PL-03, INT-06)" },
-  { key: "bank_feeds", enabled: false, releaseTag: "R2", description: "Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam)" },
-  { key: "credit_readiness", enabled: false, releaseTag: "R3", description: "Layer-3 credit readiness scoring" },
-  { key: "bank_data_room", enabled: false, releaseTag: "R4", description: "Bank data room and financing origination" },
+  {
+    key: "reconciliation",
+    enabled: false,
+    releaseTag: "R2",
+    description:
+      "Bank-statement ingestion and reconciliation v1 (SME-07, INT-05)",
+  },
+  {
+    key: "b2c_reporting",
+    enabled: false,
+    releaseTag: "R2",
+    description: "B2C 24-hour reporting module with compliance clocks (SME-08)",
+  },
+  {
+    key: "buyer_rails",
+    enabled: false,
+    releaseTag: "R2",
+    description:
+      "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)",
+  },
+  {
+    key: "white_label",
+    enabled: false,
+    releaseTag: "R2",
+    description:
+      "White-label theming, subdomains, bulk client import, certification (CON-05)",
+  },
+  {
+    key: "erp_connectors",
+    enabled: false,
+    releaseTag: "R2",
+    description:
+      "ERP connector contract and first two connectors (PL-03, INT-06)",
+  },
+  {
+    key: "bank_feeds",
+    enabled: false,
+    releaseTag: "R2",
+    description:
+      "Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam)",
+  },
+  {
+    key: "credit_readiness",
+    enabled: false,
+    releaseTag: "R3",
+    description: "Layer-3 credit readiness scoring",
+  },
+  {
+    key: "bank_data_room",
+    enabled: false,
+    releaseTag: "R4",
+    description: "Bank data room and financing origination",
+  },
   // Clerk v0 kill switch (Task #40): flipping this off instantly disables every
   // Clerk AI surface (capture extraction, Ask Clerk); manual flows keep working.
-  { key: "clerk_ai", enabled: true, releaseTag: "R3", description: "Clerk AI copilot: capture extraction and register-backed Q&A (operator-only)" },
+  {
+    key: "clerk_ai",
+    enabled: true,
+    releaseTag: "R3",
+    description:
+      "Clerk AI copilot: capture extraction and register-backed Q&A (operator-only)",
+  },
   // Proposed actions (round 21): Clerk assembles a batch from the detector
   // predicates, a human approves it, execution rides the ordinary per-invoice
   // submission path. Shipped dark (PL-02); enable per firm via override once
   // a pilot firm opts in.
-  { key: "clerk_actions", enabled: false, releaseTag: "R3", description: "Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue)" },
+  {
+    key: "clerk_actions",
+    enabled: false,
+    releaseTag: "R3",
+    description:
+      "Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue)",
+  },
   // Standing approvals (round 28): a durable, revocable per-client grant lets
   // the daily sweep run a submit kind without a fresh per-batch approval,
   // re-validated on every run. Layered ON clerk_actions — both must be lit.
   // Shipped dark (PL-02); enable per firm via override alongside a pilot.
-  { key: "clerk_action_policies", enabled: false, releaseTag: "R3", description: "Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions)" },
+  {
+    key: "clerk_action_policies",
+    enabled: false,
+    releaseTag: "R3",
+    description:
+      "Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions)",
+  },
   // Round 35 (Close with Clerk Phase 2): auto-accepting reconciliation
   // matches is the riskiest deterministic step, so it rides its OWN opt-in
   // beside clerk_actions — dark means the reconcile step simply never
   // assembles.
-  { key: "clerk_auto_reconcile", enabled: false, releaseTag: "R3", description: "Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies" },
+  {
+    key: "clerk_auto_reconcile",
+    enabled: false,
+    releaseTag: "R3",
+    description:
+      "Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies",
+  },
   // Round 45 (pgvector firm memory): the semantic index over a firm's own
   // Clerk records. Spends firm tokens on embeddings (the indexer sweep), so
   // it rides its own opt-in beside clerk_ai — dark means the indexer never
   // runs and retrieval surfaces fall back to today's exact-key behavior.
-  { key: "clerk_memory", enabled: false, releaseTag: "R3", description: "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings" },
+  {
+    key: "clerk_memory",
+    enabled: false,
+    releaseTag: "R3",
+    description:
+      "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings",
+  },
   // Round 50 (Advise with Clerk Phase 2): the monthly brief sweep can spend
   // firm tokens on every engaged client's adviser's note, so generation is
   // opt-in and dark. Delivery is deliberately NOT gated by this flag (the
   // statement-rail rule); the on-demand console generate button works
   // regardless — this only governs the background sweep.
-  { key: "clerk_advisory_briefs", enabled: false, releaseTag: "R3", description: "Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag" },
+  {
+    key: "clerk_advisory_briefs",
+    enabled: false,
+    releaseTag: "R3",
+    description:
+      "Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag",
+  },
   // Round 47 (retrieval eval lane): seeded — unlike its phrasing sibling,
   // which is dark-by-absence and can only be lit by a manual row insert
   // (setFlag is UPDATE-only) — so operators can enable the nightly run
   // through the ordinary platform flags surface.
-  { key: "clerk_auto_retrieval_eval", enabled: false, releaseTag: "R3", description: "Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day)" },
+  {
+    key: "clerk_auto_retrieval_eval",
+    enabled: false,
+    releaseTag: "R3",
+    description:
+      "Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day)",
+  },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
-  { version: 1, description: "Initial data spine (parties, invoices, lifecycle, consent, audit, platform, credit)" },
-  { version: 2, description: "Persisted operator-editable error catalogue (ADV-03)" },
-  { version: 3, description: "R2 spine: statements/reconciliation, B2C batches, buyer rails columns, certification, connectors" },
-  { version: 4, description: "Clerk v0: claims register, clerk cases, inference ledger (Task #40)" },
+  {
+    version: 1,
+    description:
+      "Initial data spine (parties, invoices, lifecycle, consent, audit, platform, credit)",
+  },
+  {
+    version: 2,
+    description: "Persisted operator-editable error catalogue (ADV-03)",
+  },
+  {
+    version: 3,
+    description:
+      "R2 spine: statements/reconciliation, B2C batches, buyer rails columns, certification, connectors",
+  },
+  {
+    version: 4,
+    description:
+      "Clerk v0: claims register, clerk cases, inference ledger (Task #40)",
+  },
 ];
 
 // Demo seeding creates login-capable accounts (operator, firm admin, auditor,
-// buyers, SME owner) and sets a shared, repo-committed password on them
-// (seedDemoPasswords). That must NEVER run on a real production deployment
+// buyers, SME owner) and gives only those identities an operator-supplied
+// DEMO_PASSWORD. That must NEVER run on a real production deployment
 // (SEC-01): a fresh boot would otherwise ship a working operator login anyone
 // who reads this repo could use. It is therefore opt-in via SEED_DEMO and
 // defaults OFF in production. Non-production defaults ON for local/CI use. Note
@@ -107,9 +244,8 @@ const SCHEMA_VERSIONS: { version: number; description: string }[] = [
 // deployment's accounts come from the Publish dev->prod data copy, so this gate
 // is defense-in-depth there. Essential platform bootstrap (feature flags,
 // schema versions, error catalogue, CPD course content) always seeds.
-const SEED_DEMO = process.env.SEED_DEMO
-  ? process.env.SEED_DEMO === "true"
-  : process.env.NODE_ENV !== "production";
+const SEED_DEMO =
+  process.env.NODE_ENV !== "production" && process.env.SEED_DEMO === "true";
 
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
 export async function seedPlatform(): Promise<void> {
@@ -281,14 +417,16 @@ async function seedSubmissionAttempt(input: {
     .where(eq(submissionAttemptsTable.idempotencyKey, input.idempotencyKey))
     .limit(1);
   if (existing.length > 0) return;
-  await getDb().insert(submissionAttemptsTable).values({
-    invoiceId: input.invoiceId,
-    rail: input.rail,
-    attemptNo: input.attemptNo,
-    idempotencyKey: input.idempotencyKey,
-    status: input.status,
-    errorCode: input.errorCode ?? null,
-  });
+  await getDb()
+    .insert(submissionAttemptsTable)
+    .values({
+      invoiceId: input.invoiceId,
+      rail: input.rail,
+      attemptNo: input.attemptNo,
+      idempotencyKey: input.idempotencyKey,
+      status: input.status,
+      errorCode: input.errorCode ?? null,
+    });
 }
 
 // A ready-to-explore SME tenant: the firm, the SME's own business party, an
@@ -403,7 +541,12 @@ async function seedDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-30),
     lines: [
-      { description: "Palm oil (25L drums)", quantity: "10", unitPrice: "18000", vatRate: "0.075" },
+      {
+        description: "Palm oil (25L drums)",
+        quantity: "10",
+        unitPrice: "18000",
+        vatRate: "0.075",
+      },
     ],
   });
   await seedInvoice({
@@ -414,8 +557,18 @@ async function seedDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-2),
     lines: [
-      { description: "Rice (50kg bags)", quantity: "40", unitPrice: "62000", vatRate: "0.075" },
-      { description: "Delivery handling", quantity: "1", unitPrice: "15000", vatRate: "0.075" },
+      {
+        description: "Rice (50kg bags)",
+        quantity: "40",
+        unitPrice: "62000",
+        vatRate: "0.075",
+      },
+      {
+        description: "Delivery handling",
+        quantity: "1",
+        unitPrice: "15000",
+        vatRate: "0.075",
+      },
     ],
   });
   await seedInvoice({
@@ -426,7 +579,12 @@ async function seedDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-10),
     lines: [
-      { description: "Cold-chain freight (Lagos–Abuja)", quantity: "3", unitPrice: "240000", vatRate: "0.075" },
+      {
+        description: "Cold-chain freight (Lagos–Abuja)",
+        quantity: "3",
+        unitPrice: "240000",
+        vatRate: "0.075",
+      },
     ],
   });
   await getDb()
@@ -456,7 +614,12 @@ async function seedDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-5),
     lines: [
-      { description: "Packaging supplies", quantity: "100", unitPrice: "3500", vatRate: "0.075" },
+      {
+        description: "Packaging supplies",
+        quantity: "100",
+        unitPrice: "3500",
+        vatRate: "0.075",
+      },
     ],
   });
   await seedSubmissionAttempt({
@@ -476,7 +639,12 @@ async function seedDemo(): Promise<void> {
     category: "b2c",
     issueDate: isoDate(-1),
     lines: [
-      { description: "Retail groceries (consolidated)", quantity: "1", unitPrice: "480000", vatRate: "0.075" },
+      {
+        description: "Retail groceries (consolidated)",
+        quantity: "1",
+        unitPrice: "480000",
+        vatRate: "0.075",
+      },
     ],
   });
 
@@ -495,7 +663,12 @@ async function seedDemo(): Promise<void> {
     issueDate: isoDate(-4),
     dueDate: isoDate(10),
     lines: [
-      { description: "Corrugated cartons (bulk)", quantity: "100", unitPrice: "1200", vatRate: "0.075" },
+      {
+        description: "Corrugated cartons (bulk)",
+        quantity: "100",
+        unitPrice: "1200",
+        vatRate: "0.075",
+      },
     ],
   });
 }
@@ -552,16 +725,25 @@ async function seedBuyerDemo(): Promise<void> {
 
 // --- Demo login credentials ---------------------------------------------------
 // Every seeded demo user can sign in through the first-party session login with
-// this shared demo password. Hashes are set only where absent, so a changed
-// password in a real deployment is never overwritten by a reseed.
-const DEMO_PASSWORD = "meridian2027";
-
+// this shared demo password. The explicit email allowlist is critical: an
+// unrelated passwordless account must never inherit demonstration credentials.
 async function seedDemoPasswords(): Promise<void> {
-  const hash = await hashPassword(DEMO_PASSWORD);
+  const password = process.env.DEMO_PASSWORD;
+  if (!password || password.length < 16) {
+    throw new Error(
+      "SEED_DEMO=true requires a non-repository DEMO_PASSWORD of at least 16 characters",
+    );
+  }
+  const hash = await hashPassword(password);
   await getDb()
     .update(usersTable)
     .set({ passwordHash: hash })
-    .where(isNull(usersTable.passwordHash));
+    .where(
+      and(
+        isNull(usersTable.passwordHash),
+        inArray(usersTable.email, [...PRODUCTION_DEMO_EMAILS]),
+      ),
+    );
 }
 
 // --- CPD certification content (CON-05) --------------------------------------
@@ -837,7 +1019,12 @@ async function seedConsoleDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-25),
     lines: [
-      { description: "Ankara fabric (bulk rolls)", quantity: "60", unitPrice: "22000", vatRate: "0.075" },
+      {
+        description: "Ankara fabric (bulk rolls)",
+        quantity: "60",
+        unitPrice: "22000",
+        vatRate: "0.075",
+      },
     ],
   });
   await seedInvoice({
@@ -849,7 +1036,12 @@ async function seedConsoleDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-8),
     lines: [
-      { description: "Cotton yarn (cartons)", quantity: "120", unitPrice: "9500", vatRate: "0.075" },
+      {
+        description: "Cotton yarn (cartons)",
+        quantity: "120",
+        unitPrice: "9500",
+        vatRate: "0.075",
+      },
     ],
   });
 
@@ -863,7 +1055,12 @@ async function seedConsoleDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-6),
     lines: [
-      { description: "Antimalarial tablets (packs)", quantity: "500", unitPrice: "4200", vatRate: "0.075" },
+      {
+        description: "Antimalarial tablets (packs)",
+        quantity: "500",
+        unitPrice: "4200",
+        vatRate: "0.075",
+      },
     ],
   });
   await seedSubmissionAttempt({
@@ -883,7 +1080,12 @@ async function seedConsoleDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-2),
     lines: [
-      { description: "Cold-chain vaccines (vials)", quantity: "300", unitPrice: "8800", vatRate: "0.075" },
+      {
+        description: "Cold-chain vaccines (vials)",
+        quantity: "300",
+        unitPrice: "8800",
+        vatRate: "0.075",
+      },
     ],
   });
 
@@ -897,7 +1099,12 @@ async function seedConsoleDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-12),
     lines: [
-      { description: "Reinforcement steel (tonnes)", quantity: "15", unitPrice: "620000", vatRate: "0.075" },
+      {
+        description: "Reinforcement steel (tonnes)",
+        quantity: "15",
+        unitPrice: "620000",
+        vatRate: "0.075",
+      },
     ],
   });
   await seedInvoice({
@@ -909,7 +1116,12 @@ async function seedConsoleDemo(): Promise<void> {
     category: "b2b",
     issueDate: isoDate(-4),
     lines: [
-      { description: "Ready-mix concrete (m3)", quantity: "80", unitPrice: "48000", vatRate: "0.075" },
+      {
+        description: "Ready-mix concrete (m3)",
+        quantity: "80",
+        unitPrice: "48000",
+        vatRate: "0.075",
+      },
     ],
   });
 
@@ -1186,7 +1398,13 @@ async function seedClerkDemo(): Promise<void> {
         proposition:
           "The standard VAT rate on taxable supplies of goods and services is {rate}.",
         protectedFacts: [
-          { key: "rate", label: "Standard VAT rate", kind: "rate", value: "7.5", unit: "%" },
+          {
+            key: "rate",
+            label: "Standard VAT rate",
+            kind: "rate",
+            value: "7.5",
+            unit: "%",
+          },
         ],
         citation: "VAT Act, s.4 (as amended by Finance Act 2019, s.34)",
         applicability: {},
@@ -1204,8 +1422,20 @@ async function seedClerkDemo(): Promise<void> {
         proposition:
           "B2C transactions of {threshold} or more must be reported to the MBS platform within {window} of the transaction.",
         protectedFacts: [
-          { key: "threshold", label: "B2C reporting threshold", kind: "amount", value: "50000", unit: "NGN" },
-          { key: "window", label: "Reporting window", kind: "duration", value: "24", unit: "hours" },
+          {
+            key: "threshold",
+            label: "B2C reporting threshold",
+            kind: "amount",
+            value: "50000",
+            unit: "NGN",
+          },
+          {
+            key: "window",
+            label: "Reporting window",
+            kind: "duration",
+            value: "24",
+            unit: "hours",
+          },
         ],
         citation: "FIRS e-invoicing guidelines (2026), B2C reporting rule",
         applicability: { category: "b2c" },
@@ -1223,7 +1453,13 @@ async function seedClerkDemo(): Promise<void> {
         proposition:
           "A business must register for VAT once its annual taxable turnover reaches {threshold}.",
         protectedFacts: [
-          { key: "threshold", label: "Annual turnover threshold", kind: "amount", value: "25000000", unit: "NGN" },
+          {
+            key: "threshold",
+            label: "Annual turnover threshold",
+            kind: "amount",
+            value: "25000000",
+            unit: "NGN",
+          },
         ],
         citation: "VAT Act, s.15 (as amended by Finance Act 2019)",
         applicability: {},
@@ -1244,8 +1480,20 @@ async function seedClerkDemo(): Promise<void> {
         proposition:
           "A small company with annual gross turnover below {threshold} is charged companies income tax at {rate}.",
         protectedFacts: [
-          { key: "threshold", label: "Small company turnover threshold", kind: "amount", value: "25000000", unit: "NGN" },
-          { key: "rate", label: "CIT rate", kind: "rate", value: "0", unit: "%" },
+          {
+            key: "threshold",
+            label: "Small company turnover threshold",
+            kind: "amount",
+            value: "25000000",
+            unit: "NGN",
+          },
+          {
+            key: "rate",
+            label: "CIT rate",
+            kind: "rate",
+            value: "0",
+            unit: "%",
+          },
         ],
         citation: "CITA, s.40 (as amended by Finance Act 2019)",
         applicability: {},

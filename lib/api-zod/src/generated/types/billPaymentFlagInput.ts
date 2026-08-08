@@ -3,11 +3,12 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 import type { BillPaymentFlagInputStatus } from './billPaymentFlagInputStatus';
 
 export interface BillPaymentFlagInput {
   status: BillPaymentFlagInputStatus;
+  /** Defaults to the bill total; when status is paid, must cover the full bill total */
   amount?: string;
 }

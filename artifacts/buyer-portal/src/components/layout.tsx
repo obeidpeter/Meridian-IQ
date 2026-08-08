@@ -59,7 +59,7 @@ function BrandMark() {
         <span className="block text-base font-extrabold leading-none text-white">
           MeridianIQ
         </span>
-        <span className="mt-1 block text-[10px] font-semibold text-white/45">
+        <span className="mt-1 block text-xs font-semibold text-white/75">
           Buyer Rails
         </span>
       </span>
@@ -94,14 +94,14 @@ function NavLinks({
           <p className="text-xs font-bold text-white">
             Buyer finance workspace
           </p>
-          <p className="mt-1 text-[11px] leading-4 text-white/45">
+          <p className="mt-1 text-xs leading-4 text-white/75">
             Supplier verification and VAT protection
           </p>
         </div>
       </div>
 
       <div className="workspace-nav-scroll min-h-0 flex-1 space-y-1 overflow-y-auto">
-        <p className="px-3 pb-1.5 text-[10px] font-bold text-white/35">
+        <p className="px-3 pb-1.5 text-xs font-bold text-white/70">
           Verification
         </p>
         {LINKS.map((link) => {
@@ -120,7 +120,9 @@ function NavLinks({
               }`}
             >
               <Icon className="size-[1.1rem] shrink-0" aria-hidden="true" />
-              <span className="min-w-0 truncate">{link.label}</span>
+              <span className="min-w-0 truncate" title={link.label}>
+                {link.label}
+              </span>
             </Link>
           );
         })}
@@ -136,10 +138,16 @@ function NavLinks({
               {accountInitials(me.fullName, me.email)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-white">
+              <p
+                className="truncate text-sm font-bold text-white"
+                title={me.fullName ?? me.email ?? "Signed in"}
+              >
                 {me.fullName ?? me.email ?? "Signed in"}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-white/45">
+              <p
+                className="mt-0.5 truncate text-xs text-white/75"
+                title="Buyer finance"
+              >
                 Buyer finance
               </p>
             </div>

@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import {
   getDb,
   usersTable,
@@ -9,6 +9,7 @@ import {
   clerkCasesTable,
   clerkInferenceCallsTable,
   auditEventsTable,
+  outboxTable,
 } from "@workspace/db";
 import {
   listen,
@@ -37,6 +38,7 @@ import {
   processInboundEmail,
   resolveInboundSender,
 } from "./email.ts";
+import { drain } from "../pipeline/pipeline.ts";
 
 // Inbound email intake rail. Pinned invariants:
 //  - fail-closed gate: INBOUND_EMAIL_TOKEN unset → the rail is dark (404 for
@@ -73,12 +75,15 @@ before(async () => {
   const db = getDb();
   // The three fixture clients ride the shared seeder (test-support.ts): one
   // canonical firm/party/user/client_user-membership write per client.
-  ({ firmId: firm1, partyId: clientParty, userId: clientUserId } =
-    await seedInboundClient(db, {
-      firmName: `Inbound Firm ${SALT}`,
-      partyName: `Inbound Client ${SALT}`,
-      email: CLIENT_EMAIL,
-    }));
+  ({
+    firmId: firm1,
+    partyId: clientParty,
+    userId: clientUserId,
+  } = await seedInboundClient(db, {
+    firmName: `Inbound Firm ${SALT}`,
+    partyName: `Inbound Client ${SALT}`,
+    email: CLIENT_EMAIL,
+  }));
   const broke = await seedInboundClient(db, {
     firmName: `Inbound Broke Firm ${SALT}`,
     partyName: `Inbound Broke ${SALT}`,
@@ -157,19 +162,30 @@ test("wrong token: 401; no processing", async () => {
     body: emailBody(CLIENT_EMAIL, [pdfAttachment("badtoken")]),
   });
   assert.equal(missing.status, 401);
+  const viaQuery = await fetch(`${base}/api/inbound/email?token=${TOKEN}`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: emailBody(CLIENT_EMAIL, [pdfAttachment("query-token")]),
+  });
+  assert.equal(viaQuery.status, 401, "secrets in URLs are never accepted");
 });
 
 test("unknown sender: 202 identical to success, nothing created, masked audit row", async () => {
   process.env.INBOUND_EMAIL_TOKEN = TOKEN;
   const base = await listen(inboundApp());
+  const queuedAfter = new Date();
   const ghost = `unknown@${DOMAIN}`;
   const filename = `ghost-${SALT}.pdf`;
 
-  const res = await fetch(`${base}/api/inbound/email?token=${TOKEN}`, {
+  const res = await fetch(`${base}/api/inbound/email`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, "x-op-token": TOKEN },
     body: emailBody(ghost, [
-      { filename, contentType: "application/pdf", contentBase64: textPdf("ghost", SALT) },
+      {
+        filename,
+        contentType: "application/pdf",
+        contentBase64: textPdf("ghost", SALT),
+      },
     ]),
   });
   assert.equal(res.status, 202);
@@ -177,17 +193,41 @@ test("unknown sender: 202 identical to success, nothing created, masked audit ro
   assert.deepEqual(unknownBody, { received: 1 });
 
   // ANTI-PROBE: a resolved sender's response is byte-for-byte the same shape.
-  const resolvedRes = await fetch(`${base}/api/inbound/email?token=${TOKEN}`, {
+  const resolvedRes = await fetch(`${base}/api/inbound/email`, {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, "x-op-token": TOKEN },
     body: emailBody(CLIENT_EMAIL, [
-      // Unsupported type: the detached pipeline audit-skips it, so this route
+      // Unsupported type: the queued pipeline audit-skips it, so this route
       // call needs no model provider.
-      { filename: `probe-${SALT}.csv`, contentType: "text/csv", contentBase64: PNG_B64 },
+      {
+        filename: `probe-${SALT}.csv`,
+        contentType: "text/csv",
+        contentBase64: PNG_B64,
+      },
     ]),
   });
   assert.equal(resolvedRes.status, 202);
   assert.deepEqual(await resolvedRes.json(), unknownBody);
+  await drain();
+
+  const completedIntake = await getDb()
+    .select({ status: outboxTable.status, payload: outboxTable.payload })
+    .from(outboxTable)
+    .where(
+      and(
+        eq(outboxTable.type, "inbound.email"),
+        gte(outboxTable.createdAt, queuedAfter),
+      ),
+    );
+  assert.equal(completedIntake.length, 2);
+  assert.ok(
+    completedIntake.every(
+      (row) =>
+        row.status === "done" &&
+        (row.payload as { redacted?: boolean }).redacted === true,
+    ),
+    "successful intake payloads are scrubbed after processing",
+  );
 
   // The drop is durable, with the address MASKED (first 2 chars + domain).
   const ignored = await eventually(async () => {
@@ -226,7 +266,9 @@ test("unknown sender: 202 identical to success, nothing created, masked audit ro
   const cases = await getDb()
     .select({ id: clerkCasesTable.id })
     .from(clerkCasesTable)
-    .where(inArray(clerkCasesTable.sourceName, [filename, `probe-${SALT}.csv`]));
+    .where(
+      inArray(clerkCasesTable.sourceName, [filename, `probe-${SALT}.csv`]),
+    );
   assert.equal(cases.length, 0);
 });
 
@@ -237,9 +279,7 @@ test("sender masking and resolution", async () => {
 
   // Case-insensitive match on users.email; staff resolve to nothing (the
   // rail only captures on behalf of clients).
-  const resolved = await resolveInboundSender(
-    `Client@${DOMAIN.toUpperCase()}`,
-  );
+  const resolved = await resolveInboundSender(`Client@${DOMAIN.toUpperCase()}`);
   assert.deepEqual(resolved, {
     userId: clientUserId,
     firmId: firm1,
@@ -268,7 +308,9 @@ test("resolved sender: PDF walks the text path, PNG the vision path, cases stamp
   // Each attachment makes one triage call (whose okExtraction() answer fails
   // the triage schema and falls back to the invoice lane — triage.test.ts
   // covers the lane switch) and one extraction call.
-  const extractCalls = calls.filter((c) => c.schemaName === "invoice_extraction");
+  const extractCalls = calls.filter(
+    (c) => c.schemaName === "invoice_extraction",
+  );
   const triageCalls = calls.filter((c) => c.schemaName === "document_triage");
   assert.equal(extractCalls.length, 2, "one extraction per attachment");
   assert.equal(triageCalls.length, 2, "one triage call per attachment");

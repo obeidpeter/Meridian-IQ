@@ -3,12 +3,13 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 import type { PaymentFlagInputPaymentStatus } from './paymentFlagInputPaymentStatus';
 
 export interface PaymentFlagInput {
   paymentStatus: PaymentFlagInputPaymentStatus;
   occurredAt?: Date;
+  /** Defaults to the invoice total; when paymentStatus is paid, must cover the full invoice total */
   amount?: string;
 }

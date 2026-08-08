@@ -24,6 +24,7 @@ import {
   requireFirmScope,
 } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
+import { isPositiveMoney } from "../lib/money";
 import { listUnmatchedCollections } from "../modules/collections/unmatched";
 import {
   createCollectionAccount,
@@ -87,13 +88,18 @@ router.post("/collection-accounts", async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
   requireFirmScope(req.principal);
   const body = parseOrThrow(CreateCollectionAccountBody, req.body);
-  // Party access + provider provision + insert + pointer-only audit live in
-  // the service (which fails closed on a broken relay — no row without a
-  // provider-side account).
-  const row = await createCollectionAccount(req.principal, {
-    clientPartyId: body.clientPartyId,
-    label: body.label ?? null,
-  });
+  // Party access + durable reservation + provider provisioning + activation
+  // + pointer-only audit live in the service. A broken relay leaves only the
+  // hidden reservation needed for an idempotent retry; it never exposes an
+  // active account that the provider did not create.
+  const row = await createCollectionAccount(
+    req.principal,
+    {
+      clientPartyId: body.clientPartyId,
+      label: body.label ?? null,
+    },
+    req.abortSignal,
+  );
   res.status(201).json(CreateCollectionAccountResponse.parse(accountView(row)));
 });
 
@@ -129,15 +135,15 @@ router.post(
 // COLLECTION_WEBHOOK_TOKEN configured the rail must not exist at all — every
 // request 404s exactly like an unknown route. Setting the env var lights the
 // rail; the shared secret then IS the credential (constant-time compare via
-// lib/op-token.ts), presented as x-op-token or ?token= — the same shapes the
-// operational endpoints accept.
+// lib/op-token.ts), presented only in the x-op-token header so credentials
+// never enter URLs, browser history or access logs.
 //
 // Local (non-generated) schema: this webhook is off-contract by design.
 const InboundCollectionBody = z.object({
-  accountReference: z.string().min(1),
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
-  invoiceNumber: z.string().min(1),
-  reference: z.string().optional(),
+  accountReference: z.string().min(1).max(256),
+  amount: z.string().refine(isPositiveMoney),
+  invoiceNumber: z.string().min(1).max(256),
+  reference: z.string().min(1).max(200),
   paidAt: z.string().datetime().optional(),
 });
 

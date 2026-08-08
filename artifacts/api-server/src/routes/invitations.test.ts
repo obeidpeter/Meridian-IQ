@@ -22,7 +22,10 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
-import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // Self-serve invite flow (IDN-01). The route harness runs getDb() on the raw
 // pool (no RLS), so these pin the module's app-layer behaviour: firmId is forced
@@ -57,7 +60,9 @@ before(async () => {
     .insert(usersTable)
     .values({ email: takenEmail })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Invite Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Invite Firm ${SALT}` });
   await db.insert(partiesTable).values([
     {
       id: engagedClientId,
@@ -94,13 +99,19 @@ async function createInvite(
     headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+  return {
+    status: res.status,
+    json: (await res.json()) as Record<string, unknown>,
+  };
 }
 
 test("creates a firm_staff invitation, returns a one-time token, stores only its hash", async () => {
   const base = await listen(appFor(admin, invitationsRouter));
   const email = `Staff-${SALT}@Test.Local`;
-  const { status, json } = await createInvite(base, { email, role: "firm_staff" });
+  const { status, json } = await createInvite(base, {
+    email,
+    role: "firm_staff",
+  });
   assert.equal(status, 201);
 
   const token = json.token as string;
@@ -108,7 +119,11 @@ test("creates a firm_staff invitation, returns a one-time token, stores only its
   const invitation = json.invitation as Record<string, unknown>;
   assert.equal(invitation.email, email.toLowerCase(), "email is normalised");
   assert.equal(invitation.role, "firm_staff");
-  assert.equal(invitation.firmId, firmId, "firmId forced to the inviter's firm");
+  assert.equal(
+    invitation.firmId,
+    firmId,
+    "firmId forced to the inviter's firm",
+  );
   assert.equal(invitation.status, "pending");
   assert.equal(invitation.clientPartyId, null);
   assert.equal(
@@ -227,12 +242,17 @@ test("redeeming a token provisions the user + membership and is single-use", asy
     clientPartyId: engagedClientId,
   });
   const token = created.json.token as string;
-  const inviteId = (created.json.invitation as Record<string, unknown>).id as string;
+  const inviteId = (created.json.invitation as Record<string, unknown>)
+    .id as string;
 
   const accept = await fetch(`${authBase}/auth/accept-invite`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ token, password: "sup3r-secret-pw", fullName: "  Ada Lovelace  " }),
+    body: JSON.stringify({
+      token,
+      password: "sup3r-secret-pw",
+      fullName: "  Ada Lovelace  ",
+    }),
   });
   assert.equal(accept.status, 204);
 
@@ -244,7 +264,8 @@ test("redeeming a token provisions the user + membership and is single-use", asy
   assert.ok(user, "user was created");
   assert.equal(user.fullName, "Ada Lovelace", "full name trimmed");
   assert.ok(
-    user.passwordHash && (await verifyPassword("sup3r-secret-pw", user.passwordHash)),
+    user.passwordHash &&
+      (await verifyPassword("sup3r-secret-pw", user.passwordHash)),
     "password is set and verifiable",
   );
 
@@ -280,9 +301,48 @@ test("redeeming an unknown token is a generic 400", async () => {
   const res = await fetch(`${authBase}/auth/accept-invite`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ token: "deadbeef".repeat(8), password: "whatever-123" }),
+    body: JSON.stringify({
+      token: "deadbeef".repeat(8),
+      password: "whatever-123",
+    }),
   });
   assert.equal(res.status, 400);
+});
+
+test("two invitations racing for one email yield one account and a controlled conflict", async () => {
+  const inviteBase = await listen(appFor(admin, invitationsRouter));
+  const authBase = await listen(appFor(admin, authRouter));
+  const email = `accept-race-${SALT}@test.local`;
+  const first = await createInvite(inviteBase, { email, role: "firm_staff" });
+  const second = await createInvite(inviteBase, { email, role: "firm_staff" });
+
+  const responses = await Promise.all(
+    [first, second].map((created, index) =>
+      fetch(`${authBase}/auth/accept-invite`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          token: created.json.token,
+          password: `race-password-${index + 1}`,
+        }),
+      }),
+    ),
+  );
+  assert.deepEqual(
+    responses.map((response) => response.status).sort(),
+    [204, 409],
+  );
+
+  const users = await getDb()
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, email));
+  assert.equal(users.length, 1);
+  const memberships = await getDb()
+    .select({ id: membershipsTable.id })
+    .from(membershipsTable)
+    .where(eq(membershipsTable.userId, users[0].id));
+  assert.equal(memberships.length, 1);
 });
 
 // ---- Operator-issued invitations (new-firm bootstrap) -----------------------
@@ -291,7 +351,9 @@ test("redeeming an unknown token is a generic 400", async () => {
 // ordinary IDN-01 flow.
 
 const operatorUserId = randomUUID();
-const operator: Principal = crossTenantPrincipal("operator", { userId: operatorUserId });
+const operator: Principal = crossTenantPrincipal("operator", {
+  userId: operatorUserId,
+});
 
 test("an operator bootstraps a new firm's first admin via a targeted invite", async () => {
   const db = getDb();
@@ -336,7 +398,11 @@ test("an operator bootstraps a new firm's first admin via a targeted invite", as
     .from(membershipsTable)
     .where(eq(membershipsTable.userId, user.id))
     .limit(1);
-  assert.equal(membership.firmId, newFirmId, "membership lands in the new firm");
+  assert.equal(
+    membership.firmId,
+    newFirmId,
+    "membership lands in the new firm",
+  );
   assert.equal(membership.role, "firm_admin");
 });
 
@@ -371,7 +437,11 @@ test("a firm principal may not target another firm (own firm is fine)", async ()
     role: "firm_staff",
     firmId: otherFirmId,
   });
-  assert.equal(foreign.status, 403, "a foreign firmId is rejected, not rewritten");
+  assert.equal(
+    foreign.status,
+    403,
+    "a foreign firmId is rejected, not rewritten",
+  );
 
   const own = await createInvite(base, {
     email: `own-firm-${SALT}@test.local`,
@@ -379,8 +449,5 @@ test("a firm principal may not target another firm (own firm is fine)", async ()
     firmId,
   });
   assert.equal(own.status, 201, "naming the caller's own firm is a no-op");
-  assert.equal(
-    (own.json.invitation as Record<string, unknown>).firmId,
-    firmId,
-  );
+  assert.equal((own.json.invitation as Record<string, unknown>).firmId, firmId);
 });

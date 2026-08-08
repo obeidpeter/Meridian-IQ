@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import type { ConsentRecord } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -198,7 +198,7 @@ export function Consent() {
                   return (
                     <Card key={l.layer} data-testid={`consent-layer-${l.layer}`}>
                       <CardHeader>
-                        <CardTitle className="flex items-center justify-between gap-2 text-base">
+                        <h2 className="flex items-center justify-between gap-2 text-base font-semibold leading-snug">
                           <span className="flex items-center gap-2">
                             <Icon className="w-4 h-4 text-primary" aria-hidden="true" />
                             Layer {l.layer} · {l.title}
@@ -216,7 +216,7 @@ export function Consent() {
                               <ShieldOff className="w-3 h-3" aria-hidden="true" /> Not granted
                             </span>
                           )}
-                        </CardTitle>
+                        </h2>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <p className="text-sm text-muted-foreground">{l.description}</p>
@@ -261,7 +261,9 @@ export function Consent() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Consent history</CardTitle>
+                  <h2 className="text-base font-semibold leading-snug">
+                    Consent history
+                  </h2>
                 </CardHeader>
                 <CardContent>
                   {(records ?? []).length === 0 ? (
@@ -306,7 +308,7 @@ export function Consent() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Your data</CardTitle>
+              <h2 className="text-base font-semibold leading-snug">Your data</h2>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">

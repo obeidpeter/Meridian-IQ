@@ -24,13 +24,19 @@ import { db, type Database } from "./client.ts";
 
 interface DbContext {
   db: Database;
+  active: boolean;
 }
 
 const storage = new AsyncLocalStorage<DbContext>();
 
 // The ambient tenant-scoped transaction, or the raw pool when none is active.
 export function getDb(): Database {
-  return storage.getStore()?.db ?? db;
+  const context = storage.getStore();
+  if (!context) return db;
+  if (!context.active) {
+    throw new Error("Database context is no longer active");
+  }
+  return context.db;
 }
 
 async function setGucs(
@@ -59,7 +65,15 @@ export async function runRequestContext<T>(
   return db.transaction(async (tx) => {
     const scoped = tx as unknown as Database;
     await setGucs(scoped, opts);
-    return storage.run({ db: scoped }, fn);
+    const context: DbContext = { db: scoped, active: true };
+    try {
+      return await storage.run(context, fn);
+    } finally {
+      // A timed-out Express handler may continue its async chain after the
+      // transaction has rolled back. Keep that stale chain from issuing work
+      // through a client that has already returned to the pool.
+      context.active = false;
+    }
   });
 }
 

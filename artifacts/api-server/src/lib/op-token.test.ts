@@ -12,9 +12,8 @@ import {
 } from "../test-helpers/route-harness.ts";
 import { crossTenantPrincipal } from "../test-helpers/principals.ts";
 
-// The opt-in operational-token guard: unset env keeps an endpoint open
-// (existing deployments and the Replit scheduler are unaffected); once set,
-// callers must present the secret via the x-op-token header or ?token= query.
+// The operational-token guard accepts secrets from the x-op-token header
+// only, keeping credentials out of URLs, access logs, and browser history.
 // Env mutations here are safe: node:test runs this file in its own process
 // and its tests serially.
 
@@ -38,7 +37,7 @@ test("opTokenAllows: a configured secret requires an exact match", () => {
   assert.equal(opTokenAllows("s3cret", "s3cret-and-more"), false);
 });
 
-test("requireOpToken: open when unset; header or query admits once set", async () => {
+test("requireOpToken: open when unset; only the header admits once set", async () => {
   const guarded: IRouter = Router();
   guarded.get("/guarded", requireOpToken("TEST_OP_TOKEN"), (_req, res) => {
     res.json({ ok: true });
@@ -69,7 +68,7 @@ test("requireOpToken: open when unset; header or query admits once set", async (
     assert.equal(viaHeader.status, 200, "x-op-token header admits");
 
     const viaQuery = await fetch(`${base}/guarded?token=op-secret`);
-    assert.equal(viaQuery.status, 200, "?token= admits URL-only pingers");
+    assert.equal(viaQuery.status, 401, "URL query secrets are rejected");
   } finally {
     delete process.env.TEST_OP_TOKEN;
   }
@@ -97,6 +96,9 @@ test("/metrics honours METRICS_TOKEN and stays open without it", async () => {
 
 test("/internal/sweep rejects before running the pass when SWEEP_TOKEN is set", async () => {
   const base = await listen(appFor(principal, sweepRouter));
+  delete process.env.SWEEP_TOKEN;
+  const dark = await fetch(`${base}/internal/sweep`);
+  assert.equal(dark.status, 404, "the mutating sweep is fail-closed");
   process.env.SWEEP_TOKEN = "cron-secret";
   try {
     const denied = await fetch(`${base}/internal/sweep`);

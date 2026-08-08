@@ -10,6 +10,7 @@ import {
   jsonb,
   pgEnum,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { firmsTable } from "./organizations.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -80,42 +81,46 @@ export const messageStatusEnum = pgEnum("message_status", [
 // notifications) — and the notification inbox reads strictly by them. Plain
 // uuids, deliberately no FK: this is a platform-wide pointer ledger, not a
 // tenant table, and rows must outlive party merges/user offboarding.
-export const messagesTable = pgTable("messages", {
-  id: id(),
-  channel: messageChannelEnum("channel").notNull(),
-  recipientRef: text("recipient_ref").notNull(),
-  recipientUserId: uuid("recipient_user_id"),
-  recipientPartyId: uuid("recipient_party_id"),
-  templateKey: text("template_key").notNull(),
-  entityType: text("entity_type"),
-  entityId: text("entity_id"),
-  status: messageStatusEnum("status").notNull().default("queued"),
-  providerMessageId: text("provider_message_id"),
-  failoverFrom: messageChannelEnum("failover_from"),
-  error: text("error"),
-  // Recipient read-state for the notification feed: null = unread. Set only
-  // by the feed's mark-read path, always under the same recipient-identity
-  // predicate that scopes reads (SEC-03 — identity columns are the wall).
-  readAt: timestamp("read_at", { withTimezone: true }),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (t) => [
-  // Kept for provider-side correlation lookups (delivery webhooks, ops).
-  index("messages_recipient_created_idx").on(t.recipientRef, t.createdAt),
-  // The notification feeds scan by recipient identity, newest first. Partial:
-  // each send sets exactly one identity column, so each index holds only its
-  // own rail's rows. The unread count and the mark-read UPDATE ride the SAME
-  // identity indexes: a per-recipient feed is tens-to-hundreds of rows, so
-  // filtering `read_at IS NULL` inside an already identity-narrowed scan is
-  // trivial — an additional partial index WHERE read_at IS NULL would buy
-  // nothing at these sizes and is deliberately not added.
-  index("messages_recipient_user_created_idx")
-    .on(t.recipientUserId, t.createdAt)
-    .where(sql`recipient_user_id IS NOT NULL`),
-  index("messages_recipient_party_created_idx")
-    .on(t.recipientPartyId, t.createdAt)
-    .where(sql`recipient_party_id IS NOT NULL`),
-]);
+export const messagesTable = pgTable(
+  "messages",
+  {
+    id: id(),
+    channel: messageChannelEnum("channel").notNull(),
+    recipientRef: text("recipient_ref").notNull(),
+    recipientUserId: uuid("recipient_user_id"),
+    recipientPartyId: uuid("recipient_party_id"),
+    templateKey: text("template_key").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    status: messageStatusEnum("status").notNull().default("queued"),
+    providerMessageId: text("provider_message_id"),
+    failoverFrom: messageChannelEnum("failover_from"),
+    error: text("error"),
+    // Recipient read-state for the notification feed: null = unread. Set only
+    // by the feed's mark-read path, always under the same recipient-identity
+    // predicate that scopes reads (SEC-03 — identity columns are the wall).
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // Kept for provider-side correlation lookups (delivery webhooks, ops).
+    index("messages_recipient_created_idx").on(t.recipientRef, t.createdAt),
+    // The notification feeds scan by recipient identity, newest first. Partial:
+    // each send sets exactly one identity column, so each index holds only its
+    // own rail's rows. The unread count and the mark-read UPDATE ride the SAME
+    // identity indexes: a per-recipient feed is tens-to-hundreds of rows, so
+    // filtering `read_at IS NULL` inside an already identity-narrowed scan is
+    // trivial — an additional partial index WHERE read_at IS NULL would buy
+    // nothing at these sizes and is deliberately not added.
+    index("messages_recipient_user_created_idx")
+      .on(t.recipientUserId, t.createdAt)
+      .where(sql`recipient_user_id IS NOT NULL`),
+    index("messages_recipient_party_created_idx")
+      .on(t.recipientPartyId, t.createdAt)
+      .where(sql`recipient_party_id IS NOT NULL`),
+  ],
+);
 
 // Transactional outbox: written in the same transaction as the domain change,
 // drained by the worker (INT-09). status=dead is the dead-letter queue.
@@ -126,32 +131,41 @@ export const outboxStatusEnum = pgEnum("outbox_status", [
   "dead",
 ]);
 
-export const outboxTable = pgTable("outbox_events", {
-  id: id(),
-  aggregateType: text("aggregate_type").notNull(),
-  aggregateId: text("aggregate_id").notNull(),
-  type: text("type").notNull(),
-  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-  status: outboxStatusEnum("status").notNull().default("pending"),
-  attempts: integer("attempts").notNull().default(0),
-  maxAttempts: integer("max_attempts").notNull().default(6),
-  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  lockedAt: timestamp("locked_at", { withTimezone: true }),
-  lastError: text("last_error"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (t) => [
-  // Exactly the drain poll's shape (status='pending' AND next_attempt_at <=
-  // now() ORDER BY created_at): partial so the index holds only the live
-  // queue, not the ever-growing done/dead tail.
-  index("outbox_events_pending_idx")
-    .on(t.nextAttemptAt, t.createdAt)
-    .where(sql`status = 'pending'`),
-  // The stuck-submission reconcile sweep probes by aggregate.
-  index("outbox_events_aggregate_idx").on(t.aggregateId),
-]);
+export const outboxTable = pgTable(
+  "outbox_events",
+  {
+    id: id(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: text("aggregate_id").notNull(),
+    type: text("type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    status: outboxStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(6),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // Exactly the drain poll's shape (status='pending' AND next_attempt_at <=
+    // now() ORDER BY created_at): partial so the index holds only the live
+    // queue, not the ever-growing done/dead tail.
+    index("outbox_events_pending_idx")
+      .on(t.nextAttemptAt, t.createdAt)
+      .where(sql`status = 'pending'`),
+    // The stuck-submission reconcile sweep probes by aggregate.
+    index("outbox_events_aggregate_idx").on(t.aggregateId),
+    // Provider redelivery of an inbound email/WhatsApp message must resolve to
+    // one durable receipt even when several instances receive it concurrently.
+    uniqueIndex("outbox_events_inbound_dedupe_idx")
+      .on(t.type, t.aggregateId)
+      .where(sql`${t.type} IN ('inbound.email', 'inbound.whatsapp')`),
+  ],
+);
 
 // Circuit-breaker state per rail, persisted so it survives restarts and can be
 // reconciled by the scheduled rail-state job (INT-09).
@@ -170,19 +184,23 @@ export const railStatesTable = pgTable("rail_states", {
 });
 
 // Stamp-verification cache with a configurable freshness window (CORE-04).
-export const stampVerificationsTable = pgTable("stamp_verifications", {
-  id: id(),
-  irn: text("irn").notNull(),
-  csid: text("csid").notNull(),
-  valid: boolean("valid").notNull(),
-  rail: text("rail").notNull(),
-  raw: jsonb("raw").$type<Record<string, unknown>>(),
-  checkedAt: timestamp("checked_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  freshUntil: timestamp("fresh_until", { withTimezone: true }).notNull(),
-// The public verify endpoint looks up by (irn, csid) on every call.
-}, (t) => [index("stamp_verifications_irn_csid_idx").on(t.irn, t.csid)]);
+export const stampVerificationsTable = pgTable(
+  "stamp_verifications",
+  {
+    id: id(),
+    irn: text("irn").notNull(),
+    csid: text("csid").notNull(),
+    valid: boolean("valid").notNull(),
+    rail: text("rail").notNull(),
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    freshUntil: timestamp("fresh_until", { withTimezone: true }).notNull(),
+    // The public verify endpoint looks up by (irn, csid) on every call.
+  },
+  (t) => [index("stamp_verifications_irn_csid_idx").on(t.irn, t.csid)],
+);
 
 // Server-generated secrets that must survive restarts (e.g. the session-cookie
 // signing key). Generated once at boot when absent; never exposed via any API.

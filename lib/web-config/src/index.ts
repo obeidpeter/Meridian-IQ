@@ -5,8 +5,8 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 /**
- * The one vite config for the four web apps (landing, console, SME, buyer
- * portal) — they were byte-identical copies. Each app's vite.config.ts calls
+ * The one Vite config for the five web apps (landing, console, SME, buyer
+ * portal, penalty calculator). Each app's vite.config.ts calls
  * this with its own directory:
  *
  *   export default webAppViteConfig(import.meta.dirname);
@@ -47,6 +47,18 @@ export async function webAppViteConfig(appDir: string): Promise<UserConfig> {
   const frameAncestors =
     process.env.FRAME_ANCESTORS ??
     "'self' https://*.replit.dev https://*.replit.app https://*.replit.com https://replit.com";
+  const contentSecurityPolicy = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https: wss:",
+    "form-action 'self'",
+    `frame-ancestors ${frameAncestors}`,
+  ].join("; ");
 
   return defineConfig({
     base: basePath,
@@ -94,8 +106,11 @@ export async function webAppViteConfig(appDir: string): Promise<UserConfig> {
       host: "0.0.0.0",
       allowedHosts: true,
       headers: {
-        "Content-Security-Policy": `frame-ancestors ${frameAncestors};`,
+        "Content-Security-Policy": `${contentSecurityPolicy};`,
         "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Permissions-Policy":
+          "camera=(), geolocation=(), microphone=(self), payment=()",
       },
     },
   });

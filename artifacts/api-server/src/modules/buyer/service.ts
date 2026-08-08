@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -68,6 +68,19 @@ export interface InvoiceFacts {
   latestConfirmationAt: Date | null;
 }
 
+type BuyerConfirmationState =
+  | "none"
+  | "requested"
+  | "confirmed"
+  | "queried"
+  | "rejected";
+
+export interface BuyerInvoiceSummary {
+  total: number;
+  awaitingTotal: string;
+  counts: Record<BuyerConfirmationState, number>;
+}
+
 // Statuses visible to the buyer organization. Drafts (and locally-validated
 // drafts) are the supplier firm's private mutable working state — an invoice
 // only exists outside its firm once submitted (CORE-02) — so they must never
@@ -87,17 +100,68 @@ const BUYER_VISIBLE_STATUSES = [
 // verifyStampBatch).
 export async function loadBuyerBook(
   buyerPartyId: string,
+  options?: {
+    limit: number;
+    offset: number;
+    confirmationState?:
+      | "none"
+      | "requested"
+      | "confirmed"
+      | "queried"
+      | "rejected";
+    invoiceId?: string;
+    supplierPartyId?: string;
+    search?: string;
+  },
 ): Promise<InvoiceFacts[]> {
-  const invoices = await getDb()
+  const latestConfirmation = sql`(
+    SELECT c.state::text
+      FROM confirmations c
+     WHERE c.invoice_id = ${invoicesTable.id}
+     ORDER BY c.created_at DESC, c.id DESC
+     LIMIT 1
+  )`;
+  const statePredicate = options?.confirmationState
+    ? options.confirmationState === "none"
+      ? sql`${latestConfirmation} IS NULL`
+      : sql`${latestConfirmation} = ${options.confirmationState}`
+    : undefined;
+  const search = options?.search?.trim();
+  const searchPattern = search
+    ? `%${search.replace(/[\\%_]/g, "\\$&")}%`
+    : undefined;
+  const searchPredicate = search
+    ? or(
+        sql`${invoicesTable.invoiceNumber} ILIKE ${searchPattern} ESCAPE '\\'`,
+        sql`EXISTS (
+          SELECT 1
+            FROM ${partiesTable} supplier
+           WHERE supplier.id = ${invoicesTable.supplierPartyId}
+             AND supplier.legal_name ILIKE ${searchPattern} ESCAPE '\\'
+        )`,
+      )
+    : undefined;
+  const query = getDb()
     .select()
     .from(invoicesTable)
     .where(
       and(
         eq(invoicesTable.buyerPartyId, buyerPartyId),
         inArray(invoicesTable.status, [...BUYER_VISIBLE_STATUSES]),
+        options?.invoiceId
+          ? eq(invoicesTable.id, options.invoiceId)
+          : undefined,
+        options?.supplierPartyId
+          ? eq(invoicesTable.supplierPartyId, options.supplierPartyId)
+          : undefined,
+        statePredicate,
+        searchPredicate,
       ),
     )
-    .orderBy(desc(invoicesTable.createdAt));
+    .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id));
+  const invoices = options
+    ? await query.limit(options.limit).offset(options.offset)
+    : await query;
   if (invoices.length === 0) return [];
   const ids = invoices.map((i) => i.id);
   const stamps = await getDb()
@@ -113,11 +177,14 @@ export async function loadBuyerBook(
     })
     .from(confirmationsTable)
     .where(inArray(confirmationsTable.invoiceId, ids))
-    .orderBy(desc(confirmationsTable.createdAt));
+    .orderBy(desc(confirmationsTable.createdAt), desc(confirmationsTable.id));
   const latestByInvoice = new Map<string, { state: string; createdAt: Date }>();
   for (const c of confirmations) {
     if (!latestByInvoice.has(c.invoiceId)) {
-      latestByInvoice.set(c.invoiceId, { state: c.state, createdAt: c.createdAt });
+      latestByInvoice.set(c.invoiceId, {
+        state: c.state,
+        createdAt: c.createdAt,
+      });
     }
   }
   return invoices.map((invoice) => {
@@ -130,6 +197,69 @@ export async function loadBuyerBook(
       latestConfirmationAt: latest?.createdAt ?? null,
     };
   });
+}
+
+export async function summarizeBuyerBook(
+  buyerPartyId: string,
+): Promise<BuyerInvoiceSummary> {
+  // Classify each visible invoice once, then aggregate the closed state set in
+  // one row. The materialized CTE avoids repeating the latest-lineage lookup
+  // across each FILTER and keeps the summary independent of list pagination.
+  const visibleStatuses = sql.join(
+    BUYER_VISIBLE_STATUSES.map((status) => sql`${status}`),
+    sql`, `,
+  );
+  const [row] = (
+    await getDb().execute<{
+      total: number;
+      awaiting_total: string;
+      none_count: number;
+      requested_count: number;
+      confirmed_count: number;
+      queried_count: number;
+      rejected_count: number;
+    }>(sql`
+      WITH visible AS MATERIALIZED (
+        SELECT
+          i.grand_total,
+          COALESCE((
+            SELECT c.state::text
+            FROM confirmations c
+            WHERE c.invoice_id = i.id
+            ORDER BY c.created_at DESC, c.id DESC
+            LIMIT 1
+          ), 'none') AS confirmation_state
+        FROM invoices i
+        WHERE i.buyer_party_id = ${buyerPartyId}
+          AND i.status IN (${visibleStatuses})
+      )
+      SELECT
+        COUNT(*)::int AS total,
+        COALESCE(
+          SUM(grand_total) FILTER (WHERE confirmation_state = 'requested'),
+          0
+        )::numeric(18, 2)::text AS awaiting_total,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'none'))::int AS none_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'requested'))::int AS requested_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'confirmed'))::int AS confirmed_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'queried'))::int AS queried_count,
+        (COUNT(*) FILTER (WHERE confirmation_state = 'rejected'))::int AS rejected_count
+      FROM visible
+    `)
+  ).rows;
+
+  const counts: BuyerInvoiceSummary["counts"] = {
+    none: row?.none_count ?? 0,
+    requested: row?.requested_count ?? 0,
+    confirmed: row?.confirmed_count ?? 0,
+    queried: row?.queried_count ?? 0,
+    rejected: row?.rejected_count ?? 0,
+  };
+  return {
+    total: row?.total ?? 0,
+    awaitingTotal: row?.awaiting_total ?? "0.00",
+    counts,
+  };
 }
 
 function groupBySupplier(book: InvoiceFacts[]): Map<string, InvoiceFacts[]> {
@@ -211,7 +341,11 @@ export async function computeExposure(
 
   const breakdown: SupplierSummary[] = [...groupBySupplier(book).entries()].map(
     ([supplierPartyId, facts]) =>
-      supplierSummaryOf(supplierPartyId, facts, supplierById.get(supplierPartyId)),
+      supplierSummaryOf(
+        supplierPartyId,
+        facts,
+        supplierById.get(supplierPartyId),
+      ),
   );
   breakdown.sort((a, b) => Number(b.vatAtRisk) - Number(a.vatAtRisk));
 
@@ -229,15 +363,17 @@ export async function computeExposure(
 }
 
 async function persistSnapshot(exposure: ExposureComputation): Promise<void> {
-  await getDb().insert(buyerExposureSnapshotsTable).values({
-    buyerPartyId: exposure.buyerPartyId,
-    supplierCount: exposure.supplierCount,
-    invoiceCount: exposure.invoiceCount,
-    protectedVat: exposure.protectedVat,
-    atRiskVat: exposure.atRiskVat,
-    breakdown: exposure.breakdown as unknown as Record<string, unknown>[],
-    computedAt: exposure.computedAt,
-  });
+  await getDb()
+    .insert(buyerExposureSnapshotsTable)
+    .values({
+      buyerPartyId: exposure.buyerPartyId,
+      supplierCount: exposure.supplierCount,
+      invoiceCount: exposure.invoiceCount,
+      protectedVat: exposure.protectedVat,
+      atRiskVat: exposure.atRiskVat,
+      breakdown: exposure.breakdown as unknown as Record<string, unknown>[],
+      computedAt: exposure.computedAt,
+    });
 }
 
 // Serve the latest snapshot; recompute inline when stale or absent so the
@@ -459,11 +595,21 @@ export async function supplierDetail(
   buyerPartyId: string,
   supplierPartyId: string,
 ): Promise<SupplierDetailView> {
-  const facts = (await loadBuyerBook(buyerPartyId)).filter(
-    (f) => f.invoice.supplierPartyId === supplierPartyId,
-  );
+  const detailCap = 500;
+  const facts = await loadBuyerBook(buyerPartyId, {
+    limit: detailCap + 1,
+    offset: 0,
+    supplierPartyId,
+  });
   if (facts.length === 0) {
     throw new DomainError("NOT_FOUND", "Supplier not found", 404);
+  }
+  if (facts.length > detailCap) {
+    throw new DomainError(
+      "RESULT_TOO_LARGE",
+      `Supplier detail exceeds ${detailCap} invoices; narrow the requested dataset`,
+      413,
+    );
   }
   const [supplier] = await getDb()
     .select({

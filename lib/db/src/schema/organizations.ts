@@ -7,9 +7,11 @@ import {
   boolean,
   timestamp,
   index,
+  uniqueIndex,
   pgEnum,
   primaryKey,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
@@ -132,7 +134,12 @@ export const passwordResetsTable = pgTable(
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [index("password_resets_user_idx").on(t.userId)],
+  (t) => [
+    index("password_resets_user_idx").on(t.userId),
+    uniqueIndex("password_resets_one_pending_per_user_uq")
+      .on(t.userId)
+      .where(sql`${t.status} = 'pending'`),
+  ],
 );
 
 export const invitationsTable = pgTable(

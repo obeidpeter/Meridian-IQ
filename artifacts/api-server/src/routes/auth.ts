@@ -26,6 +26,7 @@ import {
   issueSessionToken,
   hashPassword,
   verifyPassword,
+  PasswordKdfBusyError,
 } from "../modules/auth/session";
 import {
   buildOtpauthUri,
@@ -37,28 +38,32 @@ import {
   verifyTotpCode,
 } from "../modules/auth/totp";
 import {
-  isLoginThrottled,
-  recordLoginFailure,
+  throttleLoginCredentials,
   clearLoginFailures,
-  isActionThrottled,
-  recordActionFailure,
   clearActionFailures,
   throttleActionAttempt,
+  throttleLoginAttempt,
 } from "../modules/auth/throttle";
 import { acceptInvitation } from "../modules/auth/invitations";
 import { resetPassword } from "../modules/auth/password-reset";
 import { appendAudit } from "../modules/audit/audit";
 
-// First-party session sign-in (SEC-02). Sets an HttpOnly, SameSite=Lax cookie;
+// First-party session sign-in (SEC-02). Sets an HttpOnly session cookie;
 // the principal middleware resolves it on subsequent requests. Login/logout
 // are on the PUBLIC_PATHS allowlist (login must work unauthenticated; logout
 // must work even with an expired session); change-password is authenticated.
 
 const router: IRouter = Router();
 
-function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown> }) {
+function cookieOptions(req: {
+  secure?: boolean;
+  headers: Record<string, unknown>;
+}) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "");
-  const secure = Boolean(req.secure) || forwardedProto.includes("https");
+  const secure =
+    process.env.NODE_ENV === "production" ||
+    Boolean(req.secure) ||
+    forwardedProto.split(",")[0]?.trim() === "https";
   // The web apps are served inside a cross-site iframe (the Replit preview and
   // any other embed), so the session cookie must be SameSite=None to be sent
   // back on subsequent API calls. SameSite=None requires Secure; fall back to
@@ -131,14 +136,26 @@ function accountPayload(
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(LoginBody, req.body);
-  const retryAfter = await isLoginThrottled(req, parsed.email);
+  const ipRetryAfter = await throttleLoginAttempt(req);
+  if (ipRetryAfter !== null) {
+    sendThrottled429(res, ipRetryAfter, "Too many sign-in attempts");
+    return;
+  }
+  const retryAfter = await throttleLoginCredentials(req, parsed.email);
   if (retryAfter !== null) {
     sendThrottled429(res, retryAfter, "Too many sign-in attempts");
     return;
   }
-  const result = await authenticate(parsed.email, parsed.password);
+  let result;
+  try {
+    result = await authenticate(parsed.email, parsed.password);
+  } catch (err) {
+    if (!(err instanceof PasswordKdfBusyError)) throw err;
+    res.setHeader("Retry-After", "1");
+    res.status(503).json({ error: "Sign-in is busy. Try again shortly." });
+    return;
+  }
   if (!result) {
-    await recordLoginFailure(req, parsed.email);
     // Uniform message: never reveal whether the email exists.
     res.status(401).json({ error: "Invalid email or password" });
     return;
@@ -266,7 +283,7 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
     !user ||
     // Epoch check mirrors the session parser: a password change between login
     // and challenge revokes the pending token too (SEC-02).
-    verified.epoch < user.sessionEpoch ||
+    verified.epoch !== user.sessionEpoch ||
     !user.totpEnabledAt ||
     !user.totpSecret
   ) {
@@ -292,6 +309,7 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
       .where(
         and(
           eq(usersTable.id, user.id),
+          eq(usersTable.sessionEpoch, user.sessionEpoch),
           or(
             isNull(usersTable.totpLastUsedStep),
             lt(usersTable.totpLastUsedStep, totpMatch.step),
@@ -319,6 +337,7 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
       .where(
         and(
           eq(usersTable.id, user.id),
+          eq(usersTable.sessionEpoch, user.sessionEpoch),
           sql`${usersTable.totpRecoveryCodes} @> to_jsonb(array[${codeHash}::text])`,
         ),
       )
@@ -373,6 +392,8 @@ router.post("/auth/totp/setup", async (req, res): Promise<void> => {
     .select({
       id: usersTable.id,
       email: usersTable.email,
+      sessionEpoch: usersTable.sessionEpoch,
+      totpSecret: usersTable.totpSecret,
       totpEnabledAt: usersTable.totpEnabledAt,
     })
     .from(usersTable)
@@ -390,7 +411,7 @@ router.post("/auth/totp/setup", async (req, res): Promise<void> => {
   }
   const secret = generateTotpSecret();
   const { codes, hashes } = generateRecoveryCodes();
-  await getDb()
+  const [prepared] = await getDb()
     .update(usersTable)
     .set({
       totpSecret: secret,
@@ -398,7 +419,24 @@ router.post("/auth/totp/setup", async (req, res): Promise<void> => {
       totpRecoveryCodes: hashes,
       totpLastUsedStep: null,
     })
-    .where(eq(usersTable.id, user.id));
+    .where(
+      and(
+        eq(usersTable.id, user.id),
+        eq(usersTable.sessionEpoch, user.sessionEpoch),
+        isNull(usersTable.totpEnabledAt),
+        user.totpSecret
+          ? eq(usersTable.totpSecret, user.totpSecret)
+          : isNull(usersTable.totpSecret),
+      ),
+    )
+    .returning({ id: usersTable.id });
+  if (!prepared) {
+    throw new DomainError(
+      "TOTP_SETUP_CONFLICT",
+      "The account changed while enrolment was being prepared. Try again.",
+      409,
+    );
+  }
   res.json(
     SetupTotpResponse.parse({
       secret,
@@ -415,6 +453,12 @@ router.post("/auth/totp/setup", async (req, res): Promise<void> => {
 // caller's own cookie is re-issued under the new epoch.
 router.post("/auth/totp/activate", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(ActivateTotpBody, req.body);
+  const throttleKey = `totp:${req.principal.userId}`;
+  const retryAfter = await throttleActionAttempt(throttleKey);
+  if (retryAfter !== null) {
+    sendThrottled429(res, retryAfter, "Too many attempts");
+    return;
+  }
   const [user] = await getDb()
     .select({
       id: usersTable.id,
@@ -442,7 +486,6 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
     );
   }
   const enabledAt = new Date();
-  const nextEpoch = user.sessionEpoch + 1;
   // Same CAS discipline as the challenge's step pin: activation only lands on
   // a still-PENDING enrolment whose step pin this code still beats, so two
   // concurrent activations (or an activation racing a challenge) cannot both
@@ -455,11 +498,13 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
       // The activation code is spent: it cannot be replayed at the challenge
       // endpoint within its own validity window.
       totpLastUsedStep: match.step,
-      sessionEpoch: nextEpoch,
+      sessionEpoch: sql`${usersTable.sessionEpoch} + 1`,
     })
     .where(
       and(
         eq(usersTable.id, user.id),
+        eq(usersTable.sessionEpoch, user.sessionEpoch),
+        eq(usersTable.totpSecret, user.totpSecret),
         isNull(usersTable.totpEnabledAt),
         or(
           isNull(usersTable.totpLastUsedStep),
@@ -467,7 +512,10 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
         ),
       ),
     )
-    .returning({ id: usersTable.id });
+    .returning({
+      id: usersTable.id,
+      sessionEpoch: usersTable.sessionEpoch,
+    });
   if (activated.length === 0) {
     throw new DomainError(
       "TOTP_NOT_PENDING",
@@ -475,6 +523,7 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
       400,
     );
   }
+  await clearActionFailures(throttleKey);
   await appendAudit({
     actorId: user.id,
     firmId: req.principal.firmId,
@@ -483,7 +532,7 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
     entityId: user.id,
     after: { totpEnabled: true, sessionsRevoked: true },
   });
-  const token = await issueSessionToken(user.id, nextEpoch);
+  const token = await issueSessionToken(user.id, activated[0].sessionEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.json(
     ActivateTotpResponse.parse({
@@ -502,7 +551,7 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
 router.post("/auth/totp/disable", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(DisableTotpBody, req.body);
   const throttleKey = `totp:${req.principal.userId}`;
-  const retryAfter = await isActionThrottled(throttleKey);
+  const retryAfter = await throttleActionAttempt(throttleKey);
   if (retryAfter !== null) {
     sendThrottled429(res, retryAfter, "Too many attempts");
     return;
@@ -529,32 +578,56 @@ router.post("/auth/totp/disable", async (req, res): Promise<void> => {
   }
   const passwordOk = Boolean(
     user.passwordHash &&
-      (await verifyPassword(parsed.password, user.passwordHash)),
+    (await verifyPassword(parsed.password, user.passwordHash)),
   );
   const totpMatch = verifyTotpCode(user.totpSecret, parsed.code, {
     lastUsedStep: user.totpLastUsedStep,
   });
+  const recoveryHash = totpMatch ? null : hashRecoveryCode(parsed.code);
   const recoveryOk =
-    !totpMatch &&
-    (user.totpRecoveryCodes ?? []).includes(hashRecoveryCode(parsed.code));
+    recoveryHash !== null &&
+    (user.totpRecoveryCodes ?? []).includes(recoveryHash);
   if (!passwordOk || (!totpMatch && !recoveryOk)) {
-    await recordActionFailure(throttleKey);
     // Uniform: never say which of the two factors failed.
     res.status(401).json({ error: "Invalid password or code" });
     return;
   }
-  await clearActionFailures(throttleKey);
-  const nextEpoch = user.sessionEpoch + 1;
-  await getDb()
+  const factorStillUnused = totpMatch
+    ? or(
+        isNull(usersTable.totpLastUsedStep),
+        lt(usersTable.totpLastUsedStep, totpMatch.step),
+      )
+    : sql`${usersTable.totpRecoveryCodes} @> to_jsonb(array[${recoveryHash ?? ""}::text])`;
+  const [disabled] = await getDb()
     .update(usersTable)
     .set({
       totpSecret: null,
       totpEnabledAt: null,
       totpRecoveryCodes: null,
       totpLastUsedStep: null,
-      sessionEpoch: nextEpoch,
+      sessionEpoch: sql`${usersTable.sessionEpoch} + 1`,
     })
-    .where(eq(usersTable.id, user.id));
+    .where(
+      and(
+        eq(usersTable.id, user.id),
+        eq(usersTable.sessionEpoch, user.sessionEpoch),
+        eq(usersTable.totpSecret, user.totpSecret),
+        eq(usersTable.totpEnabledAt, user.totpEnabledAt),
+        factorStillUnused,
+      ),
+    )
+    .returning({
+      id: usersTable.id,
+      sessionEpoch: usersTable.sessionEpoch,
+    });
+  if (!disabled) {
+    throw new DomainError(
+      "AUTH_STATE_CHANGED",
+      "The account security state changed. Sign in and try again.",
+      409,
+    );
+  }
+  await clearActionFailures(throttleKey);
   await appendAudit({
     actorId: user.id,
     firmId: req.principal.firmId,
@@ -563,7 +636,7 @@ router.post("/auth/totp/disable", async (req, res): Promise<void> => {
     entityId: user.id,
     after: { totpEnabled: false, sessionsRevoked: true },
   });
-  const token = await issueSessionToken(user.id, nextEpoch);
+  const token = await issueSessionToken(user.id, disabled.sessionEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.json(
     DisableTotpResponse.parse({
@@ -619,7 +692,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   // transaction rollback) — a stolen session cookie must not be upgradeable
   // to the password by unbounded guessing.
   const throttleKey = `chpw:${req.principal.userId}`;
-  const retryAfter = await isActionThrottled(throttleKey);
+  const retryAfter = await throttleActionAttempt(throttleKey);
   if (retryAfter !== null) {
     sendThrottled429(res, retryAfter, "Too many attempts");
     return;
@@ -637,19 +710,32 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     !user?.passwordHash ||
     !(await verifyPassword(parsed.currentPassword, user.passwordHash))
   ) {
-    await recordActionFailure(throttleKey);
     res.status(401).json({ error: "Current password is incorrect" });
     return;
   }
-  await clearActionFailures(throttleKey);
-  const nextEpoch = user.sessionEpoch + 1;
-  await getDb()
+  const passwordHash = await hashPassword(parsed.newPassword);
+  const [updated] = await getDb()
     .update(usersTable)
     .set({
-      passwordHash: await hashPassword(parsed.newPassword),
-      sessionEpoch: nextEpoch,
+      passwordHash,
+      sessionEpoch: sql`${usersTable.sessionEpoch} + 1`,
     })
-    .where(eq(usersTable.id, user.id));
+    .where(
+      and(
+        eq(usersTable.id, user.id),
+        eq(usersTable.sessionEpoch, user.sessionEpoch),
+        eq(usersTable.passwordHash, user.passwordHash),
+      ),
+    )
+    .returning({ sessionEpoch: usersTable.sessionEpoch });
+  if (!updated) {
+    throw new DomainError(
+      "AUTH_STATE_CHANGED",
+      "The account security state changed. Sign in and try again.",
+      409,
+    );
+  }
+  await clearActionFailures(throttleKey);
   await appendAudit({
     actorId: user.id,
     firmId: req.principal.firmId,
@@ -663,7 +749,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   // changed it on; every OTHER outstanding token is now stale. The mobile app
   // does not expose this endpoint, so a bearer-token caller (rare) simply
   // re-authenticates — the contract response stays 204.
-  const token = await issueSessionToken(user.id, nextEpoch);
+  const token = await issueSessionToken(user.id, updated.sessionEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.sendStatus(204);
 });

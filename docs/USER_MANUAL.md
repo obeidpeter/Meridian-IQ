@@ -1,6 +1,6 @@
 # MeridianIQ — User Manual
 
-*One data spine. Five ways in.*
+_One data spine. Five ways in._
 
 This manual explains everything MeridianIQ does and how to use it — written
 for the people who use it every day (SME owners, accountants, buyer finance
@@ -40,7 +40,7 @@ rejects, attracts penalties.
 
 MeridianIQ makes that painless, and then makes it worth more:
 
-- **For SMEs** — guided invoicing that catches errors *before* submission,
+- **For SMEs** — guided invoicing that catches errors _before_ submission,
   automatic transmission with retries, a permanent vault of stamped invoices,
   deadline alerts, receivables tracking, and an AI assistant ("Clerk") that
   reads supplier documents and tax-authority notices and answers questions
@@ -57,14 +57,14 @@ MeridianIQ makes that painless, and then makes it worth more:
 Everything runs in one place, reached through **one front door** — plus a
 mobile companion app:
 
-| Address | Workspace | For |
-|---|---|---|
-| `/` | **The Portal** — sign in, pick a workspace | Everyone |
-| `/app/` | **Compliance App** | SME owners, firm staff |
-| `/console/` | **Accountant Console** (incl. the Compliance Desk) | Firms, operators, auditors |
-| `/buyer/` | **Buyer Rails** | Buyer finance teams |
-| `/penalty-calculator/` | **Penalty Calculator** | Anyone — no account needed |
-| Mobile app | **MeridianIQ Companion** (iOS/Android) | SME owners, firm staff on the go |
+| Address                | Workspace                                          | For                              |
+| ---------------------- | -------------------------------------------------- | -------------------------------- |
+| `/`                    | **The Portal** — sign in, pick a workspace         | Everyone                         |
+| `/app/`                | **Compliance App**                                 | SME owners, firm staff           |
+| `/console/`            | **Accountant Console** (incl. the Compliance Desk) | Firms, operators, auditors       |
+| `/buyer/`              | **Buyer Rails**                                    | Buyer finance teams              |
+| `/penalty-calculator/` | **Penalty Calculator**                             | Anyone — no account needed       |
+| Mobile app             | **MeridianIQ Companion** (iOS/Android)             | SME owners, firm staff on the go |
 
 ---
 
@@ -80,19 +80,20 @@ highlighted.
 
 ### Demo accounts
 
-Every demo account uses the password **`meridian2027`**. On the portal,
-clicking a demo account name signs you in with one click. (Demo accounts
-exist only on deployments seeded with demo data — see
-[section 14](#14-for-administrators).)
+Demo accounts exist only in non-production deployments started with
+`SEED_DEMO=true`. Their password is the deployment's explicit
+`DEMO_PASSWORD` secret; the sign-in page never displays or autofills demo
+credentials. Production startup disables all known demo identities. See
+[section 14](#14-for-administrators).
 
-| Account | Email | Signs you into |
-|---|---|---|
-| SME owner (Adaeze Foods) | `owner@adaezefoods.example` | Compliance App — owns the consent decisions |
-| SME firm staff | `demo.staff@meridianiq.example` | Compliance App, with live demo data |
-| Accountant (firm admin) | `demo.admin@meridianiq.example` | Accountant Console (and the Compliance App) |
-| Compliance Desk operator | `ops@meridianiq.example` | The operator queue in the Console |
-| Buyer finance (Zenith Retail) | `finance@zenithretail.example` | Buyer Rails |
-| Read-only auditor | `audit@meridianiq.example` | Audit & evidence (read-only Console) |
+| Account                       | Email                           | Signs you into                              |
+| ----------------------------- | ------------------------------- | ------------------------------------------- |
+| SME owner (Adaeze Foods)      | `owner@adaezefoods.example`     | Compliance App — owns the consent decisions |
+| SME firm staff                | `demo.staff@meridianiq.example` | Compliance App, with live demo data         |
+| Accountant (firm admin)       | `demo.admin@meridianiq.example` | Accountant Console (and the Compliance App) |
+| Compliance Desk operator      | `ops@meridianiq.example`        | The operator queue in the Console           |
+| Buyer finance (Zenith Retail) | `finance@zenithretail.example`  | Buyer Rails                                 |
+| Read-only auditor             | `audit@meridianiq.example`      | Audit & evidence (read-only Console)        |
 
 Two further accounts are seeded but not shown as buttons: a second buyer
 (`accounts@saharalogistics.example`) and a second operator
@@ -110,7 +111,7 @@ the session everywhere.
 
 On the portal, while signed in, your account card has a **Change password**
 form. You must enter your current password; the new one needs at least 8
-characters. Changing your password signs out every *other* session on your
+characters. Changing your password signs out every _other_ session on your
 account (the device you changed it from stays signed in), and the change is
 recorded on the audit trail.
 
@@ -126,7 +127,7 @@ your account. Operators issue reset links from **Console → Team invitations**.
 
 Any account can protect itself with an authenticator app (Google
 Authenticator, Aegis, 1Password — anything that speaks standard TOTP codes).
-Deployments can also *require* 2FA for chosen roles (typically operators and
+Deployments can also _require_ 2FA for chosen roles (typically operators and
 firm admins) — a required-but-unenrolled account is refused at sign-in with
 instructions to enrol first.
 
@@ -140,7 +141,7 @@ instructions to enrol first.
    exactly once if you ever lose your authenticator, and they are never
    shown again.
 2. Enter a live 6-digit code from the app to **activate**. From that moment
-   sign-in demands the code, and every *other* session on your account is
+   sign-in demands the code, and every _other_ session on your account is
    signed out.
 
 **Signing in with 2FA** — after your password is accepted you see the
@@ -150,7 +151,7 @@ over with your password. Five failed code attempts within 15 minutes locks
 the challenge until the window passes.
 
 **Turning it off** — the same card has **Turn off two-factor**; it demands
-your current password *and* a live code (or a recovery code), and signs out
+your current password _and_ a live code (or a recovery code), and signs out
 every other session.
 
 The mobile companion supports the same challenge — see
@@ -164,7 +165,7 @@ The mobile companion supports the same challenge — see
   network) out of sign-in until the window passes; a second, account-wide
   counter (50 failures per hour, from anywhere) blunts distributed
   password-guessing without letting a stranger cheaply lock you out. If you
-  see *"Too many sign-in attempts"*, wait the indicated time and try again.
+  see _"Too many sign-in attempts"_, wait the indicated time and try again.
 - Sessions last 7 days, in a secure browser cookie.
 - The API rate-limits every account (600 requests/minute in general, 60/minute
   on AI-powered routes). Normal use never touches these ceilings; scripts
@@ -177,14 +178,14 @@ The mobile companion supports the same challenge — see
 MeridianIQ enforces permissions at every level — the menus you see, the pages
 you can open, and the data the server will return.
 
-| Role | Plain-language description |
-|---|---|
-| **Client user** | The SME itself (e.g. the business owner). Creates and submits its own invoices, and is the account that grants or revokes **consent** over the business's data. |
-| **Firm staff** | An accountant working clients' books. Everything the client can do (except consent decisions), plus firm-wide views. |
-| **Firm admin** | Runs the practice. Everything staff can do, plus onboarding pipeline management, billing & payments, white-label branding, ERP integrations, client import, team invitations, and the firm's API keys & webhooks. |
-| **Operator** | MeridianIQ's own Compliance Desk. Works a cross-tenant case queue, reviews Clerk's document extractions, edits the error catalogue, manages platform health, feature flags and party data. Does **not** see firm business pages like the portfolio. |
-| **Buyer user** | A finance person at a large buyer. Sees only invoices addressed to their own organisation. |
-| **Auditor** | Read-only everything. Can view every screen the numbers live on, and can verify/export the audit log — but every button that would change something is absent or refused. |
+| Role            | Plain-language description                                                                                                                                                                                                                          |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Client user** | The SME itself (e.g. the business owner). Creates and submits its own invoices, and is the account that grants or revokes **consent** over the business's data.                                                                                     |
+| **Firm staff**  | An accountant working clients' books. Everything the client can do (except consent decisions), plus firm-wide views.                                                                                                                                |
+| **Firm admin**  | Runs the practice. Everything staff can do, plus onboarding pipeline management, billing & payments, white-label branding, ERP integrations, client import, team invitations, and the firm's API keys & webhooks.                                   |
+| **Operator**    | MeridianIQ's own Compliance Desk. Works a cross-tenant case queue, reviews Clerk's document extractions, edits the error catalogue, manages platform health, feature flags and party data. Does **not** see firm business pages like the portfolio. |
+| **Buyer user**  | A finance person at a large buyer. Sees only invoices addressed to their own organisation.                                                                                                                                                          |
+| **Auditor**     | Read-only everything. Can view every screen the numbers live on, and can verify/export the audit log — but every button that would change something is absent or refused.                                                                           |
 
 A worked example of the split: **authority obligations** (tracked
 tax-authority notices — see [section 4](#4-the-compliance-app--for-smes) and
@@ -225,7 +226,7 @@ set of cards that appear as their data becomes relevant:
 - **Expected inflows** — projected cash arrivals by week, from each buyer's
   own payment rhythm (with an accuracy line once the projection has a track
   record), and **Worth chasing** — outstanding invoices ranked by how far
-  past *that buyer's* usual payment time they are, each with a **Chase**
+  past _that buyer's_ usual payment time they are, each with a **Chase**
   shortcut.
 - **Payables** — the money you owe: your unpaid supplier bills bucketed into
   overdue and coming-due weeks, with your top suppliers. See
@@ -234,12 +235,12 @@ set of cards that appear as their data becomes relevant:
   hasn't been invoiced yet ("Draft invoice" raises it), and **Money in with
   no invoice** — bank credits on reconciled statements with no invoice
   behind them ("Raise invoice"). Where these lists are capped, the biggest
-  money keeps its slot by *naira value* — a foreign-currency habit is
+  money keeps its slot by _naira value_ — a foreign-currency habit is
   ranked at its own captured exchange rate (amounts still display in their
   own currency).
 - **Penalty exposure** — an amber card that appears when you have invoices
   past the statutory submission window, pricing what that overdue paper
-  could *cost* under the published s.104 penalty model. It always quotes
+  could _cost_ under the published s.104 penalty model. It always quotes
   the **lowest turnover band** — a floor, never a scare figure — shows the
   oldest few offenders, and its one message is always the same: submitting
   removes the exposure. An estimate, not advice.
@@ -250,7 +251,7 @@ set of cards that appear as their data becomes relevant:
   payments, unmatched collection-account payments, authority notices still
   awaiting a response (see "Your obligations" below), and (only when your
   firm uses the approval policy) drafts waiting on a colleague. Each line is
-  *clear* or *needs attention*, and each is exactly the number its own card
+  _clear_ or _needs attention_, and each is exactly the number its own card
   shows — the checklist recomputes nothing, so it can never disagree with
   the cards it summarizes. All clear? It says so.
 - **Clerk suggests** — batches Clerk has assembled for your approval, and
@@ -284,10 +285,10 @@ rate) before **Create invoice** is offered.
 - **Currency and exchange rate** — invoices are naira by default. Pick
   another currency (USD, EUR, GBP…) and an **Exchange rate (₦ per unit)**
   field appears: enter the rate at which you issued the invoice (e.g. 1500
-  for $1 = ₦1,500). The rate is *captured*, not looked up — it's your
+  for $1 = ₦1,500). The rate is _captured_, not looked up — it's your
   issue-time rate on the record, used to fold the invoice into naira
   reporting honestly. Leave it blank and the invoice still works, but naira
-  views (the VAT position, CSV exports) will show it as *excluded* rather
+  views (the VAT position, CSV exports) will show it as _excluded_ rather
   than guess a rate — MeridianIQ never assumes ₦1 = 1 unit. An NGN invoice
   never carries a rate.
 - **Add customer** — a dialog right on the form (legal name, optional TIN /
@@ -332,7 +333,7 @@ rate) before **Create invoice** is offered.
 - **Compliance status** — a green/amber/red light with plain-language
   reasons and a recommended action.
 - **Rejection risk** (drafts) — before you submit, a card lists the ways
-  invoices *like this one* (same supplier, same buyer, your firm's common
+  invoices _like this one_ (same supplier, same buyer, your firm's common
   codes) have been rejected recently. History, not prediction.
 - **Awaiting payment** (stamped invoices past their terms) — **Draft a
   payment reminder** has Clerk phrase a polite chaser from the invoice's
@@ -350,14 +351,14 @@ Governance card in the console — see
 one submits an invoice they alone signed off: submitting demands a recorded
 approval from **somebody else** first.
 
-- If you hit **Submit** without one, the submission is refused with *"This
+- If you hit **Submit** without one, the submission is refused with _"This
   firm requires a second person's approval before submission — ask a
-  colleague to review and approve this invoice first."* Nothing is lost —
+  colleague to review and approve this invoice first."_ Nothing is lost —
   the invoice simply stays where it was.
 - A colleague opens the invoice and clicks **Approve for submission** on
   its **Approvals** card. Any firm account can approve (client accounts and
   MeridianIQ operators cannot); what matters is that the person who then
-  submits is *someone else* — approving your own submission never counts.
+  submits is _someone else_ — approving your own submission never counts.
 - The Approvals card is the evidence trail: who approved, when, and any
   note. **Editing the invoice cancels its approvals** — an approval only
   ever covers the exact content the approver saw, so after a change you
@@ -401,7 +402,7 @@ Both actions require a reason, which is recorded on the permanent ledger.
 On a stamped invoice, **Request confirmation** asks your buyer to formally
 confirm it inside Buyer Rails. The confirmation timeline on the invoice shows
 every response (confirmed / queried / rejected). A confirmed invoice is worth
-more than a stamped one — it's the buyer saying *"yes, we owe this."*
+more than a stamped one — it's the buyer saying _"yes, we owe this."_
 
 ### Supplier bills
 
@@ -415,7 +416,7 @@ stamping from your account.
   purely from evidence. Mark a bill **Payment scheduled** or **Paid** and
   your flag is recorded as a settlement event against the bill;
   bank-statement matches count as evidence too (see Reconciliation). The
-  bill itself is never edited — its status is *read from* the evidence, so
+  bill itself is never edited — its status is _read from_ the evidence, so
   it is always honest, and unflagging isn't a thing: evidence is permanent.
 - **Verify the stamp** — type the IRN and CSID printed on the supplier's
   invoice and MeridianIQ checks them against the national record, keeping
@@ -434,12 +435,12 @@ stamping from your account.
   dashboard's habit cards, a capped list keeps the biggest money by naira
   value — foreign-currency bills rank at their own captured rate.
 - **Calendar** — each bill's due date appears on your compliance calendar as
-  a *bill due* entry, so committed outflows sit beside your statutory
+  a _bill due_ entry, so committed outflows sit beside your statutory
   deadlines.
 
 ### Your VAT position
 
-The **VAT** page puts your month in one number pair — a *preparation aid*
+The **VAT** page puts your month in one number pair — a _preparation aid_
 for the monthly VAT return, not the return itself:
 
 - **Output VAT** — the VAT on invoices you issued this month that actually
@@ -450,8 +451,8 @@ for the monthly VAT return, not the return itself:
   paid or not, split into **stamp-verified** and **unverified**. "Verified"
   means the bill's most recent stamp check (Bills → Verify the stamp) found
   the supplier's stamp valid on the national record.
-- **Net VAT position** = output minus *all* input VAT. The **defensible
-  net** = output minus *verified* input only — the number you could stand
+- **Net VAT position** = output minus _all_ input VAT. The **defensible
+  net** = output minus _verified_ input only — the number you could stand
   behind in an inspection, because an input-VAT claim ultimately rests on
   valid supplier stamps. The gap between the two is exactly your unverified
   bills: verifying them closes it.
@@ -459,7 +460,7 @@ for the monthly VAT return, not the return itself:
   current month is a live, month-to-date number.
 - **Foreign-currency documents**: everything is shown in naira, converted
   at each document's own captured exchange rate. A foreign-currency
-  document *without* a rate is excluded from the totals and the page says
+  document _without_ a rate is excluded from the totals and the page says
   how many were excluded — an honest gap, never a guessed rate.
 - **CSV** downloads the position as one row per document (invoices, credit
   notes and bills, each with its currency, rate, VAT and verified status) —
@@ -490,7 +491,7 @@ creates anything; imports up to **5,000 rows** are processed with a per-row
 result — every rejected row tells you why, and nothing is half-imported
 silently.
 
-### Reconciliation *(feature-flagged)*
+### Reconciliation _(feature-flagged)_
 
 **Reconciliation** matches your bank statement against your stamped invoices:
 
@@ -498,7 +499,7 @@ silently.
    exports are recognised; your firm can also register custom formats), paste
    CSV text, **or upload a scanned PDF statement**. A PDF takes the Clerk
    path: **Check parsing** has Clerk read the pages into proposed statement
-   rows, the parse report shows *exactly* the rows that will be saved
+   rows, the parse report shows _exactly_ the rows that will be saved
    ("Clerk read this scanned statement — check the dates, amounts and
    directions… nothing is saved until you press Commit"), and **Commit
    statement** commits precisely those previewed rows — never a re-read.
@@ -513,10 +514,10 @@ silently.
    below the 85% band that the bulk button covers. The button appears (to
    accounts that can accept matches — client accounts see matches read-only,
    so they don't get it) whenever such proposals have a bank narration to
-   read. Clerk reads each line's narration against *that line's own*
+   read. Clerk reads each line's narration against _that line's own_
    candidates and, where the words genuinely point at one, a violet **"Clerk
-   suggests"** chip appears on that proposal with the cue it saw (e.g. *name
-   match*, *exact reference*, *part-payment hint*); where they don't, Clerk
+   suggests"** chip appears on that proposal with the cue it saw (e.g. _name
+   match_, _exact reference_, _part-payment hint_); where they don't, Clerk
    abstains and the line shows nothing. A summary line reports the run
    ("Clerk read N lines — S suggestions, A abstentions"). Purely advisory:
    the chip never pre-selects anything — **Accept** and **Reject** stay your
@@ -524,7 +525,7 @@ silently.
    up, the page says so plainly and matching stays manual; and re-running
    never re-spends on lines Clerk has already read (abstentions included) —
    only lines that failed are retried.
-5. **Debits match bills** — money going *out* is proposed against your
+5. **Debits match bills** — money going _out_ is proposed against your
    unpaid **supplier bills** (matched by supplier name). Accepting records
    payment evidence on the bill, so its payment status reads **Paid** —
    nothing else about the bill changes. Credit lines (money coming in) still
@@ -534,7 +535,7 @@ This is the honest way an invoice becomes "paid" in MeridianIQ — a real,
 source-tagged settlement event, never a manual tick-box — and the same
 evidence rule drives a bill's payment status.
 
-### B2C reports *(feature-flagged)*
+### B2C reports _(feature-flagged)_
 
 B2C sales above ₦50,000 must be reported within **24 hours**, with a daily
 penalty for lateness. The **B2C Reports** page shows each day's batch with a
@@ -557,7 +558,7 @@ The page is deliberately **read-only**: an obligation appears when your
 accountant approves a captured notice (or records a paper one), and marking
 it responded or closed is your firm's work — you watch the record and the
 clock. Response deadlines also feed your deadline reminders: the same alert
-channels, the same *deadline reminders* switch in **Alert settings**, and the
+channels, the same _deadline reminders_ switch in **Alert settings**, and the
 same privacy rule — the message says a notice needs a response, never what it
 says or how much it demands.
 
@@ -622,8 +623,8 @@ itself.
 ### Calendar and alerts
 
 - **Calendar** — every compliance deadline for your business: invoice
-  submission windows, B2C report windows, penalty-watch items, and *bill
-  due* entries for your unpaid supplier bills.
+  submission windows, B2C report windows, penalty-watch items, and _bill
+  due_ entries for your unpaid supplier bills.
 - **Alert settings** — choose the channels (WhatsApp / SMS / email) for
   urgent alerts, enter the contact details for each, pick what to be alerted
   about (deadline reminders, submission failures, penalty watch), and send
@@ -657,7 +658,7 @@ about your business — your party record, the full consent history, your
 alert contact details, your invoices (with line items) and engagements,
 bank-statement summaries, account memberships (identity and role only —
 never passwords or security codes), and the party-level audit trail. Very
-large sections are capped and marked *truncated* rather than silently
+large sections are capped and marked _truncated_ rather than silently
 shortened, and the download itself is recorded on the audit trail.
 
 ---
@@ -666,8 +667,8 @@ shortened, and the download itself is recorded on the audit trail.
 
 Clerk is MeridianIQ's built-in assistant. One principle governs everything it
 does: **Clerk never files anything.** It reads documents and proposes; a
-human reviews and decides; approval creates a *draft* invoice — or, for a
-tax-authority notice, a tracked *obligation* — and nothing more. Numbers
+human reviews and decides; approval creates a _draft_ invoice — or, for a
+tax-authority notice, a tracked _obligation_ — and nothing more. Numbers
 in its answers are computed from your own records by the platform — the AI
 only classifies and phrases. Every Clerk surface sits behind a platform-wide
 kill switch the operator can flip, and every call it makes is metered against
@@ -705,9 +706,9 @@ form tracks invoice submissions; a sent notice shows its outcome on the
 
 A duplicate guard recognises documents Clerk has already seen ("Already sent
 this one?") so a re-forwarded email never creates two cases. Your
-**submissions list** shows each *invoice* item's status — *Clerk is reading… →
+**submissions list** shows each _invoice_ item's status — _Clerk is reading… →
 extracted (your accountant reviews everything before anything is created) →
-approved ("Draft invoice created") or failed (with the reason)* — including
+approved ("Draft invoice created") or failed (with the reason)_ — including
 a "What Clerk read" table of every extracted field.
 
 ### Forwarding by email or WhatsApp
@@ -720,7 +721,7 @@ its administrator configures it — [section 14](#14-for-administrators)):
   path above.
 - **WhatsApp** — send the document (or a text message of the invoice) from
   the WhatsApp number saved in **Alert settings**. For safety, only a number
-  the client account entered *itself* routes documents — a number typed in
+  the client account entered _itself_ routes documents — a number typed in
   by firm staff is never used as an identity. If a number matches more than
   one business, the message is refused rather than guessed.
 
@@ -769,7 +770,7 @@ an **obligation** — never an invoice. **Reject** and **Escalate** are the
 alternatives, each with an optional reason kept with the decision.
 
 Cases that pass pre-flight cleanly with high confidence form the **fast
-lane**: *Approve fast lane (N)* approves them in bulk — the server
+lane**: _Approve fast lane (N)_ approves them in bulk — the server
 re-verifies every case before touching it, and anything not genuinely
 fast-lane is skipped with its reason. The fast lane is for invoice cases
 only: a notice records a statutory response deadline, so it never qualifies
@@ -819,8 +820,8 @@ against each other, so client accounts don't get it).
 **Follow-ups.** Follow-ups thread: after an answer about your numbers,
 "and for May?" or "same for that client?" carries straight on. When the
 answer was scoped to a month or a business, a chip under the question box
-shows exactly what a follow-up will keep — *"Follow-ups keep: June 2026 ·
-Adaeze Foods Ltd"*. The thread remembers the exact month and the exact
+shows exactly what a follow-up will keep — _"Follow-ups keep: June 2026 ·
+Adaeze Foods Ltd"_. The thread remembers the exact month and the exact
 business (not just a name two clients might share), and **New topic**
 clears it whenever you want a fresh start; the answer you were reading
 stays on screen.
@@ -835,24 +836,24 @@ with the firm-wide questions excluded. Refused questions aren't wasted:
 the console
 mines them into a "register gaps" list, so the firm can see which claims to
 draft next — and the helpfulness ratings feed a matching operator view of
-the questions Clerk *did* answer.
+the questions Clerk _did_ answer.
 
-**Clerk remembers** *(opt-in — the operator switches the memory feature
-on)*. Once memory is on, an answered question may carry a quiet **"Last
+**Clerk remembers** _(opt-in — the operator switches the memory feature
+on)_. Once memory is on, an answered question may carry a quiet **"Last
 time something like this happened"** card underneath: up to two links to
 genuinely similar past questions from your own history — and, where one is
 more relevant, a past monthly advisory brief, labelled as coming from the
 advisory brief. The card is pointers only: it never repeats the old answer (that
 stays one click away, where reading it re-checks your access), client
-accounts are only ever shown their *own* past questions and their own
+accounts are only ever shown their _own_ past questions and their own
 business's briefs, and a refused question is never offered as precedent.
 If nothing similar exists, or memory is off, there is simply no card —
 the answer itself is unchanged either way.
 
 ### Clerk suggests & automation
 
-*(Feature-flagged — the operator switches proposed actions on, and daily
-automation on top of that; until then the card simply doesn't appear.)*
+_(Feature-flagged — the operator switches proposed actions on, and daily
+automation on top of that; until then the card simply doesn't appear.)_
 
 The **Clerk suggests** card (on the SME dashboard, with a twin on the
 firm's client page in the console) closes the gap between advice and
@@ -870,7 +871,7 @@ stale:
   unchanged invoice will simply fail again).
 - **Draft payment reminders** — one approval drafts a staged reminder for
   every receivable that's late against its buyer's own rhythm. The drafts
-  are shown once for *you* to copy and send — the platform sends nothing.
+  are shown once for _you_ to copy and send — the platform sends nothing.
 
 **Approving.** **Review & approve** shows exactly what will run, then asks
 you to confirm. Approval executes through the ordinary per-invoice path —
@@ -881,7 +882,7 @@ re-processed. You get a per-invoice results dialog, and the whole decision
 is recorded (see "The run record" below).
 
 **Automate daily.** Approving the same batch every morning gets old, so
-next to the two *submit* kinds (reminders always stay a human job — someone
+next to the two _submit_ kinds (reminders always stay a human job — someone
 has to read and send them) there's an **Automate daily** button. Granting a
 standing approval means:
 
@@ -904,21 +905,21 @@ standing approval means:
 **"N paused"** pill whenever any of your automations is stopped, and the
 Automation strip says why, in plain words:
 
-- *paused manually* — someone clicked Pause.
-- *the granter's access changed* — the person who set it up left the firm
+- _paused manually_ — someone clicked Pause.
+- _the granter's access changed_ — the person who set it up left the firm
   or lost submission rights; their standing instruction stops with them.
-- *compliance consent is missing* — the business's layer-1 consent lapsed;
+- _compliance consent is missing_ — the business's layer-1 consent lapsed;
   nothing may be submitted, so nothing is.
-- *the engagement has ended* — the firm no longer actively engages this
+- _the engagement has ended_ — the firm no longer actively engages this
   client, so the autopilot must not outlive the relationship.
-- *too many failures in the last run* — half or more of a run's invoices
+- _too many failures in the last run_ — half or more of a run's invoices
   failed outright; something structural needs a human look first.
-- *the rails rejected the last run* — the previous run's submissions were
+- _the rails rejected the last run_ — the previous run's submissions were
   accepted at first but half or more later came back rejected; automation
   stops feeding the rails rejected paper until someone investigates.
-- *the run itself hit an error* — rather than silently retrying every day,
+- _the run itself hit an error_ — rather than silently retrying every day,
   an automation whose run breaks is stopped until a human looks.
-- *this action kind can't run automatically* — a safety stop you should
+- _this action kind can't run automatically_ — a safety stop you should
   never see in practice.
 
 A pause is **reversible**: fix the cause, click **Resume**, and the next
@@ -932,7 +933,7 @@ Automatic runs are tagged **"· auto"** and always name the person whose
 standing approval authorized them — the paper trail stays one human deep.
 The record is permanent: it can never be edited or deleted, by anyone.
 The console's client page adds an **effectiveness** view on top — whether
-the batches *worked*: where the submitted invoices stand now (stamped,
+the batches _worked_: where the submitted invoices stand now (stamped,
 failed again, still in flight) and the penalty exposure the automation
 actually removed.
 
@@ -944,7 +945,7 @@ preferences. And when an automation pauses itself, the person who granted
 it is notified through the same rails — the card is the source of truth,
 but you shouldn't have to open it to learn your autopilot stopped.
 
-- **Weekly firm digest** *(opt-in)* — a short Monday briefing per firm:
+- **Weekly firm digest** _(opt-in)_ — a short Monday briefing per firm:
   unsubmitted and overdue invoices (with the estimated s.104 penalty floor
   when anything is overdue), failures, money expected this week, who's
   worth chasing (including invoices already chased twice), unbilled
@@ -963,11 +964,11 @@ but you shouldn't have to open it to learn your autopilot stopped.
   Staff opt in individually (**Your notifications** card on the console
   portfolio — email delivery requires a verified address; a 6–8 character
   code confirms it).
-- **Monthly client statement** *(opt-in)* — a per-client compliance summary
+- **Monthly client statement** _(opt-in)_ — a per-client compliance summary
   of each closed month, shown on the SME dashboard and offered over the
   alert rails (with the client's layer-1 consent).
-- **Monthly advisory brief** *(opt-in)* — the statement's advisory sibling:
-  a per-client "where you stand right now" for the *live* month, composed
+- **Monthly advisory brief** _(opt-in)_ — the statement's advisory sibling:
+  a per-client "where you stand right now" for the _live_ month, composed
   entirely from the client's own reports — statutory position (returns and
   authority notices), penalty exposure, the last closed month's VAT, money
   in and out, and books hygiene — plus, from the second month, a **"Since
@@ -1039,7 +1040,7 @@ invoice list — a partner can reach any failing invoice in three clicks.
   not failing.
 - **Evidence in the grant dialogs** — when you (or your client) open a
   "Turn on daily automation" or "Run monthly" dialog, it now opens with
-  *your own record*: how many of exactly these actions were eventually done
+  _your own record_: how many of exactly these actions were eventually done
   by hand over the last six months, and how late. The line comes from the
   same backtest as the portfolio card, scoped to the one client the grant
   covers, and it never blocks the buttons — it exists so the consent
@@ -1051,14 +1052,14 @@ invoice list — a partner can reach any failing invoice in three clicks.
   header, and totals with overdue in red. Drill into a client to walk its
   rows forward.
 - **Add client** — one dialog (legal name, optional TIN / CAC / street /
-  city) creates the client *and* its engagement in a single step, with the
+  city) creates the client _and_ its engagement in a single step, with the
   same duplicate guard as the bulk importer (an existing engaged client
   with that TIN or exact name is refused, never silently doubled). The new
   client appears in the book immediately; invite its owner from **Team
   invitations** when ready.
 - **Getting started** — a new firm's portfolio opens with a short
-  checklist: *Add your first client → Invite the client's owner → Client
-  grants consent → Create the first invoice → Submit for stamping.* Steps
+  checklist: _Add your first client → Invite the client's owner → Client
+  grants consent → Create the first invoice → Submit for stamping._ Steps
   tick themselves off as the underlying data appears (consent is the
   client's own decision, so that step is informational), and the card can
   be dismissed once you know your way around.
@@ -1119,17 +1120,18 @@ invoice list — a partner can reach any failing invoice in three clicks.
     payables and VAT position — drawn by the exact same engine as the
     monthly compliance pack, so the bundle and the pack can never disagree
     about a month. No AI is involved anywhere in this document.
-  - **Draft response letter** — the reply's *body text*, drafted by Clerk
+  - **Draft response letter** — the reply's _body text_, drafted by Clerk
     from the period's records; when Clerk is off or the allowance is spent,
     a complete letter is assembled from a plain template instead. The panel
-    always says which happened — *"Drafted by Clerk from the period's
-    records…"* or *"Assembled from the period's records (Clerk
-    unavailable)…"* — and either way you review and edit before sending.
+    always says which happened — _"Drafted by Clerk from the period's
+    records…"_ or _"Assembled from the period's records (Clerk
+    unavailable)…"_ — and either way you review and edit before sending.
     **Copy letter** puts it on your clipboard.
 
   The panel's standing caption is the point: the platform never sends or
   files the response — the letter is a draft for the firm to own, and
   submitting it to the authority is the firm's own act.
+
 - **Monthly compliance pack** — also on the drill-down: pick a month and
   **download the pack (PDF)** — a branded, client-ready summary of that
   client's month: a cover note, the document register, receivables,
@@ -1176,16 +1178,15 @@ Money / Compliance / Connections & delivery**:
 - **VAT filing pack** — per-month accepted-invoice totals for the VAT
   return, with CSV export, a Clerk-phrased **cover note** you edit and own,
   and a **settlement cross-check** (which of the month's invoices the
-  platform has *observed* being paid — an assurance view, never an
+  platform has _observed_ being paid — an assurance view, never an
   accusation).
 - **VAT positions** — every engaged client's month in one table: output VAT
   vs input VAT, verified input, net and **defensible net** (verified input
   only), with firm totals — the firm-side mirror of each client's own VAT
   page ([section 4](#4-the-compliance-app--for-smes) → Your VAT position),
   computed by the same engine so the two can never disagree. Sorted largest
-  net liability first, current month included, month picker for the last
-  12.
-- **Governance** *(firm admins)* — the firm's control switches; today one:
+  net liability first, current month included, month picker for the last 12.
+- **Governance** _(firm admins)_ — the firm's control switches; today one:
   **Submission approval**. On, every invoice submission demands a recorded
   approval by someone other than the submitter (maker-checker — see
   [section 4](#4-the-compliance-app--for-smes) → When your firm requires a
@@ -1208,7 +1209,7 @@ Money / Compliance / Connections & delivery**:
   clustered into catalogue-grounded causes, with trend.
 - **Clerk adoption & impact** — per-client capture volume, kept-rate and
   review turnaround: the renewal-conversation numbers.
-- **Bank-feed connections** *(feature-flagged)* — scheduled statement pulls
+- **Bank-feed connections** _(feature-flagged)_ — scheduled statement pulls
   per client through a registered connector: create a connection, **Sync
   now**, and inspect each run (started / status / lines). Pulled statements
   land through the ordinary reconciliation path.
@@ -1259,12 +1260,12 @@ expires after 7 days and works once. The invitee opens it, sets a password
 The four commercial tiers, with per-tier pricing, included invoice volume,
 overage price and revenue-share percentage:
 
-| Tier | Monthly | Included invoices | Overage | Revenue share |
-|---|---|---|---|---|
-| Essential | ₦15,000 | 50 | ₦120 | 10% |
-| Compliance Desk | ₦45,000 | 200 | ₦100 | 15% |
-| Professional | ₦120,000 | 750 | ₦80 | 20% |
-| Enterprise-lite | ₦350,000 | 3,000 | ₦55 | 25% |
+| Tier            | Monthly  | Included invoices | Overage | Revenue share |
+| --------------- | -------- | ----------------- | ------- | ------------- |
+| Essential       | ₦15,000  | 50                | ₦120    | 10%           |
+| Compliance Desk | ₦45,000  | 200               | ₦100    | 15%           |
+| Professional    | ₦120,000 | 750               | ₦80     | 20%           |
+| Enterprise-lite | ₦350,000 | 3,000             | ₦55     | 25%           |
 
 Firm admins can switch the firm's subscription; tier parameters themselves
 are edited under a **price review** discipline (every change recorded with
@@ -1273,11 +1274,12 @@ history, not a silent overwrite — tier edits are an operator action).
 ### Statements
 
 Monthly revenue-share statements per firm: billed invoice count, subscription
-+ overage, and the firm's share. Generate a period on demand and **export
-CSV** for accounting. (This is the firm's *earnings* view; what the firm
-*owes* MeridianIQ is the portfolio's billing statement card.)
 
-### API & webhooks *(firm admin only)*
+- overage, and the firm's share. Generate a period on demand and **export
+  CSV** for accounting. (This is the firm's _earnings_ view; what the firm
+  _owes_ MeridianIQ is the portfolio's billing statement card.)
+
+### API & webhooks _(firm admin only)_
 
 **API & webhooks** connects the firm's own software. Both credentials are
 **shown exactly once** at creation — store them in a secret manager.
@@ -1286,8 +1288,8 @@ CSV** for accounting. (This is the firm's *earnings* view; what the firm
 capabilities offered are deliberately narrow:
 
 - **Read invoices** — pull invoice data and statuses.
-- **Write draft invoices** — create and edit drafts. *Submission to the
-  rails stays a human action* — no key can submit, and no key can touch
+- **Write draft invoices** — create and edit drafts. _Submission to the
+  rails stays a human action_ — no key can submit, and no key can touch
   Clerk, billing, or identity.
 - **Push bank statements** — upload statement files for reconciliation.
 
@@ -1320,7 +1322,7 @@ rate-limit and pointer-only rules up top. It is generated from the same
 contract the server validates against, and also reachable directly at
 `/console/api-reference.html`.
 
-### Client import *(feature-flagged)*
+### Client import _(feature-flagged)_
 
 Bulk-import a client book from a practice-management export — a 200-client
 book lands in one session, with per-row results. If your export's columns
@@ -1328,19 +1330,19 @@ don't match the template, **Draft with Clerk** proposes the column mapping —
 verified against the headers that actually exist — and the import still runs
 validate-then-commit.
 
-### Integrations *(feature-flagged)*
+### Integrations _(feature-flagged)_
 
 Connect a client's accounting package (SagePro and QuickLite ship first) and
 pull their AR invoices on demand. **Sync now** imports through the standard
 path — validation still runs before anything is submitted. The page shows
 each connection's status, last sync and any errors.
 
-### White-label *(feature-flagged)*
+### White-label _(feature-flagged)_
 
 Brand the workspace as your own: firm name, colours and a subdomain — live in
 under a day, no per-firm deployment.
 
-### Certification *(feature-flagged)*
+### Certification _(feature-flagged)_
 
 CPD course content for firm staff: enrol in a course, work through its
 modules, and complete it for the stated CPD hours. Progress per person is
@@ -1363,7 +1365,7 @@ a red line if Clerk is switched off or its injection resistance dropped.
 
 Cases arrive automatically from three sources — no one has to file them:
 
-1. **Client escalations** — when an SME clicks *Escalate*, the case appears
+1. **Client escalations** — when an SME clicks _Escalate_, the case appears
    with the client's own words attached ("what I already tried").
 2. **Failed submissions** — when the pipeline gives up on an invoice
    (terminal rejection or exhausted retries), a case opens with the failure
@@ -1384,7 +1386,7 @@ suggests"** routing proposal ("a proposal, not a decision"). The workflow:
   the invoice's real attempt history; you edit, then **Send reply** — the
   client sees it on their invoice. When the memory feature is on, the
   draft also learns from the Desk's own past work: it is shown a genuinely
-  similar *resolved* escalation's reply as a style example (matched on the
+  similar _resolved_ escalation's reply as a style example (matched on the
   situation, not just the error code) — the facts still come only from
   this case's catalogue entry and attempt history.
 
@@ -1423,7 +1425,7 @@ Live health of the machinery:
 
 - **Submission rails** — each transmission rail's circuit-breaker state
   (Healthy / Half-open / Circuit open) and recent failure count.
-- **Health alerts** — the platform pages *itself*: an hourly watch raises a
+- **Health alerts** — the platform pages _itself_: an hourly watch raises a
   durable alert the first time it sees a rail circuit stuck open, a
   dead-lettered pipeline event, or a firm webhook delivery that exhausted
   its retries. Each condition alerts **once** (the tamper-evident audit
@@ -1507,8 +1509,8 @@ sweep trips the kill switch automatically if extraction quality collapses.
 
 ## 8. Buyer Rails — for buyer finance teams
 
-Sign in as a buyer and you land at `/buyer/`. *(Feature-flagged — the
-operator switches Buyer Rails on.)* A buyer account sees **only invoices
+Sign in as a buyer and you land at `/buyer/`. _(Feature-flagged — the
+operator switches Buyer Rails on.)_ A buyer account sees **only invoices
 addressed to its own organisation**. Three pages: **Confirmations,
 Suppliers, Scoreboard** — plus a **notification bell** in the header that
 collects alerts addressed to your organisation, exactly as in the other
@@ -1670,7 +1672,7 @@ Settings** — plus screens reached from Home:
 
 Everything in MeridianIQ hangs off one idea: **an invoice's history is
 append-only.** Drafts are editable; from submission onward nothing is ever
-edited or deleted — states are only ever *added*. That's what makes the vault,
+edited or deleted — states are only ever _added_. That's what makes the vault,
 the audit trail and (one day) financing trustworthy.
 
 ```mermaid
@@ -1698,17 +1700,17 @@ stateDiagram-v2
 
 What the states mean in practice:
 
-| State | Meaning |
-|---|---|
-| **Draft** | Editable working copy. The only mutable state. |
-| **Validated** | Passed every mandatory-field check locally; ready to submit. |
-| **Submitted / Pending** | In the pipeline / awaiting the national platform's verdict. |
-| **Stamped** | Officially valid — IRN, CSID and QR recorded; artifact vaulted forever. |
-| **Failed** | Rejected, with a catalogue explanation. Fix and resubmit, or cancel. |
-| **Confirmed** | The buyer formally acknowledged it in Buyer Rails. |
-| **Settled** | Payment was *observed* — a statement match or a buyer payment flag. Never a manual tick. |
-| **Cancelled** | Terminal. Never presentable as valid again. |
-| **Credited** | Terminal. A stamped credit note reversed it — reached **only** through a stamped credit note. |
+| State                   | Meaning                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| **Draft**               | Editable working copy. The only mutable state.                                                |
+| **Validated**           | Passed every mandatory-field check locally; ready to submit.                                  |
+| **Submitted / Pending** | In the pipeline / awaiting the national platform's verdict.                                   |
+| **Stamped**             | Officially valid — IRN, CSID and QR recorded; artifact vaulted forever.                       |
+| **Failed**              | Rejected, with a catalogue explanation. Fix and resubmit, or cancel.                          |
+| **Confirmed**           | The buyer formally acknowledged it in Buyer Rails.                                            |
+| **Settled**             | Payment was _observed_ — a statement match or a buyer payment flag. Never a manual tick.      |
+| **Cancelled**           | Terminal. Never presentable as valid again.                                                   |
+| **Credited**            | Terminal. A stamped credit note reversed it — reached **only** through a stamped credit note. |
 
 The public **stamp verification** service reflects this: verifying a
 cancelled or credited invoice's stamp reports it as valid-but-**not
@@ -1745,33 +1747,33 @@ human decision, every state only ever added:
 
 MeridianIQ ships capabilities **dark** and switches them on when their
 evidence gate passes (or per firm). A dark feature isn't hidden — it's
-unreachable, for every role. If a page shows *"…is not yet enabled"*, ask
+unreachable, for every role. If a page shows _"…is not yet enabled"_, ask
 your operator to flip its flag (Compliance Desk → Feature flags).
 
-| Flag | Release | What it unlocks | Ships |
-|---|---|---|---|
-| `invoice_lifecycle` | R0 | Core invoicing | **On** |
-| `advisory_engagements` | R0 | Advisory toolkit | **On** |
-| `consent_ledger` | R0 | Consent ledger | **On** |
-| `buyer_confirmations` | R1 | Confirmation workflow | **On** |
-| `stamp_verification` | R1 | Public stamp verification | **On** |
-| `messaging_notifications` | R1 | WhatsApp/SMS/email/push alerts + delivery log | Dark |
-| `anonymized_benchmarks` | R2 | Aggregate analytics | Dark |
-| `reconciliation` | R2 | Bank-statement reconciliation | Dark |
-| `b2c_reporting` | R2 | B2C 24-hour reports | Dark |
-| `buyer_rails` | R2 | The whole Buyer Rails portal | Dark |
-| `white_label` | R2 | Theming, subdomains, client import, certification | Dark |
-| `erp_connectors` | R2 | ERP integrations | Dark |
-| `bank_feeds` | R2 | Scheduled bank-feed statement pulls | Dark |
-| `credit_readiness` | R3 | Credit layer (dormant by design) | Dark |
-| `bank_data_room` | R4 | Bank data room (dormant by design) | Dark |
-| `clerk_ai` | R3 | Every Clerk AI surface — this is the kill switch: flipping it off instantly disables them all | **On** |
-| `clerk_actions` | R3 | Clerk's proposed actions ("Clerk suggests" — human-approved batch execution) | Dark |
-| `clerk_action_policies` | R3 | Daily automation on top of proposed actions (standing approvals) — both flags must be on | Dark |
+| Flag                      | Release | What it unlocks                                                                               | Ships  |
+| ------------------------- | ------- | --------------------------------------------------------------------------------------------- | ------ |
+| `invoice_lifecycle`       | R0      | Core invoicing                                                                                | **On** |
+| `advisory_engagements`    | R0      | Advisory toolkit                                                                              | **On** |
+| `consent_ledger`          | R0      | Consent ledger                                                                                | **On** |
+| `buyer_confirmations`     | R1      | Confirmation workflow                                                                         | **On** |
+| `stamp_verification`      | R1      | Public stamp verification                                                                     | **On** |
+| `messaging_notifications` | R1      | WhatsApp/SMS/email/push alerts + delivery log                                                 | Dark   |
+| `anonymized_benchmarks`   | R2      | Aggregate analytics                                                                           | Dark   |
+| `reconciliation`          | R2      | Bank-statement reconciliation                                                                 | Dark   |
+| `b2c_reporting`           | R2      | B2C 24-hour reports                                                                           | Dark   |
+| `buyer_rails`             | R2      | The whole Buyer Rails portal                                                                  | Dark   |
+| `white_label`             | R2      | Theming, subdomains, client import, certification                                             | Dark   |
+| `erp_connectors`          | R2      | ERP integrations                                                                              | Dark   |
+| `bank_feeds`              | R2      | Scheduled bank-feed statement pulls                                                           | Dark   |
+| `credit_readiness`        | R3      | Credit layer (dormant by design)                                                              | Dark   |
+| `bank_data_room`          | R4      | Bank data room (dormant by design)                                                            | Dark   |
+| `clerk_ai`                | R3      | Every Clerk AI surface — this is the kill switch: flipping it off instantly disables them all | **On** |
+| `clerk_actions`           | R3      | Clerk's proposed actions ("Clerk suggests" — human-approved batch execution)                  | Dark   |
+| `clerk_action_policies`   | R3      | Daily automation on top of proposed actions (standing approvals) — both flags must be on      | Dark   |
 
 The credit/bank R3/R4 flags stay dark until their business gates pass — that's
 policy, not an oversight (`clerk_ai` is the exception: it ships on, and exists
-to be switched *off*). Further Clerk flags are opt-in and default dark
+to be switched _off_). Further Clerk flags are opt-in and default dark
 until an operator enables them:
 `clerk_digest` (weekly firm digests), `clerk_client_statements` (monthly
 client statements), `clerk_advisory_briefs` (monthly advisory briefs —
@@ -1787,12 +1789,12 @@ tokens), `clerk_triage` (escalation routing suggestions), and
 Two notes on where the newer features sit in this table. The **Notice Desk**
 pages themselves (Obligations, the Authority notices card, the Tax-notice
 capture choice) carry no flag of their own — but every Clerk lane that feeds
-them rides `clerk_ai`: with the kill switch off, notice *reading* pauses
+them rides `clerk_ai`: with the kill switch off, notice _reading_ pauses
 (recording a paper notice by hand, tracking deadlines, and the response
 bundle all keep working — they involve no AI), and the response letter is
 assembled from the plain template instead of drafted. **Narration
 suggestions** on the reconciliation page ride the `reconciliation` flag
-(they are part of that surface) *and* `clerk_ai` — either being dark means
+(they are part of that surface) _and_ `clerk_ai` — either being dark means
 the button's work is refused and matching stays manual.
 
 ---
@@ -1806,8 +1808,8 @@ Three principles, visible throughout the product:
    is optional; layer 3 (credit) is dormant until it's real — and every code
    path that would use client data beyond layer 1 checks the ledger first.
    Revocation takes effect immediately.
-2. **Messages never carry data.** A WhatsApp/SMS/email/push alert says *how
-   many* items need attention and links into the authenticated app — never
+2. **Messages never carry data.** A WhatsApp/SMS/email/push alert says _how
+   many_ items need attention and links into the authenticated app — never
    amounts, names, TINs or documents. The same rule binds outbound firm
    webhooks: payloads are ids and timestamps only.
 3. **History is evidence.** The audit log is hash-chained and exportable;
@@ -1846,21 +1848,21 @@ CPD content. Seeding is idempotent — restarts never duplicate data.
 Several rails ship **dark and fail closed** — unset means the feature is
 unreachable (404), not broken:
 
-| Variable | Lights |
-|---|---|
-| `TOTP_REQUIRED_ROLES` | Comma-separated roles that must have 2FA to sign in (e.g. `operator,firm_admin`). Unset = optional for everyone. |
-| `INBOUND_EMAIL_TOKEN` / `INBOUND_WHATSAPP_TOKEN` | The Clerk email / WhatsApp intake rails (each independently). `INBOUND_EMAIL_DAILY_CAP` / `INBOUND_WHATSAPP_DAILY_CAP` bound per-firm daily volume. |
-| `MESSAGING_WEBHOOK_URL` (+ `MESSAGING_WEBHOOK_TOKEN`) | Real outbound message delivery; unset = in-process simulator (messaging ships dark anyway behind `messaging_notifications`). |
-| `PAYMENT_PROVIDER_URL` (+ `PAYMENT_PROVIDER_TOKEN`) | The hosted-checkout payment provider; unset = simulator (payment intents record, no checkout page). |
-| `PAYMENT_WEBHOOK_TOKEN` | The payment-confirmation webhook; unset = 404. |
-| `COLLECTION_PROVIDER_URL` (+ `COLLECTION_PROVIDER_TOKEN`) | The collection-account provisioning relay (real virtual accounts at a bank/PSP); unset = simulator (references are minted but no real account exists). |
-| `COLLECTION_WEBHOOK_TOKEN` | The inbound collection-payment webhook that settles invoices; unset = the rail 404s (fail-closed — nothing can mark invoices settled without it). |
-| `MESSAGES_RETENTION_DAYS` | Message-ledger retention sweep (default 180 days; malformed values disable the sweep). |
-| `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN` | Per-principal rate limits (defaults 600 / 60; `0` disables a class). |
-| `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance. |
-| `METRICS_TOKEN` / `SWEEP_TOKEN` | Optional shared secrets for `/api/metrics` and the sweep wake-up endpoint. |
-| `FRAME_ANCESTORS` | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist. |
-| `ENABLE_DEV_AUTH` | The `x-mock-*` dev identity shim — a full auth bypass, honoured only outside production. |
+| Variable                                                        | Lights                                                                                                                                                     |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TOTP_REQUIRED_ROLES`                                           | Comma-separated roles that must have 2FA to sign in (e.g. `operator,firm_admin`). Unset = optional for everyone.                                           |
+| `INBOUND_EMAIL_TOKEN` / `INBOUND_WHATSAPP_TOKEN`                | The Clerk email / WhatsApp intake rails (each independently). `INBOUND_EMAIL_DAILY_CAP` / `INBOUND_WHATSAPP_DAILY_CAP` bound per-firm daily volume.        |
+| `MESSAGING_WEBHOOK_URL` (+ `MESSAGING_WEBHOOK_TOKEN`)           | Real outbound message delivery; unset = in-process simulator (messaging ships dark anyway behind `messaging_notifications`).                               |
+| `PAYMENT_PROVIDER_URL` (+ `PAYMENT_PROVIDER_TOKEN`)             | The hosted-checkout payment provider; unset = simulator (payment intents record, no checkout page).                                                        |
+| `PAYMENT_WEBHOOK_TOKEN`                                         | The payment-confirmation webhook; unset = 404.                                                                                                             |
+| `COLLECTION_PROVIDER_URL` (+ `COLLECTION_PROVIDER_TOKEN`)       | The collection-account provisioning relay (real virtual accounts at a bank/PSP); unset = simulator (references are minted but no real account exists).     |
+| `COLLECTION_WEBHOOK_TOKEN`                                      | The inbound collection-payment webhook that settles invoices; unset = the rail 404s (fail-closed — nothing can mark invoices settled without it).          |
+| `MESSAGES_RETENTION_DAYS`                                       | Message-ledger retention sweep (default 180 days; malformed values disable the sweep).                                                                     |
+| `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN`       | Per-principal rate limits (defaults 600 / 60; `0` disables a class).                                                                                       |
+| `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance.                                                       |
+| `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Optional metrics secret and required sweep secret. Send either only in the `x-op-token` header; the sweep endpoint is unavailable when its token is unset. |
+| `FRAME_ANCESTORS`                                               | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                       |
+| `ENABLE_DEV_AUTH`                                               | The `x-mock-*` dev identity shim — a full auth bypass, honoured only outside production.                                                                   |
 
 ### The frontends
 
@@ -1882,7 +1884,7 @@ if the running server's version differs, every app shows a dismissible
   all five web/mobile packages plus the shared libs, the migration
   rollback test against a real Postgres, and all **five** production web
   builds.
-- **e2e** — boots the built API server and four built frontends behind a
+- **e2e** — boots the built API server and five built frontends behind a
   path-router and drives **107 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
@@ -2012,7 +2014,7 @@ fallbacks answer where Clerk would have phrased.
 
 **A scanned statement's preview looks wrong.**
 Nothing is saved until you press **Commit statement**, and what commits is
-*exactly* the previewed rows. Fix the source (or use a CSV export) and check
+_exactly_ the previewed rows. Fix the source (or use a CSV export) and check
 parsing again.
 
 **"Account has no active membership."**
@@ -2041,7 +2043,7 @@ events can be replayed there.
 **I forwarded an invoice by email/WhatsApp and nothing appeared.**
 The intake rails are deployment-configured (dark until their tokens are
 set), the sending address/number must match your account (for WhatsApp: a
-number *you* saved in Alert settings yourself), and each firm has a daily
+number _you_ saved in Alert settings yourself), and each firm has a daily
 cap. Check with your administrator, or upload through **Send to Clerk**.
 
 **Where do escalations go?**
@@ -2053,47 +2055,47 @@ on the invoice itself.
 
 ## 16. Glossary
 
-| Term | Meaning |
-|---|---|
-| **IRN** | Invoice Reference Number — the national platform's identifier for a validated invoice. |
-| **CSID** | Cryptographic Stamp ID — the platform's stamp proving validation. |
-| **Stamp** | The IRN + CSID + QR issued when the national platform accepts an invoice. |
-| **TIN** | Tax Identification Number of a business. Validated TINs gate the confirmation workflow. |
-| **CAC number** | Corporate Affairs Commission registration number. |
-| **APP / rail** | Access Point Provider — the accredited channel that transmits invoices to the authority. MeridianIQ uses two, with automatic failover. |
-| **Vault** | Permanent, write-once storage of stamped invoice artifacts. |
-| **Clerk** | MeridianIQ's AI assistant: reads documents, answers register-grounded questions, phrases drafts. Proposes only — a human always decides. |
-| **Extraction case** | One invoice document Clerk has read, waiting for (or through) human review. Approval creates a draft invoice only. |
-| **Notice case** | One tax-authority notice Clerk has read, waiting for firm review in the intake queue's Notices tab. Approval records an **obligation** — never an invoice — and notice cases never ride the fast lane. |
-| **Fast lane** | Invoice extraction cases that passed pre-flight cleanly with high confidence — eligible for one-click bulk approval, re-verified server-side. Invoices only; never notices. |
-| **Obligation** | A tracked tax-authority notice with a response deadline — recorded when a firm approves a notice case or records a paper notice. Open → responded → closed, updated by the firm; it drives deadline reminders and appears in the digest, month-end close checklist and compliance pack until answered. |
-| **Authority notice** | Official correspondence from a tax authority (FIRS, a State IRS, Customs): an assessment, demand notice, information request, audit letter, penalty notice or reminder. Captured as a notice case; confirmed into an obligation. |
-| **Response bundle** | The deterministic PDF a firm encloses with its reply to an authority notice: a cover sheet keyed to the authority's reference plus the period's document register, receivables, payables and VAT position — drawn by the same engine as the compliance pack, with no AI involved. |
-| **Narration suggestion** | Clerk's advisory read of a bank line's narration against that line's own match candidates — a violet "Clerk suggests" chip with the cue it saw, or nothing when Clerk abstains. Never a decision: accepting a match stays the human's buttons. |
-| **Claims register** | The store of approved rule statements Ask Clerk answers from, maintained under maker-checker (draft → review → active). |
-| **Maker-checker** | Two-person control: whoever proposes can never be the one who approves. Applies to register claims (draft vs approve) and — when a firm switches the policy on — invoice submission (approver vs submitter). |
-| **Digest** | Clerk's weekly firm briefing (opt-in) — every fact computed from records, Clerk only phrases. |
-| **Proposed action** | A batch Clerk assembles from the live dashboard checks (submit overdue / retry failed / draft reminders) for a human to approve — computed fresh each time, never stored, and nothing runs until someone approves it. |
-| **Standing approval** | A durable, revocable grant that lets the platform run one proposed-action kind for one client daily, unattended, under the granter's name and up to a chosen per-run limit — re-validated on every run, and self-pausing when anything looks wrong. |
-| **Run record** | The permanent, append-only record of every approved batch: who approved it (automatic runs are tagged "· auto" and name the standing approval's granter), the evidence at decision time, and each invoice's outcome — submitted, skipped or failed, with reasons. |
-| **Error catalogue** | The living map from every rejection code to a plain-language cause and fix. |
-| **Escalation** | A client's "I'm stuck" — lands in the operator queue with context. |
-| **Case** | A unit of Compliance Desk work: an escalation, a dead-lettered failure, or an unmapped code. |
-| **Confirmation** | A buyer's formal acknowledgment of an invoice in Buyer Rails. |
-| **No-set-off** | The buyer's acknowledgment that it won't offset the invoice against counterclaims. |
-| **Settlement event** | Evidence an invoice was paid, from an allowed source: statement match, buyer flag, payer flag (on a supplier bill), or an inbound payment on a collection account. |
-| **Bill** | A captured supplier invoice where your business is the *buyer*. Tracked (payment status, stamp verification) but never submitted for stamping — its payment status is derived from settlement evidence only. |
-| **Credit note** | A stamped document that formally reverses an invoice; the only way an invoice becomes **Credited**. |
-| **VAT position** | A month's output VAT (rails-accepted issued documents, credits netted) against input VAT (captured supplier bills, split verified/unverified), in naira. The **defensible net** deducts stamp-verified input only. A preparation aid, never a return. |
-| **Collection account** | A virtual payment reference (`CA-…`) provisioned per client; inbound payments reported on it become settlement events that mark the matching invoice Settled automatically. |
-| **Compliance pack** | The monthly per-client PDF a firm downloads (and can offer the client, consent-gated): cover note, document register, receivables, payables, VAT position and next deadlines — all from the same numbers the dashboards show. |
-| **Consent layer** | One of three permission tiers over client data: compliance, benchmarking, credit. |
-| **Feature flag** | The switch that keeps a release-gated capability dark until its evidence gate passes. |
-| **API key** | A firm-created machine credential (`mk_…`) carrying an explicit, narrow capability list. Shown once; revocable instantly. |
-| **Webhook** | A firm-registered HTTPS endpoint that receives signed, pointer-only event notifications (stamped / settled / reconciled). |
-| **Payment intent** | One month's platform fee, computed server-side and collected through a hosted checkout; at most one live intent per month. |
-| **Recovery code** | One of 8 single-use codes issued at 2FA setup — each signs you in exactly once without the authenticator. |
-| **Pointer-only** | The privacy rule for everything that leaves the platform (alerts, webhooks): references and counts, never amounts, names, TINs or documents. |
-| **Credit-observable** | A business whose stamped invoices flow through the platform with confirmation or settlement signals — the measure the credit roadmap gates on. |
-| **s.103 / s.104** | The statutory penalty sections for denying systems access / issuing non-compliant e-invoices. |
-| **Audit bundle** | A self-contained, independently verifiable export of the hash-chained audit log. |
+| Term                     | Meaning                                                                                                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **IRN**                  | Invoice Reference Number — the national platform's identifier for a validated invoice.                                                                                                                                                                                                                 |
+| **CSID**                 | Cryptographic Stamp ID — the platform's stamp proving validation.                                                                                                                                                                                                                                      |
+| **Stamp**                | The IRN + CSID + QR issued when the national platform accepts an invoice.                                                                                                                                                                                                                              |
+| **TIN**                  | Tax Identification Number of a business. Validated TINs gate the confirmation workflow.                                                                                                                                                                                                                |
+| **CAC number**           | Corporate Affairs Commission registration number.                                                                                                                                                                                                                                                      |
+| **APP / rail**           | Access Point Provider — the accredited channel that transmits invoices to the authority. MeridianIQ uses two, with automatic failover.                                                                                                                                                                 |
+| **Vault**                | Permanent, write-once storage of stamped invoice artifacts.                                                                                                                                                                                                                                            |
+| **Clerk**                | MeridianIQ's AI assistant: reads documents, answers register-grounded questions, phrases drafts. Proposes only — a human always decides.                                                                                                                                                               |
+| **Extraction case**      | One invoice document Clerk has read, waiting for (or through) human review. Approval creates a draft invoice only.                                                                                                                                                                                     |
+| **Notice case**          | One tax-authority notice Clerk has read, waiting for firm review in the intake queue's Notices tab. Approval records an **obligation** — never an invoice — and notice cases never ride the fast lane.                                                                                                 |
+| **Fast lane**            | Invoice extraction cases that passed pre-flight cleanly with high confidence — eligible for one-click bulk approval, re-verified server-side. Invoices only; never notices.                                                                                                                            |
+| **Obligation**           | A tracked tax-authority notice with a response deadline — recorded when a firm approves a notice case or records a paper notice. Open → responded → closed, updated by the firm; it drives deadline reminders and appears in the digest, month-end close checklist and compliance pack until answered. |
+| **Authority notice**     | Official correspondence from a tax authority (FIRS, a State IRS, Customs): an assessment, demand notice, information request, audit letter, penalty notice or reminder. Captured as a notice case; confirmed into an obligation.                                                                       |
+| **Response bundle**      | The deterministic PDF a firm encloses with its reply to an authority notice: a cover sheet keyed to the authority's reference plus the period's document register, receivables, payables and VAT position — drawn by the same engine as the compliance pack, with no AI involved.                      |
+| **Narration suggestion** | Clerk's advisory read of a bank line's narration against that line's own match candidates — a violet "Clerk suggests" chip with the cue it saw, or nothing when Clerk abstains. Never a decision: accepting a match stays the human's buttons.                                                         |
+| **Claims register**      | The store of approved rule statements Ask Clerk answers from, maintained under maker-checker (draft → review → active).                                                                                                                                                                                |
+| **Maker-checker**        | Two-person control: whoever proposes can never be the one who approves. Applies to register claims (draft vs approve) and — when a firm switches the policy on — invoice submission (approver vs submitter).                                                                                           |
+| **Digest**               | Clerk's weekly firm briefing (opt-in) — every fact computed from records, Clerk only phrases.                                                                                                                                                                                                          |
+| **Proposed action**      | A batch Clerk assembles from the live dashboard checks (submit overdue / retry failed / draft reminders) for a human to approve — computed fresh each time, never stored, and nothing runs until someone approves it.                                                                                  |
+| **Standing approval**    | A durable, revocable grant that lets the platform run one proposed-action kind for one client daily, unattended, under the granter's name and up to a chosen per-run limit — re-validated on every run, and self-pausing when anything looks wrong.                                                    |
+| **Run record**           | The permanent, append-only record of every approved batch: who approved it (automatic runs are tagged "· auto" and name the standing approval's granter), the evidence at decision time, and each invoice's outcome — submitted, skipped or failed, with reasons.                                      |
+| **Error catalogue**      | The living map from every rejection code to a plain-language cause and fix.                                                                                                                                                                                                                            |
+| **Escalation**           | A client's "I'm stuck" — lands in the operator queue with context.                                                                                                                                                                                                                                     |
+| **Case**                 | A unit of Compliance Desk work: an escalation, a dead-lettered failure, or an unmapped code.                                                                                                                                                                                                           |
+| **Confirmation**         | A buyer's formal acknowledgment of an invoice in Buyer Rails.                                                                                                                                                                                                                                          |
+| **No-set-off**           | The buyer's acknowledgment that it won't offset the invoice against counterclaims.                                                                                                                                                                                                                     |
+| **Settlement event**     | Evidence an invoice was paid, from an allowed source: statement match, buyer flag, payer flag (on a supplier bill), or an inbound payment on a collection account.                                                                                                                                     |
+| **Bill**                 | A captured supplier invoice where your business is the _buyer_. Tracked (payment status, stamp verification) but never submitted for stamping — its payment status is derived from settlement evidence only.                                                                                           |
+| **Credit note**          | A stamped document that formally reverses an invoice; the only way an invoice becomes **Credited**.                                                                                                                                                                                                    |
+| **VAT position**         | A month's output VAT (rails-accepted issued documents, credits netted) against input VAT (captured supplier bills, split verified/unverified), in naira. The **defensible net** deducts stamp-verified input only. A preparation aid, never a return.                                                  |
+| **Collection account**   | A virtual payment reference (`CA-…`) provisioned per client; inbound payments reported on it become settlement events that mark the matching invoice Settled automatically.                                                                                                                            |
+| **Compliance pack**      | The monthly per-client PDF a firm downloads (and can offer the client, consent-gated): cover note, document register, receivables, payables, VAT position and next deadlines — all from the same numbers the dashboards show.                                                                          |
+| **Consent layer**        | One of three permission tiers over client data: compliance, benchmarking, credit.                                                                                                                                                                                                                      |
+| **Feature flag**         | The switch that keeps a release-gated capability dark until its evidence gate passes.                                                                                                                                                                                                                  |
+| **API key**              | A firm-created machine credential (`mk_…`) carrying an explicit, narrow capability list. Shown once; revocable instantly.                                                                                                                                                                              |
+| **Webhook**              | A firm-registered HTTPS endpoint that receives signed, pointer-only event notifications (stamped / settled / reconciled).                                                                                                                                                                              |
+| **Payment intent**       | One month's platform fee, computed server-side and collected through a hosted checkout; at most one live intent per month.                                                                                                                                                                             |
+| **Recovery code**        | One of 8 single-use codes issued at 2FA setup — each signs you in exactly once without the authenticator.                                                                                                                                                                                              |
+| **Pointer-only**         | The privacy rule for everything that leaves the platform (alerts, webhooks): references and counts, never amounts, names, TINs or documents.                                                                                                                                                           |
+| **Credit-observable**    | A business whose stamped invoices flow through the platform with confirmation or settlement signals — the measure the credit roadmap gates on.                                                                                                                                                         |
+| **s.103 / s.104**        | The statutory penalty sections for denying systems access / issuing non-compliant e-invoices.                                                                                                                                                                                                          |
+| **Audit bundle**         | A self-contained, independently verifiable export of the hash-chained audit log.                                                                                                                                                                                                                       |

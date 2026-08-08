@@ -49,7 +49,9 @@ export function normalizeContentType(contentType: string): string {
 
 // contentType → capture source. Anything unmapped is skipped (audited by the
 // caller), never an error back to the provider.
-export function attachmentSource(att: InboundAttachment): CreateCaseInput | null {
+export function attachmentSource(
+  att: InboundAttachment,
+): CreateCaseInput | null {
   const contentType = normalizeContentType(att.contentType);
   if (contentType === PDF_TYPE) {
     return {
@@ -71,13 +73,9 @@ export function attachmentSource(att: InboundAttachment): CreateCaseInput | null
   return null;
 }
 
-// In-process concurrency bound on the detached processors: each inbound
-// message can be multi-second vision work, and the routes fire processing
-// after their 202 — without a bound, a webhook burst runs everything at
-// once. ONE semaphore across BOTH rails on purpose: the bound exists to cap
-// concurrent provider work, and the provider does not care which rail the
-// work arrived on. Excess messages queue here (FIFO) instead of stacking
-// provider calls.
+// In-process concurrency bound inside each outbox worker: an inbound message
+// can involve multi-second vision work. One semaphore spans both rails so a
+// burst cannot stack unbounded provider calls; excess claimed work waits FIFO.
 const MAX_CONCURRENT_INBOUND = 2;
 let activeInbound = 0;
 const inboundWaiters: Array<() => void> = [];
@@ -175,7 +173,7 @@ export interface ResolvedInboundClient {
 // One skip entry in a rail's receipt: which item, and the domain code why.
 export type InboundSkip = { filename: string; reason: string };
 
-// What both rails' detached processors report: whether the sender resolved,
+// What both rails' outbox processors report: whether the sender resolved,
 // plus the caseIds/skipped arrays their pointer-only receipt is built from.
 export interface InboundProcessResult {
   resolved: boolean;
@@ -189,8 +187,8 @@ export interface InboundProcessResult {
 // needs a provider configured at all, and NOTHING throws for a per-item
 // problem — CLERK_BUDGET_EXHAUSTED, DUPLICATE_SOURCE (providers redeliver on
 // timeout), the module's own upload guards and the kill switch all skip THIS
-// item with the domain code on record, so nothing escapes the detached
-// promise. Results accumulate on the returned caseIds/skipped arrays, which
+// item with the domain code on record, so one item cannot abort the whole
+// message. Results accumulate on the returned caseIds/skipped arrays, which
 // the caller folds into its pointer-only receipt.
 //
 // Between budget/gateway acquisition and the capture call, each ATTACHMENT

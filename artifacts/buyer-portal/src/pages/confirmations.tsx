@@ -1,7 +1,14 @@
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  ReactNode,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link } from "wouter";
 import {
   useListBuyerInvoices,
+  useGetBuyerInvoiceSummary,
   useBulkRespondConfirmations,
   getListBuyerInvoicesQueryKey,
   getExportBuyerConfirmationsUrl,
@@ -81,6 +88,7 @@ const FILTERS = [
 type FilterKey = (typeof FILTERS)[number]["key"];
 
 const PAGE_SIZE = 25;
+const SERVER_PAGE_SIZE = 100;
 
 // The bulk endpoint accepts at most this many invoice ids per call — the
 // header "Select all" stops here, and a hand-picked overflow disables the
@@ -133,13 +141,14 @@ function InvoiceRow({
       {showSelectionColumn &&
         (selectable ? (
           <Checkbox
+            className="size-6 shrink-0"
             checked={checked}
             onCheckedChange={(v) => onToggle(v === true)}
             aria-label={`Select ${invoice.invoiceNumber} for bulk confirmation`}
             data-testid={`check-confirm-${invoice.id}`}
           />
         ) : (
-          <span className="w-4 shrink-0" aria-hidden="true" />
+          <span className="w-6 shrink-0" aria-hidden="true" />
         ))}
       <Link
         href={`/invoices/${invoice.id}`}
@@ -149,8 +158,13 @@ function InvoiceRow({
         } ${FOCUS_RING}`}
       >
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">{invoice.invoiceNumber}</p>
-          <p className="text-xs text-muted-foreground truncate">
+          <p className="font-medium truncate" title={invoice.invoiceNumber}>
+            {invoice.invoiceNumber}
+          </p>
+          <p
+            className="text-xs text-muted-foreground truncate"
+            title={`${invoice.supplierName} - ${formatDate(invoice.issueDate)}`}
+          >
             {invoice.supplierName} · {formatDate(invoice.issueDate)}
             <span className="sm:hidden tabular-nums">
               {" · "}
@@ -207,7 +221,15 @@ export function Confirmations() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const { data, isLoading, error, refetch } = useListBuyerInvoices();
+  const [serverPage, setServerPage] = useState(0);
+  const deferredSearch = useDeferredValue(search.trim());
+  const { data, isLoading, isFetching, error, refetch } = useListBuyerInvoices({
+    limit: SERVER_PAGE_SIZE + 1,
+    offset: serverPage * SERVER_PAGE_SIZE,
+    ...(filter === "all" ? {} : { confirmationState: filter }),
+    ...(deferredSearch === "" ? {} : { search: deferredSearch }),
+  });
+  const { data: summary } = useGetBuyerInvoiceSummary();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -221,7 +243,11 @@ export function Confirmations() {
     useState<BulkConfirmationsResult | null>(null);
   const bulk = useBulkRespondConfirmations();
 
-  const invoices = useMemo(() => data ?? [], [data]);
+  const invoices = useMemo(
+    () => (data ?? []).slice(0, SERVER_PAGE_SIZE),
+    [data],
+  );
+  const hasNextServerPage = (data?.length ?? 0) > SERVER_PAGE_SIZE;
 
   // A refetch can flip a selected row out of the awaiting state (someone
   // else responded, or our own bulk run landed) — drop it from the selection
@@ -239,21 +265,8 @@ export function Confirmations() {
     });
   }, [invoices]);
 
-  const query = search.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    let rows = invoices;
-    if (filter !== "all") {
-      rows = rows.filter((i) => i.confirmationState === filter);
-    }
-    if (query !== "") {
-      rows = rows.filter(
-        (i) =>
-          i.invoiceNumber.toLowerCase().includes(query) ||
-          i.supplierName.toLowerCase().includes(query),
-      );
-    }
-    return rows;
-  }, [invoices, filter, query]);
+  const filtered = invoices;
+  const query = deferredSearch;
 
   if (isLoading) {
     return (
@@ -295,15 +308,19 @@ export function Confirmations() {
   }
 
   const awaiting = invoices.filter((i) => i.confirmationState === "requested");
-  const awaitingTotal = awaiting.reduce(
-    (sum, i) => sum + (Number(i.grandTotal) || 0),
-    0,
-  );
-  const counts = new Map<FilterKey, number>([["all", invoices.length]]);
-  for (const inv of invoices) {
-    const key = inv.confirmationState as FilterKey;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
+  const summaryCounts = summary?.counts;
+  const awaitingCount = summaryCounts?.requested ?? awaiting.length;
+  const awaitingTotal =
+    summary?.awaitingTotal ??
+    String(awaiting.reduce((sum, i) => sum + (Number(i.grandTotal) || 0), 0));
+  const counts = new Map<FilterKey, number>([
+    ["all", summary?.total ?? invoices.length],
+    ["none", summaryCounts?.none ?? 0],
+    ["requested", awaitingCount],
+    ["confirmed", summaryCounts?.confirmed ?? 0],
+    ["queried", summaryCounts?.queried ?? 0],
+    ["rejected", summaryCounts?.rejected ?? 0],
+  ]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -311,8 +328,36 @@ export function Confirmations() {
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
+  const hasPreviousPage = serverPage > 0 || currentPage > 1;
+  const hasNextPage = currentPage < pageCount || hasNextServerPage;
+  const displayPage = serverPage * (SERVER_PAGE_SIZE / PAGE_SIZE) + currentPage;
+  const visibleStart =
+    serverPage * SERVER_PAGE_SIZE + (currentPage - 1) * PAGE_SIZE + 1;
+  const visibleEnd = visibleStart + visible.length - 1;
 
-  const isFirstRun = invoices.length === 0;
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setPage(currentPage - 1);
+      return;
+    }
+    if (serverPage > 0) {
+      setServerPage(serverPage - 1);
+      setPage(SERVER_PAGE_SIZE / PAGE_SIZE);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < pageCount) {
+      setPage(currentPage + 1);
+      return;
+    }
+    if (hasNextServerPage) {
+      setServerPage(serverPage + 1);
+      setPage(1);
+    }
+  };
+
+  const isFirstRun = (summary?.total ?? invoices.length) === 0;
   const hasActiveNarrowing = filter !== "all" || query !== "";
 
   // Bulk selection derivations: the awaiting rows in the CURRENT filtered
@@ -408,10 +453,10 @@ export function Confirmations() {
       <MetricStrip label="Confirmation summary">
         <Metric
           label="Needs response"
-          value={String(awaiting.length)}
+          value={String(awaitingCount)}
           detail={formatNaira(awaitingTotal)}
           icon={<ReceiptText className="size-4" aria-hidden="true" />}
-          tone={awaiting.length > 0 ? "warning" : "default"}
+          tone={awaitingCount > 0 ? "warning" : "default"}
         />
         <Metric
           label="Confirmed"
@@ -430,21 +475,21 @@ export function Confirmations() {
         <Metric
           label="Rejected"
           value={String(counts.get("rejected") ?? 0)}
-          detail={`${invoices.length} invoices in scope`}
+          detail={`${summary?.total ?? invoices.length} invoices in scope`}
           icon={<ShieldAlert className="size-4" aria-hidden="true" />}
           tone={(counts.get("rejected") ?? 0) > 0 ? "critical" : "default"}
         />
       </MetricStrip>
 
-      {awaiting.length > 0 && (
+      {awaitingCount > 0 && (
         <Card
           className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/40"
           data-testid="card-awaiting"
         >
           <CardHeader>
             <CardTitle className="text-base text-amber-900 dark:text-amber-300">
-              {awaiting.length}{" "}
-              {awaiting.length === 1 ? "invoice needs" : "invoices need"} your
+              {awaitingCount}{" "}
+              {awaitingCount === 1 ? "invoice needs" : "invoices need"} your
               response
             </CardTitle>
           </CardHeader>
@@ -461,6 +506,7 @@ export function Confirmations() {
               onClick={() => {
                 setFilter("requested");
                 setPage(1);
+                setServerPage(0);
               }}
               data-testid="button-view-awaiting"
             >
@@ -539,6 +585,7 @@ export function Confirmations() {
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
+              setServerPage(0);
             }}
             placeholder="Search invoice number or supplier…"
             data-testid="input-search"
@@ -555,6 +602,7 @@ export function Confirmations() {
                 onClick={() => {
                   setFilter(f.key);
                   setPage(1);
+                  setServerPage(0);
                 }}
                 aria-pressed={isActive}
                 data-testid={`chip-${f.key}`}
@@ -571,13 +619,14 @@ export function Confirmations() {
         </div>
       </div>
 
-      <Card>
+      <Card aria-busy={isFetching}>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Invoices</CardTitle>
             {showSelectionColumn && (
               <div className="flex items-center gap-2">
                 <Checkbox
+                  className="size-6"
                   id="select-all-awaiting"
                   checked={allSelected}
                   onCheckedChange={(v) =>
@@ -640,6 +689,7 @@ export function Confirmations() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Checkbox
+                    className="size-6 shrink-0"
                     id="bulk-no-set-off"
                     checked={bulkNoSetOff}
                     onCheckedChange={(v) => setBulkNoSetOff(v === true)}
@@ -745,6 +795,7 @@ export function Confirmations() {
                         setFilter("all");
                         setSearch("");
                         setPage(1);
+                        setServerPage(0);
                       }}
                       data-testid="button-clear-filters"
                     >
@@ -767,51 +818,52 @@ export function Confirmations() {
                   />
                 ))}
               </div>
-              {pageCount > 1 && (
+              {(pageCount > 1 || serverPage > 0 || hasNextServerPage) && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                   <p
                     className="text-xs text-muted-foreground tabular-nums"
                     data-testid="text-truncated"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
                   >
-                    Showing {(currentPage - 1) * PAGE_SIZE + 1}–
-                    {Math.min(currentPage * PAGE_SIZE, filtered.length)} of{" "}
-                    {filtered.length} invoices
+                    Showing {visibleStart} to {visibleEnd}
                   </p>
                   <Pagination className="mx-0 w-auto justify-end">
                     <PaginationContent>
                       <PaginationItem>
                         <PaginationPrevious
                           href="#"
-                          aria-disabled={currentPage === 1}
+                          aria-disabled={!hasPreviousPage}
                           className={
-                            currentPage === 1
+                            !hasPreviousPage
                               ? "pointer-events-none opacity-50"
                               : undefined
                           }
                           onClick={(e) => {
                             e.preventDefault();
-                            setPage(Math.max(1, currentPage - 1));
+                            goToPreviousPage();
                           }}
                           data-testid="button-page-previous"
                         />
                       </PaginationItem>
                       <PaginationItem>
                         <span className="px-2 text-sm text-muted-foreground tabular-nums">
-                          Page {currentPage} of {pageCount}
+                          Page {displayPage}
                         </span>
                       </PaginationItem>
                       <PaginationItem>
                         <PaginationNext
                           href="#"
-                          aria-disabled={currentPage === pageCount}
+                          aria-disabled={!hasNextPage}
                           className={
-                            currentPage === pageCount
+                            !hasNextPage
                               ? "pointer-events-none opacity-50"
                               : undefined
                           }
                           onClick={(e) => {
                             e.preventDefault();
-                            setPage(Math.min(pageCount, currentPage + 1));
+                            goToNextPage();
                           }}
                           data-testid="button-page-next"
                         />

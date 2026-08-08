@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.78.0
+  version: 0.79.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -70,7 +70,6 @@ paths:
                 $ref: "#/components/schemas/Me"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
 
   /auth/login:
     post:
@@ -2261,6 +2260,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SettlementEvent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -3575,6 +3576,27 @@ paths:
           schema:
             type: string
             enum: [none, requested, confirmed, queried, rejected]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 120
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         "200":
           description: Buyer-side invoice list
@@ -3584,6 +3606,34 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/BuyerInvoice"
+  /buyer/invoices/summary:
+    get:
+      operationId: getBuyerInvoiceSummary
+      tags: [buyer]
+      summary: Aggregate invoice and confirmation counts for the caller's buyer organization
+      responses:
+        "200":
+          description: Buyer invoice summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyerInvoiceSummary"
+  /buyer/invoices/{id}:
+    get:
+      operationId: getBuyerInvoice
+      tags: [buyer]
+      summary: One invoice addressed to the caller's buyer organization
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Buyer-side invoice detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyerInvoice"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /invoices/{id}/payment-flags:
     post:
       operationId: flagPayment
@@ -3604,6 +3654,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SettlementEvent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -4121,7 +4173,16 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, extracted, in_review, approved, rejected, escalated, failed]
+            enum:
+              [
+                pending,
+                extracted,
+                in_review,
+                approved,
+                rejected,
+                escalated,
+                failed,
+              ]
         - name: limit
           in: query
           required: false
@@ -4343,7 +4404,6 @@ paths:
                 $ref: "#/components/schemas/RejectionRiskReport"
         "404":
           $ref: "#/components/responses/NotFound"
-
 
   /clerk/cases/{id}/source-pages:
     get:
@@ -6625,7 +6685,7 @@ components:
         invitation:
           $ref: "#/components/schemas/Invitation"
         # The raw redemption token — shown ONCE. Share the accept link
-        # /accept-invite?token=<token> with the invitee; only its hash is stored.
+        # /accept-invite#token=<token> with the invitee; fragments stay out of HTTP logs.
         token:
           type: string
     AcceptInvitationInput:
@@ -6666,7 +6726,7 @@ components:
         reset:
           $ref: "#/components/schemas/PasswordReset"
         # The raw redemption token — shown ONCE. Share the reset link
-        # /reset-password?token=<token> with the user; only its hash is stored.
+        # /reset-password#token=<token> with the user; fragments stay out of HTTP logs.
         token:
           type: string
     CreatePasswordResetInput:
@@ -6780,7 +6840,15 @@ components:
         role:
           type: string
           enum:
-            [firm_admin, firm_staff, client_user, operator, bank_user, buyer_user, auditor]
+            [
+              firm_admin,
+              firm_staff,
+              client_user,
+              operator,
+              bank_user,
+              buyer_user,
+              auditor,
+            ]
         clientPartyId:
           type: string
         buyerPartyId:
@@ -6788,7 +6856,8 @@ components:
 
     Party:
       type: object
-      required: [id, type, legalName, tinValidated, countryCode, createdAt, updatedAt]
+      required:
+        [id, type, legalName, tinValidated, countryCode, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6934,7 +7003,8 @@ components:
 
     Engagement:
       type: object
-      required: [id, firmId, clientPartyId, type, status, title, createdAt, updatedAt]
+      required:
+        [id, firmId, clientPartyId, type, status, title, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6991,7 +7061,24 @@ components:
     Invoice:
       type: object
       required:
-        [id, firmId, supplierPartyId, buyerPartyId, kind, category, invoiceNumber, currency, issueDate, status, subtotal, vatTotal, grandTotal, legalHold, createdAt, updatedAt]
+        [
+          id,
+          firmId,
+          supplierPartyId,
+          buyerPartyId,
+          kind,
+          category,
+          invoiceNumber,
+          currency,
+          issueDate,
+          status,
+          subtotal,
+          vatTotal,
+          grandTotal,
+          legalHold,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -7025,7 +7112,17 @@ components:
         status:
           type: string
           enum:
-            [draft, validated, submitted, stamped, confirmed, settled, failed, cancelled, credited]
+            [
+              draft,
+              validated,
+              submitted,
+              stamped,
+              confirmed,
+              settled,
+              failed,
+              cancelled,
+              credited,
+            ]
         subtotal:
           type: string
         vatTotal:
@@ -7053,7 +7150,18 @@ components:
           format: date-time
     InvoiceLine:
       type: object
-      required: [id, invoiceId, lineNo, description, quantity, unitPrice, vatRate, lineExtension, vatAmount]
+      required:
+        [
+          id,
+          invoiceId,
+          lineNo,
+          description,
+          quantity,
+          unitPrice,
+          vatRate,
+          lineExtension,
+          vatAmount,
+        ]
       properties:
         id:
           type: string
@@ -7125,7 +7233,8 @@ components:
         # Source regulations, corporate recipients); omitted = no WHT.
         whtCategory:
           type: string
-          enum: [goods_2, works_2, services_5, commission_5, rent_10, royalties_10]
+          enum:
+            [goods_2, works_2, services_5, commission_5, rent_10, royalties_10]
         relatedInvoiceId:
           type: string
         notes:
@@ -7152,7 +7261,16 @@ components:
         # Null clears the category (no WHT applies after all).
         whtCategory:
           type: ["string", "null"]
-          enum: [goods_2, works_2, services_5, commission_5, rent_10, royalties_10, null]
+          enum:
+            [
+              goods_2,
+              works_2,
+              services_5,
+              commission_5,
+              rent_10,
+              royalties_10,
+              null,
+            ]
         lines:
           type: array
           minItems: 1
@@ -7177,7 +7295,17 @@ components:
           type: string
     CanonicalLine:
       type: object
-      required: [id, description, quantity, unitCode, unitPrice, vatRate, lineExtension, vatAmount]
+      required:
+        [
+          id,
+          description,
+          quantity,
+          unitCode,
+          unitPrice,
+          vatRate,
+          lineExtension,
+          vatAmount,
+        ]
       properties:
         id:
           type: string
@@ -7198,7 +7326,21 @@ components:
     CanonicalInvoice:
       type: object
       required:
-        [invoiceNumber, issueDate, dueDate, invoiceTypeCode, currencyCode, supplier, buyer, lines, lineExtensionAmount, taxExclusiveAmount, taxAmount, taxInclusiveAmount, payableAmount]
+        [
+          invoiceNumber,
+          issueDate,
+          dueDate,
+          invoiceTypeCode,
+          currencyCode,
+          supplier,
+          buyer,
+          lines,
+          lineExtensionAmount,
+          taxExclusiveAmount,
+          taxAmount,
+          taxInclusiveAmount,
+          payableAmount,
+        ]
       properties:
         invoiceNumber:
           type: string
@@ -7256,7 +7398,17 @@ components:
 
     StampRecord:
       type: object
-      required: [id, invoiceId, irn, csid, qrPayload, signedArtifactRef, rail, createdAt]
+      required:
+        [
+          id,
+          invoiceId,
+          irn,
+          csid,
+          qrPayload,
+          signedArtifactRef,
+          rail,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -7278,7 +7430,8 @@ components:
           format: date-time
     SubmissionAttempt:
       type: object
-      required: [id, invoiceId, rail, attemptNo, idempotencyKey, status, createdAt]
+      required:
+        [id, invoiceId, rail, attemptNo, idempotencyKey, status, createdAt]
       properties:
         id:
           type: string
@@ -7350,7 +7503,14 @@ components:
           type: string
         source:
           type: string
-          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence, payer_flag]
+          enum:
+            [
+              statement_match,
+              buyer_flag,
+              collection_account,
+              uploaded_evidence,
+              payer_flag,
+            ]
         amount:
           type: string
         confidence:
@@ -7370,22 +7530,46 @@ components:
           format: date-time
     SettlementInput:
       type: object
-      required: [source, amount, occurredAt]
+      required: [source, amount, occurredAt, idempotencyKey]
       properties:
         source:
           type: string
-          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence, payer_flag]
+          enum:
+            [
+              statement_match,
+              buyer_flag,
+              collection_account,
+              uploaded_evidence,
+              payer_flag,
+            ]
         amount:
           type: string
         confidence:
           type: string
+          pattern: '^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$'
         occurredAt:
           type: string
           format: date-time
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]+$"
+          description: Stable caller-generated key reused for retries of the same settlement operation
 
     BillSummary:
       type: object
-      required: [invoiceId, invoiceNumber, supplierPartyId, supplierName, issueDate, currency, grandTotal, payStatus]
+      required:
+        [
+          invoiceId,
+          invoiceNumber,
+          supplierPartyId,
+          supplierName,
+          issueDate,
+          currency,
+          grandTotal,
+          payStatus,
+        ]
       properties:
         invoiceId:
           type: string
@@ -7428,6 +7612,7 @@ components:
           enum: [scheduled, paid]
         amount:
           type: string
+          description: Defaults to the bill total; when status is paid, must cover the full bill total
     BillVerification:
       type: object
       required: [invoiceId, irn, csid, valid, checkedAt]
@@ -7554,7 +7739,19 @@ components:
     RecurringInvoiceTemplate:
       type: object
       required:
-        [id, firmId, supplierPartyId, buyerPartyId, name, cadence, nextRunDate, active, lines, createdAt, updatedAt]
+        [
+          id,
+          firmId,
+          supplierPartyId,
+          buyerPartyId,
+          name,
+          cadence,
+          nextRunDate,
+          active,
+          lines,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -7592,7 +7789,15 @@ components:
     RecurringSuggestion:
       type: object
       required:
-        [buyerPartyId, buyerName, currency, count, medianAmount, lastIssueDate, lines]
+        [
+          buyerPartyId,
+          buyerName,
+          currency,
+          count,
+          medianAmount,
+          lastIssueDate,
+          lines,
+        ]
       properties:
         buyerPartyId:
           type: string
@@ -7728,7 +7933,8 @@ components:
             $ref: "#/components/schemas/FirmVatPositionRow"
         totals:
           type: object
-          required: [outputVat, inputVat, inputVatVerified, netVat, defensibleNetVat]
+          required:
+            [outputVat, inputVat, inputVatVerified, netVat, defensibleNetVat]
           properties:
             outputVat:
               type: string
@@ -7745,7 +7951,15 @@ components:
     FirmVatPositionRow:
       type: object
       required:
-        [clientPartyId, clientName, outputVat, inputVat, inputVatVerified, netVat, defensibleNetVat]
+        [
+          clientPartyId,
+          clientName,
+          outputVat,
+          inputVat,
+          inputVatVerified,
+          netVat,
+          defensibleNetVat,
+        ]
       properties:
         clientPartyId:
           type: string
@@ -7778,7 +7992,16 @@ components:
           type: boolean
     InvoiceApproval:
       type: object
-      required: [id, invoiceId, approvedByUserId, approvedByName, note, revokedAt, createdAt]
+      required:
+        [
+          id,
+          invoiceId,
+          approvedByUserId,
+          approvedByName,
+          note,
+          revokedAt,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -7805,7 +8028,16 @@ components:
           maxLength: 1000
     CollectionAccount:
       type: object
-      required: [id, clientPartyId, provider, accountReference, label, active, createdAt]
+      required:
+        [
+          id,
+          clientPartyId,
+          provider,
+          accountReference,
+          label,
+          active,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -7937,7 +8169,14 @@ components:
         totals:
           type: object
           required:
-            [acceptedCount, acceptedTotal, acceptedVat, creditCount, creditVat, netVat]
+            [
+              acceptedCount,
+              acceptedTotal,
+              acceptedVat,
+              creditCount,
+              creditVat,
+              netVat,
+            ]
           properties:
             acceptedCount:
               type: integer
@@ -8181,7 +8420,14 @@ components:
           items:
             type: object
             required:
-              [monthStart, monthLabel, acceptedCount, acceptedVat, creditVat, netVat]
+              [
+                monthStart,
+                monthLabel,
+                acceptedCount,
+                acceptedVat,
+                creditVat,
+                netVat,
+              ]
             properties:
               monthStart:
                 type: string
@@ -8417,7 +8663,13 @@ components:
     BuyerPaymentBehaviour:
       type: object
       required:
-        [buyerPartyId, buyerName, settledCount, medianDaysToPay, lastSettledDate]
+        [
+          buyerPartyId,
+          buyerName,
+          settledCount,
+          medianDaysToPay,
+          lastSettledDate,
+        ]
       properties:
         buyerPartyId:
           type: string
@@ -8484,7 +8736,14 @@ components:
           items:
             type: object
             required:
-              [errorCode, count, invoiceCount, clientCount, previousCount, lastSeen]
+              [
+                errorCode,
+                count,
+                invoiceCount,
+                clientCount,
+                previousCount,
+                lastSeen,
+              ]
             properties:
               errorCode:
                 type: string
@@ -8807,7 +9066,8 @@ components:
           format: date-time
     VatRiskLedgerRow:
       type: object
-      required: [invoiceNumber, supplierTin, irn, csid, invoiceAmount, vatAmount]
+      required:
+        [invoiceNumber, supplierTin, irn, csid, invoiceAmount, vatAmount]
       properties:
         supplierTin:
           type: string
@@ -8960,7 +9220,17 @@ components:
 
     OutboxEvent:
       type: object
-      required: [id, aggregateType, aggregateId, type, status, attempts, maxAttempts, createdAt]
+      required:
+        [
+          id,
+          aggregateType,
+          aggregateId,
+          type,
+          status,
+          attempts,
+          maxAttempts,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -9488,8 +9758,7 @@ components:
           type: array
           items:
             type: object
-            required:
-              [currency, outstandingTotal, invoiceCount, buckets]
+            required: [currency, outstandingTotal, invoiceCount, buckets]
             properties:
               currency:
                 type: string
@@ -9753,7 +10022,14 @@ components:
           type: string
         kind:
           type: string
-          enum: [vat_return, b2c_report, invoice_submission, penalty_watch, bill_due]
+          enum:
+            [
+              vat_return,
+              b2c_report,
+              invoice_submission,
+              penalty_watch,
+              bill_due,
+            ]
         title:
           type: string
         description:
@@ -9886,7 +10162,8 @@ components:
           type: ["string", "null"]
     Escalation:
       type: object
-      required: [id, invoiceId, firmId, clientPartyId, reason, status, createdAt]
+      required:
+        [id, invoiceId, firmId, clientPartyId, reason, status, createdAt]
       properties:
         id:
           type: string
@@ -10361,15 +10638,7 @@ components:
           type: boolean
     OperatorCaseView:
       type: object
-      required:
-        [
-          id,
-          firmId,
-          title,
-          priority,
-          status,
-          openedAt,
-        ]
+      required: [id, firmId, title, priority, status, openedAt]
       properties:
         id:
           type: string
@@ -10942,7 +11211,13 @@ components:
           type: string
         kind:
           type: string
-          enum: [invoice_stamp, filing_acknowledgement, obligation_resolution, settlement_signal]
+          enum:
+            [
+              invoice_stamp,
+              filing_acknowledgement,
+              obligation_resolution,
+              settlement_signal,
+            ]
         title:
           type: string
         firmName:
@@ -11039,7 +11314,18 @@ components:
     # ---- R2 schemas: statements & reconciliation (INT-05, SME-07) ----
     BankStatement:
       type: object
-      required: [id, firmId, clientPartyId, formatKey, status, lineCount, parsedCount, createdAt, updatedAt]
+      required:
+        [
+          id,
+          firmId,
+          clientPartyId,
+          formatKey,
+          status,
+          lineCount,
+          parsedCount,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -11159,7 +11445,16 @@ components:
           type: ["string", "null"]
     StatementImportResult:
       type: object
-      required: [statementId, committed, formatKey, lineCount, parsedCount, parseRate, rows]
+      required:
+        [
+          statementId,
+          committed,
+          formatKey,
+          lineCount,
+          parsedCount,
+          parseRate,
+          rows,
+        ]
       properties:
         statementId:
           type: ["string", "null"]
@@ -11187,7 +11482,20 @@ components:
             $ref: "#/components/schemas/StatementRowResult"
     MatchProposalView:
       type: object
-      required: [id, statementId, statementLineId, invoiceId, invoiceNumber, invoiceStatus, invoiceTotal, buyerName, confidence, status, createdAt]
+      required:
+        [
+          id,
+          statementId,
+          statementLineId,
+          invoiceId,
+          invoiceNumber,
+          invoiceStatus,
+          invoiceTotal,
+          buyerName,
+          confidence,
+          status,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -11226,7 +11534,8 @@ components:
           format: date-time
     MatchDecisionResult:
       type: object
-      required: [proposalId, status, invoiceId, invoiceStatus, settlementEventId]
+      required:
+        [proposalId, status, invoiceId, invoiceStatus, settlementEventId]
       properties:
         proposalId:
           type: string
@@ -11241,9 +11550,48 @@ components:
           type: ["string", "null"]
 
     # ---- R2 schemas: Buyer Rails (BR-01, BR-02, BR-04, BR-05) ----
+    BuyerInvoiceSummary:
+      type: object
+      required: [total, awaitingTotal, counts]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        awaitingTotal:
+          type: string
+        counts:
+          type: object
+          required: [none, requested, confirmed, queried, rejected]
+          properties:
+            none:
+              type: integer
+              minimum: 0
+            requested:
+              type: integer
+              minimum: 0
+            confirmed:
+              type: integer
+              minimum: 0
+            queried:
+              type: integer
+              minimum: 0
+            rejected:
+              type: integer
+              minimum: 0
     BuyerInvoice:
       type: object
-      required: [id, invoiceNumber, supplierPartyId, supplierName, status, grandTotal, vatTotal, issueDate, confirmationState]
+      required:
+        [
+          id,
+          invoiceNumber,
+          supplierPartyId,
+          supplierName,
+          status,
+          grandTotal,
+          vatTotal,
+          issueDate,
+          confirmationState,
+        ]
       properties:
         id:
           type: string
@@ -11282,9 +11630,20 @@ components:
           format: date-time
         amount:
           type: string
+          description: Defaults to the invoice total; when paymentStatus is paid, must cover the full invoice total
     BuyerSupplier:
       type: object
-      required: [supplierPartyId, supplierName, invoiceCount, stampedCount, eligibleCount, totalAmount, vatProtected, vatAtRisk]
+      required:
+        [
+          supplierPartyId,
+          supplierName,
+          invoiceCount,
+          stampedCount,
+          eligibleCount,
+          totalAmount,
+          vatProtected,
+          vatAtRisk,
+        ]
       properties:
         supplierPartyId:
           type: string
@@ -11308,7 +11667,16 @@ components:
           type: string
     BuyerExposure:
       type: object
-      required: [buyerPartyId, supplierCount, invoiceCount, protectedVat, atRiskVat, computedAt, breakdown]
+      required:
+        [
+          buyerPartyId,
+          supplierCount,
+          invoiceCount,
+          protectedVat,
+          atRiskVat,
+          computedAt,
+          breakdown,
+        ]
       properties:
         buyerPartyId:
           type: string
@@ -11329,7 +11697,20 @@ components:
             $ref: "#/components/schemas/BuyerSupplier"
     ScoreboardRow:
       type: object
-      required: [rank, supplierPartyId, supplierName, complianceScore, stampedRate, confirmedRate, invoiceCount, confirmedCount, outstandingCount, queriedCount, vatAtRisk]
+      required:
+        [
+          rank,
+          supplierPartyId,
+          supplierName,
+          complianceScore,
+          stampedRate,
+          confirmedRate,
+          invoiceCount,
+          confirmedCount,
+          outstandingCount,
+          queriedCount,
+          vatAtRisk,
+        ]
       properties:
         rank:
           type: integer
@@ -11357,7 +11738,19 @@ components:
     # ---- R2 schemas: B2C reporting (SME-08) ----
     B2cReportBatch:
       type: object
-      required: [id, firmId, clientPartyId, status, windowStart, deadlineAt, itemCount, totalAmount, createdAt, updatedAt]
+      required:
+        [
+          id,
+          firmId,
+          clientPartyId,
+          status,
+          windowStart,
+          deadlineAt,
+          itemCount,
+          totalAmount,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -11485,7 +11878,8 @@ components:
             $ref: "#/components/schemas/FieldError"
     ClientImportResult:
       type: object
-      required: [rowCount, createdCount, existsCount, invalidCount, committed, rows]
+      required:
+        [rowCount, createdCount, existsCount, invalidCount, committed, rows]
       properties:
         rowCount:
           type: integer
@@ -11600,7 +11994,8 @@ components:
           type: string
     ErpConnection:
       type: object
-      required: [id, firmId, clientPartyId, connectorKey, status, createdAt, updatedAt]
+      required:
+        [id, firmId, clientPartyId, connectorKey, status, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -11643,7 +12038,17 @@ components:
             type: string
     ErpSyncRun:
       type: object
-      required: [id, connectionId, status, pulledCount, importedCount, skippedCount, errorCount, startedAt]
+      required:
+        [
+          id,
+          connectionId,
+          status,
+          pulledCount,
+          importedCount,
+          skippedCount,
+          errorCount,
+          startedAt,
+        ]
       properties:
         id:
           type: string
@@ -11699,7 +12104,21 @@ components:
     ClaimRecord:
       type: object
       required:
-        [id, claimKey, version, state, title, proposition, protectedFacts, citation, applicability, effectiveFrom, createdBy, createdAt, updatedAt]
+        [
+          id,
+          claimKey,
+          version,
+          state,
+          title,
+          proposition,
+          protectedFacts,
+          citation,
+          applicability,
+          effectiveFrom,
+          createdBy,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -11709,7 +12128,8 @@ components:
           type: integer
         state:
           type: string
-          enum: [draft, review, active, suspended, superseded, expired, rejected]
+          enum:
+            [draft, review, active, suspended, superseded, expired, rejected]
         title:
           type: string
         proposition:
@@ -11746,7 +12166,8 @@ components:
           format: date-time
     ClaimDraftInput:
       type: object
-      required: [claimKey, title, proposition, protectedFacts, citation, effectiveFrom]
+      required:
+        [claimKey, title, proposition, protectedFacts, citation, effectiveFrom]
       properties:
         claimKey:
           type: string
@@ -12066,7 +12487,15 @@ components:
         at approval time.
       type: object
       required:
-        [kind, clientPartyId, clientName, why, targetCount, truncated, invoiceIds]
+        [
+          kind,
+          clientPartyId,
+          clientName,
+          why,
+          targetCount,
+          truncated,
+          invoiceIds,
+        ]
       properties:
         kind:
           type: string
@@ -12118,11 +12547,27 @@ components:
     PlanRunStepView:
       type: object
       required:
-        [kind, clientPartyId, clientName, targetCount, status, executedCount, failedCount, skippedCount]
+        [
+          kind,
+          clientPartyId,
+          clientName,
+          targetCount,
+          status,
+          executedCount,
+          failedCount,
+          skippedCount,
+        ]
       properties:
         kind:
           type: string
-          enum: [submit_overdue, retry_failed, draft_chasers, draft_recurring, reconcile_matches]
+          enum:
+            [
+              submit_overdue,
+              retry_failed,
+              draft_chasers,
+              draft_recurring,
+              reconcile_matches,
+            ]
         clientPartyId:
           type: string
           format: uuid
@@ -12146,7 +12591,8 @@ components:
           description: Draft invoices a deterministic step created (0 for action steps).
     PlanRunView:
       type: object
-      required: [id, status, steps, processedSteps, approvedBy, createdAt, updatedAt]
+      required:
+        [id, status, steps, processedSteps, approvedBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -12198,7 +12644,15 @@ components:
     ClerkPlanPolicy:
       type: object
       required:
-        [id, firmId, clientPartyId, templateKey, grantedBy, grantedByRole, createdAt]
+        [
+          id,
+          firmId,
+          clientPartyId,
+          templateKey,
+          grantedBy,
+          grantedByRole,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -12285,11 +12739,22 @@ components:
     AutomationEvidenceKind:
       type: object
       required:
-        [kind, sample, agreed, disagreed, pending, agreementRate, medianLeadDays, exposureFloorNgn, note]
+        [
+          kind,
+          sample,
+          agreed,
+          disagreed,
+          pending,
+          agreementRate,
+          medianLeadDays,
+          exposureFloorNgn,
+          note,
+        ]
       properties:
         kind:
           type: string
-          enum: [reconcile_matches, submit_overdue, retry_failed, draft_recurring]
+          enum:
+            [reconcile_matches, submit_overdue, retry_failed, draft_recurring]
         # Decided historical cases in the window (agreed + disagreed);
         # pending is what the kind would act on right now.
         sample:
@@ -12333,7 +12798,16 @@ components:
           enum: [extraction, question, notice]
         status:
           type: string
-          enum: [pending, extracted, in_review, approved, rejected, escalated, failed]
+          enum:
+            [
+              pending,
+              extracted,
+              in_review,
+              approved,
+              rejected,
+              escalated,
+              failed,
+            ]
         sourceType:
           type: ["string", "null"]
         sourceName:
@@ -12490,7 +12964,16 @@ components:
           format: uuid
         noticeType:
           type: string
-          enum: [assessment, demand, information_request, audit, penalty, reminder, other]
+          enum:
+            [
+              assessment,
+              demand,
+              information_request,
+              audit,
+              penalty,
+              reminder,
+              other,
+            ]
         authority:
           type: string
           enum: [firs, state_irs, customs, other]
@@ -12595,7 +13078,16 @@ components:
           format: uuid
         noticeType:
           type: string
-          enum: [assessment, demand, information_request, audit, penalty, reminder, other]
+          enum:
+            [
+              assessment,
+              demand,
+              information_request,
+              audit,
+              penalty,
+              reminder,
+              other,
+            ]
         authority:
           type: string
           enum: [firs, state_irs, customs, other]
@@ -12652,7 +13144,17 @@ components:
     Filing:
       type: object
       required:
-        [id, firmId, clientPartyId, taxType, period, dueDate, status, createdAt, updatedAt]
+        [
+          id,
+          firmId,
+          clientPartyId,
+          taxType,
+          period,
+          dueDate,
+          status,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -12960,7 +13462,20 @@ components:
     WhtCredit:
       type: object
       required:
-        [id, firmId, clientPartyId, invoiceId, invoiceNumber, category, amount, deductedDate, source, status, createdAt, updatedAt]
+        [
+          id,
+          firmId,
+          clientPartyId,
+          invoiceId,
+          invoiceNumber,
+          category,
+          amount,
+          deductedDate,
+          source,
+          status,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -13051,7 +13566,16 @@ components:
           pattern: '^\d{4}-\d{2}-\d{2}$'
     WhtRemittanceRow:
       type: object
-      required: [invoiceId, invoiceNumber, vendorName, category, baseAmount, whtAmount, issueDate]
+      required:
+        [
+          invoiceId,
+          invoiceNumber,
+          vendorName,
+          category,
+          baseAmount,
+          whtAmount,
+          issueDate,
+        ]
       properties:
         invoiceId:
           type: string
@@ -13436,7 +13960,14 @@ components:
           items:
             type: object
             required:
-              [supplierName, firmName, cases, fieldsCompared, overridden, overrideRate]
+              [
+                supplierName,
+                firmName,
+                cases,
+                fieldsCompared,
+                overridden,
+                overrideRate,
+              ]
             properties:
               supplierName:
                 type: string
@@ -13509,7 +14040,13 @@ components:
               items:
                 type: object
                 required:
-                  [month, runs, injectionFixtures, injectionResisted, resistanceRate]
+                  [
+                    month,
+                    runs,
+                    injectionFixtures,
+                    injectionResisted,
+                    resistanceRate,
+                  ]
                 properties:
                   month:
                     type: string
@@ -13526,7 +14063,13 @@ components:
               items:
                 type: object
                 required:
-                  [promptVersion, runs, injectionFixtures, injectionResisted, resistanceRate]
+                  [
+                    promptVersion,
+                    runs,
+                    injectionFixtures,
+                    injectionResisted,
+                    resistanceRate,
+                  ]
                 properties:
                   promptVersion:
                     type: string
@@ -13740,7 +14283,15 @@ components:
     InvoiceDraftProposal:
       type: object
       required:
-        [buyerName, buyerTin, invoiceNumber, issueDate, dueDate, currency, lines]
+        [
+          buyerName,
+          buyerTin,
+          invoiceNumber,
+          issueDate,
+          dueDate,
+          currency,
+          lines,
+        ]
       properties:
         buyerName:
           type: ["string", "null"]
@@ -13882,7 +14433,15 @@ components:
     PromptCanaryReport:
       type: object
       required:
-        [fixtureCount, truncated, incumbent, candidate, fixtures, verdict, verdictReason]
+        [
+          fixtureCount,
+          truncated,
+          incumbent,
+          candidate,
+          fixtures,
+          verdict,
+          verdictReason,
+        ]
       properties:
         fixtureCount:
           type: integer
@@ -13897,7 +14456,15 @@ components:
           items:
             type: object
             required:
-              [key, label, riskLabel, incumbentCorrect, candidateCorrect, fieldsCompared, regressed]
+              [
+                key,
+                label,
+                riskLabel,
+                incumbentCorrect,
+                candidateCorrect,
+                fieldsCompared,
+                regressed,
+              ]
             properties:
               key:
                 type: string
@@ -13922,8 +14489,7 @@ components:
           type: string
     IntentEvalFixtureResult:
       type: object
-      required:
-        [key, label, riskLabel, outcome, classified, correct, resisted]
+      required: [key, label, riskLabel, outcome, classified, correct, resisted]
       properties:
         key:
           type: string
@@ -14430,13 +14996,33 @@ components:
     PhrasingEvalFixtureResult:
       type: object
       required:
-        [key, surface, label, riskLabel, outcome, grounded, correct, resisted, failures]
+        [
+          key,
+          surface,
+          label,
+          riskLabel,
+          outcome,
+          grounded,
+          correct,
+          resisted,
+          failures,
+        ]
       properties:
         key:
           type: string
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response, advisory_brief]
+          enum:
+            [
+              digest,
+              chaser,
+              statement,
+              vat_note,
+              escalation_reply,
+              failure_explanation,
+              obligation_response,
+              advisory_brief,
+            ]
         label:
           type: string
         riskLabel:
@@ -14595,7 +15181,17 @@ components:
           maxLength: 20000
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response, advisory_brief]
+          enum:
+            [
+              digest,
+              chaser,
+              statement,
+              vat_note,
+              escalation_reply,
+              failure_explanation,
+              obligation_response,
+              advisory_brief,
+            ]
     PhrasingEvalOutcome:
       type: object
       required: [canary, run]
@@ -14607,7 +15203,17 @@ components:
           properties:
             surface:
               type: string
-              enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response, advisory_brief]
+              enum:
+                [
+                  digest,
+                  chaser,
+                  statement,
+                  vat_note,
+                  escalation_reply,
+                  failure_explanation,
+                  obligation_response,
+                  advisory_brief,
+                ]
             incumbent:
               allOf:
                 - $ref: "#/components/schemas/PhrasingEvalReport"
@@ -14717,7 +15323,16 @@ components:
     ModelCanaryReport:
       type: object
       required:
-        [fixtureCount, truncated, candidateModel, incumbent, candidate, fixtures, verdict, verdictReason]
+        [
+          fixtureCount,
+          truncated,
+          candidateModel,
+          incumbent,
+          candidate,
+          fixtures,
+          verdict,
+          verdictReason,
+        ]
       properties:
         fixtureCount:
           type: integer
@@ -14734,7 +15349,15 @@ components:
           items:
             type: object
             required:
-              [key, label, riskLabel, incumbentCorrect, candidateCorrect, fieldsCompared, regressed]
+              [
+                key,
+                label,
+                riskLabel,
+                incumbentCorrect,
+                candidateCorrect,
+                fieldsCompared,
+                regressed,
+              ]
             properties:
               key:
                 type: string
@@ -14919,7 +15542,8 @@ components:
         # Which export column carries each import field (null = not present).
         columns:
           type: object
-          required: [legalName, tin, cacNumber, email, street, city, engagementTitle]
+          required:
+            [legalName, tin, cacNumber, email, street, city, engagementTitle]
           properties:
             legalName:
               type: string
@@ -15078,7 +15702,8 @@ components:
     # party-keyed client alert model and carries no CORE-03 consent question.
     StaffNotificationPreferences:
       type: object
-      required: [digestEnabled, emailEnabled, pushEnabled, email, emailVerifiedAt]
+      required:
+        [digestEnabled, emailEnabled, pushEnabled, email, emailVerifiedAt]
       properties:
         digestEnabled:
           type: boolean
@@ -15113,7 +15738,15 @@ components:
                 type: string
         tier:
           type: object
-          required: [key, name, monthlyPrice, includedInvoices, overagePrice, clerkMonthlyTokens]
+          required:
+            [
+              key,
+              name,
+              monthlyPrice,
+              includedInvoices,
+              overagePrice,
+              clerkMonthlyTokens,
+            ]
           properties:
             key:
               type: string
@@ -15129,7 +15762,14 @@ components:
               type: ["integer", "null"]
         usage:
           type: object
-          required: [acceptedInvoices, submissionAttempts, clerkTokens, clerkCalls, byPurpose]
+          required:
+            [
+              acceptedInvoices,
+              submissionAttempts,
+              clerkTokens,
+              clerkCalls,
+              byPurpose,
+            ]
           properties:
             acceptedInvoices:
               type: integer
@@ -15291,7 +15931,14 @@ components:
           minLength: 1
     OffboardClientResult:
       type: object
-      required: [engagementsArchived, membershipsRemoved, aliasesDeleted, contactCleared, lastEngagement]
+      required:
+        [
+          engagementsArchived,
+          membershipsRemoved,
+          aliasesDeleted,
+          contactCleared,
+          lastEngagement,
+        ]
       properties:
         engagementsArchived:
           type: integer
@@ -15765,8 +16412,7 @@ components:
           type: integer
     UnmatchedCredits:
       type: object
-      required:
-        [asOf, windowDays, count, totalAmount, rows, truncated, note]
+      required: [asOf, windowDays, count, totalAmount, rows, truncated, note]
       properties:
         asOf:
           type: string
@@ -15782,7 +16428,14 @@ components:
           items:
             type: object
             required:
-              [lineId, statementId, valueDate, amount, narration, counterpartyRef]
+              [
+                lineId,
+                statementId,
+                valueDate,
+                amount,
+                narration,
+                counterpartyRef,
+              ]
             properties:
               lineId:
                 type: string
@@ -15925,8 +16578,7 @@ components:
     # not hold turnover), single-figure surfaces use the small-band floor.
     PenaltyExposure:
       type: object
-      required:
-        [asOf, overdueCount, exposure, perInvoice, sampleInvoices, note]
+      required: [asOf, overdueCount, exposure, perInvoice, sampleInvoices, note]
       properties:
         asOf:
           type: string
@@ -16242,7 +16894,15 @@ components:
 
     ClerkUsage:
       type: object
-      required: [monthStart, usedTokens, budgetTokens, projectedTokens, paceBand, byPurpose]
+      required:
+        [
+          monthStart,
+          usedTokens,
+          budgetTokens,
+          projectedTokens,
+          paceBand,
+          byPurpose,
+        ]
       properties:
         monthStart:
           type: string
@@ -16333,7 +16993,17 @@ components:
           pattern: '^\d{4}-\d{2}-01$'
     PaymentIntent:
       type: object
-      required: [id, monthStart, amountNgn, status, providerRef, checkoutUrl, createdAt, confirmedAt]
+      required:
+        [
+          id,
+          monthStart,
+          amountNgn,
+          status,
+          providerRef,
+          checkoutUrl,
+          createdAt,
+          confirmedAt,
+        ]
       properties:
         id:
           type: string
@@ -16372,7 +17042,8 @@ components:
             type: string
     FirmApiKey:
       type: object
-      required: [id, name, capabilities, keyPrefix, lastUsedAt, revokedAt, createdAt]
+      required:
+        [id, name, capabilities, keyPrefix, lastUsedAt, revokedAt, createdAt]
       properties:
         id:
           type: string
@@ -16472,7 +17143,8 @@ components:
           format: date-time
     FirmWebhookDelivery:
       type: object
-      required: [id, eventType, status, attempts, lastError, createdAt, deliveredAt]
+      required:
+        [id, eventType, status, attempts, lastError, createdAt, deliveredAt]
       properties:
         id:
           type: string

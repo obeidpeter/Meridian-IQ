@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.77.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.79.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.77.0</title>
+<title>MeridianIQ API reference — v0.79.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.77.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.79.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -97,9 +97,10 @@ billing or identity, or mint further credentials. Revocation is immediate —
 a revoked or unknown key is a clean <code>401</code>, never a fall-through to
 another credential.</li>
 <li><strong>Sessions (the web apps &amp; mobile)</strong> — an HttpOnly cookie (or the same
-signed token as <code>Authorization: Bearer</code> on mobile). Cookie-authenticated
+signed token as <code>Authorization: Bearer</code> on mobile). All browser-facing
 <em>state-changing</em> requests must also send the CSRF header
-<code>x-meridian-csrf: 1</code>; Bearer requests are exempt (they carry no cookie).</li>
+<code>x-meridian-csrf: 1</code>, whether they use cookies or Bearer authentication.
+Only dedicated machine webhooks are exempt.</li>
 </ul>
 </div>
 
@@ -156,7 +157,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">21</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">24</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">21</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -593,8 +594,28 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RailConfigEntry[]</code> <span class="dim">Per-rail configuration state</span></li></ul></div>
 </details>
 <details class="op" id="getGateMetrics">
-<summary><span class="method m-get">GET</span><code class="path">/api/operator/gate-metrics</code><span class="sum">Live measurements of the roadmap release-gate metrics</span></summary>
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/gate-metrics</code><span class="sum">Live evidence and activation measurements for roadmap release gates</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>GateMetrics</code> <span class="dim">Gate metrics computed from the spine</span></li></ul></div>
+</details>
+<details class="op" id="listBuyerPilots">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/buyer-pilots</code><span class="sum">Anchor-buyer pilot readiness and participation evidence</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerPilotWorkspace</code> <span class="dim">Buyer Rails pilot workspace</span></li></ul></div>
+</details>
+<details class="op" id="getComplianceOperations">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/compliance-operations</code><span class="sum">Cross-domain compliance exceptions ordered by operational SLA</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ComplianceOperationsWorkspace</code> <span class="dim">Compliance case and exception workspace</span></li></ul></div>
+</details>
+<details class="op" id="getIntegrationReliability">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/integration-reliability</code><span class="sum">Connector reliability and data-quality signals across tenants</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntegrationReliabilityWorkspace</code> <span class="dim">Integration reliability workspace</span></li></ul></div>
+</details>
+<details class="op" id="getEvidenceVault">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/evidence-vault</code><span class="sum">Indexed compliance evidence and enterprise trust controls</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EvidenceVaultWorkspace</code> <span class="dim">Evidence vault workspace</span></li></ul></div>
+</details>
+<details class="op" id="getClerkAssurance">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/clerk-assurance</code><span class="sum">Clerk operational readiness, guardrails and human-review posture</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkAssuranceWorkspace</code> <span class="dim">Clerk assurance workspace</span></li></ul></div>
 </details>
 <details class="op" id="listDeadLetters">
 <summary><span class="method m-get">GET</span><code class="path">/api/operator/dead-letters</code><span class="sum">listDeadLetters</span></summary>
@@ -870,9 +891,17 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/buyer/invoices</code><span class="sum">Invoices addressed to the caller's buyer organization</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerInvoice[]</code> <span class="dim">Buyer-side invoice list</span></li></ul></div>
 </details>
+<details class="op" id="getBuyerInvoiceSummary">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/invoices/summary</code><span class="sum">Aggregate invoice and confirmation counts for the caller's buyer organization</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerInvoiceSummary</code> <span class="dim">Buyer invoice summary</span></li></ul></div>
+</details>
+<details class="op" id="getBuyerInvoice">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/invoices/{id}</code><span class="sum">One invoice addressed to the caller's buyer organization</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerInvoice</code> <span class="dim">Buyer-side invoice detail</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
 <details class="op" id="flagPayment">
 <summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/payment-flags</code><span class="sum">Buyer marks an invoice payment as scheduled or paid (BR-04)</span></summary>
-<div class="opbody"><div class="req">Request body: <code>PaymentFlagInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Settlement event recorded with source buyer_flag</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+<div class="opbody"><div class="req">Request body: <code>PaymentFlagInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Settlement event recorded with source buyer_flag</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
 </details>
 <details class="op" id="listBuyerSuppliers">
 <summary><span class="method m-get">GET</span><code class="path">/api/buyer/suppliers</code><span class="sum">Supplier verification view (BR-01)</span></summary>
@@ -1440,7 +1469,7 @@ request's writes were rolled back.</li>
 </details>
 <details class="op" id="flagBillPayment">
 <summary><span class="method m-post">POST</span><code class="path">/api/bills/{id}/payment-flag</code><span class="sum">Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)</span></summary>
-<div class="opbody"><div class="req">Request body: <code>BillPaymentFlagInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Settlement event recorded</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+<div class="opbody"><div class="req">Request body: <code>BillPaymentFlagInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Settlement event recorded</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
 </details>
 <details class="op" id="verifyBillStamp">
 <summary><span class="method m-post">POST</span><code class="path">/api/bills/{id}/verify-stamp</code><span class="sum">Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)</span></summary>
@@ -1581,7 +1610,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.77.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.79.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>

@@ -3,13 +3,21 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 import type { SettlementInputSource } from './settlementInputSource';
 
 export interface SettlementInput {
   source: SettlementInputSource;
   amount: string;
+  /** @pattern ^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$ */
   confidence?: string;
   occurredAt: Date;
+  /**
+     * Stable caller-generated key reused for retries of the same settlement operation
+     * @minLength 8
+     * @maxLength 128
+     * @pattern ^[A-Za-z0-9._:-]+$
+     */
+  idempotencyKey: string;
 }
