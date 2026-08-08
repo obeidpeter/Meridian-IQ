@@ -148,45 +148,7 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: #071a1c;
-  background-image: url("/compliance-dashboard.jpg");
-  background-position: right center;
-  background-repeat: no-repeat;
-  background-size: auto 110%;
-}
-
-.landing-hero::before {
-  position: absolute;
-  z-index: -2;
-  inset: 0;
-  content: "";
-  background: rgb(4 24 26 / 55%);
-}
-
-.landing-hero::after {
-  position: absolute;
-  z-index: -1;
-  inset-block: 0;
-  left: 0;
-  width: 100%;
-  content: "";
-  background: rgb(4 24 26 / 72%);
-}
-
-@media (min-width: 1024px) {
-  .landing-hero {
-    background-size: auto 125%;
-  }
-
-  .landing-hero::before {
-    background: rgb(4 24 26 / 42%);
-  }
-
-  .landing-hero::after {
-    width: 72%;
-    clip-path: polygon(0 0, 92% 0, 100% 100%, 0 100%);
-    background: rgb(4 24 26 / 82%);
-  }
+  background: #071a1c;
 }
 
 .landing-preview-body {
