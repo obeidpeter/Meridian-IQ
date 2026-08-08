@@ -27,7 +27,11 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // GET /clients/{id}/export — data-subject export. Access: assertPartyAccess
 // whole (client_user pinned to its OWN party per SEC-03; firm principals
@@ -89,9 +93,24 @@ before(async () => {
     { id: buyerX, type: "buyer", legalName: `CX Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId: firmA, clientPartyId: partyP, type: "retainer", title: `CX A-P ${SALT}` },
-    { firmId: firmB, clientPartyId: partyP, type: "retainer", title: `CX B-P ${SALT}` },
-    { firmId: firmA, clientPartyId: partyQ, type: "retainer", title: `CX A-Q ${SALT}` },
+    {
+      firmId: firmA,
+      clientPartyId: partyP,
+      type: "retainer",
+      title: `CX A-P ${SALT}`,
+    },
+    {
+      firmId: firmB,
+      clientPartyId: partyP,
+      type: "retainer",
+      title: `CX B-P ${SALT}`,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: partyQ,
+      type: "retainer",
+      title: `CX A-Q ${SALT}`,
+    },
   ]);
   await db.insert(invoicesTable).values([
     {
@@ -162,8 +181,18 @@ before(async () => {
     },
   ]);
   await db.insert(membershipsTable).values([
-    { userId: userPA, firmId: firmA, role: "client_user", clientPartyId: partyP },
-    { userId: userPB, firmId: firmB, role: "client_user", clientPartyId: partyP },
+    {
+      userId: userPA,
+      firmId: firmA,
+      role: "client_user",
+      clientPartyId: partyP,
+    },
+    {
+      userId: userPB,
+      firmId: firmB,
+      role: "client_user",
+      clientPartyId: partyP,
+    },
   ]);
   await db.insert(alertPreferencesTable).values({
     clientPartyId: partyP,
@@ -214,7 +243,7 @@ test("engagement wall: a non-engaged firm is refused; roles without party.read a
   assert.equal(bankRes.status, 403, "bank_user lacks party.read");
 });
 
-test("the data subject's own client_user gets the full cross-firm bundle, secrets redacted", async () => {
+test("the data subject's client_user export stays within its membership firm, secrets redacted", async () => {
   const base = await listen(appFor(clientP, clientsRouter));
   const res = await fetch(`${base}/clients/${partyP}/export`);
   assert.equal(res.status, 200);
@@ -225,16 +254,24 @@ test("the data subject's own client_user gets the full cross-firm bundle, secret
     counts: Array<{ section: string; rows: number; truncated: boolean }>;
   };
   assert.equal(bundle.partyId, partyP);
-  assert.equal(bundle.firmId, null, "the subject's view carries no tenant lens");
+  assert.equal(
+    bundle.firmId,
+    firmA,
+    "the membership's firm is the export lens",
+  );
   assert.deepEqual(
     Object.keys(bundle.sections).sort(),
     [...ALL_SECTIONS].sort(),
     "every section is present",
   );
   assert.equal(bundle.sections.party[0].id, partyP);
-  assert.equal(bundle.sections.engagements.length, 2, "both firms' engagements ride");
-  assert.equal(bundle.sections.invoices.length, 2);
-  assert.equal(bundle.sections.members.length, 2);
+  assert.equal(
+    bundle.sections.engagements.length,
+    1,
+    "other firms stay private",
+  );
+  assert.equal(bundle.sections.invoices.length, 1);
+  assert.equal(bundle.sections.members.length, 1);
   assert.equal(bundle.sections.alert_preferences.length, 1);
   assert.equal(
     bundle.sections.alert_preferences[0].whatsappTo,
@@ -264,13 +301,25 @@ test("a firm caller gets only its own tenant's slice of the firm-keyed sections"
     sections: Record<string, Array<Record<string, unknown>>>;
   };
   assert.equal(bundle.firmId, firmA);
-  assert.equal(bundle.sections.engagements.length, 1, "only firm A's engagement");
+  assert.equal(
+    bundle.sections.engagements.length,
+    1,
+    "only firm A's engagement",
+  );
   assert.equal(bundle.sections.engagements[0].firmId, firmA);
-  assert.equal(bundle.sections.invoices.length, 1, "firm B's invoice stays out");
+  assert.equal(
+    bundle.sections.invoices.length,
+    1,
+    "firm B's invoice stays out",
+  );
   assert.equal(bundle.sections.invoices[0].id, invoiceA);
   assert.equal(bundle.sections.invoice_lines.length, 1);
   assert.equal(bundle.sections.invoice_lines[0].invoiceId, invoiceA);
-  assert.equal(bundle.sections.members.length, 1, "firm B's member identity stays out");
+  assert.equal(
+    bundle.sections.members.length,
+    1,
+    "firm B's member identity stays out",
+  );
   assert.equal(bundle.sections.members[0].userId, userPA);
   assert.equal(bundle.sections.statements.length, 1);
   assert.equal(bundle.sections.escalations.length, 1);
@@ -296,7 +345,10 @@ test("operator sees the full bundle; the export itself is audited pointer-only",
   assert.equal(bundle.firmId, null);
   assert.equal(bundle.sections.engagements.length, 2);
   const actions = bundle.sections.audit_events.map((e) => e.action);
-  assert.ok(actions.includes(`cx.firm-b-${SALT}`), "no lens for cross-tenant staff");
+  assert.ok(
+    actions.includes(`cx.firm-b-${SALT}`),
+    "no lens for cross-tenant staff",
+  );
 
   const exportEvents = await getDb()
     .select()
@@ -325,7 +377,9 @@ test("unknown party 404s (operator); sections are capped with a visible truncati
 
   const capped = await exportClientData(partyP, null, 1);
   assert.equal(capped.sections.engagements.length, 1, "capped at 1 row");
-  const engagementCount = capped.counts.find((c) => c.section === "engagements");
+  const engagementCount = capped.counts.find(
+    (c) => c.section === "engagements",
+  );
   assert.equal(engagementCount?.rows, 1);
   assert.equal(engagementCount?.truncated, true);
   const partyCount = capped.counts.find((c) => c.section === "party");

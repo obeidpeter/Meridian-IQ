@@ -40,9 +40,8 @@ const VALID_ROLES: Role[] = [
   "auditor",
 ];
 
-// Routes reachable without a principal (health probe, the external sweep
-// wake-up trigger — an anonymous scheduler ping, see routes/sweep.ts — public
-// stamp verification, subdomain branding resolution — the white-label shell
+// Routes reachable without a principal (health probe, the token-gated sweep
+// scheduler endpoint, public stamp verification, subdomain branding resolution — the white-label shell
 // needs its theme before any login — and the session endpoints themselves).
 // Exported for middleware/rate-limit.ts: public paths are exempt from the
 // per-principal limiter because each carries its own gate (login throttle,
@@ -107,6 +106,12 @@ if (DEV_AUTH_ENABLED) {
 
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_HEADER = "x-meridian-csrf";
+const MACHINE_PATHS = new Set([
+  "/api/inbound/email",
+  "/api/inbound/whatsapp",
+  "/api/billing/payments/confirm",
+  "/api/collections/inbound",
+]);
 
 // CSRF guard (SEC-02). The first-party session cookie is issued SameSite=None so
 // it works inside the cross-site preview iframe, which means the browser also
@@ -114,29 +119,23 @@ const CSRF_HEADER = "x-meridian-csrf";
 // custom request header on state-changing, cookie-authenticated requests: the
 // browser will not let a cross-site page set a custom header without a CORS
 // preflight, and the API's CORS policy does not grant that preflight, so a
-// forged <form>/simple request is rejected. Requests authenticated by dev
-// x-mock headers, a Bearer token or Clerk carry no session cookie and cannot be
-// forged cross-site, so they pass through. Public endpoints (login/logout/health
-// /verify-stamp/theme) are exempt so unauthenticated and tooling calls still
-// work. Must run after cookie-parser so req.cookies is populated.
+// forged <form>/simple request is rejected. The rule applies uniformly to all
+// browser-facing unsafe routes, including login and logout, while dedicated
+// machine webhooks use their header credential and are explicitly exempt.
 export function requireCsrfHeader(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  if (CSRF_SAFE_METHODS.has(req.method) || PUBLIC_PATHS.has(req.path)) {
+  if (CSRF_SAFE_METHODS.has(req.method) || MACHINE_PATHS.has(req.path)) {
     next();
     return;
   }
-  const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
-  const hasSessionCookie = Boolean(cookies?.[SESSION_COOKIE]);
-  if (!hasSessionCookie || header(req, CSRF_HEADER)) {
+  if (header(req, CSRF_HEADER)) {
     next();
     return;
   }
-  res
-    .status(403)
-    .json({ error: "Missing or invalid CSRF header" });
+  res.status(403).json({ error: "Missing or invalid CSRF header" });
 }
 
 function header(req: Request, name: string): string | null {
@@ -218,20 +217,21 @@ function resolveDevPrincipal(req: Request): Principal | null {
 // an HttpOnly cookie resolves to a platform user; tenancy and role come from
 // the membership table exactly as in the Clerk path. Multi-membership users
 // disambiguate with x-firm-id.
-async function resolveSessionPrincipal(req: Request): Promise<Principal | null> {
-  const token = (req as Request & { cookies?: Record<string, string> }).cookies?.[
-    SESSION_COOKIE
-  ];
+async function resolveSessionPrincipal(
+  req: Request,
+): Promise<Principal | null> {
+  const token = (req as Request & { cookies?: Record<string, string> })
+    .cookies?.[SESSION_COOKIE];
   if (!token) return null;
   return principalFromSessionToken(req, token);
 }
 
 // Bearer variant of the same first-party session: native mobile clients (the
-// Expo companion app) cannot rely on the HttpOnly cookie, so /auth/login also
-// returns the signed session token in the response body and the app presents
-// it as `Authorization: Bearer <token>`. Verification and membership
-// resolution are identical to the cookie path; bearer requests carry no cookie
-// so the CSRF guard already passes them through.
+// Expo companion app) cannot rely on the HttpOnly cookie, so a mobile login can
+// receive the signed session token and present it as `Authorization: Bearer
+// <token>`. Verification and membership resolution are identical to the cookie
+// path. Unsafe bearer requests still carry the first-party CSRF marker; only
+// dedicated machine-webhook paths are exempt from that uniform rule.
 async function resolveBearerPrincipal(req: Request): Promise<Principal | null> {
   const authz = header(req, "authorization");
   if (!authz || !authz.toLowerCase().startsWith("bearer ")) return null;
@@ -252,7 +252,7 @@ async function principalFromSessionToken(
   // held by an attacker stop resolving the moment the victim rotates their
   // password, instead of surviving until their 7-day expiry.
   const epoch = await currentSessionEpoch(userId);
-  if (epoch === null || verified.epoch < epoch) return null;
+  if (epoch === null || verified.epoch !== epoch) return null;
   return principalFromMembership(req, userId);
 }
 

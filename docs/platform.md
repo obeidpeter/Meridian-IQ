@@ -107,7 +107,7 @@ business "today" from `toISOString().slice(0, 10)` or `current_date`.
 **Multi-instance safety.** The loops are reentrancy-guarded per process, and
 every sweep is **idempotent** by construction (advisory locks, dedup
 ledgers, compare-and-set on `nextRunDate`, `FOR UPDATE SKIP LOCKED`), so
-running several instances is *correct* though *redundant* — two instances
+running several instances is _correct_ though _redundant_ — two instances
 may both attempt a pass, but the guards make the second a no-op. The one
 piece of state that was process-local, the login throttle, is now in
 Postgres (`login_attempts`), so its caps hold cluster-wide. On Autoscale
@@ -377,8 +377,8 @@ member (`modules/collections/{service,provider}.ts`,
   settles money state on the word of an unauthenticated caller, so with
   `COLLECTION_WEBHOOK_TOKEN` unset the rail does not exist — every request
   404s exactly like an unknown route. Set, the shared secret IS the
-  credential (constant-time compare via `lib/op-token.ts`, `x-op-token` or
-  `?token=`). The route answers **202 either way**: an unknown or
+  credential (constant-time compare via `lib/op-token.ts`, `x-op-token`
+  header only). The route answers **202 either way**: an unknown or
   deactivated reference — or an unmatchable invoice number — all look
   identical, so a caller holding the secret still cannot probe which
   references are live (an unmatched payment on a LIVE account additionally
@@ -390,14 +390,12 @@ member (`modules/collections/{service,provider}.ts`,
   own firm + client as SUPPLIER + the quoted invoice number, `kind=invoice`
   only, status ∈ submitted/stamped/confirmed — a stranger's coincidental
   number can never settle cross-tenant, and credit notes are never targets.
-  Every delivery appends one `collection_account` settlement event (a
-  replayed webhook records again — evidence, never an update; `actorId`
-  null marks the machine observer). The status transition is the buyer
-  paid-flag branch exactly: **CAS to `settled`** only where the lifecycle
-  allows (stamped/confirmed; a `submitted` receivable records the event
-  only, and a concurrent cancel/credit wins — the event stands as lineage,
-  the transition is skipped). Pointer-only audit; the settlement event
-  itself carries the figures for whoever is entitled to read them.
+  Every unique provider reference appends one `collection_account`
+  settlement event; replaying the same reference is a no-op. The invoice row
+  is locked while cumulative collection evidence is calculated, and it moves
+  to `settled` only when paid evidence reaches the invoice total and the
+  lifecycle allows it. Partial payments remain as evidence without falsely
+  settling the invoice. A concurrent cancel or credit wins the compare-and-set.
 
 ## VAT position & FX
 
@@ -547,7 +545,7 @@ arrived; it never claims or remits anything itself.
   WHT-categorised bill issued in the period (deduct at the earlier of
   payment or credit — the invoice-recognition basis, chosen because bill
   payStatus is derived evidence, not a stored date). `GET
-  /wht/remittance` lists the period's schedule (bills × expected WHT);
+/wht/remittance` lists the period's schedule (bills × expected WHT);
   the filing cockpit grows a WHT column where null = "no withholding
   duty", the common cell.
 - **Authz**: credits and remittance reuse `invoice.read`/`invoice.write`
@@ -742,7 +740,7 @@ actions are firm-scoped relationship changes, never party mutations.
   `GET /clients/{id}/export` — the client's own account, its engaging firm,
   or an operator/auditor): the per-client sibling of the firm export — one
   deterministic, read-only bundle of everything the platform holds ABOUT
-  one party, sectioned (the party row whole — legal name/TIN/CAC *are* the
+  one party, sectioned (the party row whole — legal name/TIN/CAC _are_ the
   subject's data; consent records; the party's own alert-preferences
   contact row; supplier-side invoices + lines; engagements; statement
   summary rows only — raw bank lines omitted; memberships as identity +
@@ -782,14 +780,14 @@ actions are firm-scoped relationship changes, never party mutations.
   payment intent against a CLOSED billing month — the amount is the shared
   billing fee core (so an intent can never disagree with the statement), a
   partial unique index `(firm_id, month_start) WHERE status IN
-  ('pending','confirmed')` enforces one live intent per month (409),
+('pending','confirmed')` enforces one live intent per month (409),
   zero-fee months refuse (400). The provider is an injectable
   `PaymentProvider` (the push/messaging transport idiom): the simulator is
   the default, `PAYMENT_PROVIDER_URL`/`_TOKEN` light a JSON relay that may
   return a `checkoutUrl`. Confirmation is a machine rail deliberately OFF
   the contract (`POST /api/billing/payments/confirm`, fail-closed
   `PAYMENT_WEBHOOK_TOKEN`, 404 while unset): a CAS `pending → confirmed |
-  failed` transition, idempotent on replay, pointer-only audit. Subscription
+failed` transition, idempotent on replay, pointer-only audit. Subscription
   paid-through state stays operator-managed — payments record intent, they
   do not mutate entitlement.
 - **Firm API keys** (`modules/integrations/api-keys.ts`, migration 0022,
@@ -885,10 +883,10 @@ actions are firm-scoped relationship changes, never party mutations.
   lag, RSS, heap, uptime), and sweep liveness
   (`meridian_sweep_last_success_*`). Hand-rolled in `lib/metrics.ts` (a
   metrics lib would fork drizzle via `@opentelemetry/api`).
-- `/api/metrics` and `/api/internal/sweep` are public by default; setting
-  `METRICS_TOKEN` / `SWEEP_TOKEN` closes the endpoint behind that shared
-  secret (`x-op-token` header or `?token=`, `lib/op-token.ts`). Opt-in:
-  unset env keeps today's open behaviour.
+- `/api/internal/sweep` is fail-closed unless `SWEEP_TOKEN` is configured and
+  supplied in the `x-op-token` header; it also has an endpoint rate limit.
+  `/api/metrics` is open when `METRICS_TOKEN` is unset and header-protected
+  when configured. Operation tokens are never accepted in URLs.
 
 ## Backups, restore drills & releases
 
@@ -909,7 +907,7 @@ backup.
   separate runner) and **copy dumps off-box** — a backup beside its database
   shares its fate.
 - **Restore drill** — `DATABASE_URL=<source> DRILL_DATABASE_URL=<scratch>
-  pnpm --filter @workspace/scripts run ops:restore-drill`. Dumps the source,
+pnpm --filter @workspace/scripts run ops:restore-drill`. Dumps the source,
   checks the sha256 round-trip, **drops and recreates** the drill target
   (maintenance connection derived from the drill URL, or `DRILL_ADMIN_URL`),
   restores with `--exit-on-error`, then asserts: `_schema_migrations`
@@ -920,7 +918,7 @@ backup.
   timings. CI runs it on every merge against the CI database; run it
   per-release too — an untested backup is a hope, not a backup.
 - **Release** — `DATABASE_URL=… pnpm --filter @workspace/scripts run
-  ops:release -- --yes` (refuses without both; prints the redacted target
+ops:release -- --yes` (refuses without both; prints the redacted target
   first). Sequence: optional pre-flight dump (`RELEASE_BACKUP=1`) →
   `db run push` (`RELEASE_PUSH_FORCE=1` swaps in `push-force` for destructive
   diffs, where plain push prompts and hangs) → `db run migrate` → verify that
@@ -938,7 +936,7 @@ backup.
 schedule itself, so if you dump nightly you can lose a day. RTO = the restore
 drill's measured shape (it prints dump/restore timings at the current data
 volume; seconds on CI-sized data, scale accordingly). The audit-event hash
-chain is contiguous *within* a snapshot: restoring rewinds the world to the
+chain is contiguous _within_ a snapshot: restoring rewinds the world to the
 snapshot point, and events after it are **lost, not tampered with** — the
 chain verifies clean up to its new tip and simply ends there, so absence
 after a restore is expected and honest, not a break.

@@ -232,6 +232,9 @@ export const paymentIntentsTable = pgTable(
     uniqueIndex("payment_intents_one_live_per_month")
       .on(t.firmId, t.monthStart)
       .where(sql`${t.status} IN ('pending', 'confirmed')`),
+    uniqueIndex("payment_intents_provider_ref_uq")
+      .on(t.providerRef)
+      .where(sql`${t.providerRef} IS NOT NULL`),
   ],
 );
 

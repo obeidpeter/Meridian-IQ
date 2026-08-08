@@ -33,7 +33,15 @@ import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { isForbidden } from "@/lib/errors";
 import { humanize, priorityBadgeClasses } from "@/lib/format";
-import { Clock, Zap, ShieldCheck, Lock, LifeBuoy, Inbox, Sparkles } from "lucide-react";
+import {
+  Clock,
+  Zap,
+  ShieldCheck,
+  Lock,
+  LifeBuoy,
+  Inbox,
+  Sparkles,
+} from "lucide-react";
 
 function formatDuration(seconds?: number | null): string {
   if (seconds == null) return "—";
@@ -129,6 +137,12 @@ function EscalationItem({
         </Button>
       ) : canAct && reply !== null ? (
         <div className="space-y-2">
+          <Label
+            htmlFor={`operator-reply-${escalation.id}`}
+            className="sr-only"
+          >
+            Reply to escalation
+          </Label>
           {draftSource && (
             <p className="text-xs text-muted-foreground">
               {draftSource === "clerk"
@@ -137,6 +151,7 @@ function EscalationItem({
             </p>
           )}
           <Textarea
+            id={`operator-reply-${escalation.id}`}
             value={reply}
             onChange={(e) => setReply(e.target.value)}
             className="min-h-[100px] text-sm bg-background"
@@ -212,7 +227,10 @@ function CaseCard({
         {c.playbook && (
           <div className="rounded-md bg-muted/60 p-3 text-sm space-y-1">
             <p className="font-medium flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-primary" aria-hidden="true" />{" "}
+              <ShieldCheck
+                className="w-4 h-4 text-primary"
+                aria-hidden="true"
+              />{" "}
               Playbook · {c.playbook.category}
             </p>
             <p className="text-muted-foreground">
@@ -415,7 +433,10 @@ export function OperatorQueue() {
   if (isForbidden(error) || isForbidden(statsError)) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Operator work queue
         </h1>
         <Card data-testid="card-operator-access-required">
@@ -450,7 +471,10 @@ export function OperatorQueue() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Operator work queue
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -463,11 +487,15 @@ export function OperatorQueue() {
           <CardContent className="pt-6 space-y-1.5 text-sm">
             <p className="font-semibold">This morning</p>
             {brief.openCases.oldestTitle && (
-              <p className="text-muted-foreground" data-testid="brief-oldest-case">
+              <p
+                className="text-muted-foreground"
+                data-testid="brief-oldest-case"
+              >
                 {brief.openCases.byPriority
                   .map((p) => `${p.count} ${p.priority}`)
                   .join(" · ")}{" "}
-                open — longest waiting: “{brief.openCases.oldestTitle.slice(0, 80)}”.
+                open — longest waiting: “
+                {brief.openCases.oldestTitle.slice(0, 80)}”.
               </p>
             )}
             <p className="text-muted-foreground">
@@ -482,7 +510,8 @@ export function OperatorQueue() {
                 : ""}{" "}
               {brief.decidedYesterday} case(s) were decided yesterday.
             </p>
-            {(brief.approvalsPending > 0 || brief.unmatchedCollections7d > 0) && (
+            {(brief.approvalsPending > 0 ||
+              brief.unmatchedCollections7d > 0) && (
               <p
                 className="text-muted-foreground"
                 data-testid="brief-governance"

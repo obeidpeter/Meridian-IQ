@@ -58,6 +58,13 @@ import {
 // page's offline draft before navigating here.
 export const DRAFT_KEY = "meridianiq:invoice-draft";
 
+export function draftStorageKey(
+  userId: string,
+  firmId?: string | null,
+): string {
+  return `${DRAFT_KEY}:${firmId ?? "no-firm"}:${userId}`;
+}
+
 export interface DraftState {
   invoiceNumber: string;
   buyerPartyId: string;
@@ -96,18 +103,18 @@ const emptyDraft = (): DraftState => ({
 // option rides a sentinel that maps back to "" in the draft.
 const NO_WHT = "none";
 
-function loadDraft(): DraftState {
+function loadDraft(key: string): DraftState {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = sessionStorage.getItem(key);
     // Merge over the empty draft so an offline draft saved before the
     // currency fields existed still loads with NGN defaults.
-    if (raw) return { ...emptyDraft(), ...(JSON.parse(raw) as Partial<DraftState>) };
+    if (raw)
+      return { ...emptyDraft(), ...(JSON.parse(raw) as Partial<DraftState>) };
   } catch {
     /* ignore corrupt draft */
   }
   return emptyDraft();
 }
-
 
 export function InvoiceNew() {
   usePageTitle("New invoice");
@@ -127,10 +134,19 @@ export function InvoiceNew() {
     );
   }, [catalogue]);
 
-  const [draft, setDraft] = useState<DraftState>(loadDraft);
+  const [draft, setDraft] = useState<DraftState>(emptyDraft);
+  const [draftOwner, setDraftOwner] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const draftKey = me ? draftStorageKey(me.userId, me.firmId) : null;
+
+  useEffect(() => {
+    if (!draftKey || draftOwner === draftKey) return;
+    setDraft(loadDraft(draftKey));
+    setDraftOwner(draftKey);
+    localStorage.removeItem(DRAFT_KEY);
+  }, [draftKey, draftOwner]);
 
   // Frequent items (line-item memory): mined server-side from this client's
   // own invoices. Clicking a chip appends a prefilled line — a suggestion the
@@ -152,7 +168,9 @@ export function InvoiceNew() {
         last && !last.description.trim() && !Number(last.unitPrice);
       return {
         ...d,
-        lines: lastIsEmpty ? [...d.lines.slice(0, -1), line] : [...d.lines, line],
+        lines: lastIsEmpty
+          ? [...d.lines.slice(0, -1), line]
+          : [...d.lines, line],
       };
     });
   };
@@ -215,15 +233,16 @@ export function InvoiceNew() {
   };
 
   useEffect(() => {
+    if (!draftKey || draftOwner !== draftKey) return;
     const t = setTimeout(() => {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      sessionStorage.setItem(draftKey, JSON.stringify(draft));
       setSavedAt(new Date());
     }, 400);
     return () => clearTimeout(t);
-  }, [draft]);
+  }, [draft, draftKey, draftOwner]);
 
   const discardDraft = () => {
-    localStorage.removeItem(DRAFT_KEY);
+    if (draftKey) sessionStorage.removeItem(draftKey);
     setDraft(emptyDraft());
     setSavedAt(null);
     setShowErrors(false);
@@ -234,12 +253,14 @@ export function InvoiceNew() {
   const totals = lineTotals(draft.lines);
 
   const errors: Record<string, string> = {};
-  if (!draft.invoiceNumber.trim()) errors.invoiceNumber = "Invoice number is required.";
+  if (!draft.invoiceNumber.trim())
+    errors.invoiceNumber = "Invoice number is required.";
   if (!draft.buyerPartyId) errors.buyerPartyId = "Select a customer.";
   else if (!selectedBuyer?.tin) errors.buyerTin = tinGuidance;
   if (!draft.issueDate) errors.issueDate = "Issue date is required.";
   draft.lines.forEach((l, i) => {
-    if (!l.description.trim()) errors[`line-${i}-desc`] = "Description required.";
+    if (!l.description.trim())
+      errors[`line-${i}-desc`] = "Description required.";
     if (!(Number(l.quantity) > 0)) errors[`line-${i}-qty`] = "Qty must be > 0.";
     if (!(Number(l.unitPrice) >= 0) || l.unitPrice === "")
       errors[`line-${i}-price`] = "Price required.";
@@ -300,7 +321,7 @@ export function InvoiceNew() {
           lines,
         },
       });
-      localStorage.removeItem(DRAFT_KEY);
+      if (draftKey) sessionStorage.removeItem(draftKey);
       // Not awaited: a background refetch rejection must not surface as a false
       // "could not create invoice" error after the save already succeeded.
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
@@ -309,7 +330,10 @@ export function InvoiceNew() {
     } catch (e) {
       toast({
         title: "Could not create invoice",
-        description: e instanceof Error ? e.message : "Please check the fields and try again.",
+        description:
+          e instanceof Error
+            ? e.message
+            : "Please check the fields and try again.",
         variant: "destructive",
       });
     }
@@ -319,10 +343,19 @@ export function InvoiceNew() {
     { ok: !!draft.invoiceNumber.trim(), label: "Invoice number" },
     { ok: !!draft.buyerPartyId, label: "Customer selected" },
     { ok: !!selectedBuyer?.tin, label: "Customer has a TIN" },
-    { ok: draft.lines.every((l) => l.description.trim() && Number(l.quantity) > 0), label: "Line items complete" },
-    { ok: draft.lines.every((l) => Number(l.vatRate) === 0.075 || Number(l.vatRate) === 0), label: "VAT at 7.5% (or exempt)" },
+    {
+      ok: draft.lines.every(
+        (l) => l.description.trim() && Number(l.quantity) > 0,
+      ),
+      label: "Line items complete",
+    },
+    {
+      ok: draft.lines.every(
+        (l) => Number(l.vatRate) === 0.075 || Number(l.vatRate) === 0,
+      ),
+      label: "VAT at 7.5% (or exempt)",
+    },
   ];
-
 
   return (
     <div className="space-y-6">
@@ -333,7 +366,8 @@ export function InvoiceNew() {
         {savedAt && (
           <span className="text-xs text-muted-foreground flex items-center gap-2 shrink-0">
             <span className="flex items-center gap-1">
-              <Cloud className="w-3.5 h-3.5" aria-hidden="true" /> Draft saved offline
+              <Cloud className="w-3.5 h-3.5" aria-hidden="true" /> Draft saved
+              offline
             </span>
             <Button
               variant="ghost"
@@ -349,367 +383,444 @@ export function InvoiceNew() {
       </PageHeader>
 
       <RequireClientScope thing="invoice form">
-      <AddCustomerDialog
-        open={addCustomerOpen}
-        onOpenChange={setAddCustomerOpen}
-        onCreated={(party) =>
-          setDraft((d) => ({ ...d, buyerPartyId: party.id }))
-        }
-      />
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="border-violet-200 dark:border-violet-900">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles
-                  className="w-4 h-4 text-violet-600 dark:text-violet-400"
-                  aria-hidden="true"
+        <AddCustomerDialog
+          open={addCustomerOpen}
+          onOpenChange={setAddCustomerOpen}
+          onCreated={(party) =>
+            setDraft((d) => ({ ...d, buyerPartyId: party.id }))
+          }
+        />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="border-violet-200 dark:border-violet-900">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles
+                    className="w-4 h-4 text-violet-600 dark:text-violet-400"
+                    aria-hidden="true"
+                  />
+                  Draft with Clerk
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Label htmlFor="clerk-draft-text" className="sr-only">
+                  Describe the invoice
+                </Label>
+                <Textarea
+                  id="clerk-draft-text"
+                  value={clerkText}
+                  onChange={(e) => setClerkText(e.target.value)}
+                  rows={2}
+                  placeholder='e.g. "Invoice Adaeze Foods ₦150,000 for June deliveries, 7.5% VAT"'
+                  data-testid="input-clerk-draft"
                 />
-                Draft with Clerk
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Label htmlFor="clerk-draft-text" className="sr-only">
-                Describe the invoice
-              </Label>
-              <Textarea
-                id="clerk-draft-text"
-                value={clerkText}
-                onChange={(e) => setClerkText(e.target.value)}
-                rows={2}
-                placeholder='e.g. "Invoice Adaeze Foods ₦150,000 for June deliveries, 7.5% VAT"'
-                data-testid="input-clerk-draft"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Clerk prefills the form below — you review and save; nothing
-                  is created until you do.
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={draftWithClerk}
-                  disabled={clerkText.trim().length < 5 || clerkDraft.isPending}
-                  data-testid="button-clerk-draft"
-                >
-                  {clerkDraft.isPending ? "Drafting…" : "Draft it"}
-                </Button>
-              </div>
-              {clerkNote && (
-                <p
-                  className="text-xs text-violet-800 dark:text-violet-300"
-                  data-testid="text-clerk-note"
-                >
-                  {clerkNote}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="invoice-number">Invoice number</Label>
-                <Input
-                  id="invoice-number"
-                  value={draft.invoiceNumber}
-                  onChange={(e) => setDraft((d) => ({ ...d, invoiceNumber: e.target.value }))}
-                  placeholder="INV-1006"
-                  aria-invalid={showErrors && !!errors.invoiceNumber}
-                  aria-describedby={
-                    showErrors && errors.invoiceNumber ? "invoice-number-error" : undefined
-                  }
-                  className={invalidClass(showErrors && !!errors.invoiceNumber)}
-                />
-                {showErrors && errors.invoiceNumber && (
-                  <FieldError id="invoice-number-error">{errors.invoiceNumber}</FieldError>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="buyer-select">Customer</Label>
-                {buyers.length === 0 ? (
-                  <div
-                    id="buyer-select"
-                    className="border rounded-md px-3 py-2 mt-1 flex flex-wrap items-center justify-between gap-2"
-                    data-testid="text-no-buyers"
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Clerk prefills the form below — you review and save; nothing
+                    is created until you do.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={draftWithClerk}
+                    disabled={
+                      clerkText.trim().length < 5 || clerkDraft.isPending
+                    }
+                    data-testid="button-clerk-draft"
                   >
-                    <span className="text-sm text-muted-foreground">
-                      No customers yet — add your first customer.
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAddCustomerOpen(true)}
-                      data-testid="button-add-first-customer"
-                    >
-                      <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add customer
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <Select
-                        value={draft.buyerPartyId || undefined}
-                        onValueChange={(v) => setDraft((d) => ({ ...d, buyerPartyId: v }))}
-                      >
-                        <SelectTrigger
-                          id="buyer-select"
-                          aria-invalid={showErrors && !!(errors.buyerPartyId || errors.buyerTin)}
-                          aria-describedby={
-                            showErrors && errors.buyerPartyId
-                              ? "buyer-select-error"
-                              : errors.buyerTin
-                                ? "buyer-tin-note"
-                                : undefined
-                          }
-                          className={invalidClass(
-                            showErrors && !!(errors.buyerPartyId || errors.buyerTin),
-                          )}
-                        >
-                          <SelectValue placeholder="Select a customer…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <BuyerSelectOptions buyers={buyers} />
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="shrink-0"
-                      onClick={() => setAddCustomerOpen(true)}
-                      data-testid="button-add-customer"
-                    >
-                      <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add customer
-                    </Button>
-                  </div>
-                )}
-                {showErrors && errors.buyerPartyId && (
-                  <FieldError id="buyer-select-error">{errors.buyerPartyId}</FieldError>
-                )}
-                {selectedBuyer && !selectedBuyer.tin && (
+                    {clerkDraft.isPending ? "Drafting…" : "Draft it"}
+                  </Button>
+                </div>
+                {clerkNote && (
                   <p
-                    id="buyer-tin-note"
-                    role={showErrors ? "alert" : undefined}
-                    className={`text-sm mt-1 ${
-                      showErrors ? "text-destructive" : "text-amber-700 dark:text-amber-400"
-                    }`}
+                    className="text-xs text-violet-800 dark:text-violet-300"
+                    data-testid="text-clerk-note"
                   >
-                    {errors.buyerTin}
+                    {clerkNote}
                   </p>
                 )}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="issue-date">Issue date</Label>
+                  <Label htmlFor="invoice-number">Invoice number</Label>
                   <Input
-                    id="issue-date"
-                    type="date"
-                    value={draft.issueDate}
-                    onChange={(e) => setDraft((d) => ({ ...d, issueDate: e.target.value }))}
-                    aria-invalid={showErrors && !!errors.issueDate}
-                    aria-describedby={
-                      showErrors && errors.issueDate ? "issue-date-error" : undefined
+                    id="invoice-number"
+                    value={draft.invoiceNumber}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, invoiceNumber: e.target.value }))
                     }
-                    className={invalidClass(showErrors && !!errors.issueDate)}
+                    placeholder="INV-1006"
+                    aria-invalid={showErrors && !!errors.invoiceNumber}
+                    aria-describedby={
+                      showErrors && errors.invoiceNumber
+                        ? "invoice-number-error"
+                        : undefined
+                    }
+                    className={invalidClass(
+                      showErrors && !!errors.invoiceNumber,
+                    )}
                   />
-                  {showErrors && errors.issueDate && (
-                    <FieldError id="issue-date-error">{errors.issueDate}</FieldError>
+                  {showErrors && errors.invoiceNumber && (
+                    <FieldError id="invoice-number-error">
+                      {errors.invoiceNumber}
+                    </FieldError>
                   )}
                 </div>
                 <div>
-                  <Label htmlFor="due-date">Due date (optional)</Label>
-                  <Input
-                    id="due-date"
-                    type="date"
-                    value={draft.dueDate}
-                    onChange={(e) => setDraft((d) => ({ ...d, dueDate: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="currency-select">Currency</Label>
-                  <select
-                    id="currency-select"
-                    value={draft.currency}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, currency: e.target.value }))
-                    }
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    data-testid="select-currency"
-                  >
-                    {CURRENCIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {draft.currency !== "NGN" && (
-                  <div>
-                    <Label htmlFor="fx-rate">Exchange rate (₦ per unit)</Label>
-                    <Input
-                      id="fx-rate"
-                      inputMode="decimal"
-                      value={draft.fxRateToNgn}
-                      placeholder="e.g. 1650.00"
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, fxRateToNgn: e.target.value }))
-                      }
-                      data-testid="input-fx-rate"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Used to fold this invoice into your naira VAT position.
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="wht-category-select">WHT category</Label>
-                {/* A human picks the category — nothing is ever
-                    pre-selected; "No WHT" is the default and omits the
-                    field from the payload. The % in each label is wording
-                    from the shared catalogue, not arithmetic. */}
-                <Select
-                  value={draft.whtCategory || NO_WHT}
-                  onValueChange={(v) =>
-                    setDraft((d) => ({
-                      ...d,
-                      whtCategory: v === NO_WHT ? "" : v,
-                    }))
-                  }
-                >
-                  <SelectTrigger
-                    id="wht-category-select"
-                    data-testid="select-wht-category"
-                  >
-                    <SelectValue placeholder="No WHT" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_WHT}>No WHT</SelectItem>
-                    {Object.entries(WHT_CATEGORY_LABELS).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  If your buyer withholds tax on this invoice, pick the
-                  deduction type — the buyer owes you a credit note for it.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle>Line items</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDraft((d) => ({ ...d, lines: [...d.lines, emptyLine()] }))}
-              >
-                <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {(frequentItems ?? []).length > 0 && (
-                <div className="space-y-1.5" data-testid="frequent-items">
-                  <p className="text-xs text-muted-foreground">
-                    Frequent items — from your own invoices; click to add a
-                    prefilled line, then check the price.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(frequentItems ?? []).slice(0, 8).map((item) => (
+                  <Label htmlFor="buyer-select">Customer</Label>
+                  {buyers.length === 0 ? (
+                    <div
+                      id="buyer-select"
+                      className="border rounded-md px-3 py-2 mt-1 flex flex-wrap items-center justify-between gap-2"
+                      data-testid="text-no-buyers"
+                    >
+                      <span className="text-sm text-muted-foreground">
+                        No customers yet — add your first customer.
+                      </span>
                       <Button
-                        key={item.key}
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => addFrequentItem(item)}
-                        data-testid={`frequent-item-${item.key}`}
+                        onClick={() => setAddCustomerOpen(true)}
+                        data-testid="button-add-first-customer"
                       >
-                        {item.description} · {formatNaira(item.medianUnitPrice)}
+                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
+                        customer
                       </Button>
-                    ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <Select
+                          value={draft.buyerPartyId || undefined}
+                          onValueChange={(v) =>
+                            setDraft((d) => ({ ...d, buyerPartyId: v }))
+                          }
+                        >
+                          <SelectTrigger
+                            id="buyer-select"
+                            aria-invalid={
+                              showErrors &&
+                              !!(errors.buyerPartyId || errors.buyerTin)
+                            }
+                            aria-describedby={
+                              showErrors && errors.buyerPartyId
+                                ? "buyer-select-error"
+                                : errors.buyerTin
+                                  ? "buyer-tin-note"
+                                  : undefined
+                            }
+                            className={invalidClass(
+                              showErrors &&
+                                !!(errors.buyerPartyId || errors.buyerTin),
+                            )}
+                          >
+                            <SelectValue placeholder="Select a customer…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <BuyerSelectOptions buyers={buyers} />
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => setAddCustomerOpen(true)}
+                        data-testid="button-add-customer"
+                      >
+                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
+                        customer
+                      </Button>
+                    </div>
+                  )}
+                  {showErrors && errors.buyerPartyId && (
+                    <FieldError id="buyer-select-error">
+                      {errors.buyerPartyId}
+                    </FieldError>
+                  )}
+                  {selectedBuyer && !selectedBuyer.tin && (
+                    <p
+                      id="buyer-tin-note"
+                      role={showErrors ? "alert" : undefined}
+                      className={`text-sm mt-1 ${
+                        showErrors
+                          ? "text-destructive"
+                          : "text-amber-700 dark:text-amber-400"
+                      }`}
+                    >
+                      {errors.buyerTin}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="issue-date">Issue date</Label>
+                    <Input
+                      id="issue-date"
+                      type="date"
+                      value={draft.issueDate}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, issueDate: e.target.value }))
+                      }
+                      aria-invalid={showErrors && !!errors.issueDate}
+                      aria-describedby={
+                        showErrors && errors.issueDate
+                          ? "issue-date-error"
+                          : undefined
+                      }
+                      className={invalidClass(showErrors && !!errors.issueDate)}
+                    />
+                    {showErrors && errors.issueDate && (
+                      <FieldError id="issue-date-error">
+                        {errors.issueDate}
+                      </FieldError>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="due-date">Due date (optional)</Label>
+                    <Input
+                      id="due-date"
+                      type="date"
+                      value={draft.dueDate}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, dueDate: e.target.value }))
+                      }
+                    />
                   </div>
                 </div>
-              )}
-              {draft.lines.map((l, i) => (
-                <LineItemRow
-                  key={i}
-                  index={i}
-                  line={l}
-                  onPatch={(patch) => setLine(i, patch)}
-                  removable={draft.lines.length > 1}
-                  onRemove={() =>
-                    setDraft((d) => ({ ...d, lines: d.lines.filter((_, idx) => idx !== i) }))
-                  }
-                  errors={{
-                    description: showErrors ? errors[`line-${i}-desc`] : undefined,
-                    quantity: showErrors ? errors[`line-${i}-qty`] : undefined,
-                    unitPrice: showErrors ? errors[`line-${i}-price`] : undefined,
-                  }}
-                  showTotal
-                />
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="lg:sticky lg:top-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldCheck className="w-4 h-4 text-primary" aria-hidden="true" /> Compliance check
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {checklist.map((c, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  {c.ok ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <Circle className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="currency-select">Currency</Label>
+                    <select
+                      id="currency-select"
+                      value={draft.currency}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, currency: e.target.value }))
+                      }
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      data-testid="select-currency"
+                    >
+                      {CURRENCIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {draft.currency !== "NGN" && (
+                    <div>
+                      <Label htmlFor="fx-rate">
+                        Exchange rate (₦ per unit)
+                      </Label>
+                      <Input
+                        id="fx-rate"
+                        inputMode="decimal"
+                        value={draft.fxRateToNgn}
+                        placeholder="e.g. 1650.00"
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            fxRateToNgn: e.target.value,
+                          }))
+                        }
+                        data-testid="input-fx-rate"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Used to fold this invoice into your naira VAT position.
+                      </p>
+                    </div>
                   )}
-                  <span className={c.ok ? "" : "text-muted-foreground"}>
-                    {c.label}
-                    <span className="sr-only">{c.ok ? " — complete" : " — not yet"}</span>
-                  </span>
                 </div>
-              ))}
-              <div className="border-t pt-3 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Net</span>
-                  <span className="tabular-nums">{formatNaira(totals.net)}</span>
+                <div>
+                  <Label htmlFor="wht-category-select">WHT category</Label>
+                  {/* A human picks the category — nothing is ever
+                    pre-selected; "No WHT" is the default and omits the
+                    field from the payload. The % in each label is wording
+                    from the shared catalogue, not arithmetic. */}
+                  <Select
+                    value={draft.whtCategory || NO_WHT}
+                    onValueChange={(v) =>
+                      setDraft((d) => ({
+                        ...d,
+                        whtCategory: v === NO_WHT ? "" : v,
+                      }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="wht-category-select"
+                      data-testid="select-wht-category"
+                    >
+                      <SelectValue placeholder="No WHT" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_WHT}>No WHT</SelectItem>
+                      {Object.entries(WHT_CATEGORY_LABELS).map(
+                        ([key, label]) => (
+                          <SelectItem key={key} value={key}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If your buyer withholds tax on this invoice, pick the
+                    deduction type — the buyer owes you a credit note for it.
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">VAT</span>
-                  <span className="tabular-nums">{formatNaira(totals.vat)}</span>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>Line items</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      lines: [...d.lines, emptyLine()],
+                    }))
+                  }
+                >
+                  <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(frequentItems ?? []).length > 0 && (
+                  <div className="space-y-1.5" data-testid="frequent-items">
+                    <p className="text-xs text-muted-foreground">
+                      Frequent items — from your own invoices; click to add a
+                      prefilled line, then check the price.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(frequentItems ?? []).slice(0, 8).map((item) => (
+                        <Button
+                          key={item.key}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => addFrequentItem(item)}
+                          data-testid={`frequent-item-${item.key}`}
+                        >
+                          {item.description} ·{" "}
+                          {formatNaira(item.medianUnitPrice)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {draft.lines.map((l, i) => (
+                  <LineItemRow
+                    key={i}
+                    index={i}
+                    line={l}
+                    onPatch={(patch) => setLine(i, patch)}
+                    removable={draft.lines.length > 1}
+                    onRemove={() =>
+                      setDraft((d) => ({
+                        ...d,
+                        lines: d.lines.filter((_, idx) => idx !== i),
+                      }))
+                    }
+                    errors={{
+                      description: showErrors
+                        ? errors[`line-${i}-desc`]
+                        : undefined,
+                      quantity: showErrors
+                        ? errors[`line-${i}-qty`]
+                        : undefined,
+                      unitPrice: showErrors
+                        ? errors[`line-${i}-price`]
+                        : undefined,
+                    }}
+                    showTotal
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card className="lg:sticky lg:top-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck
+                    className="w-4 h-4 text-primary"
+                    aria-hidden="true"
+                  />{" "}
+                  Compliance check
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {checklist.map((c, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    {c.ok ? (
+                      <CheckCircle2
+                        className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Circle
+                        className="w-4 h-4 text-muted-foreground shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className={c.ok ? "" : "text-muted-foreground"}>
+                      {c.label}
+                      <span className="sr-only">
+                        {c.ok ? " — complete" : " — not yet"}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                <div className="border-t pt-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Net</span>
+                    <span className="tabular-nums">
+                      {formatNaira(totals.net)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">VAT</span>
+                    <span className="tabular-nums">
+                      {formatNaira(totals.vat)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold">
+                    <span>Total</span>
+                    <span className="tabular-nums">
+                      {formatNaira(totals.net + totals.vat)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span className="tabular-nums">{formatNaira(totals.net + totals.vat)}</span>
-                </div>
-              </div>
-              <Button className="w-full" onClick={submit} disabled={create.isPending}>
-                {create.isPending ? "Saving…" : "Create invoice"}
-              </Button>
-              {showErrors && !isValid && (
-                <p className="text-sm text-destructive text-center" role="alert">
-                  Fix the highlighted fields to continue.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                <Button
+                  className="w-full"
+                  onClick={submit}
+                  disabled={create.isPending}
+                >
+                  {create.isPending ? "Saving…" : "Create invoice"}
+                </Button>
+                {showErrors && !isValid && (
+                  <p
+                    className="text-sm text-destructive text-center"
+                    role="alert"
+                  >
+                    Fix the highlighted fields to continue.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
       </RequireClientScope>
     </div>
   );

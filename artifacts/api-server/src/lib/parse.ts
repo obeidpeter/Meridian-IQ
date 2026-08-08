@@ -1,4 +1,5 @@
 import { DomainError } from "../modules/errors";
+import { decimalToMinorUnits, isPositiveMoney } from "./money";
 
 // Strict request parsing: a schema failure becomes a 400 through the central
 // error boundary (middleware/error.ts), byte-identical to the previous inline
@@ -7,7 +8,9 @@ import { DomainError } from "../modules/errors";
 // defaults on failure) must NOT use this.
 export function parseOrThrow<Out>(
   schema: {
-    safeParse(input: unknown):
+    safeParse(
+      input: unknown,
+    ):
       | { success: true; data: Out }
       | { success: false; error: { message: string } };
   },
@@ -25,11 +28,34 @@ export function parseOrThrow<Out>(
 // decimal must be rejected before it reaches the numeric column (400, not a
 // DB 500). undefined passes — the routes default an absent amount themselves.
 export function assertPlainDecimalAmount(amount: string | undefined): void {
-  if (amount !== undefined && !/^\d+(\.\d{1,2})?$/.test(amount)) {
+  if (amount !== undefined && !isPositiveMoney(amount)) {
     throw new DomainError(
       "INVALID_AMOUNT",
-      "amount must be a plain decimal string (e.g. 120000.00)",
+      "amount must be a positive decimal string (e.g. 120000.00)",
       400,
     );
   }
+}
+
+// A `paid` flag is consumed as proof that the whole invoice is paid. Keep the
+// event amount aligned with that meaning so a partial amount cannot settle a
+// receivable or remove a bill from payables. Overpayments remain valid.
+export function resolvePaymentFlagAmount(
+  status: "scheduled" | "paid",
+  amount: string | undefined,
+  invoiceTotal: string,
+): string {
+  assertPlainDecimalAmount(amount);
+  const effectiveAmount = amount ?? invoiceTotal;
+  if (
+    status === "paid" &&
+    decimalToMinorUnits(effectiveAmount) < decimalToMinorUnits(invoiceTotal)
+  ) {
+    throw new DomainError(
+      "INCOMPLETE_PAYMENT",
+      "amount for a paid flag must cover the invoice total",
+      400,
+    );
+  }
+  return effectiveAmount;
 }

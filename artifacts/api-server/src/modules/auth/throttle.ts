@@ -23,12 +23,32 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
 const ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
 const ACCOUNT_MAX_FAILURES = 50;
+const IP_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const IP_ATTEMPT_MAX = 30;
+
+function requestIp(req: Request): string {
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
 
 function ipKey(req: Request, email: string): string {
   // req.ip is derived from the trusted-proxy hop count (app.set("trust proxy")),
   // so it reflects the real client and cannot be spoofed via X-Forwarded-For.
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
-  return `${normalizeEmail(email)}|${ip}`;
+  return `${normalizeEmail(email)}|${requestIp(req)}`;
+}
+
+// Count every login attempt before account lookup or scrypt. This aggregate IP
+// gate cannot be evaded by rotating fabricated email addresses and therefore
+// bounds unauthenticated KDF work independently of the account protections.
+export async function throttleLoginAttempt(
+  req: Request,
+): Promise<number | null> {
+  const row = await bumpFixedWindow(
+    `login-ip:${requestIp(req)}`,
+    IP_ATTEMPT_WINDOW_MS,
+  );
+  if (row.count <= IP_ATTEMPT_MAX) return null;
+  const elapsed = Date.now() - new Date(row.window_start).getTime();
+  return Math.max(1, Math.ceil((IP_ATTEMPT_WINDOW_MS - elapsed) / 1000));
 }
 
 function accountKey(email: string): string {
@@ -47,43 +67,39 @@ function retryAfter(
   return null;
 }
 
-// The wait, in seconds, before this attempt is allowed — or null if not
-// throttled. Both counters are read in ONE query (a single pooled connection,
-// so the login — which already holds its own request-transaction connection —
-// borrows at most one more), then the longer wait wins.
-export async function isLoginThrottled(
+// Reserve against both credential caps before the password KDF runs. Each
+// increment is atomic, so concurrent requests observe distinct counts instead
+// of all passing a stale check. A successful login clears both reservations;
+// failed attempts remain in the fixed window.
+function retryAfterReservedAttempt(
+  row: { count: number; window_start: Date },
+  windowMs: number,
+  max: number,
+): number | null {
+  if (row.count <= max) return null;
+  const elapsed = Date.now() - new Date(row.window_start).getTime();
+  return Math.max(1, Math.ceil((windowMs - elapsed) / 1000));
+}
+
+export async function throttleLoginCredentials(
   req: Request,
   email: string,
 ): Promise<number | null> {
   const ipK = ipKey(req, email);
   const acctK = accountKey(email);
-  const { rows } = await pool.query<{
-    key: string;
-    count: number;
-    window_start: Date;
-  }>("SELECT key, count, window_start FROM login_attempts WHERE key = ANY($1)", [
-    [ipK, acctK],
+  const [ipRow, accountRow] = await Promise.all([
+    bumpFixedWindow(ipK, LOGIN_WINDOW_MS),
+    bumpFixedWindow(acctK, ACCOUNT_WINDOW_MS),
   ]);
-  const byKey = new Map(rows.map((r) => [r.key, r]));
   const waits = [
-    retryAfter(byKey.get(ipK), LOGIN_WINDOW_MS, LOGIN_MAX_FAILURES),
-    retryAfter(byKey.get(acctK), ACCOUNT_WINDOW_MS, ACCOUNT_MAX_FAILURES),
+    retryAfterReservedAttempt(ipRow, LOGIN_WINDOW_MS, LOGIN_MAX_FAILURES),
+    retryAfterReservedAttempt(
+      accountRow,
+      ACCOUNT_WINDOW_MS,
+      ACCOUNT_MAX_FAILURES,
+    ),
   ].filter((w): w is number => w !== null);
   return waits.length ? Math.max(...waits) : null;
-}
-
-// Counter bumps use the shared atomic increment-and-window-reset statement
-// (lib/fixed-window.ts bumpFixedWindow — also the rate limiter's counter),
-// correct under concurrent failures on the same key.
-
-export async function recordLoginFailure(
-  req: Request,
-  email: string,
-): Promise<void> {
-  await Promise.all([
-    bumpFixedWindow(ipKey(req, email), LOGIN_WINDOW_MS),
-    bumpFixedWindow(accountKey(email), ACCOUNT_WINDOW_MS),
-  ]);
 }
 
 export async function clearLoginFailures(

@@ -26,8 +26,11 @@ import {
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { lagosMonthStart } from "../clerk/client-statement.ts";
-import { resetPaymentProvider } from "./provider.ts";
-import { crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import { resetPaymentProvider, setPaymentProvider } from "./provider.ts";
+import {
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Payment collection seam. Pinned invariants:
 //  - the amount is NEVER a caller input: it comes from the billing-statement
@@ -37,8 +40,8 @@ import { crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principa
 //    confirmed block, failed frees the slot;
 //  - provider seam: the simulator answers when no relay is configured
 //    (dark by default); PAYMENT_PROVIDER_URL lights a generic JSON relay
-//    whose checkoutUrl lands on the intent, and a broken relay creates
-//    NOTHING (fail closed, 502);
+//    whose checkoutUrl lands on the intent; a broken relay leaves a durable
+//    reservation that retries with the same provider idempotency key;
 //  - confirmation webhook: fail-closed PAYMENT_WEBHOOK_TOKEN (unset = 404),
 //    CAS pending→confirmed/failed with confirmedAt stamped on confirm,
 //    202 for replays and unknown refs alike (idempotent, no ref oracle),
@@ -56,6 +59,8 @@ const MONTH = lagosMonthStart(1); // newest closed Lagos month
 const M2 = lagosMonthStart(2);
 const M3 = lagosMonthStart(3);
 const M4 = lagosMonthStart(4);
+const M5 = lagosMonthStart(5);
+const M6 = lagosMonthStart(6);
 const OPEN = lagosMonthStart(0);
 const inMonthUtc = new Date(`${MONTH.slice(0, 8)}10T12:00:00.000Z`);
 
@@ -107,7 +112,12 @@ let asAdminFree: string;
 let asClient: string;
 let asOperator: string;
 
-const post = (base: string, path: string, body: unknown, headers: Record<string, string> = {}) =>
+const post = (
+  base: string,
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) =>
   fetch(`${base}${path}`, {
     method: "POST",
     headers: { ...JSON_HEADERS, ...headers },
@@ -132,7 +142,11 @@ before(async () => {
     { id: firmFree, name: `Free Firm ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: supplier, type: "client_business", legalName: `Pay Supplier ${SALT}` },
+    {
+      id: supplier,
+      type: "client_business",
+      legalName: `Pay Supplier ${SALT}`,
+    },
     { id: buyer, type: "buyer", legalName: `Pay Buyer ${SALT}` },
   ]);
   for (const [key, cfg] of Object.entries(TIER)) {
@@ -445,20 +459,25 @@ test("webhook: replayed and unknown confirmations are 202 no-ops (single audit)"
   }
 });
 
-test("relay-lit provider: generic JSON shape in, checkoutUrl out; a broken relay creates nothing", async () => {
-  const seen: { body: Record<string, unknown>; token: string | undefined }[] =
-    [];
+test("relay-lit provider: reservations survive relay failure and retry idempotently", async () => {
+  const seen: {
+    body: Record<string, unknown>;
+    token: string | undefined;
+    idempotencyKey: string | undefined;
+  }[] = [];
   let mode: "ok" | "fail" = "ok";
   const relay = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<
+        string,
+        unknown
+      >;
       seen.push({
-        body: JSON.parse(Buffer.concat(chunks).toString()) as Record<
-          string,
-          unknown
-        >,
+        body,
         token: req.headers["x-op-token"] as string | undefined,
+        idempotencyKey: req.headers["idempotency-key"] as string | undefined,
       });
       if (mode === "fail") {
         res.statusCode = 500;
@@ -468,7 +487,7 @@ test("relay-lit provider: generic JSON shape in, checkoutUrl out; a broken relay
       res.setHeader("content-type", "application/json");
       res.end(
         JSON.stringify({
-          providerRef: `psk_${SALT}`,
+          providerRef: `psk_${String(body.monthStart)}_${SALT}`,
           checkoutUrl: `https://checkout.test/${SALT}`,
         }),
       );
@@ -482,7 +501,7 @@ test("relay-lit provider: generic JSON shape in, checkoutUrl out; a broken relay
     const resp = await post(asAdmin, "/billing/payments", { monthStart: M3 });
     assert.equal(resp.status, 201);
     const intent = (await resp.json()) as IntentView;
-    assert.equal(intent.providerRef, `psk_${SALT}`);
+    assert.equal(intent.providerRef, `psk_${M3}_${SALT}`);
     assert.equal(intent.checkoutUrl, `https://checkout.test/${SALT}`);
     assert.equal(seen.length, 1);
     assert.deepEqual(seen[0].body, {
@@ -492,8 +511,10 @@ test("relay-lit provider: generic JSON shape in, checkoutUrl out; a broken relay
       amountNgn: BASE_FEE,
     });
     assert.equal(seen[0].token, `relay-${SALT}`);
+    assert.equal(seen[0].idempotencyKey, `billing:${firmPay}:${M3}:1`);
 
-    // A relay that answers 500 fails the request closed: 502, no intent.
+    // A relay that answers 500 fails the request but leaves a durable,
+    // non-payable reservation. A retry reuses both that row and provider key.
     mode = "fail";
     assert.equal(
       (await post(asAdmin, "/billing/payments", { monthStart: M4 })).status,
@@ -502,16 +523,100 @@ test("relay-lit provider: generic JSON shape in, checkoutUrl out; a broken relay
     const list = (await (
       await fetch(`${asAdmin}/billing/payments`)
     ).json()) as IntentView[];
-    assert.ok(
-      !list.some((i) => i.monthStart === M4),
-      "no intent row survives a failed provider init",
+    const reserved = list.find((i) => i.monthStart === M4);
+    assert.ok(reserved, "the idempotency reservation commits before the relay");
+    assert.equal(reserved.providerRef, null);
+    assert.equal(reserved.checkoutUrl, null);
+    const failedKey = seen.at(-1)?.idempotencyKey;
+
+    mode = "ok";
+    const retried = await post(asAdmin, "/billing/payments", {
+      monthStart: M4,
+    });
+    assert.equal(retried.status, 201);
+    const resumed = (await retried.json()) as IntentView;
+    assert.equal(
+      resumed.id,
+      reserved.id,
+      "retry finalizes the same reservation",
     );
+    assert.equal(seen.at(-1)?.idempotencyKey, failedKey);
   } finally {
     delete process.env.PAYMENT_PROVIDER_URL;
     delete process.env.PAYMENT_PROVIDER_TOKEN;
     await new Promise<void>((resolve, reject) =>
       relay.close((err) => (err ? reject(err) : resolve())),
     );
+  }
+});
+
+test("concurrent creation reaches the external provider only once", async () => {
+  let providerCalls = 0;
+  let signalStarted!: () => void;
+  let releaseProvider!: () => void;
+  const started = new Promise<void>((resolve) => {
+    signalStarted = resolve;
+  });
+  const finish = new Promise<void>((resolve) => {
+    releaseProvider = resolve;
+  });
+  setPaymentProvider(async () => {
+    providerCalls += 1;
+    signalStarted();
+    await finish;
+    return { providerRef: `locked_${SALT}`, checkoutUrl: null };
+  });
+
+  try {
+    const first = post(asAdmin, "/billing/payments", { monthStart: M5 });
+    await started;
+    const concurrent = await post(asAdmin, "/billing/payments", {
+      monthStart: M5,
+    });
+    assert.equal(concurrent.status, 409);
+    releaseProvider();
+    assert.equal((await first).status, 201);
+    assert.equal(providerCalls, 1);
+  } finally {
+    releaseProvider?.();
+    resetPaymentProvider();
+  }
+});
+
+test("a finalized failed attempt gets a fresh provider idempotency generation", async () => {
+  const keys: string[] = [];
+  let call = 0;
+  setPaymentProvider(async (input) => {
+    keys.push(input.idempotencyKey);
+    call += 1;
+    return { providerRef: `generation_${call}_${SALT}`, checkoutUrl: null };
+  });
+  process.env.PAYMENT_WEBHOOK_TOKEN = WEBHOOK_TOKEN;
+  try {
+    const first = await post(asAdmin, "/billing/payments", { monthStart: M6 });
+    assert.equal(first.status, 201);
+    const firstIntent = (await first.json()) as IntentView;
+    assert.equal(
+      (
+        await post(
+          asAdmin,
+          "/billing/payments/confirm",
+          { providerRef: firstIntent.providerRef, outcome: "failed" },
+          { "x-op-token": WEBHOOK_TOKEN },
+        )
+      ).status,
+      202,
+    );
+
+    const retry = await post(asAdmin, "/billing/payments", { monthStart: M6 });
+    assert.equal(retry.status, 201);
+    assert.deepEqual(keys, [
+      `billing:${firmPay}:${M6}:1`,
+      `billing:${firmPay}:${M6}:2`,
+    ]);
+  } finally {
+    delete process.env.PAYMENT_WEBHOOK_TOKEN;
+    resetPaymentProvider();
   }
 });
 

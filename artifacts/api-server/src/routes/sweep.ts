@@ -1,6 +1,33 @@
-import { Router, type IRouter } from "express";
+import {
+  Router,
+  type IRouter,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import { runScheduledWorkOnce } from "../modules/pipeline/pipeline";
 import { requireOpToken } from "../lib/op-token";
+import { bumpFixedWindow } from "../lib/fixed-window";
+
+async function limitSweep(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const configured = Number(process.env.SWEEP_RATE_LIMIT_PER_MIN ?? 12);
+  const limit =
+    Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 12;
+  const row = await bumpFixedWindow(
+    `rl:sweep:${req.ip ?? req.socket.remoteAddress ?? "unknown"}`,
+    60_000,
+  );
+  if (Number(row.count) > limit) {
+    res.setHeader("Retry-After", "60");
+    res.status(429).json({ error: "Sweep rate limit exceeded" });
+    return;
+  }
+  next();
+}
 
 // Public wake-up trigger for the Autoscale deployment (SME-08 reliability).
 //
@@ -35,14 +62,19 @@ import { requireOpToken } from "../lib/op-token";
 // request-transaction cap).
 const router: IRouter = Router();
 
-router.get("/internal/sweep", requireOpToken("SWEEP_TOKEN"), async (req, res): Promise<void> => {
-  const startedAt = Date.now();
-  const result = await runScheduledWorkOnce();
-  req.log.info(
-    { ...result, tookMs: Date.now() - startedAt },
-    "external sweep trigger completed",
-  );
-  res.json({ status: "ok", ran: result.ran });
-});
+router.get(
+  "/internal/sweep",
+  requireOpToken("SWEEP_TOKEN", { required: true }),
+  limitSweep,
+  async (req, res): Promise<void> => {
+    const startedAt = Date.now();
+    const result = await runScheduledWorkOnce();
+    req.log.info(
+      { ...result, tookMs: Date.now() - startedAt },
+      "external sweep trigger completed",
+    );
+    res.json({ status: "ok", ran: result.ran });
+  },
+);
 
 export default router;

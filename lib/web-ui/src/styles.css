@@ -1,3 +1,7 @@
+/* Shared component class strings live outside each app's automatic source
+   root. Importing this stylesheet also registers the package for scanning. */
+@source "./";
+
 :root {
   --mi-ink: #071a1c;
   --mi-teal: #0b6463;

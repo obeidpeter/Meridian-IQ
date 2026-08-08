@@ -71,7 +71,7 @@ function Brand() {
         <span className="block text-base font-extrabold leading-none text-white">
           Clerk AI
         </span>
-        <span className="mt-1 block text-[10px] font-semibold text-white/45">
+        <span className="mt-1 block text-xs font-semibold text-white/75">
           Governed operations
         </span>
       </span>
@@ -114,7 +114,7 @@ export function ClerkShell({ children }: { children: ReactNode }) {
             <p className="text-xs font-bold text-white">
               AI operations workspace
             </p>
-            <p className="mt-1 text-[11px] leading-4 text-white/45">
+            <p className="mt-1 text-xs leading-4 text-white/75">
               Intake, evidence and governed review
             </p>
           </div>

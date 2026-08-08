@@ -27,7 +27,7 @@ import {
 // webhook relay POSTs it to routes/inbound.ts, and each piece of media walks
 // the ORDINARY Clerk capture path — same 5MB/type/duplicate guards, same
 // per-firm budget, same ledger, same human review. Mirrors the email rail's
-// posture exactly (fail-closed token, anti-probe 202, detached processing,
+// posture exactly (fail-closed token, anti-probe 202, durable outbox processing,
 // per-firm daily cap via ./shared.ts, masked audits).
 //
 // The sender's phone number is the only identity signal a WhatsApp message
@@ -140,7 +140,8 @@ export async function resolveInboundWhatsAppSender(
     // either stored number matching counts.
     const matches = rows.filter(
       (r) =>
-        (r.whatsappTo !== null && normalizePhone(r.whatsappTo) === normalized) ||
+        (r.whatsappTo !== null &&
+          normalizePhone(r.whatsappTo) === normalized) ||
         (r.phone !== null && normalizePhone(r.phone) === normalized),
     );
     if (matches.length === 0) return { ok: false, reason: "no_match" };
@@ -172,8 +173,8 @@ export async function resolveInboundWhatsAppSender(
   });
 }
 
-// The whole post-response pipeline, exported so tests can await it directly;
-// the route calls it detached (.catch(logger.error)) AFTER responding 202.
+// The outbox worker's processing pipeline, exported so tests can invoke it
+// directly. The route returns 202 only after its durable queue write commits.
 // Same contract as processInboundEmail: nothing in here may throw for a
 // per-item problem, the unresolvable-sender path is handled here so the
 // route's response can never depend on resolution, and the shared inbound

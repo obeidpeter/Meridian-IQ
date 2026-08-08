@@ -40,6 +40,9 @@ import { migration0038 } from "./0038_pgvector_extension.ts";
 import { migration0039 } from "./0039_memory_guardrails.ts";
 import { migration0040 } from "./0040_retrieval_eval_guardrails.ts";
 import { migration0041 } from "./0041_advisory_brief_guardrails.ts";
+import { migration0042 } from "./0042_audit_remediation_guardrails.ts";
+import { migration0043 } from "./0043_payment_provider_reference_guardrail.ts";
+import { migration0044 } from "./0044_password_reset_concurrency_guardrail.ts";
 
 export interface Migration {
   version: number;
@@ -93,6 +96,9 @@ export const migrations: Migration[] = [
   migration0039,
   migration0040,
   migration0041,
+  migration0042,
+  migration0043,
+  migration0044,
 ];
 
 type Executor = Pick<pg.Pool, "query">;
@@ -174,8 +180,12 @@ async function applyMigrationsInternal(
   // if the process dies. The waiter finds everything already applied — every
   // `up` is idempotent.
   const client = await pool.connect();
+  let locked = false;
+  let operationError: unknown;
+  let releaseError: Error | undefined;
   try {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
+    locked = true;
     for (const m of migrationList) {
       try {
         await client.query("BEGIN");
@@ -202,11 +212,26 @@ async function applyMigrationsInternal(
         throw err;
       }
     }
+  } catch (error) {
+    operationError = error;
+    throw error;
   } finally {
-    await client
-      .query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID])
-      .catch(() => {});
-    client.release();
+    if (locked) {
+      try {
+        const result = await client.query<{ unlocked: boolean }>(
+          "SELECT pg_advisory_unlock($1) AS unlocked",
+          [MIGRATION_LOCK_ID],
+        );
+        if (result.rows[0]?.unlocked !== true) {
+          throw new Error("Migration advisory lock was not held at release");
+        }
+      } catch (error) {
+        releaseError =
+          error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    client.release(releaseError);
+    if (!operationError && releaseError) throw releaseError;
   }
   return { applied, skipped };
 }

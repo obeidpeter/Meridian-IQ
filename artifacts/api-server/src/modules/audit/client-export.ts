@@ -36,9 +36,11 @@ import { EXPORT_SECTION_ROW_CAP } from "./firm-export";
 //  - firm-scoped callers pass their own firmId: every firm-keyed section is
 //    filtered to that tenant's slice (another firm's pipeline for the same
 //    party must never leak through a shared client — SEC-02/03);
-//  - the data subject's own client_user and cross-tenant staff
-//    (operator/auditor) pass null: the subject's data across ALL engaging
-//    firms rides, which is what a data-subject access request means.
+//  - every tenant member, including the data subject's client_user, passes
+//    that membership's firmId. A cross-firm subject access request requires a
+//    separate verified workflow and cannot be inferred from one membership;
+//  - cross-tenant operator/auditor callers pass null and can assemble the
+//    platform-wide subject bundle as part of that privileged workflow.
 // Party-keyed sections (the party row, consent_records, alert_preferences)
 // are the subject's own data and are never lensed.
 //

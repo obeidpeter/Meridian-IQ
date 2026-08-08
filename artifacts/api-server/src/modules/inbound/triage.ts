@@ -19,8 +19,7 @@ import { fenceUntrusted } from "../clerk/prompts";
 //    can never cause a skip and never drops a document; the model call rides
 //    through inferPhrasing (gateway.ts), whose contract is exactly that
 //    posture (flag re-check, every gateway failure folded to null), plus a
-//    local try/catch so even a flag-READ failure cannot escape the rails'
-//    detached promise.
+//    local try/catch so even a flag-read failure cannot abort the queue item.
 
 export const TRIAGE_PROMPT_VERSION = "triage.v1";
 

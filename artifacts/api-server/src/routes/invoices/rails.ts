@@ -1,6 +1,11 @@
+import { createHash } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { asc, eq } from "drizzle-orm";
-import { getDb, confirmationsTable, settlementEventsTable } from "@workspace/db";
+import {
+  getDb,
+  confirmationsTable,
+  settlementEventsTable,
+} from "@workspace/db";
 import {
   ListConfirmationsParams,
   ListConfirmationsResponse,
@@ -13,7 +18,7 @@ import {
   CreateSettlementBody,
   CreateSettlementResponse,
 } from "@workspace/api-zod";
-import { parseOrThrow } from "../../lib/parse";
+import { assertPlainDecimalAmount, parseOrThrow } from "../../lib/parse";
 import { assertCan, assertBuyerPartyAccess } from "../../modules/auth/rbac";
 import { getInvoiceWithLines } from "../../modules/invoice/service";
 import { recordConfirmation } from "../../modules/invoice/confirmations";
@@ -21,6 +26,7 @@ import { appendAudit } from "../../modules/audit/audit";
 import { DomainError } from "../../modules/errors";
 import { requireFlag } from "../../modules/flags/flags";
 import { loadForTenant } from "./shared";
+import { appendSettlementEvent } from "../../modules/invoice/settlement";
 
 // The buyer rails on a single invoice: the BR-02 confirmation workflow
 // (flag-gated) and settlement evidence. These are the two surfaces where a
@@ -30,17 +36,21 @@ import { loadForTenant } from "./shared";
 const router: IRouter = Router();
 
 // Buyer confirmations are a release-tagged (R1) feature: unreachable when dark.
-router.get("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "confirmation.read");
-  const params = parseOrThrow(ListConfirmationsParams, req.params);
-  await loadForTenant(req, params.id);
-  const rows = await getDb()
-    .select()
-    .from(confirmationsTable)
-    .where(eq(confirmationsTable.invoiceId, params.id))
-    .orderBy(asc(confirmationsTable.createdAt));
-  res.json(ListConfirmationsResponse.parse(rows));
-});
+router.get(
+  "/invoices/:id/confirmations",
+  requireFlag("buyer_confirmations"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "confirmation.read");
+    const params = parseOrThrow(ListConfirmationsParams, req.params);
+    await loadForTenant(req, params.id);
+    const rows = await getDb()
+      .select()
+      .from(confirmationsTable)
+      .where(eq(confirmationsTable.invoiceId, params.id))
+      .orderBy(asc(confirmationsTable.createdAt));
+    res.json(ListConfirmationsResponse.parse(rows));
+  },
+);
 
 // BR-02 confirmation workflow. One write path to the spine, two sides:
 //   - The supplier's firm requests confirmation (state=requested) on a stamped
@@ -52,27 +62,31 @@ router.get("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), as
 // invoice, which caller" — buyer-party pin, TIN gate, the record-level state
 // machine over the append-only lineage, the CAS transition, the buyer nudge
 // and the audit row — lives in modules/invoice/confirmations.ts.
-router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), async (req, res): Promise<void> => {
-  const params = parseOrThrow(CreateConfirmationParams, req.params);
-  const parsed = parseOrThrow(CreateConfirmationBody, req.body);
-  const isRequest = parsed.state === "requested";
+router.post(
+  "/invoices/:id/confirmations",
+  requireFlag("buyer_confirmations"),
+  async (req, res): Promise<void> => {
+    const params = parseOrThrow(CreateConfirmationParams, req.params);
+    const parsed = parseOrThrow(CreateConfirmationBody, req.body);
+    const isRequest = parsed.state === "requested";
 
-  let invoice;
-  if (isRequest) {
-    assertCan(req.principal, "confirmation.write");
-    ({ invoice } = await loadForTenant(req, params.id));
-  } else {
-    // Buyer-side response: scoped by buyer Party, not by firm tenancy.
-    assertCan(req.principal, "confirmation.respond");
-    const bundle = await getInvoiceWithLines(params.id);
-    if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
-    invoice = bundle.invoice;
-    assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
-  }
+    let invoice;
+    if (isRequest) {
+      assertCan(req.principal, "confirmation.write");
+      ({ invoice } = await loadForTenant(req, params.id));
+    } else {
+      // Buyer-side response: scoped by buyer Party, not by firm tenancy.
+      assertCan(req.principal, "confirmation.respond");
+      const bundle = await getInvoiceWithLines(params.id);
+      if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+      invoice = bundle.invoice;
+      assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
+    }
 
-  const row = await recordConfirmation(invoice, parsed, req.principal);
-  res.status(201).json(CreateConfirmationResponse.parse(row));
-});
+    const row = await recordConfirmation(invoice, parsed, req.principal);
+    res.status(201).json(CreateConfirmationResponse.parse(row));
+  },
+);
 
 router.get("/invoices/:id/settlements", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
@@ -91,24 +105,48 @@ router.post("/invoices/:id/settlements", async (req, res): Promise<void> => {
   const params = parseOrThrow(CreateSettlementParams, req.params);
   const parsed = parseOrThrow(CreateSettlementBody, req.body);
   const { invoice } = await loadForTenant(req, params.id);
-  const [row] = await getDb()
-    .insert(settlementEventsTable)
-    .values({
-      invoiceId: params.id,
-      source: parsed.source,
-      amount: parsed.amount,
-      confidence: parsed.confidence ?? null,
-      occurredAt: parsed.occurredAt,
-    })
-    .returning();
-  await appendAudit({
+  if (parsed.source !== "uploaded_evidence") {
+    throw new DomainError(
+      "INVALID_SETTLEMENT_SOURCE",
+      "Manual settlements must use uploaded_evidence",
+      400,
+    );
+  }
+  assertPlainDecimalAmount(parsed.amount);
+  if (
+    parsed.confidence !== undefined &&
+    !/^(?:0(?:\.\d{1,4})?|1(?:\.0{1,4})?)$/.test(parsed.confidence)
+  ) {
+    throw new DomainError(
+      "INVALID_CONFIDENCE",
+      "confidence must be a decimal from 0 to 1 with at most 4 decimal places",
+      400,
+    );
+  }
+  const operationHash = createHash("sha256")
+    .update(
+      JSON.stringify([params.id, req.principal.userId, parsed.idempotencyKey]),
+    )
+    .digest("hex");
+  const { event: row, created } = await appendSettlementEvent({
+    invoiceId: params.id,
+    source: parsed.source,
+    amount: parsed.amount,
+    confidence: parsed.confidence ?? null,
     actorId: req.principal.userId,
-    firmId: invoice.firmId,
-    action: "invoice.settlement",
-    entityType: "settlement_event",
-    entityId: row.id,
-    after: { source: row.source, amount: row.amount },
+    externalReference: `manual:${operationHash}`,
+    occurredAt: parsed.occurredAt,
   });
+  if (created) {
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId: invoice.firmId,
+      action: "invoice.settlement",
+      entityType: "settlement_event",
+      entityId: row.id,
+      after: { source: row.source, amount: row.amount },
+    });
+  }
   res.status(201).json(CreateSettlementResponse.parse(row));
 });
 

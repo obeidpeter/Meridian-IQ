@@ -232,74 +232,86 @@ export interface ClerkAnswer {
   links?: ClerkAnswerLink[];
 }
 
-export const clerkCasesTable = pgTable("clerk_cases", {
-  id: id(),
-  kind: clerkCaseKindEnum("kind").notNull(),
-  status: clerkCaseStatusEnum("status").notNull().default("pending"),
-  // --- extraction cases ---
-  sourceType: clerkSourceTypeEnum("source_type"),
-  sourceName: text("source_name"),
-  // Extracted/uploaded text (pdf/text sources). Untrusted document content.
-  sourceText: text("source_text"),
-  // Base64 image payload (image sources). Excluded from list endpoints.
-  sourceImageB64: text("source_image_b64"),
-  // Scanned-PDF intake: the rendered page images (base64 PNG, document order)
-  // when a PDF had no selectable text. Kept for retry exactly like
-  // sourceText/sourceImageB64 and purged by the same content-retention
-  // sweep; never returned over the API (the response schemas strip it).
-  sourceScanPagesB64: jsonb("source_scan_pages_b64").$type<string[]>(),
-  // sha256 of the exact source content (text/transcript/image bytes) —
-  // duplicate-intake detection without retaining a second copy.
-  sourceHash: text("source_hash"),
-  // Recorder-reported length of a voice note, in seconds (voice sources only).
-  sourceDurationSec: integer("source_duration_sec"),
-  extraction: jsonb("extraction").$type<ClerkExtraction>(),
-  // Notice Desk (kind "notice" cases): the proposed notice reading. Mutually
-  // exclusive with `extraction` — a case is one document kind for life.
-  noticeExtraction: jsonb("notice_extraction").$type<ClerkNoticeExtraction>(),
-  // Recomputed on every successful (re-)extraction; see modules/clerk/preflight.
-  preflight: jsonb("preflight").$type<PreflightIssue[]>(),
-  // The async batch this case was created from, when it came out of one
-  // (round-8 idea #3): the review queue groups a bundle's segments together
-  // and shows per-batch progress. Null for one-off captures.
-  batchId: uuid("batch_id").references(() => clerkBatchesTable.id),
-  // --- question cases ---
-  question: text("question"),
-  answer: jsonb("answer").$type<ClerkAnswer>(),
-  // Asker's helpfulness signal on a question case: 'helpful' | 'not_helpful'; null = unrated.
-  feedback: text("feedback"),
-  // --- review claim (one operator actively works a case at a time) ---
-  claimedBy: uuid("claimed_by").references(() => usersTable.id),
-  claimedAt: timestamp("claimed_at", { withTimezone: true }),
-  // --- review decision ---
-  firmId: uuid("firm_id").references(() => firmsTable.id),
-  createdBy: uuid("created_by")
-    .notNull()
-    .references(() => usersTable.id),
-  decidedBy: uuid("decided_by").references(() => usersTable.id),
-  decisionAction: text("decision_action"),
-  decisionReason: text("decision_reason"),
-  // Extraction-vs-approved diff, computed at approval (see computeCorrections).
-  corrections: jsonb("corrections").$type<ClerkCorrection[] | null>(),
-  createdInvoiceId: uuid("created_invoice_id").references(
-    () => invoicesTable.id,
-  ),
-  failReason: text("fail_reason"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-},
-// The duplicate-intake guard probes source_hash on every case creation; the
-// queue lists filter by status (the updated_at suffix additionally serves the
-// decision-clock scans — quality watch, adoption, avgDecisionMinutes — that
-// filter status and read/bucket by updated_at; prefix-compatible with the old
-// (status) index); claim-gap mining scans question cases by created_at.
-(t) => [
-  index("clerk_cases_source_hash_idx").on(t.sourceHash),
-  index("clerk_cases_status_idx").on(t.status, t.updatedAt),
-  index("clerk_cases_kind_created_idx").on(t.kind, t.createdAt),
-  // The batch progress join counts a batch's reviewed cases.
-  index("clerk_cases_batch_idx").on(t.batchId),
-]);
+export const clerkCasesTable = pgTable(
+  "clerk_cases",
+  {
+    id: id(),
+    kind: clerkCaseKindEnum("kind").notNull(),
+    status: clerkCaseStatusEnum("status").notNull().default("pending"),
+    // --- extraction cases ---
+    sourceType: clerkSourceTypeEnum("source_type"),
+    sourceName: text("source_name"),
+    // Extracted/uploaded text (pdf/text sources). Untrusted document content.
+    sourceText: text("source_text"),
+    // Base64 image payload (image sources). Excluded from list endpoints.
+    sourceImageB64: text("source_image_b64"),
+    // Scanned-PDF intake: the rendered page images (base64 PNG, document order)
+    // when a PDF had no selectable text. Kept for retry exactly like
+    // sourceText/sourceImageB64 and purged by the same content-retention
+    // sweep; never returned over the API (the response schemas strip it).
+    sourceScanPagesB64: jsonb("source_scan_pages_b64").$type<string[]>(),
+    // sha256 of the exact source content (text/transcript/image bytes) —
+    // duplicate-intake detection without retaining a second copy.
+    sourceHash: text("source_hash"),
+    // Null only for an explicit human "create anyway" override. Normal intake
+    // writes firm-or-platform scope + source hash here; a partial unique index
+    // over live cases closes the concurrent check-then-insert race.
+    dedupeKey: text("dedupe_key"),
+    // Recorder-reported length of a voice note, in seconds (voice sources only).
+    sourceDurationSec: integer("source_duration_sec"),
+    extraction: jsonb("extraction").$type<ClerkExtraction>(),
+    // Notice Desk (kind "notice" cases): the proposed notice reading. Mutually
+    // exclusive with `extraction` — a case is one document kind for life.
+    noticeExtraction: jsonb("notice_extraction").$type<ClerkNoticeExtraction>(),
+    // Recomputed on every successful (re-)extraction; see modules/clerk/preflight.
+    preflight: jsonb("preflight").$type<PreflightIssue[]>(),
+    // The async batch this case was created from, when it came out of one
+    // (round-8 idea #3): the review queue groups a bundle's segments together
+    // and shows per-batch progress. Null for one-off captures.
+    batchId: uuid("batch_id").references(() => clerkBatchesTable.id),
+    // --- question cases ---
+    question: text("question"),
+    answer: jsonb("answer").$type<ClerkAnswer>(),
+    // Asker's helpfulness signal on a question case: 'helpful' | 'not_helpful'; null = unrated.
+    feedback: text("feedback"),
+    // --- review claim (one operator actively works a case at a time) ---
+    claimedBy: uuid("claimed_by").references(() => usersTable.id),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    // --- review decision ---
+    firmId: uuid("firm_id").references(() => firmsTable.id),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => usersTable.id),
+    decidedBy: uuid("decided_by").references(() => usersTable.id),
+    decisionAction: text("decision_action"),
+    decisionReason: text("decision_reason"),
+    // Extraction-vs-approved diff, computed at approval (see computeCorrections).
+    corrections: jsonb("corrections").$type<ClerkCorrection[] | null>(),
+    createdInvoiceId: uuid("created_invoice_id").references(
+      () => invoicesTable.id,
+    ),
+    failReason: text("fail_reason"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  // The duplicate-intake guard probes source_hash on every case creation; the
+  // queue lists filter by status (the updated_at suffix additionally serves the
+  // decision-clock scans — quality watch, adoption, avgDecisionMinutes — that
+  // filter status and read/bucket by updated_at; prefix-compatible with the old
+  // (status) index); claim-gap mining scans question cases by created_at.
+  (t) => [
+    index("clerk_cases_source_hash_idx").on(t.sourceHash),
+    uniqueIndex("clerk_cases_live_dedupe_uq")
+      .on(t.dedupeKey)
+      .where(
+        sql`${t.dedupeKey} IS NOT NULL AND ${t.status} NOT IN ('failed', 'rejected')`,
+      ),
+    index("clerk_cases_status_idx").on(t.status, t.updatedAt),
+    index("clerk_cases_kind_created_idx").on(t.kind, t.createdAt),
+    // The batch progress join counts a batch's reviewed cases.
+    index("clerk_cases_batch_idx").on(t.batchId),
+  ],
+);
 
 // Append-only ledger of every model invocation (enforced by trigger in
 // migration 0005): model, prompt version, input reference (hash — never the
@@ -311,36 +323,39 @@ export const clerkInferenceOutcomeEnum = pgEnum("clerk_inference_outcome", [
   "error",
 ]);
 
-export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
-  id: id(),
-  caseId: uuid("case_id").references(() => clerkCasesTable.id),
-  // The firm the call was made on behalf of (client capture, firm Ask Clerk).
-  // Null for operator/platform traffic. Drives the per-firm monthly token
-  // budget and lets usage be read under the firm-keyed RLS policy (0009).
-  firmId: uuid("firm_id").references(() => firmsTable.id),
-  purpose: text("purpose").notNull(),
-  model: text("model").notNull(),
-  promptVersion: text("prompt_version").notNull(),
-  // sha256 of the exact input document/question — auditable without retaining
-  // a second copy of untrusted content in the ledger.
-  inputRef: text("input_ref").notNull(),
-  outputJson: jsonb("output_json").$type<unknown>(),
-  schemaValid: boolean("schema_valid").notNull(),
-  outcome: clerkInferenceOutcomeEnum("outcome").notNull(),
-  errorText: text("error_text"),
-  latencyMs: integer("latency_ms"),
-  // Token usage where the provider reports it (CLK-NFR-04 cost-to-serve).
-  promptTokens: integer("prompt_tokens"),
-  completionTokens: integer("completion_tokens"),
-  createdAt: createdAt(),
-},
-// The watchdog and metrics scan recent windows; case joins walk case_id; the
-// per-firm budget sums a firm's month-to-date tokens on every capture/ask.
-(t) => [
-  index("clerk_inference_calls_created_idx").on(t.createdAt),
-  index("clerk_inference_calls_case_idx").on(t.caseId),
-  index("clerk_inference_calls_firm_idx").on(t.firmId, t.createdAt),
-]);
+export const clerkInferenceCallsTable = pgTable(
+  "clerk_inference_calls",
+  {
+    id: id(),
+    caseId: uuid("case_id").references(() => clerkCasesTable.id),
+    // The firm the call was made on behalf of (client capture, firm Ask Clerk).
+    // Null for operator/platform traffic. Drives the per-firm monthly token
+    // budget and lets usage be read under the firm-keyed RLS policy (0009).
+    firmId: uuid("firm_id").references(() => firmsTable.id),
+    purpose: text("purpose").notNull(),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    // sha256 of the exact input document/question — auditable without retaining
+    // a second copy of untrusted content in the ledger.
+    inputRef: text("input_ref").notNull(),
+    outputJson: jsonb("output_json").$type<unknown>(),
+    schemaValid: boolean("schema_valid").notNull(),
+    outcome: clerkInferenceOutcomeEnum("outcome").notNull(),
+    errorText: text("error_text"),
+    latencyMs: integer("latency_ms"),
+    // Token usage where the provider reports it (CLK-NFR-04 cost-to-serve).
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    createdAt: createdAt(),
+  },
+  // The watchdog and metrics scan recent windows; case joins walk case_id; the
+  // per-firm budget sums a firm's month-to-date tokens on every capture/ask.
+  (t) => [
+    index("clerk_inference_calls_created_idx").on(t.createdAt),
+    index("clerk_inference_calls_case_idx").on(t.caseId),
+    index("clerk_inference_calls_firm_idx").on(t.firmId, t.createdAt),
+  ],
+);
 
 // One fixture's outcome inside an evaluation run (§13.1). Expected/actual
 // values are synthetic C1 fixture data, never client content.
@@ -351,7 +366,11 @@ export interface ClerkEvalFixtureResult {
   outcome: "ok" | "invalid" | "error";
   fieldsCompared: number;
   fieldsCorrect: number;
-  mismatches: { field: string; expected: string | null; actual: string | null }[];
+  mismatches: {
+    field: string;
+    expected: string | null;
+    actual: string | null;
+  }[];
   // Injection fixtures only: true when every critical field still matched the
   // legitimate document values (the planted instruction changed nothing).
   injectionResisted: boolean | null;
@@ -727,11 +746,13 @@ export const clerkBatchesTable = pgTable(
     // reclaim and slicing never re-segment (model nondeterminism would shift
     // boundaries and defeat the duplicate guard). processedSegments is the
     // cursor into this array. Cleared at terminal states.
-    segments: jsonb("segments").$type<{ label: string | null; text: string }[]>(),
+    segments:
+      jsonb("segments").$type<{ label: string | null; text: string }[]>(),
     // Page-range segments for 'scan' bundles, persisted once like segments.
-    scanSegments: jsonb("scan_segments").$type<
-      { label: string | null; startPage: number; endPage: number }[]
-    >(),
+    scanSegments:
+      jsonb("scan_segments").$type<
+        { label: string | null; startPage: number; endPage: number }[]
+      >(),
     status: clerkBatchStatusEnum("status").notNull().default("queued"),
     // Null until segmentation has run.
     totalSegments: integer("total_segments"),
@@ -792,7 +813,8 @@ export const clerkPhrasingEvalRunsTable = pgTable("clerk_phrasing_eval_runs", {
   createdAt: createdAt(),
 });
 
-export type ClerkPhrasingEvalRun = typeof clerkPhrasingEvalRunsTable.$inferSelect;
+export type ClerkPhrasingEvalRun =
+  typeof clerkPhrasingEvalRunsTable.$inferSelect;
 
 // Standing approvals (round 28): a durable, revocable GRANT that lets the
 // daily sweep run one action kind for one client without a fresh per-batch
@@ -861,7 +883,12 @@ export interface ActionTargetOutcome {
   invoiceNumber: string;
   // "drafted" is the draft_chasers success outcome (round 22): a reminder
   // was written for the human to send — nothing was submitted anywhere.
-  outcome: "submitted" | "invalid" | "skipped_not_eligible" | "failed" | "drafted";
+  outcome:
+    | "submitted"
+    | "invalid"
+    | "skipped_not_eligible"
+    | "failed"
+    | "drafted";
   error: string | null;
 }
 
@@ -908,8 +935,7 @@ export const clerkActionDecisionsTable = pgTable(
   ],
 );
 
-export type ClerkActionDecision =
-  typeof clerkActionDecisionsTable.$inferSelect;
+export type ClerkActionDecision = typeof clerkActionDecisionsTable.$inferSelect;
 
 // ============ Do with Clerk Phase 2 — plan runs (round 32) ============
 // One row per approved multi-step action plan: the whole-plan approval

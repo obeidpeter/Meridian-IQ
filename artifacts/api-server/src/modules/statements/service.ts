@@ -22,10 +22,7 @@ import {
   recordTransition,
 } from "../invoice/lifecycle.ts";
 import { registerHandler, type HandlerOutcome } from "../pipeline/pipeline";
-import {
-  parseStatementText,
-  type ParsedStatement,
-} from "./parsers.ts";
+import { parseStatementText, type ParsedStatement } from "./parsers.ts";
 import { parseWithCustomFormats } from "./custom-formats.ts";
 import {
   proposeMatches,
@@ -87,7 +84,9 @@ function toRows(parsed: ParsedStatement): IngestResult["rows"] {
   }));
 }
 
-export async function ingestStatement(input: IngestInput): Promise<IngestResult> {
+export async function ingestStatement(
+  input: IngestInput,
+): Promise<IngestResult> {
   // Reconciliation is layer-1 compliance processing (Plan 7.2, CORE-03).
   const permitted = await isPurposePermitted(
     input.clientPartyId,
@@ -169,12 +168,14 @@ export async function ingestStatement(input: IngestInput): Promise<IngestResult>
   }
   // Transactional outbox (INT-09 pattern): the reconcile job is enqueued in the
   // same transaction as the statement rows.
-  await getDb().insert(outboxTable).values({
-    aggregateType: "bank_statement",
-    aggregateId: statement.id,
-    type: "statement.reconcile",
-    payload: { statementId: statement.id },
-  });
+  await getDb()
+    .insert(outboxTable)
+    .values({
+      aggregateType: "bank_statement",
+      aggregateId: statement.id,
+      type: "statement.reconcile",
+      payload: { statementId: statement.id },
+    });
   await appendAudit({
     actorId: input.actorId,
     firmId: input.firmId,
@@ -239,9 +240,7 @@ async function loadCandidates(
       grandTotal: Number(r.grandTotal),
       issueDate: r.issueDate,
       dueDate: r.dueDate,
-      ...(r.expectedWht !== null
-        ? { expectedWht: Number(r.expectedWht) }
-        : {}),
+      ...(r.expectedWht !== null ? { expectedWht: Number(r.expectedWht) } : {}),
     }));
 
   const billRows = (
@@ -359,7 +358,11 @@ export interface DecisionResult {
 
 async function loadProposal(
   proposalId: string,
-): Promise<{ proposal: MatchProposal; line: BankStatementLine; statement: BankStatement }> {
+): Promise<{
+  proposal: MatchProposal;
+  line: BankStatementLine;
+  statement: BankStatement;
+}> {
   const [proposal] = await getDb()
     .select()
     .from(matchProposalsTable)
@@ -478,6 +481,7 @@ export async function acceptProposal(
       confidence: proposal.confidence,
       statementLineId: line.id,
       actorId: actor.userId,
+      externalReference: `statement-match:${line.id}`,
       occurredAt,
     })
     .returning();
@@ -572,7 +576,11 @@ export async function rejectProposal(
     })
     .where(eq(matchProposalsTable.id, proposal.id));
   const [invoice] = await getDb()
-    .select({ id: invoicesTable.id, status: invoicesTable.status, firmId: invoicesTable.firmId })
+    .select({
+      id: invoicesTable.id,
+      status: invoicesTable.status,
+      firmId: invoicesTable.firmId,
+    })
     .from(invoicesTable)
     .where(eq(invoicesTable.id, proposal.invoiceId))
     .limit(1);
@@ -592,4 +600,3 @@ export async function rejectProposal(
     settlementEventId: null,
   };
 }
-

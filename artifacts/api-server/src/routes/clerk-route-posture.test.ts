@@ -26,7 +26,10 @@ import { routeBlock, setBlock, src } from "../test-helpers/source-pins.ts";
 // file that carries its route.
 
 test("explain-failure stays reachable for the client who owns the failed invoice", () => {
-  const block = routeBlock(src("routes/clerk/ask.ts"), "/clerk/explain-failure");
+  const block = routeBlock(
+    src("routes/clerk/ask.ts"),
+    "/clerk/explain-failure",
+  );
   assert.ok(
     block.includes('assertCan(req.principal, "clerk.capture")'),
     "explain-failure must gate on clerk.capture — clerk.ask would lock out client_users and break the SME fix-and-retry card",
@@ -38,7 +41,10 @@ test("explain-failure stays reachable for the client who owns the failed invoice
 });
 
 test("draft-invoice checks the firm budget before any provider spend", () => {
-  const block = routeBlock(src("routes/clerk/drafts.ts"), "/clerk/draft-invoice");
+  const block = routeBlock(
+    src("routes/clerk/drafts.ts"),
+    "/clerk/draft-invoice",
+  );
   const budgetAt = block.indexOf("assertFirmClerkBudget");
   const moduleAt = block.indexOf("draftInvoiceWithClerk(");
   assert.ok(budgetAt >= 0, "the route checks the budget");
@@ -148,13 +154,9 @@ test("bulk approval is operator-gated and runs OUTSIDE the request transaction",
 });
 
 test("BOTH inbound rails run outside the request transaction", () => {
-  // Each rail responds 202 and then runs sender resolution + capture in a
-  // DETACHED promise. Inside tenantContext that promise inherits — and
-  // outlives — the request transaction: the 202 commits (or rolls back) the
-  // tx while the pipeline is still using it, so its audits/cases fail or
-  // interleave into whatever request grabs the pooled connection next. The
-  // rails must therefore both be NO_CONTEXT; their detached DB stages open
-  // their own short transactions (clerk scope.ts / appendAudit's own tx).
+  // Each rail commits a durable outbox row before returning 202. The request
+  // must be NO_CONTEXT so queue insertion and later worker processing own
+  // independent transactions and cannot inherit a tenant request connection.
   const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/inbound/email"'),
@@ -162,7 +164,7 @@ test("BOTH inbound rails run outside the request transaction", () => {
   );
   assert.ok(
     set.includes('"POST /api/inbound/whatsapp"'),
-    "the inbound WhatsApp webhook must skip the request transaction — a detached pipeline inheriting the request tx fails its audits and interleaves across requests",
+    "the inbound WhatsApp webhook must skip the request transaction so worker-owned processing cannot inherit request state",
   );
 });
 
@@ -186,7 +188,9 @@ test("statement import runs outside the request transaction, in the MODEL class,
     "POST /api/statements must be in the MODEL rate-limit class",
   );
   const block = routeBlock(src("routes/statements.ts"), "/statements");
-  const wrapAt = block.indexOf("runRequestContext({ bypass: true, firmId: null }");
+  const wrapAt = block.indexOf(
+    "runRequestContext({ bypass: true, firmId: null }",
+  );
   const ingestAt = block.indexOf("ingestStatement(");
   assert.ok(
     wrapAt >= 0 && ingestAt > wrapAt,
@@ -240,7 +244,9 @@ test("action execution runs outside the request transaction, model call outside 
     "the chaser's staged (DB) half runs inside its own short context",
   );
   assert.ok(
-    /const draft = await phrasePaymentChaser\(staged, gateway\)/.test(moduleSrc),
+    /const draft = await phrasePaymentChaser\(staged, gateway\)/.test(
+      moduleSrc,
+    ),
     "the chaser's phrasing half is called on the staged value",
   );
   assert.ok(
@@ -298,7 +304,6 @@ test("standing-approval routes: read gate, grant walls, firm-scoped lifecycle", 
     clientEvidenceBlock.includes("resolveClientAnalyticsScope"),
     "the client evidence read walls a client_user to its own party (SEC-03)",
   );
-
 
   // Granting IS a standing submission authorization: invoice.submit plus
   // the execute route's IDOR wall (assertPartyAccess), re-walked here.
@@ -451,7 +456,10 @@ test("bulk submit runs outside the request transaction with per-item caller-post
   // The route's own party-access gate needs a context too — the raw pool
   // carries no GUCs, so an unwrapped engagement read would false-deny under
   // RLS for firm principals.
-  const block = routeBlock(src("routes/invoices/lifecycle.ts"), "/invoices/bulk-submit");
+  const block = routeBlock(
+    src("routes/invoices/lifecycle.ts"),
+    "/invoices/bulk-submit",
+  );
   // One spanning regex, not two includes: an unwrapped assertPartyAccess
   // beside a vestigial runRequestContext(noop) must not pass.
   assert.ok(

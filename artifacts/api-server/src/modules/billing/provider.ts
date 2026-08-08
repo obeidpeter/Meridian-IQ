@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DomainError } from "../errors";
+import { logger } from "../../lib/logger";
 
 // Payment provider seam (messaging.ts's MessageTransport / push.ts's
 // PushTransport idiom): every payment initialization flows through ONE
@@ -24,6 +25,7 @@ export interface PaymentInit {
   monthStart: string;
   // 2dp naira string — computeBillingFee's total.
   amountNgn: string;
+  idempotencyKey: string;
 }
 
 export interface PaymentInitResult {
@@ -33,6 +35,7 @@ export interface PaymentInitResult {
 
 export type PaymentProvider = (
   input: PaymentInit,
+  signal?: AbortSignal,
 ) => Promise<PaymentInitResult>;
 
 // Simulated provider: mints a reference, offers no checkout page. The
@@ -49,31 +52,72 @@ const simulatorProvider: PaymentProvider = async () => ({
 // pin it (fetch has no default timeout).
 const RELAY_TIMEOUT_MS = 5_000;
 
-// FAIL CLOSED when a relay is configured but broken: an intent we could not
-// hand to the provider must never be stored as pending (nobody could ever
-// pay it, and the one-live-intent index would then block the month until an
-// operator noticed). The thrown 502 rolls the request back; the simulator
-// path can never fail, so dark deployments are unaffected.
-const defaultProvider: PaymentProvider = async (input) => {
+// FAIL CLOSED when a configured relay is broken. The service records a
+// durable, resumable reservation before this call; a 502 leaves that row
+// pending so a retry uses the same provider idempotency key instead of
+// creating a second external payment.
+function providerSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(RELAY_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+function vettedCheckoutUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  if (value.length > 2_048) {
+    throw new DomainError(
+      "PAYMENT_PROVIDER",
+      "Payment provider returned an invalid checkout URL",
+      502,
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new DomainError(
+      "PAYMENT_PROVIDER",
+      "Payment provider returned an invalid checkout URL",
+      502,
+    );
+  }
+  if (
+    url.username ||
+    url.password ||
+    (url.protocol !== "https:" &&
+      !(process.env.NODE_ENV !== "production" && url.protocol === "http:"))
+  ) {
+    throw new DomainError(
+      "PAYMENT_PROVIDER",
+      "Payment provider returned an insecure checkout URL",
+      502,
+    );
+  }
+  return url.toString();
+}
+
+const defaultProvider: PaymentProvider = async (input, signal) => {
   const url = process.env.PAYMENT_PROVIDER_URL;
   if (!url) return simulatorProvider(input);
   const headers: Record<string, string> = {
     "content-type": "application/json",
+    "idempotency-key": input.idempotencyKey,
   };
   const token = process.env.PAYMENT_PROVIDER_TOKEN;
   if (token) headers["x-op-token"] = token;
+  const { idempotencyKey: _idempotencyKey, ...paymentFacts } = input;
   let resp: Response;
   try {
     resp = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ kind: "payment_init", ...input }),
-      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+      body: JSON.stringify({ kind: "payment_init", ...paymentFacts }),
+      signal: providerSignal(signal),
     });
   } catch (err) {
+    logger.error({ err }, "Payment provider request failed");
     throw new DomainError(
       "PAYMENT_PROVIDER",
-      `Payment provider unreachable: ${err instanceof Error ? err.message : String(err)}`,
+      "Payment provider is unreachable",
       502,
     );
   }
@@ -89,10 +133,12 @@ const defaultProvider: PaymentProvider = async (input) => {
     checkoutUrl?: unknown;
   } | null;
   const providerRef =
-    typeof payload?.providerRef === "string" && payload.providerRef.length > 0
-      ? payload.providerRef
-      : null;
-  if (!providerRef) {
+    typeof payload?.providerRef === "string" ? payload.providerRef.trim() : "";
+  if (
+    !providerRef ||
+    providerRef.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(providerRef)
+  ) {
     throw new DomainError(
       "PAYMENT_PROVIDER",
       "Payment provider returned no reference",
@@ -101,10 +147,7 @@ const defaultProvider: PaymentProvider = async (input) => {
   }
   return {
     providerRef,
-    checkoutUrl:
-      typeof payload?.checkoutUrl === "string" && payload.checkoutUrl.length > 0
-        ? payload.checkoutUrl
-        : null,
+    checkoutUrl: vettedCheckoutUrl(payload?.checkoutUrl),
   };
 };
 
@@ -121,6 +164,7 @@ export function resetPaymentProvider(): void {
 // The one call site seam consumers use; keeps the module-level `let` private.
 export async function initProviderPayment(
   input: PaymentInit,
+  signal?: AbortSignal,
 ): Promise<PaymentInitResult> {
-  return provider(input);
+  return provider(input, signal);
 }

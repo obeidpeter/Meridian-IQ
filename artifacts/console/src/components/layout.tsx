@@ -282,7 +282,7 @@ function BrandMark() {
         <span className="block text-base font-extrabold leading-none text-white">
           MeridianIQ
         </span>
-        <span className="mt-1 block text-[10px] font-semibold text-white/45">
+        <span className="mt-1 block text-xs font-semibold text-white/75">
           Accountant Console
         </span>
       </span>
@@ -377,7 +377,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <p className="text-xs font-bold text-white">
             {me ? roleContext.title : "Loading workspace"}
           </p>
-          <p className="mt-1 text-[11px] leading-4 text-white/45">
+          <p className="mt-1 text-xs leading-4 text-white/75">
             {roleContext.description}
           </p>
         </div>
@@ -385,7 +385,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="console-nav-scroll min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
         {groups.map((group) => (
           <div key={group.title} className="flex flex-col gap-1">
-            <p className="px-3 pb-1.5 text-[10px] font-bold uppercase text-white/35">
+            <p className="px-3 pb-1.5 text-xs font-bold uppercase text-white/70">
               {group.title}
             </p>
             {group.links.map((link) => {
@@ -404,7 +404,9 @@ export function Layout({ children }: { children: ReactNode }) {
                   }`}
                 >
                   <Icon className="size-[1.1rem] shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 truncate">{link.label}</span>
+                  <span className="min-w-0 truncate" title={link.label}>
+                    {link.label}
+                  </span>
                 </Link>
               );
             })}
@@ -422,10 +424,16 @@ export function Layout({ children }: { children: ReactNode }) {
               {accountInitials(me.fullName, me.email)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-white">
+              <p
+                className="truncate text-sm font-bold text-white"
+                title={me.fullName ?? me.email ?? "Signed in"}
+              >
                 {me.fullName ?? me.email ?? "Signed in"}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-white/45">
+              <p
+                className="mt-0.5 truncate text-xs text-white/75"
+                title={roleContext.badge}
+              >
                 {roleContext.badge}
               </p>
             </div>

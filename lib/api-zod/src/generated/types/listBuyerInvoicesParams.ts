@@ -3,10 +3,23 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 import type { ListBuyerInvoicesConfirmationState } from './listBuyerInvoicesConfirmationState';
 
 export type ListBuyerInvoicesParams = {
 confirmationState?: ListBuyerInvoicesConfirmationState;
+/**
+ * @maxLength 120
+ */
+search?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };

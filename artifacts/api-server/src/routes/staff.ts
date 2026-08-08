@@ -19,11 +19,13 @@ import { isUuid } from "../lib/uuid";
 import { appendAudit } from "../modules/audit/audit";
 import {
   clearActionFailures,
-  isActionThrottled,
-  recordActionFailure,
+  throttleActionAttempt,
 } from "../modules/auth/throttle";
 import { requireFirmScope, type Principal } from "../modules/auth/rbac";
-import { relayConfigured, sendRawToRelay } from "../modules/messaging/messaging";
+import {
+  relayConfigured,
+  sendRawToRelay,
+} from "../modules/messaging/messaging";
 import { DomainError } from "../modules/errors";
 
 // Staff notification preferences (self-service, OPT-IN). A firm member
@@ -115,74 +117,83 @@ async function ownRow(
   return row;
 }
 
-router.get("/staff/notification-preferences", async (req, res): Promise<void> => {
-  const firmId = staffSelfScope(req.principal);
-  // The dev x-mock shim can carry a non-UUID userId ("dev-user"); such a
-  // principal can own no row, so it reads the all-off defaults. The firm
-  // filter keeps a multi-firm member's firms independent (composite key).
-  const row = isUuid(req.principal.userId)
-    ? await ownRow(req.principal.userId, firmId)
-    : undefined;
-  res.json(GetStaffNotificationPreferencesResponse.parse(prefsBody(row)));
-});
+router.get(
+  "/staff/notification-preferences",
+  async (req, res): Promise<void> => {
+    const firmId = staffSelfScope(req.principal);
+    // The dev x-mock shim can carry a non-UUID userId ("dev-user"); such a
+    // principal can own no row, so it reads the all-off defaults. The firm
+    // filter keeps a multi-firm member's firms independent (composite key).
+    const row = isUuid(req.principal.userId)
+      ? await ownRow(req.principal.userId, firmId)
+      : undefined;
+    res.json(GetStaffNotificationPreferencesResponse.parse(prefsBody(row)));
+  },
+);
 
-router.put("/staff/notification-preferences", async (req, res): Promise<void> => {
-  const firmId = staffSelfScope(req.principal);
-  const parsed = parseOrThrow(UpdateStaffNotificationPreferencesBody, req.body);
-  if (!isUuid(req.principal.userId)) {
-    res.status(400).json({
-      error: "Notification preferences require a real user session",
-    });
-    return;
-  }
+router.put(
+  "/staff/notification-preferences",
+  async (req, res): Promise<void> => {
+    const firmId = staffSelfScope(req.principal);
+    const parsed = parseOrThrow(
+      UpdateStaffNotificationPreferencesBody,
+      req.body,
+    );
+    if (!isUuid(req.principal.userId)) {
+      res.status(400).json({
+        error: "Notification preferences require a real user session",
+      });
+      return;
+    }
 
-  // Partial input merges onto the existing row for THIS firm (or the all-off
-  // defaults): omitted switches keep their value; email distinguishes
-  // omitted (undefined — keep) from explicit null (clear).
-  const existing = await ownRow(req.principal.userId, firmId);
-  const next = {
-    digestEnabled:
-      parsed.digestEnabled ??
-      existing?.digestEnabled ??
-      DEFAULTS.digestEnabled,
-    emailEnabled:
-      parsed.emailEnabled ?? existing?.emailEnabled ?? DEFAULTS.emailEnabled,
-    pushEnabled:
-      parsed.pushEnabled ?? existing?.pushEnabled ?? DEFAULTS.pushEnabled,
-    email:
-      parsed.email !== undefined
-        ? (parsed.email ?? null)
-        : (existing?.email ?? DEFAULTS.email),
-  };
+    // Partial input merges onto the existing row for THIS firm (or the all-off
+    // defaults): omitted switches keep their value; email distinguishes
+    // omitted (undefined — keep) from explicit null (clear).
+    const existing = await ownRow(req.principal.userId, firmId);
+    const next = {
+      digestEnabled:
+        parsed.digestEnabled ??
+        existing?.digestEnabled ??
+        DEFAULTS.digestEnabled,
+      emailEnabled:
+        parsed.emailEnabled ?? existing?.emailEnabled ?? DEFAULTS.emailEnabled,
+      pushEnabled:
+        parsed.pushEnabled ?? existing?.pushEnabled ?? DEFAULTS.pushEnabled,
+      email:
+        parsed.email !== undefined
+          ? (parsed.email ?? null)
+          : (existing?.email ?? DEFAULTS.email),
+    };
 
-  // CHANGING the address (including clearing it) drops the verification and
-  // any pending code: verification attests to one exact address, never the
-  // next one. Re-saving the identical string keeps the verified state.
-  const emailChanged = next.email !== (existing?.email ?? null);
-  const verificationReset = emailChanged
-    ? {
-        emailVerifiedAt: null,
-        emailVerifyCodeHash: null,
-        emailVerifyExpiresAt: null,
-      }
-    : {};
+    // CHANGING the address (including clearing it) drops the verification and
+    // any pending code: verification attests to one exact address, never the
+    // next one. Re-saving the identical string keeps the verified state.
+    const emailChanged = next.email !== (existing?.email ?? null);
+    const verificationReset = emailChanged
+      ? {
+          emailVerifiedAt: null,
+          emailVerifyCodeHash: null,
+          emailVerifyExpiresAt: null,
+        }
+      : {};
 
-  const [row] = await getDb()
-    .insert(staffNotificationPreferencesTable)
-    .values({ userId: req.principal.userId, firmId, ...next })
-    .onConflictDoUpdate({
-      // Composite key (userId, firmId), both from the principal: a
-      // multi-firm member saves each firm's preferences independently —
-      // never re-homing (or clobbering) another firm's row.
-      target: [
-        staffNotificationPreferencesTable.userId,
-        staffNotificationPreferencesTable.firmId,
-      ],
-      set: { ...next, ...verificationReset, updatedAt: new Date() },
-    })
-    .returning();
-  res.json(UpdateStaffNotificationPreferencesResponse.parse(prefsBody(row)));
-});
+    const [row] = await getDb()
+      .insert(staffNotificationPreferencesTable)
+      .values({ userId: req.principal.userId, firmId, ...next })
+      .onConflictDoUpdate({
+        // Composite key (userId, firmId), both from the principal: a
+        // multi-firm member saves each firm's preferences independently —
+        // never re-homing (or clobbering) another firm's row.
+        target: [
+          staffNotificationPreferencesTable.userId,
+          staffNotificationPreferencesTable.firmId,
+        ],
+        set: { ...next, ...verificationReset, updatedAt: new Date() },
+      })
+      .returning();
+    res.json(UpdateStaffNotificationPreferencesResponse.parse(prefsBody(row)));
+  },
+);
 
 // Dispatch a 6-digit verification code to the SAVED address. Only the code's
 // sha256 + a 15-minute expiry are stored; requests are throttled per user
@@ -198,13 +209,6 @@ router.post(
       });
       return;
     }
-    const throttleKey = `everify:${req.principal.userId}`;
-    const retryAfter = await isActionThrottled(throttleKey);
-    if (retryAfter !== null) {
-      sendThrottled429(res, retryAfter, "Too many requests");
-      return;
-    }
-
     const row = await ownRow(req.principal.userId, firmId);
     if (!row?.email) {
       res.status(400).json({ error: "Save an email address first" });
@@ -212,7 +216,12 @@ router.post(
     }
     // Every request counts against the cap (this throttles SENDS, not
     // failures — there is no failure signal to count instead).
-    await recordActionFailure(throttleKey);
+    const throttleKey = `everify:${req.principal.userId}`;
+    const retryAfter = await throttleActionAttempt(throttleKey);
+    if (retryAfter !== null) {
+      sendThrottled429(res, retryAfter, "Too many requests");
+      return;
+    }
 
     // The outbound relay is the messaging transport's webhook
     // (relayConfigured lives with the transport that reads the same env).
@@ -226,7 +235,9 @@ router.post(
     }
 
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-    await getDb()
+    // Bind the code to the address read above. A concurrent preferences PUT
+    // must not move a code sent to the old inbox onto a newly saved address.
+    const [verificationState] = await getDb()
       .update(staffNotificationPreferencesTable)
       .set({
         emailVerifyCodeHash: sha256Hex(code),
@@ -237,8 +248,17 @@ router.post(
         and(
           eq(staffNotificationPreferencesTable.userId, req.principal.userId),
           eq(staffNotificationPreferencesTable.firmId, firmId),
+          eq(staffNotificationPreferencesTable.email, row.email),
         ),
+      )
+      .returning({ userId: staffNotificationPreferencesTable.userId });
+    if (!verificationState) {
+      throw new DomainError(
+        "NOTIFICATION_EMAIL_CHANGED",
+        "The saved email address changed. Request a new verification code.",
+        409,
       );
+    }
 
     // DELIBERATE, DOCUMENTED SEC-12 EXCEPTION: the platform's messaging seam
     // is pointer-only — sendMessage rejects anything that looks like a raw
@@ -274,7 +294,7 @@ router.post(
       return;
     }
     const throttleKey = `everifyc:${req.principal.userId}`;
-    const retryAfter = await isActionThrottled(throttleKey);
+    const retryAfter = await throttleActionAttempt(throttleKey);
     if (retryAfter !== null) {
       sendThrottled429(res, retryAfter, "Too many attempts");
       return;
@@ -289,7 +309,6 @@ router.post(
       digestEquals(presentedHash, row.emailVerifyCodeHash);
     if (!valid) {
       // Raw-pool counter: survives this 400's transaction rollback.
-      await recordActionFailure(throttleKey);
       res.status(400).json({ error: "Invalid or expired code" });
       return;
     }
@@ -314,12 +333,14 @@ router.post(
         and(
           eq(staffNotificationPreferencesTable.userId, req.principal.userId),
           eq(staffNotificationPreferencesTable.firmId, firmId),
-          eq(staffNotificationPreferencesTable.emailVerifyCodeHash, presentedHash),
+          eq(
+            staffNotificationPreferencesTable.emailVerifyCodeHash,
+            presentedHash,
+          ),
         ),
       )
       .returning();
     if (!updated) {
-      await recordActionFailure(throttleKey);
       res.status(400).json({ error: "Invalid or expired code" });
       return;
     }

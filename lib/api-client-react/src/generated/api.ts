@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.78.0
+ * OpenAPI spec version: 0.79.0
  */
 import {
   useMutation,
@@ -58,6 +58,7 @@ import type {
   BulkSubmitResult,
   BuyerExposure,
   BuyerInvoice,
+  BuyerInvoiceSummary,
   BuyerPaymentBehaviour,
   BuyerPilotWorkspace,
   BuyerSupplier,
@@ -9639,7 +9640,7 @@ export const flagBillPayment = async (id: string,
 
 
 
-export const getFlagBillPaymentMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+export const getFlagBillPaymentMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagBillPayment>>, TError,{id: string;data: BodyType<BillPaymentFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof flagBillPayment>>, TError,{id: string;data: BodyType<BillPaymentFlagInput>}, TContext> => {
 
@@ -9668,12 +9669,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type FlagBillPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof flagBillPayment>>>
     export type FlagBillPaymentMutationBody = BodyType<BillPaymentFlagInput>
-    export type FlagBillPaymentMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+    export type FlagBillPaymentMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
 
     /**
  * @summary Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)
  */
-export const useFlagBillPayment = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+export const useFlagBillPayment = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagBillPayment>>, TError,{id: string;data: BodyType<BillPaymentFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof flagBillPayment>>,
@@ -15023,6 +15024,160 @@ export function useListBuyerInvoices<TData = Awaited<ReturnType<typeof listBuyer
 
 
 
+export const getGetBuyerInvoiceSummaryUrl = () => {
+
+
+
+
+  return `/api/buyer/invoices/summary`
+}
+
+/**
+ * @summary Aggregate invoice and confirmation counts for the caller's buyer organization
+ */
+export const getBuyerInvoiceSummary = async ( options?: RequestInit): Promise<BuyerInvoiceSummary> => {
+
+  return customFetch<BuyerInvoiceSummary>(getGetBuyerInvoiceSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBuyerInvoiceSummaryQueryKey = () => {
+    return [
+    `/api/buyer/invoices/summary`
+    ] as const;
+    }
+
+
+export const getGetBuyerInvoiceSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getBuyerInvoiceSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBuyerInvoiceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBuyerInvoiceSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBuyerInvoiceSummary>>> = ({ signal }) => getBuyerInvoiceSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBuyerInvoiceSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBuyerInvoiceSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getBuyerInvoiceSummary>>>
+export type GetBuyerInvoiceSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Aggregate invoice and confirmation counts for the caller's buyer organization
+ */
+
+export function useGetBuyerInvoiceSummary<TData = Awaited<ReturnType<typeof getBuyerInvoiceSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBuyerInvoiceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBuyerInvoiceSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBuyerInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/buyer/invoices/${id}`
+}
+
+/**
+ * @summary One invoice addressed to the caller's buyer organization
+ */
+export const getBuyerInvoice = async (id: string, options?: RequestInit): Promise<BuyerInvoice> => {
+
+  return customFetch<BuyerInvoice>(getGetBuyerInvoiceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBuyerInvoiceQueryKey = (id: string,) => {
+    return [
+    `/api/buyer/invoices/${id}`
+    ] as const;
+    }
+
+
+export const getGetBuyerInvoiceQueryOptions = <TData = Awaited<ReturnType<typeof getBuyerInvoice>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBuyerInvoice>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBuyerInvoiceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBuyerInvoice>>> = ({ signal }) => getBuyerInvoice(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBuyerInvoice>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBuyerInvoiceQueryResult = NonNullable<Awaited<ReturnType<typeof getBuyerInvoice>>>
+export type GetBuyerInvoiceQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary One invoice addressed to the caller's buyer organization
+ */
+
+export function useGetBuyerInvoice<TData = Awaited<ReturnType<typeof getBuyerInvoice>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBuyerInvoice>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBuyerInvoiceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getFlagPaymentUrl = (id: string,) => {
 
 
@@ -15049,7 +15204,7 @@ export const flagPayment = async (id: string,
 
 
 
-export const getFlagPaymentMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+export const getFlagPaymentMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagPayment>>, TError,{id: string;data: BodyType<PaymentFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof flagPayment>>, TError,{id: string;data: BodyType<PaymentFlagInput>}, TContext> => {
 
@@ -15078,12 +15233,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type FlagPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof flagPayment>>>
     export type FlagPaymentMutationBody = BodyType<PaymentFlagInput>
-    export type FlagPaymentMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+    export type FlagPaymentMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
 
     /**
  * @summary Buyer marks an invoice payment as scheduled or paid (BR-04)
  */
-export const useFlagPayment = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+export const useFlagPayment = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagPayment>>, TError,{id: string;data: BodyType<PaymentFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof flagPayment>>,

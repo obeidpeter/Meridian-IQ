@@ -1,10 +1,14 @@
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import {
   getDb,
+  pool,
+  type Database,
   billingTiersTable,
   clerkInferenceCallsTable,
   firmSubscriptionsTable,
 } from "@workspace/db";
+import * as dbSchema from "@workspace/db/schema";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { DomainError } from "../errors";
 
 // Per-firm Clerk budget (Clerk expansion A). Client capture and firm Ask Clerk
@@ -16,9 +20,14 @@ import { DomainError } from "../errors";
 // the USD rates are optional operator configuration, tokens are always known.
 // Operator/platform traffic carries no firmId and is never capped.
 
-const DEFAULT_MONTHLY_TOKENS = Number(
+const configuredDefaultMonthlyTokens = Number(
   process.env.CLERK_FIRM_MONTHLY_TOKENS ?? 2_000_000,
 );
+const DEFAULT_MONTHLY_TOKENS =
+  Number.isSafeInteger(configuredDefaultMonthlyTokens) &&
+  configuredDefaultMonthlyTokens >= 0
+    ? configuredDefaultMonthlyTokens
+    : 2_000_000;
 
 // THE token expression — what a call costs. One home (round 54): the spend
 // watch, tier report, platform spend meter and billing statement all promise
@@ -155,7 +164,8 @@ export function budgetPace(
   }
   if (
     usage.usedTokens >= usage.budgetTokens * PACE_WARNING_USED_FRACTION ||
-    (elapsed >= PACE_MIN_ELAPSED_FRACTION && projectedTokens >= usage.budgetTokens)
+    (elapsed >= PACE_MIN_ELAPSED_FRACTION &&
+      projectedTokens >= usage.budgetTokens)
   ) {
     return { projectedTokens, paceBand: "warning" };
   }
@@ -164,9 +174,9 @@ export function budgetPace(
 
 // Gate for firm-attributed Clerk work. Called BEFORE the gateway/provider is
 // touched, so an exhausted firm gets a clean 429 without any model call. The
-// check is advisory-at-the-edge (a burst of parallel requests can each pass
-// and overshoot by one call's tokens) — acceptable: the ceiling holds from the
-// next request on, and the ledger keeps the true spend.
+// This route-level check gives a clean early 429. The gateway separately takes
+// a database advisory-lock permit across provider call + ledger append, which
+// is the race-proof enforcement boundary for concurrent requests.
 export async function assertFirmClerkBudget(firmId: string): Promise<void> {
   const usage = await firmClerkUsage(firmId);
   if (usage.usedTokens >= usage.budgetTokens) {
@@ -175,5 +185,103 @@ export async function assertFirmClerkBudget(firmId: string): Promise<void> {
       "Your firm has used its Clerk allowance for this month. Manual workflows are unaffected; contact MeridianIQ to raise the allowance.",
       429,
     );
+  }
+}
+
+export interface FirmClerkBudgetPermit {
+  ledgerDb: Database;
+  release(): Promise<void>;
+}
+
+export async function acquireFirmClerkBudgetPermit(
+  firmId: string,
+  reserveTokens: number,
+): Promise<FirmClerkBudgetPermit | null> {
+  const client = await pool.connect();
+  let locked = false;
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [
+      `clerk-budget:${firmId}`,
+    ]);
+    locked = true;
+    const tier = await client.query<{ clerk_monthly_tokens: number | null }>(
+      `SELECT bt.clerk_monthly_tokens
+         FROM firm_subscriptions fs
+         JOIN billing_tiers bt ON bt.id = fs.tier_id
+        WHERE fs.firm_id = $1
+        LIMIT 1`,
+      [firmId],
+    );
+    const used = await client.query<{ tokens: string }>(
+      `SELECT COALESCE(sum(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::text AS tokens
+         FROM clerk_inference_calls
+        WHERE firm_id = $1
+          AND created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`,
+      [firmId],
+    );
+    const budget = Number(
+      tier.rows[0]?.clerk_monthly_tokens ?? DEFAULT_MONTHLY_TOKENS,
+    );
+    const spent = Number(used.rows[0]?.tokens ?? 0);
+    if (budget <= 0 || spent + Math.max(1, reserveTokens) > budget) {
+      const unlocked = await client.query<{ unlocked: boolean }>(
+        "SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked",
+        [`clerk-budget:${firmId}`],
+      );
+      if (unlocked.rows[0]?.unlocked !== true) {
+        throw new Error("Clerk budget advisory lock was not held at release");
+      }
+      locked = false;
+      client.release();
+      return null;
+    }
+    let released = false;
+    return {
+      ledgerDb: drizzle(client, { schema: dbSchema }) as unknown as Database,
+      async release(): Promise<void> {
+        if (released) return;
+        released = true;
+        let releaseError: Error | undefined;
+        try {
+          const unlocked = await client.query<{ unlocked: boolean }>(
+            "SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked",
+            [`clerk-budget:${firmId}`],
+          );
+          if (unlocked.rows[0]?.unlocked !== true) {
+            throw new Error(
+              "Clerk budget advisory lock was not held at release",
+            );
+          }
+        } catch (error) {
+          releaseError =
+            error instanceof Error ? error : new Error(String(error));
+          throw releaseError;
+        } finally {
+          // Destroy the session if unlock failed; returning it to the pool
+          // could strand the session-level lock across unrelated requests.
+          client.release(releaseError);
+        }
+      },
+    };
+  } catch (err) {
+    let releaseError: Error | undefined;
+    if (locked) {
+      const unlocked = await client
+        .query<{
+          unlocked: boolean;
+        }>("SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked", [`clerk-budget:${firmId}`])
+        .catch((error: unknown) => {
+          releaseError =
+            error instanceof Error ? error : new Error(String(error));
+          return null;
+        });
+      if (unlocked && unlocked.rows[0]?.unlocked !== true) {
+        releaseError = new Error(
+          "Clerk budget advisory lock was not held at release",
+        );
+      }
+    }
+    client.release(releaseError);
+    throw err;
   }
 }

@@ -4,7 +4,6 @@ import {
   getDb,
   billVerificationsTable,
   invoicesTable,
-  settlementEventsTable,
   type Invoice,
 } from "@workspace/db";
 import {
@@ -23,7 +22,8 @@ import {
   ListMissingRecurringBillsQueryParams,
   ListMissingRecurringBillsResponse,
 } from "@workspace/api-zod";
-import { assertPlainDecimalAmount, parseOrThrow } from "../lib/parse";
+import { parseOrThrow, resolvePaymentFlagAmount } from "../lib/parse";
+import { appendSettlementEvent } from "../modules/invoice/settlement";
 import { resolveClientAnalyticsScope } from "../lib/client-scope";
 import {
   assertCan,
@@ -148,26 +148,33 @@ router.post("/bills/:id/payment-flag", async (req, res): Promise<void> => {
   const invoice = await loadBillForScope(req.principal, params.id);
   // The shared payment-flag amount guard (lib/parse.ts) — the same guard the
   // buyer payment-flag route applies.
-  assertPlainDecimalAmount(body.amount);
-  const [event] = await getDb()
-    .insert(settlementEventsTable)
-    .values({
+  const amount = resolvePaymentFlagAmount(
+    body.status,
+    body.amount,
+    invoice.grandTotal,
+  );
+  const { event, created } = await appendSettlementEvent(
+    {
       invoiceId: invoice.id,
       source: "payer_flag",
-      amount: body.amount ?? invoice.grandTotal,
+      amount,
       paymentStatus: body.status,
       actorId: req.principal.userId,
+      externalReference: `payer-flag:${invoice.id}:${req.principal.userId}:${body.status}`,
       occurredAt: new Date(),
-    })
-    .returning();
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId: invoice.firmId,
-    action: "invoice.payment_flag",
-    entityType: "settlement_event",
-    entityId: event.id,
-    after: { paymentStatus: event.paymentStatus, amount: event.amount },
-  });
+    },
+    { compareOccurredAt: false },
+  );
+  if (created) {
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId: invoice.firmId,
+      action: "invoice.payment_flag",
+      entityType: "settlement_event",
+      entityId: event.id,
+      after: { paymentStatus: event.paymentStatus, amount: event.amount },
+    });
+  }
   res.status(201).json(FlagBillPaymentResponse.parse(event));
 });
 

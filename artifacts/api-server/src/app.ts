@@ -1,4 +1,9 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, {
+  type Express,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
@@ -11,12 +16,18 @@ import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
 import { rateLimit } from "./middleware/rate-limit";
 import { errorHandler } from "./middleware/error";
 import { metricsMiddleware } from "./lib/metrics";
+import { getReadiness } from "./lib/readiness";
 
 // Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
 // (buyer_user — scoped to a buyer Party at the route level, not to a firm) and
 // unauthenticated public endpoints (e.g. stamp verification) run with RLS
 // bypassed; firm-scoped principals are pinned to their own firm_id.
-const BYPASS_ROLES = new Set(["operator", "auditor", "bank_user", "buyer_user"]);
+const BYPASS_ROLES = new Set([
+  "operator",
+  "auditor",
+  "bank_user",
+  "buyer_user",
+]);
 
 // Liveness probe must not depend on the database, so it skips the per-request
 // transaction entirely. The external sweep trigger also skips it: each
@@ -78,13 +89,11 @@ const NO_CONTEXT_ROUTES = new Set([
   // (retrieval-eval.ts), so it must not nest inside the request
   // transaction — the eval-lane posture.
   "POST /api/clerk/eval/retrieval",
-  // Inbound webhooks (routes/inbound.ts): each handler responds 202 and
-  // then runs sender resolution + extraction in a detached promise whose DB
-  // stages commit in their own short transactions (clerk scope.ts) — nothing
-  // should buffer in tenantContext, and the detached model calls must not
-  // inherit (or outlive) a per-request transaction. BOTH rails: a detached
-  // pipeline left inside the request transaction outlives the 202's commit,
-  // so its audits/cases fail or interleave into a stranger's transaction.
+  // Inbound webhooks (routes/inbound.ts) commit a deduplicated outbox row
+  // before returning 202. The request has no tenant principal; the worker
+  // resolves the sender and processes the payload later in its own bypass
+  // transaction. Keeping these routes outside tenantContext prevents a
+  // request transaction from being inherited by worker-owned processing.
   "POST /api/inbound/email",
   "POST /api/inbound/whatsapp",
   // Statement import: the PDF branch makes one bounded model call
@@ -118,6 +127,13 @@ const NO_CONTEXT_ROUTES = new Set([
   // (modules/collections/service.ts recordInboundCollection) and the 202
   // goes out only after the settle is durably committed.
   "POST /api/collections/inbound",
+  // Provider-backed creation uses three stages: a short tenant-scoped
+  // reservation transaction, the external call, then a short finalization
+  // transaction. Keeping these routes out of the ambient request transaction
+  // makes the idempotency reservation durable before any provider side effect
+  // and avoids holding a pooled connection during network I/O.
+  "POST /api/billing/payments",
+  "POST /api/collection-accounts",
   // Proposed-action execution (round 22): a draft_chasers batch makes up to
   // ten sequential model calls (far past the 30s cap), and a submit batch's
   // per-invoice audits would otherwise hold the GLOBAL audit advisory lock
@@ -245,9 +261,7 @@ function tenantContext(req: Request, res: Response, next: NextFunction): void {
       patched.flushHeaders = () => {};
       patched.writeHead = (statusCode: unknown, ...rest: unknown[]) => {
         if (typeof statusCode === "number") res.statusCode = statusCode;
-        const headerArg = rest.find(
-          (a) => a !== null && typeof a === "object",
-        );
+        const headerArg = rest.find((a) => a !== null && typeof a === "object");
         if (headerArg && !Array.isArray(headerArg)) {
           for (const [key, value] of Object.entries(
             headerArg as Record<string, unknown>,
@@ -296,6 +310,9 @@ function tenantContext(req: Request, res: Response, next: NextFunction): void {
         if (!terminated) {
           terminated = true;
           timedOut = true;
+          req.requestAbortController.abort(
+            new Error("Request transaction timed out"),
+          );
           reject(new RequestRollback());
         }
       }, REQUEST_TX_TIMEOUT_MS);
@@ -386,6 +403,42 @@ app.use(
     },
   }),
 );
+
+app.use((req, res, next) => {
+  const controller = new AbortController();
+  req.requestAbortController = controller;
+  req.abortSignal = controller.signal;
+  req.once("aborted", () => controller.abort(new Error("Client disconnected")));
+  res.once("close", () => {
+    if (!res.writableEnded) {
+      controller.abort(new Error("Response connection closed"));
+    }
+  });
+  next();
+});
+
+// Production traffic stays behind a readiness barrier until startup has
+// verified the database role, RLS policies, append-only triggers and signing
+// configuration. Liveness and readiness themselves must remain reachable so
+// the platform can observe and recover an unhealthy instance.
+app.use((req, res, next) => {
+  if (
+    process.env.NODE_ENV === "production" &&
+    req.path.startsWith("/api/") &&
+    req.path !== "/api/healthz" &&
+    req.path !== "/api/readyz"
+  ) {
+    const readiness = getReadiness();
+    if (!readiness.ready) {
+      res.status(503).json({
+        error: "Service is not ready",
+        reason: readiness.reason,
+      });
+      return;
+    }
+  }
+  next();
+});
 // CORS: the mobile companion's web preview is served from the Expo dev domain,
 // a different origin than this API, and the shared fetch client always sends
 // credentials. A credentialed cross-origin request is rejected by browsers
@@ -426,9 +479,9 @@ app.use(
 app.use(express.json({ limit: "8mb" }));
 // Session cookie (modules/auth/session.ts) is read by the principal middleware.
 app.use(cookieParser());
-// CSRF guard: require a custom header on cookie-authenticated state-changing
-// requests. Runs after cookie-parser so it can see the session cookie, and
-// before principal resolution (SEC-02).
+// CSRF guard: every browser-facing state-changing route requires the explicit
+// marker, regardless of whether authentication later resolves from a cookie,
+// bearer token or the non-production development shim (SEC-02).
 app.use(requireCsrfHeader);
 
 // Verify the Clerk session (if any) from cookie/Bearer token and attach auth to
@@ -437,7 +490,21 @@ app.use(requireCsrfHeader);
 // Mounted only when Clerk keys are provisioned: a keyless dev environment
 // (local smoke, CI) authenticates through the dev-header shim alone.
 if (process.env.CLERK_SECRET_KEY) {
-  app.use(clerkMiddleware());
+  const authorizedParties = [
+    ...(process.env.CLERK_AUTHORIZED_PARTIES?.split(",") ?? []),
+    ...(process.env.REPLIT_DOMAINS?.split(",") ?? []).map(
+      (domain) => `https://${domain.trim()}`,
+    ),
+  ]
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (process.env.NODE_ENV === "production" && authorizedParties.length === 0) {
+    logger.error(
+      "CLERK_SECRET_KEY is set without CLERK_AUTHORIZED_PARTIES or REPLIT_DOMAINS; Clerk authentication is disabled",
+    );
+  } else {
+    app.use(clerkMiddleware({ authorizedParties }));
+  }
 }
 app.use(resolvePrincipal);
 // Per-principal rate limiting: AFTER resolvePrincipal (keys on the resolved

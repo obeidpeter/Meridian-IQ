@@ -5,7 +5,9 @@ import {
   boolean,
   index,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -41,6 +43,9 @@ export const collectionAccountsTable = pgTable(
     unique().on(t.accountReference),
     index("collection_accounts_firm_idx").on(t.firmId),
     index("collection_accounts_client_idx").on(t.clientPartyId),
+    uniqueIndex("collection_accounts_one_active_per_client")
+      .on(t.firmId, t.clientPartyId)
+      .where(sql`${t.active} = true`),
   ],
 );
 

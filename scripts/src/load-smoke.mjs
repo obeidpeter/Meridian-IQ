@@ -6,6 +6,7 @@
 //   1. Boot a server the way scripts/src/e2e/run.mjs does, e.g.:
 //        pnpm --filter @workspace/api-server run build
 //        DATABASE_URL=postgresql://.../meridian_ci SEED_DEMO=true \
+//          DEMO_PASSWORD='a-strong-test-password' \
 //          NODE_ENV=development PORT=5100 \
 //          node --enable-source-maps artifacts/api-server/dist/index.mjs
 //      (any running dev server with the demo seed works — the script signs in
@@ -14,6 +15,7 @@
 //
 // Env:
 //   API_URL                        target server (default http://127.0.0.1:5100)
+//   DEMO_PASSWORD                  password used by the target's opt-in demo seed
 //   LOAD_SMOKE_P95_MS              per-route p95 gate in ms (default 1000 — generous
 //                                  on purpose; this is a smoke, not a benchmark)
 //   LOAD_SMOKE_REQUESTS_PER_ROUTE  timed requests per route (default 40 → ~200 total)
@@ -38,13 +40,19 @@
 
 import { performance } from "node:perf_hooks";
 
-const API_URL = (process.env.API_URL ?? "http://127.0.0.1:5100").replace(/\/$/, "");
+const API_URL = (process.env.API_URL ?? "http://127.0.0.1:5100").replace(
+  /\/$/,
+  "",
+);
 const P95_GATE_MS = Number(process.env.LOAD_SMOKE_P95_MS ?? 1000);
 const PER_ROUTE = Number(process.env.LOAD_SMOKE_REQUESTS_PER_ROUTE ?? 40);
-const CONCURRENCY = Math.max(1, Number(process.env.LOAD_SMOKE_CONCURRENCY ?? 4));
+const CONCURRENCY = Math.max(
+  1,
+  Number(process.env.LOAD_SMOKE_CONCURRENCY ?? 4),
+);
 
 // Demo identities and fixed demo ids (bootstrap/seed.ts: DEMO, DEMO_PASSWORD).
-const DEMO_PASSWORD = "meridian2027";
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 const STAFF_EMAIL = "demo.staff@meridianiq.example";
 const ADMIN_EMAIL = "demo.admin@meridianiq.example";
 const CLIENT_PARTY_ID = "22222222-2222-4222-8222-222222222222";
@@ -52,6 +60,12 @@ const CLIENT_PARTY_ID = "22222222-2222-4222-8222-222222222222";
 function fail(msg) {
   console.error(`load-smoke: ${msg}`);
   process.exit(2);
+}
+
+if (!DEMO_PASSWORD || DEMO_PASSWORD.length < 16) {
+  fail(
+    "DEMO_PASSWORD must match the target's demo seed (minimum 16 characters)",
+  );
 }
 
 // The mobile-client login variant returns the session token in the body
@@ -71,7 +85,9 @@ async function login(email) {
     fail(`cannot reach ${API_URL} (${err.message}) — is the server running?`);
   }
   if (!res.ok) {
-    fail(`login for ${email} returned ${res.status} — is SEED_DEMO enabled on the target?`);
+    fail(
+      `login for ${email} returned ${res.status} — is SEED_DEMO enabled on the target?`,
+    );
   }
   const body = await res.json();
   if (!body.token) fail(`login for ${email} returned no bearer token`);
@@ -118,7 +134,9 @@ async function timedRequest(route) {
 
 // One untimed warm-up call per route (connection setup, code paths, caches).
 for (const route of ROUTES) {
-  await timedRequest(route).catch((err) => fail(`warm-up failed: ${err.message}`));
+  await timedRequest(route).catch((err) =>
+    fail(`warm-up failed: ${err.message}`),
+  );
 }
 
 // Round-robin task list (routes interleaved, like real traffic) drained by a
@@ -147,7 +165,12 @@ await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 const runMs = performance.now() - runStart;
 
 function percentile(sorted, p) {
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))];
+  return sorted[
+    Math.min(
+      sorted.length - 1,
+      Math.max(0, Math.ceil((p / 100) * sorted.length) - 1),
+    )
+  ];
 }
 
 console.log(
@@ -155,7 +178,11 @@ console.log(
     `(concurrency ${CONCURRENCY}, p95 gate ${P95_GATE_MS}ms)\n`,
 );
 console.log(
-  "route".padEnd(36) + "count".padStart(6) + "p50 ms".padStart(9) + "p95 ms".padStart(9) + "max ms".padStart(9),
+  "route".padEnd(36) +
+    "count".padStart(6) +
+    "p50 ms".padStart(9) +
+    "p95 ms".padStart(9) +
+    "max ms".padStart(9),
 );
 
 let gateBreached = false;
@@ -177,11 +204,15 @@ for (const route of ROUTES) {
 }
 
 if (failures.length > 0) {
-  console.error(`\nload-smoke: ${failures.length} request(s) failed; first: ${failures[0]}`);
+  console.error(
+    `\nload-smoke: ${failures.length} request(s) failed; first: ${failures[0]}`,
+  );
   process.exit(2);
 }
 if (gateBreached) {
-  console.error(`\nload-smoke: a route's p95 exceeded ${P95_GATE_MS}ms (LOAD_SMOKE_P95_MS)`);
+  console.error(
+    `\nload-smoke: a route's p95 exceeded ${P95_GATE_MS}ms (LOAD_SMOKE_P95_MS)`,
+  );
   process.exit(1);
 }
 console.log(`\nload-smoke: OK — every route p95 under ${P95_GATE_MS}ms`);

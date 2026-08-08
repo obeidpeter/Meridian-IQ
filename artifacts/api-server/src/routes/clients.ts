@@ -14,7 +14,6 @@ import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertPartyAccess,
-  clientPartyScope,
   requireFirmScope,
   tenantFirmId,
   type Principal,
@@ -170,10 +169,10 @@ router.get("/clients/:id/export", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
   const params = parseOrThrow(ExportClientDataParams, req.params);
   await assertPartyAccess(req.principal, params.id);
-  const firmLens =
-    clientPartyScope(req.principal) !== null
-      ? null
-      : tenantFirmId(req.principal);
+  // An ordinary client membership proves access only within the membership's
+  // firm. Cross-firm data-subject requests require a separate verified DSAR
+  // workflow; they must never be inferred from possession of one invitation.
+  const firmLens = tenantFirmId(req.principal);
   const bundle = await exportClientData(params.id, firmLens); // 404 when the party does not exist
   // Audit the export itself, pointer-only (section row counts, never
   // content), AFTER assembling the bundle so an export never contains its
@@ -186,7 +185,9 @@ router.get("/clients/:id/export", async (req, res): Promise<void> => {
     entityType: "party",
     entityId: params.id,
     after: {
-      sections: Object.fromEntries(bundle.counts.map((c) => [c.section, c.rows])),
+      sections: Object.fromEntries(
+        bundle.counts.map((c) => [c.section, c.rows]),
+      ),
       truncated: bundle.counts.filter((c) => c.truncated).map((c) => c.section),
     },
   });

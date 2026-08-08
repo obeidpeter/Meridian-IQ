@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
-  useListBuyerInvoices,
+  useGetBuyerInvoice,
   useCreateConfirmation,
   useFlagPayment,
   useGetMe,
   getListBuyerInvoicesQueryKey,
+  getGetBuyerInvoiceQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,7 +101,7 @@ const RESPONSE_OPTIONS: Array<{
 export function InvoiceRespond() {
   const params = useParams();
   const id = params.id as string;
-  const { data: invoices, isLoading, error, refetch } = useListBuyerInvoices();
+  const { data: invoice, isLoading, error, refetch } = useGetBuyerInvoice(id);
   const { data: me } = useGetMe();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -121,7 +122,6 @@ export function InvoiceRespond() {
   const confirm = useCreateConfirmation();
   const flag = useFlagPayment();
 
-  const invoice = invoices?.find((i) => i.id === id);
   usePageTitle(invoice ? invoice.invoiceNumber : "Invoice");
 
   const backLink = (
@@ -174,7 +174,7 @@ export function InvoiceRespond() {
     );
   }
 
-  if (error || !invoices) {
+  if (error) {
     return (
       <div className="space-y-4">
         {backLink}
@@ -205,7 +205,11 @@ export function InvoiceRespond() {
               out of date. Your confirmation queue lists every invoice you can
               act on.
             </p>
-            <Button asChild variant="outline" data-testid="button-back-to-queue">
+            <Button
+              asChild
+              variant="outline"
+              data-testid="button-back-to-queue"
+            >
               <Link href="/">Back to confirmations</Link>
             </Button>
           </CardContent>
@@ -262,6 +266,9 @@ export function InvoiceRespond() {
           queryClient.invalidateQueries({
             queryKey: getListBuyerInvoicesQueryKey(),
           });
+          queryClient.invalidateQueries({
+            queryKey: getGetBuyerInvoiceQueryKey(invoice.id),
+          });
         },
         onError: (err) =>
           toast({
@@ -286,6 +293,9 @@ export function InvoiceRespond() {
           // status badge does not go stale.
           void queryClient.invalidateQueries({
             queryKey: getListBuyerInvoicesQueryKey(),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: getGetBuyerInvoiceQueryKey(invoice.id),
           });
           toast({
             title:
@@ -562,8 +572,8 @@ export function InvoiceRespond() {
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Let the supplier know where this invoice sits in your payment run.
-            Flags feed the supplier's settlement reconciliation — the history
-            is kept on their side.
+            Flags feed the supplier's settlement reconciliation — the history is
+            kept on their side.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -608,8 +618,8 @@ export function InvoiceRespond() {
                     Mark this invoice as paid?
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This records a settlement event on the supplier's
-                    compliance record and can't be undone. Mark{" "}
+                    This records a settlement event on the supplier's compliance
+                    record and can't be undone. Mark{" "}
                     {formatNaira(invoice.grandTotal)} as paid?
                   </AlertDialogDescription>
                 </AlertDialogHeader>

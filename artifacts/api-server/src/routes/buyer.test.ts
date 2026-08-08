@@ -79,7 +79,9 @@ const EVIL_INVOICE_NUMBER = `=2+5+BRT${SALT}`;
 const admin: Principal = firmPrincipal(firmId, { userId: staffUserId });
 const buyerOne: Principal = buyerPrincipal(buyer1, { userId: buyerUser1 });
 const buyerTwo: Principal = buyerPrincipal(buyer2, { userId: buyerUser2 });
-const buyerNoTinUser: Principal = buyerPrincipal(buyerNoTin, { userId: buyerUser2 });
+const buyerNoTinUser: Principal = buyerPrincipal(buyerNoTin, {
+  userId: buyerUser2,
+});
 
 async function saveAndEnable(key: string): Promise<boolean | null> {
   const db = getDb();
@@ -100,7 +102,9 @@ async function saveAndEnable(key: string): Promise<boolean | null> {
 
 async function restore(key: string, was: boolean | null): Promise<void> {
   if (was === null) {
-    await getDb().delete(featureFlagsTable).where(eq(featureFlagsTable.key, key));
+    await getDb()
+      .delete(featureFlagsTable)
+      .where(eq(featureFlagsTable.key, key));
   } else {
     await setFlag(key, was);
   }
@@ -181,13 +185,25 @@ before(async () => {
     invoiceSeed({ id: invDraftId, buyerPartyId: buyer1, status: "draft" }),
     invoiceSeed({ id: invConfirmId, buyerPartyId: buyer1, status: "stamped" }),
     invoiceSeed({ id: invQueryId, buyerPartyId: buyer1, status: "stamped" }),
-    invoiceSeed({ id: invNoTinId, buyerPartyId: buyerNoTin, status: "stamped" }),
+    invoiceSeed({
+      id: invNoTinId,
+      buyerPartyId: buyerNoTin,
+      status: "stamped",
+    }),
     invoiceSeed({ id: invB2Id, buyerPartyId: buyer2, status: "submitted" }),
     invoiceSeed({ id: invBulkAId, buyerPartyId: buyer1, status: "stamped" }),
     invoiceSeed({ id: invBulkBId, buyerPartyId: buyer1, status: "stamped" }),
-    invoiceSeed({ id: invBulkTinId, buyerPartyId: buyerNoTin, status: "stamped" }),
+    invoiceSeed({
+      id: invBulkTinId,
+      buyerPartyId: buyerNoTin,
+      status: "stamped",
+    }),
     invoiceSeed({ id: invNotifyId, buyerPartyId: buyer1, status: "stamped" }),
-    invoiceSeed({ id: invNotifyDarkId, buyerPartyId: buyer1, status: "stamped" }),
+    invoiceSeed({
+      id: invNotifyDarkId,
+      buyerPartyId: buyer1,
+      status: "stamped",
+    }),
     {
       // From the injection-named supplier, with an injection-shaped invoice
       // number and a due date — the CSV export must neutralize both cells.
@@ -244,6 +260,25 @@ test("payment flags: scheduled then paid settles once via CAS, lineage append-on
   );
   assert.equal(await invoiceStatus(invFlagId), "stamped");
 
+  const partialPaid = await fetch(
+    `${base}/invoices/${invFlagId}/payment-flags`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ paymentStatus: "paid", amount: "119999.99" }),
+    },
+  );
+  assert.equal(partialPaid.status, 400);
+  assert.match(
+    ((await partialPaid.json()) as { error: string }).error,
+    /cover the invoice total/,
+  );
+  assert.equal(
+    await invoiceStatus(invFlagId),
+    "stamped",
+    "a partial paid flag cannot settle the invoice",
+  );
+
   // `paid` settles the invoice (stamped → settled is an allowed transition).
   const paid = await fetch(`${base}/invoices/${invFlagId}/payment-flags`, {
     method: "POST",
@@ -251,9 +286,10 @@ test("payment flags: scheduled then paid settles once via CAS, lineage append-on
     body: JSON.stringify({ paymentStatus: "paid", amount: "120000.00" }),
   });
   assert.equal(paid.status, 201);
+  const paidBody = (await paid.json()) as { id: string };
   assert.equal(await invoiceStatus(invFlagId), "settled");
 
-  // A repeat `paid` flag on the settled invoice records lineage but the CAS
+  // A repeated `paid` flag is an idempotent replay; the event identity and CAS
   // guard never produces a second transition (settled → settled is invalid).
   const again = await fetch(`${base}/invoices/${invFlagId}/payment-flags`, {
     method: "POST",
@@ -261,13 +297,15 @@ test("payment flags: scheduled then paid settles once via CAS, lineage append-on
     body: JSON.stringify({ paymentStatus: "paid" }),
   });
   assert.equal(again.status, 201);
+  const againBody = (await again.json()) as { id: string };
+  assert.equal(againBody.id, paidBody.id, "a retry returns the first event");
   assert.equal(await invoiceStatus(invFlagId), "settled");
 
   const events = await getDb()
     .select()
     .from(settlementEventsTable)
     .where(eq(settlementEventsTable.invoiceId, invFlagId));
-  assert.equal(events.length, 3, "every flag is one append-only event");
+  assert.equal(events.length, 2, "a retry cannot append another paid flag");
   assert.ok(events.every((e) => e.source === "buyer_flag"));
   assert.ok(events.every((e) => e.actorId === buyerUser1));
 
@@ -291,7 +329,10 @@ test("payment flags: scheduled then paid settles once via CAS, lineage append-on
     body: JSON.stringify({ paymentStatus: "paid", amount: "12.345" }),
   });
   assert.equal(badAmount.status, 400);
-  assert.match(((await badAmount.json()) as { error: string }).error, /plain decimal string/);
+  assert.match(
+    ((await badAmount.json()) as { error: string }).error,
+    /plain decimal string/,
+  );
 
   const draft = await fetch(`${base}/invoices/${invDraftId}/payment-flags`, {
     method: "POST",
@@ -299,14 +340,21 @@ test("payment flags: scheduled then paid settles once via CAS, lineage append-on
     body: JSON.stringify({ paymentStatus: "paid" }),
   });
   assert.equal(draft.status, 409);
-  assert.match(((await draft.json()) as { error: string }).error, /only stamped, confirmed or settled invoices/);
+  assert.match(
+    ((await draft.json()) as { error: string }).error,
+    /only stamped, confirmed or settled invoices/,
+  );
 });
 
 test("confirmation respond flow: open request, method, CAS to confirmed", async () => {
   const staffBase = await listen(appFor(admin, invoicesRouter));
   const buyerBase = await listen(appFor(buyerOne, invoicesRouter));
 
-  const respond = (base: string, invoiceId: string, body: Record<string, unknown>) =>
+  const respond = (
+    base: string,
+    invoiceId: string,
+    body: Record<string, unknown>,
+  ) =>
     fetch(`${base}/invoices/${invoiceId}/confirmations`, {
       method: "POST",
       headers: JSON_HEADERS,
@@ -319,25 +367,45 @@ test("confirmation respond flow: open request, method, CAS to confirmed", async 
     method: "portal",
   });
   assert.equal(early.status, 409);
-  assert.match(((await early.json()) as { error: string }).error, /requires an open request/);
+  assert.match(
+    ((await early.json()) as { error: string }).error,
+    /requires an open request/,
+  );
 
   // The supplier firm raises the request on the stamped invoice.
-  const requested = await respond(staffBase, invConfirmId, { state: "requested" });
+  const requested = await respond(staffBase, invConfirmId, {
+    state: "requested",
+  });
   assert.equal(requested.status, 201);
 
   // A mismatched body buyerPartyId can never re-point the confirmation.
-  const mismatch = await fetch(`${buyerBase}/invoices/${invConfirmId}/confirmations`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ buyerPartyId: buyer2, state: "confirmed", method: "portal" }),
-  });
+  const mismatch = await fetch(
+    `${buyerBase}/invoices/${invConfirmId}/confirmations`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        buyerPartyId: buyer2,
+        state: "confirmed",
+        method: "portal",
+      }),
+    },
+  );
   assert.equal(mismatch.status, 409);
-  assert.match(((await mismatch.json()) as { error: string }).error, /must match the invoice buyer/);
+  assert.match(
+    ((await mismatch.json()) as { error: string }).error,
+    /must match the invoice buyer/,
+  );
 
   // A response must state its method.
-  const noMethod = await respond(buyerBase, invConfirmId, { state: "confirmed" });
+  const noMethod = await respond(buyerBase, invConfirmId, {
+    state: "confirmed",
+  });
   assert.equal(noMethod.status, 400);
-  assert.match(((await noMethod.json()) as { error: string }).error, /must state its method/);
+  assert.match(
+    ((await noMethod.json()) as { error: string }).error,
+    /must state its method/,
+  );
 
   // Confirm: the row is recorded with the confirming user, and the invoice
   // moves stamped → confirmed through the compare-and-set.
@@ -361,7 +429,10 @@ test("confirmation respond flow: open request, method, CAS to confirmed", async 
     note: "too late",
   });
   assert.equal(reRespond.status, 409);
-  assert.match(((await reRespond.json()) as { error: string }).error, /requires an open request/);
+  assert.match(
+    ((await reRespond.json()) as { error: string }).error,
+    /requires an open request/,
+  );
 });
 
 test("query response stores the note, keeps status, and re-opens the request lane", async () => {
@@ -401,19 +472,28 @@ test("query response stores the note, keeps status, and re-opens the request lan
     note: "still wrong",
   });
   assert.equal(respondAfterQuery.status, 409);
-  assert.match(((await respondAfterQuery.json()) as { error: string }).error, /requires an open request/);
+  assert.match(
+    ((await respondAfterQuery.json()) as { error: string }).error,
+    /requires an open request/,
+  );
   assert.equal((await post(staffBase, { state: "requested" })).status, 201);
 });
 
 test("TIN gate: an unvalidated buyer party never enters the workflow", async () => {
   const staffBase = await listen(appFor(admin, invoicesRouter));
-  const request = await fetch(`${staffBase}/invoices/${invNoTinId}/confirmations`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ buyerPartyId: buyerNoTin, state: "requested" }),
-  });
+  const request = await fetch(
+    `${staffBase}/invoices/${invNoTinId}/confirmations`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ buyerPartyId: buyerNoTin, state: "requested" }),
+    },
+  );
   assert.equal(request.status, 422);
-  assert.match(((await request.json()) as { error: string }).error, /Buyer TIN must be validated/);
+  assert.match(
+    ((await request.json()) as { error: string }).error,
+    /Buyer TIN must be validated/,
+  );
 
   // Even with a request forced into the lineage, the responder hits the same
   // gate — the check runs before the state machine.
@@ -423,13 +503,23 @@ test("TIN gate: an unvalidated buyer party never enters the workflow", async () 
     state: "requested",
   });
   const noTinBase = await listen(appFor(buyerNoTinUser, invoicesRouter));
-  const respond = await fetch(`${noTinBase}/invoices/${invNoTinId}/confirmations`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ buyerPartyId: buyerNoTin, state: "confirmed", method: "portal" }),
-  });
+  const respond = await fetch(
+    `${noTinBase}/invoices/${invNoTinId}/confirmations`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        buyerPartyId: buyerNoTin,
+        state: "confirmed",
+        method: "portal",
+      }),
+    },
+  );
   assert.equal(respond.status, 422);
-  assert.match(((await respond.json()) as { error: string }).error, /Buyer TIN must be validated/);
+  assert.match(
+    ((await respond.json()) as { error: string }).error,
+    /Buyer TIN must be validated/,
+  );
 });
 
 test("buyer scoping: a buyer_user sees only its own party's book", async () => {
@@ -471,13 +561,81 @@ test("buyer scoping: a buyer_user sees only its own party's book", async () => {
   );
 
   // Cross-buyer writes are refused, before any state is touched.
-  const crossFlag = await fetch(`${base2}/invoices/${invConfirmId}/payment-flags`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ paymentStatus: "paid" }),
-  });
+  const crossFlag = await fetch(
+    `${base2}/invoices/${invConfirmId}/payment-flags`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ paymentStatus: "paid" }),
+    },
+  );
   assert.equal(crossFlag.status, 403);
-  assert.match(((await crossFlag.json()) as { error: string }).error, /not addressed to your buyer organization/);
+  assert.match(
+    ((await crossFlag.json()) as { error: string }).error,
+    /not addressed to your buyer organization/,
+  );
+});
+
+test("buyer invoice reads are bounded, searchable, summarized and tenant-scoped", async () => {
+  const base1 = await listen(appFor(buyerOne, buyerRouter));
+  const base2 = await listen(appFor(buyerTwo, buyerRouter));
+
+  const first = (await (
+    await fetch(`${base1}/buyer/invoices?limit=2&offset=0`)
+  ).json()) as { id: string }[];
+  const second = (await (
+    await fetch(`${base1}/buyer/invoices?limit=2&offset=2`)
+  ).json()) as { id: string }[];
+  assert.equal(first.length, 2);
+  assert.equal(second.length, 2);
+  assert.deepEqual(
+    first.filter((row) => second.some((candidate) => candidate.id === row.id)),
+    [],
+    "stable pages cannot overlap",
+  );
+  assert.equal((await fetch(`${base1}/buyer/invoices?limit=201`)).status, 400);
+
+  const searched = (await (
+    await fetch(
+      `${base1}/buyer/invoices?search=${encodeURIComponent(EVIL_INVOICE_NUMBER)}`,
+    )
+  ).json()) as { id: string }[];
+  assert.deepEqual(
+    searched.map((row) => row.id),
+    [invCsvInjId],
+  );
+  const literalWildcard = (await (
+    await fetch(`${base1}/buyer/invoices?search=${encodeURIComponent("%_")}`)
+  ).json()) as unknown[];
+  assert.equal(
+    literalWildcard.length,
+    0,
+    "search wildcards are treated literally",
+  );
+
+  const full = (await (
+    await fetch(`${base1}/buyer/invoices?limit=200`)
+  ).json()) as { id: string }[];
+  const summary = (await (
+    await fetch(`${base1}/buyer/invoices/summary`)
+  ).json()) as {
+    total: number;
+    counts: Record<string, number>;
+  };
+  assert.equal(summary.total, full.length);
+  assert.equal(
+    Object.values(summary.counts).reduce((sum, count) => sum + count, 0),
+    summary.total,
+  );
+
+  assert.equal(
+    (await fetch(`${base1}/buyer/invoices/${invConfirmId}`)).status,
+    200,
+  );
+  assert.equal(
+    (await fetch(`${base2}/buyer/invoices/${invConfirmId}`)).status,
+    404,
+  );
 });
 
 interface BulkItem {
@@ -543,7 +701,10 @@ test("bulk confirm: per-item outcomes — one bad row never aborts (or silently 
 
   // Another buyer's invoice is refused per item — the batch continues.
   assert.equal(body.items[2].status, "skipped");
-  assert.match(body.items[2].reason ?? "", /not addressed to your buyer organization/);
+  assert.match(
+    body.items[2].reason ?? "",
+    /not addressed to your buyer organization/,
+  );
   assert.equal(await invoiceStatus(invB2Id), "submitted");
 
   // An unknown id is reported, never silently dropped.
@@ -567,7 +728,10 @@ test("bulk confirm: per-item outcomes — one bad row never aborts (or silently 
     body: JSON.stringify({ invoiceIds: [invBulkTinId], method: "portal" }),
   });
   assert.equal(tinRes.status, 200);
-  const tinBody = (await tinRes.json()) as { confirmed: number; items: BulkItem[] };
+  const tinBody = (await tinRes.json()) as {
+    confirmed: number;
+    items: BulkItem[];
+  };
   assert.equal(tinBody.confirmed, 0);
   assert.match(tinBody.items[0].reason ?? "", /TIN must be validated/);
   assert.equal(await invoiceStatus(invBulkTinId), "stamped");
@@ -602,7 +766,11 @@ test("pending-confirmations CSV: awaiting-only rows, buyer-scoped, formula injec
   // fetch's text() strips a leading BOM per the WHATWG encoding spec, so the
   // Excel-friendliness check reads the raw bytes.
   const raw = new Uint8Array(await res.arrayBuffer());
-  assert.deepEqual([...raw.slice(0, 3)], [0xef, 0xbb, 0xbf], "BOM for Excel UTF-8");
+  assert.deepEqual(
+    [...raw.slice(0, 3)],
+    [0xef, 0xbb, 0xbf],
+    "BOM for Excel UTF-8",
+  );
   const text = new TextDecoder().decode(raw.slice(3));
   const rows = parseCsv(text);
   assert.deepEqual(rows[0], [
@@ -697,8 +865,14 @@ test("supplier drill-down: same numbers as the breakdown, own-book invoices only
 
   // A supplier that never invoiced the caller is a plain 404 — whether it
   // exists for another buyer or not at all.
-  assert.equal((await fetch(`${base2}/buyer/suppliers/${evilSupplier}`)).status, 404);
-  assert.equal((await fetch(`${base1}/buyer/suppliers/${randomUUID()}`)).status, 404);
+  assert.equal(
+    (await fetch(`${base2}/buyer/suppliers/${evilSupplier}`)).status,
+    404,
+  );
+  assert.equal(
+    (await fetch(`${base1}/buyer/suppliers/${randomUUID()}`)).status,
+    404,
+  );
 });
 
 test("confirmation request stamps a pointer-only notification for the buyer party; dark flag writes no row", async () => {
@@ -717,11 +891,14 @@ test("confirmation request stamps a pointer-only notification for the buyer part
       );
   const beforeCount = (await rowsFor()).length;
 
-  const requested = await fetch(`${staffBase}/invoices/${invNotifyId}/confirmations`, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ buyerPartyId: buyer1, state: "requested" }),
-  });
+  const requested = await fetch(
+    `${staffBase}/invoices/${invNotifyId}/confirmations`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ buyerPartyId: buyer1, state: "requested" }),
+    },
+  );
   assert.equal(requested.status, 201);
 
   const after = await rowsFor();
@@ -752,12 +929,19 @@ test("confirmation request stamps a pointer-only notification for the buyer part
           ),
         )
     ).length;
-    const dark = await fetch(`${staffBase}/invoices/${invNotifyDarkId}/confirmations`, {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ buyerPartyId: buyer1, state: "requested" }),
-    });
-    assert.equal(dark.status, 201, "the confirmation request never depends on messaging");
+    const dark = await fetch(
+      `${staffBase}/invoices/${invNotifyDarkId}/confirmations`,
+      {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ buyerPartyId: buyer1, state: "requested" }),
+      },
+    );
+    assert.equal(
+      dark.status,
+      201,
+      "the confirmation request never depends on messaging",
+    );
     const allAfter = (
       await getDb()
         .select({ id: messagesTable.id })

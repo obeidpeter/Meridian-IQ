@@ -122,6 +122,17 @@ const triggerAllowsFailed = (): Probe => ({
   expect: true,
   check: lineTriggerAllowsFailed,
 });
+const index = (name: string): Probe => ({
+  desc: `index ${name} exists`,
+  expect: true,
+  check: async (pool) => {
+    const result = await pool.query<{ present: boolean }>(
+      "SELECT to_regclass($1) IS NOT NULL AS present",
+      [`public.${name}`],
+    );
+    return result.rows[0]?.present === true;
+  },
+});
 const not = (probe: Probe): Probe => ({
   desc: probe.desc,
   expect: !probe.expect,
@@ -160,7 +171,11 @@ interface LadderStep {
 const LADDER: LadderStep[] = [
   {
     version: 1, // base guardrails
-    atTop: [fn("meridian_block_mutations"), fn("meridian_purge_expired"), pol("invoices")],
+    atTop: [
+      fn("meridian_block_mutations"),
+      fn("meridian_purge_expired"),
+      pol("invoices"),
+    ],
     afterRollback: [not(fn("meridian_block_mutations")), not(pol("invoices"))],
   },
   {
@@ -408,13 +423,38 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("clerk_advisory_briefs")],
     afterRollback: [not(clerkTenant("clerk_advisory_briefs"))],
   },
+  {
+    version: 42, // audit remediation concurrency and replay guardrails
+    atTop: [
+      index("settlement_events_external_reference_uq"),
+      index("outbox_events_inbound_dedupe_idx"),
+      index("clerk_cases_live_dedupe_uq"),
+      index("collection_accounts_one_active_per_client"),
+    ],
+    afterRollback: [
+      not(index("settlement_events_external_reference_uq")),
+      not(index("outbox_events_inbound_dedupe_idx")),
+      not(index("clerk_cases_live_dedupe_uq")),
+      not(index("collection_accounts_one_active_per_client")),
+    ],
+  },
+  {
+    version: 43, // payment provider reference uniqueness
+    atTop: [index("payment_intents_provider_ref_uq")],
+    afterRollback: [not(index("payment_intents_provider_ref_uq"))],
+  },
+  {
+    version: 44, // one pending password reset per account
+    atTop: [index("password_resets_one_pending_per_user_uq")],
+    afterRollback: [not(index("password_resets_one_pending_per_user_uq"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except
 // those a later migration supersedes.
-const FULLY_APPLIED = LADDER.filter((s) => s.supersededBy === undefined).flatMap(
-  (s) => s.atTop,
-);
+const FULLY_APPLIED = LADDER.filter(
+  (s) => s.supersededBy === undefined,
+).flatMap((s) => s.atTop);
 
 async function assertProbes(
   pool: pg.Pool,
@@ -473,7 +513,11 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
         step.version,
         `rollback should pop version ${step.version} next`,
       );
-      await assertProbes(pool, step.afterRollback, `after rolling back ${step.version}`);
+      await assertProbes(
+        pool,
+        step.afterRollback,
+        `after rolling back ${step.version}`,
+      );
       if (i > 0) {
         await assertProbes(
           pool,

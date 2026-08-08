@@ -3,6 +3,7 @@
 // owner's consent round trip, and the buyer TOTP enrolment lifecycle.
 import { totpStep, totpCodeAtStep } from "../totp.mjs";
 import { DEMO_PASSWORD, signIn, signOutFromApp } from "./shared.mjs";
+import { checkPageAccessibility } from "../accessibility.mjs";
 
 // ---------- public landing + portal ----------
 async function journeyPortalAuth(page, BASE, check) {
@@ -18,14 +19,36 @@ async function journeyPortalAuth(page, BASE, check) {
   );
 
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
+  await checkPageAccessibility(page, check, "landing");
   check(
     "landing page links to the login portal",
     await page.getByTestId("link-hero-login").isVisible(),
   );
+
+  const calculatorLink = page.locator('a[href="/penalty-calculator/"]').first();
+  check(
+    "landing page links to the penalty calculator",
+    await calculatorLink.isVisible(),
+  );
+  await calculatorLink.click();
+  await page.waitForURL(BASE + "/penalty-calculator/");
+  await checkPageAccessibility(page, check, "penalty calculator");
+  check(
+    "penalty calculator route serves its own application",
+    (await page.getByTestId("text-page-title").innerText()).includes(
+      "E-invoicing penalty estimator",
+    ),
+  );
+
+  await page.goto(BASE + "/", { waitUntil: "networkidle" });
   await page.getByTestId("link-hero-login").click();
   await page.waitForURL(BASE + "/login");
   await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
-  check("portal shows sign-in panel", await page.getByTestId("input-email").isVisible());
+  await checkPageAccessibility(page, check, "login");
+  check(
+    "portal shows sign-in panel",
+    await page.getByTestId("input-email").isVisible(),
+  );
 
   await page.getByTestId("input-email").fill("ops@meridianiq.example");
   await page.getByTestId("input-password").fill("wrong-password");
@@ -33,7 +56,9 @@ async function journeyPortalAuth(page, BASE, check) {
   await page.waitForSelector('[data-testid="text-login-error"]');
   check(
     "bad password shows uniform error",
-    (await page.getByTestId("text-login-error").innerText()).includes("Invalid email or password"),
+    (await page.getByTestId("text-login-error").innerText()).includes(
+      "Invalid email or password",
+    ),
   );
 
   // Login throttling (SEC-02): probe a throwaway identity via the API.
@@ -54,9 +79,12 @@ async function journeyPortalAuth(page, BASE, check) {
 async function journeyOperatorDesk(page, BASE, check) {
   await signIn(page, BASE, "button-demo-ops", "**/console/operator-queue");
   await page.waitForSelector('[data-testid="text-page-title"]');
+  await checkPageAccessibility(page, check, "operator queue");
   check(
     "operator lands on the work queue",
-    (await page.getByTestId("text-page-title").innerText()).includes("Operator work queue"),
+    (await page.getByTestId("text-page-title").innerText()).includes(
+      "Operator work queue",
+    ),
   );
   await page.waitForSelector("text=Client escalation", { timeout: 10000 });
   check("queue card carries client escalation context", true);
@@ -67,7 +95,9 @@ async function journeyOperatorDesk(page, BASE, check) {
 
   // Error catalogue renders with entries
   await page.getByTestId("nav-error-catalogue").click();
-  await page.waitForSelector('[data-testid="entry-MBS_INVALID_TIN"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="entry-MBS_INVALID_TIN"]', {
+    timeout: 10000,
+  });
   check("error catalogue lists entries", true);
 
   // Feature flag round trip
@@ -82,20 +112,28 @@ async function journeyOperatorDesk(page, BASE, check) {
   // Platform ops: rails + messages section render
   await page.getByTestId("nav-platform-ops").click();
   await page.waitForSelector('[data-testid="card-rails"]', { timeout: 10000 });
-  await page.waitForSelector('[data-testid="card-messages"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="card-messages"]', {
+    timeout: 10000,
+  });
   check("platform ops renders rails and message log", true);
 
   // Control centre activation evidence + audit evidence
   await page.getByTestId("nav-control-centre").click();
-  await page.waitForSelector('[data-testid="gate-time-to-stamp"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="gate-time-to-stamp"]', {
+    timeout: 10000,
+  });
   check("control centre activation evidence renders", true);
   await page.getByTestId("nav-audit-&-evidence").click();
-  await page.waitForSelector('[data-testid="card-chain-valid"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="card-chain-valid"]', {
+    timeout: 10000,
+  });
   check("audit chain verifies", true);
 
   // Party integrity workbench renders
   await page.getByTestId("nav-party-integrity").click();
-  await page.waitForSelector('[data-testid="stat-parties"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="stat-parties"]', {
+    timeout: 10000,
+  });
   check("party workbench renders", true);
 
   await signOutFromApp(page, BASE);
@@ -105,9 +143,12 @@ async function journeyOperatorDesk(page, BASE, check) {
 async function journeyFirmAdminAdvisory(page, BASE, check) {
   await signIn(page, BASE, "button-demo-demo.admin", "**/console/");
   await page.waitForSelector('[data-testid="text-page-title"]');
+  await checkPageAccessibility(page, check, "firm portfolio");
   check(
     "admin lands on portfolio",
-    (await page.getByTestId("text-page-title").innerText()).includes("Client portfolio"),
+    (await page.getByTestId("text-page-title").innerText()).includes(
+      "Client portfolio",
+    ),
   );
   await page.getByTestId("nav-advisory").click();
   await page.getByTestId("tab-vat-risk").click();
@@ -117,7 +158,9 @@ async function journeyFirmAdminAdvisory(page, BASE, check) {
       "invoice number,supplier tin,irn,csid,invoice amount,vat amount\nT-1,20000000-0002,IRN-X,CSID-X,100000,7500",
     );
   await page.getByTestId("button-analyze-vat").click();
-  await page.waitForSelector('[data-testid="stat-vat-at-risk"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="stat-vat-at-risk"]', {
+    timeout: 15000,
+  });
   check("VAT-risk analysis produces a report", true);
   await signOutFromApp(page, BASE);
 }
@@ -125,7 +168,9 @@ async function journeyFirmAdminAdvisory(page, BASE, check) {
 // ---------- auditor: read-only boundary ----------
 async function journeyAuditorReadOnly(page, BASE, check) {
   await signIn(page, BASE, "button-demo-audit", "**/console/audit");
-  await page.waitForSelector('[data-testid="card-chain-valid"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="card-chain-valid"]', {
+    timeout: 15000,
+  });
   await page.getByTestId("nav-operator-queue").first().click();
   await page.waitForSelector('[data-testid^="card-case-"]', { timeout: 10000 });
   check(
@@ -139,17 +184,24 @@ async function journeyAuditorReadOnly(page, BASE, check) {
 async function journeyOwnerConsent(page, BASE, check) {
   await signIn(page, BASE, "button-demo-owner", "**/app/**");
   await page.goto(BASE + "/app/consent", { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="consent-layer-1"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="consent-layer-1"]', {
+    timeout: 10000,
+  });
+  await checkPageAccessibility(page, check, "client consent");
   check(
     "consent page: layer 3 dormant",
-    (await page.locator('[data-testid="consent-layer-3"]').innerText()).includes(
-      "Not yet available",
-    ),
+    (
+      await page.locator('[data-testid="consent-layer-3"]').innerText()
+    ).includes("Not yet available"),
   );
   await page.getByTestId("button-grant-2").click();
-  await page.waitForSelector('[data-testid="button-revoke-2"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="button-revoke-2"]', {
+    timeout: 10000,
+  });
   await page.getByTestId("button-revoke-2").click();
-  await page.waitForSelector('[data-testid="button-grant-2"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="button-grant-2"]', {
+    timeout: 10000,
+  });
   check("consent layer 2 grant/revoke round-trips", true);
   await signOutFromApp(page, BASE);
 }
@@ -195,14 +247,14 @@ async function journeyTotp(page, BASE, check) {
   await page.waitForSelector('[data-testid="text-totp-secret"]', {
     timeout: 10000,
   });
-  const secret = (await page.getByTestId("text-totp-secret").innerText()).trim();
-  check(
-    "enrolment reveals a base32 secret",
-    /^[A-Z2-7]{16,}$/.test(secret),
-  );
+  const secret = (
+    await page.getByTestId("text-totp-secret").innerText()
+  ).trim();
+  check("enrolment reveals a base32 secret", /^[A-Z2-7]{16,}$/.test(secret));
   check(
     "eight single-use recovery codes are shown",
-    (await page.locator('[data-testid="list-recovery-codes"] li').count()) === 8,
+    (await page.locator('[data-testid="list-recovery-codes"] li').count()) ===
+      8,
   );
 
   // Activate with a live code computed in the harness from that secret.
@@ -213,7 +265,9 @@ async function journeyTotp(page, BASE, check) {
   });
   check(
     "live code activates two-factor; the panel survives the re-issued cookie",
-    (await page.getByTestId("text-recovery-remaining").innerText()).includes("8"),
+    (await page.getByTestId("text-recovery-remaining").innerText()).includes(
+      "8",
+    ),
   );
 
   // Activation bumped the session epoch and re-issued THIS session's cookie —
@@ -255,7 +309,9 @@ async function journeyTotp(page, BASE, check) {
   });
   await page.getByTestId("button-totp-disable-show").click();
   await page.getByTestId("input-totp-disable-password").fill(DEMO_PASSWORD);
-  await page.getByTestId("input-totp-disable-code").fill(await freshCode(secret));
+  await page
+    .getByTestId("input-totp-disable-code")
+    .fill(await freshCode(secret));
   await page.getByTestId("button-totp-disable").click();
   await page.waitForSelector('[data-testid="button-totp-enable"]', {
     timeout: 10000,
@@ -275,4 +331,11 @@ async function journeyTotp(page, BASE, check) {
   await signOutFromApp(page, BASE);
 }
 
-export { journeyPortalAuth, journeyOperatorDesk, journeyFirmAdminAdvisory, journeyAuditorReadOnly, journeyOwnerConsent, journeyTotp };
+export {
+  journeyPortalAuth,
+  journeyOperatorDesk,
+  journeyFirmAdminAdvisory,
+  journeyAuditorReadOnly,
+  journeyOwnerConsent,
+  journeyTotp,
+};

@@ -5,13 +5,18 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, pool, usersTable, membershipsTable } from "@workspace/db";
 import authRouter from "./auth.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
-import { hashPassword, verifySessionToken, issueSessionToken } from "../modules/auth/session.ts";
+import {
+  hashPassword,
+  verifySessionToken,
+  issueSessionToken,
+} from "../modules/auth/session.ts";
 import {
   totpCode,
   totpStep,
   hashRecoveryCode,
   generateTotpSecret,
   generateRecoveryCodes,
+  issueMfaToken,
   TOTP_STEP_SECONDS,
 } from "../modules/auth/totp.ts";
 import {
@@ -79,7 +84,10 @@ const userH = {
   role: "firm_staff" as const,
 };
 
-function principalFor(user: { id: string; role: Principal["role"] }): Principal {
+function principalFor(user: {
+  id: string;
+  role: Principal["role"];
+}): Principal {
   return {
     userId: user.id,
     role: user.role,
@@ -235,7 +243,10 @@ test("activate demands a valid current code, then bumps the epoch (revoking old 
   const body = (await good.json()) as Record<string, unknown>;
   assert.equal(body.enabled, true);
   assert.equal(body.recoveryCodesRemaining, 8);
-  assert.ok(sessionCookie(good), "caller's cookie re-issued under the new epoch");
+  assert.ok(
+    sessionCookie(good),
+    "caller's cookie re-issued under the new epoch",
+  );
 
   const [row] = await getDb()
     .select({
@@ -248,12 +259,19 @@ test("activate demands a valid current code, then bumps the epoch (revoking old 
     .limit(1);
   assert.ok(row.totpEnabledAt, "enabledAt stamped");
   assert.equal(row.sessionEpoch, 1, "epoch bumped: other sessions revoked");
-  assert.equal(typeof row.totpLastUsedStep, "number", "activation code is spent");
+  assert.equal(
+    typeof row.totpLastUsedStep,
+    "number",
+    "activation code is spent",
+  );
 
   // The pre-activation token now predates the user's epoch — exactly the
   // comparison principalFromSessionToken makes to reject it.
   const verified = await verifySessionToken(preToken);
-  assert.ok(verified && verified.epoch < row.sessionEpoch, "old token is stale");
+  assert.ok(
+    verified && verified.epoch < row.sessionEpoch,
+    "old token is stale",
+  );
 });
 
 test("setup on an already-enabled account is a 409", async () => {
@@ -272,7 +290,11 @@ test("enrolled login returns mfaRequired + mfaToken and NO session (cookie or be
     { "x-meridian-client": "mobile" },
   );
   assert.equal(res.status, 200);
-  assert.equal(sessionCookie(res), null, "no session cookie before the second factor");
+  assert.equal(
+    sessionCookie(res),
+    null,
+    "no session cookie before the second factor",
+  );
   const body = (await res.json()) as Record<string, unknown>;
   assert.equal(body.mfaRequired, true);
   assert.equal(typeof body.mfaToken, "string");
@@ -285,7 +307,8 @@ test("challenge: activation code replay refused; next-step code earns the sessio
   const enrolment = (globalThis as Record<string, unknown>).__totpA as {
     secret: string;
   };
-  const mfaToken = (globalThis as Record<string, unknown>).__mfaTokenA as string;
+  const mfaToken = (globalThis as Record<string, unknown>)
+    .__mfaTokenA as string;
   const base = await listen(appFor(principalFor(userA), authRouter));
 
   // The code spent at activation cannot be replayed within its window (and
@@ -309,7 +332,11 @@ test("challenge: activation code replay refused; next-step code earns the sessio
   const body = (await ok.json()) as Record<string, unknown>;
   assert.equal(body.userId, userA.id);
   assert.equal(body.role, userA.role);
-  assert.equal(typeof body.token, "string", "mobile client gets its bearer token here");
+  assert.equal(
+    typeof body.token,
+    "string",
+    "mobile client gets its bearer token here",
+  );
   assert.ok(!body.mfaRequired);
 
   // Same code again: single-use within its window.
@@ -324,7 +351,8 @@ test("challenge: a recovery code works exactly once and decrements the pool", as
   const enrolment = (globalThis as Record<string, unknown>).__totpA as {
     recoveryCodes: string[];
   };
-  const mfaToken = (globalThis as Record<string, unknown>).__mfaTokenA as string;
+  const mfaToken = (globalThis as Record<string, unknown>)
+    .__mfaTokenA as string;
   const base = await listen(appFor(principalFor(userA), authRouter));
 
   const recovery = enrolment.recoveryCodes[0];
@@ -377,6 +405,27 @@ test("challenge refuses garbage and non-mfa tokens uniformly", async () => {
     code: "123456",
   });
   assert.equal(confused.status, 401);
+});
+
+test("challenge requires an exact session epoch, including rejecting a future epoch", async () => {
+  const secret = generateTotpSecret();
+  const [user] = await getDb()
+    .update(usersTable)
+    .set({
+      totpSecret: secret,
+      totpEnabledAt: new Date(),
+      totpRecoveryCodes: generateRecoveryCodes().hashes,
+    })
+    .where(eq(usersTable.id, userC.id))
+    .returning({ sessionEpoch: usersTable.sessionEpoch });
+  assert.ok(user);
+  const futureToken = await issueMfaToken(userC.id, user.sessionEpoch + 1);
+  const base = await listen(appFor(principalFor(userC), authRouter));
+  const response = await postJson(base, "/auth/totp/challenge", {
+    mfaToken: futureToken,
+    code: totpCode(secret, Date.now()),
+  });
+  assert.equal(response.status, 401);
 });
 
 test("wrong codes 401 then throttle to 429 after five failures — even for a valid code", async () => {
@@ -566,7 +615,11 @@ test("concurrent redemption of the same TOTP code yields exactly one session (CA
     postJson(base, "/auth/totp/challenge", { mfaToken, code }),
   ]);
   const statuses = [r1.status, r2.status].sort((a, b) => a - b);
-  assert.deepEqual(statuses, [200, 401], "exactly one of the pair earns the session");
+  assert.deepEqual(
+    statuses,
+    [200, 401],
+    "exactly one of the pair earns the session",
+  );
   const winner = r1.status === 200 ? r1 : r2;
   assert.ok(sessionCookie(winner), "the single winner gets the cookie");
 
@@ -575,7 +628,11 @@ test("concurrent redemption of the same TOTP code yields exactly one session (CA
     .from(usersTable)
     .where(eq(usersTable.id, userE.id))
     .limit(1);
-  assert.equal(row.totpLastUsedStep, totpStep(now), "the code's step is pinned exactly once");
+  assert.equal(
+    row.totpLastUsedStep,
+    totpStep(now),
+    "the code's step is pinned exactly once",
+  );
 
   // The redemption tail replayed with the SAME step: the CAS WHERE re-asserts
   // freshness at write time, so even a caller whose earlier read was stale
@@ -596,7 +653,10 @@ test("concurrent redemption of the same TOTP code yields exactly one session (CA
   assert.equal(replayedCas.length, 0, "same-step CAS claims zero rows");
 
   // And over HTTP the replay stays the uniform 401.
-  const again = await postJson(base, "/auth/totp/challenge", { mfaToken, code });
+  const again = await postJson(base, "/auth/totp/challenge", {
+    mfaToken,
+    code,
+  });
   assert.equal(again.status, 401);
 });
 
@@ -625,7 +685,11 @@ test("concurrent redemption of the same recovery code burns it exactly once", as
     postJson(base, "/auth/totp/challenge", { mfaToken, code: recovery }),
   ]);
   const statuses = [r1.status, r2.status].sort((a, b) => a - b);
-  assert.deepEqual(statuses, [200, 401], "a recovery code redeems once even under a race");
+  assert.deepEqual(
+    statuses,
+    [200, 401],
+    "a recovery code redeems once even under a race",
+  );
 
   const [row] = await getDb()
     .select({ totpRecoveryCodes: usersTable.totpRecoveryCodes })
@@ -634,7 +698,11 @@ test("concurrent redemption of the same recovery code burns it exactly once", as
     .limit(1);
   // The atomic burn (containment check + removal in ONE statement) fires
   // once: 8 → 7, never 6, and only the redeemed hash is gone.
-  assert.deepEqual(row.totpRecoveryCodes, hashes.slice(1), "decremented exactly once");
+  assert.deepEqual(
+    row.totpRecoveryCodes,
+    hashes.slice(1),
+    "decremented exactly once",
+  );
 
   const again = await postJson(base, "/auth/totp/challenge", {
     mfaToken,

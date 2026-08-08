@@ -9,6 +9,7 @@ import type {
   MemoryEmbedder,
 } from "./gateway";
 import { createGateway, recordExternalCall } from "./gateway";
+import { acquireFirmClerkBudgetPermit } from "./budget";
 
 // Production provider: OpenAI via the Replit AI integrations proxy. Kept in
 // its own module (and loaded lazily) so importing the gateway in tests never
@@ -33,9 +34,7 @@ export const CLERK_MODEL = process.env.CLERK_MODEL ?? "gpt-5.4";
 // (eval-run rows, the extraction blob's `model`, triage proposals, NL draft
 // results). Under tiering those labels can be stale; the inference ledger
 // records the model that actually served each call and is the authority.
-export function parseModelTiers(
-  raw: string | undefined,
-): Map<string, string> {
+export function parseModelTiers(raw: string | undefined): Map<string, string> {
   const tiers = new Map<string, string>();
   for (const entry of (raw ?? "").split(",")) {
     const [purpose, model] = entry.split("=").map((s) => s.trim());
@@ -88,9 +87,7 @@ let cached: ClerkGateway | null = null;
 // gateway: importing the integration only when a call is actually made keeps
 // the AI env vars out of every test that injects a fake gateway.
 async function loadOpenAI() {
-  const { openai } = await import(
-    "@workspace/integrations-openai-ai-server"
-  );
+  const { openai } = await import("@workspace/integrations-openai-ai-server");
   return openai;
 }
 type OpenAIClient = Awaited<ReturnType<typeof loadOpenAI>>;
@@ -261,36 +258,61 @@ export async function transcribeAndLedger(
   transcriber: VoiceTranscriber,
 ): Promise<string> {
   const audioB64 = buf.toString("base64");
-  const startedAt = Date.now();
-  let transcript: string;
-  try {
-    transcript = (await transcriber(buf)).trim();
-  } catch (err) {
-    await recordExternalCall({
-      firmId,
-      purpose: "transcribe_voice",
-      model: TRANSCRIBE_MODEL,
-      promptVersion: "transcribe-v1",
-      inputForHash: audioB64,
-      outcome: "error",
-      errorText: err instanceof Error ? err.message : String(err),
-      latencyMs: Date.now() - startedAt,
-    });
+  const promptTokens = Math.max(1, Math.ceil(buf.length / 32));
+  const permit = firmId
+    ? await acquireFirmClerkBudgetPermit(firmId, promptTokens + 4_096)
+    : null;
+  if (firmId && !permit) {
     throw new DomainError(
-      "VOICE_UNREADABLE",
-      "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
-      422,
+      "CLERK_BUDGET_EXHAUSTED",
+      "Your firm has used its Clerk allowance for this month. Manual workflows are unaffected; contact MeridianIQ to raise the allowance.",
+      429,
     );
   }
-  await recordExternalCall({
-    firmId,
-    purpose: "transcribe_voice",
-    model: TRANSCRIBE_MODEL,
-    promptVersion: "transcribe-v1",
-    inputForHash: audioB64,
-    outcome: "ok",
-    outputChars: transcript.length,
-    latencyMs: Date.now() - startedAt,
-  });
-  return transcript;
+  const startedAt = Date.now();
+  try {
+    let transcript: string;
+    try {
+      transcript = (await transcriber(buf)).trim();
+    } catch (err) {
+      await recordExternalCall(
+        {
+          firmId,
+          purpose: "transcribe_voice",
+          model: TRANSCRIBE_MODEL,
+          promptVersion: "transcribe-v1",
+          inputForHash: audioB64,
+          outcome: "error",
+          errorText: err instanceof Error ? err.message : String(err),
+          latencyMs: Date.now() - startedAt,
+          promptTokens,
+          completionTokens: 0,
+        },
+        permit?.ledgerDb,
+      );
+      throw new DomainError(
+        "VOICE_UNREADABLE",
+        "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
+        422,
+      );
+    }
+    await recordExternalCall(
+      {
+        firmId,
+        purpose: "transcribe_voice",
+        model: TRANSCRIBE_MODEL,
+        promptVersion: "transcribe-v1",
+        inputForHash: audioB64,
+        outcome: "ok",
+        outputChars: transcript.length,
+        latencyMs: Date.now() - startedAt,
+        promptTokens,
+        completionTokens: Math.max(1, Math.ceil(transcript.length / 4)),
+      },
+      permit?.ledgerDb,
+    );
+    return transcript;
+  } finally {
+    await permit?.release();
+  }
 }
