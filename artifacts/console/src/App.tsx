@@ -26,7 +26,7 @@ import { Integrations } from "@/pages/integrations";
 import { ApiAccess } from "@/pages/api-access";
 import { Catalogue } from "@/pages/catalogue";
 import { AuditEvidence } from "@/pages/audit-evidence";
-import { GateMetrics } from "@/pages/gate-metrics";
+import { ControlCentre } from "@/pages/control-centre";
 import { Parties } from "@/pages/parties";
 import { Invitations } from "@/pages/invitations";
 import { ClerkClaims } from "@/pages/clerk-claims";
@@ -62,7 +62,7 @@ function Home() {
   // instead of a blank pane.
   if (!me) return <PortfolioSkeleton />;
   if (me.role === "operator") {
-    return <Redirect to="/operator-queue" replace />;
+    return <Redirect to="/control-centre/activation" replace />;
   }
   if (me.role === "auditor") {
     return <Redirect to="/audit" replace />;
@@ -217,10 +217,41 @@ function ConsoleRoutes() {
             <PlatformOps />
           </CapabilityGate>
         </Route>
-        <Route path="/gate-metrics">
+        <Route path="/control-centre/activation">
           <CapabilityGate capability="operator.queue.read">
-            <GateMetrics />
+            <ControlCentre section="activation" />
           </CapabilityGate>
+        </Route>
+        <Route path="/control-centre/buyers">
+          <CapabilityGate capability="operator.queue.read">
+            <ControlCentre section="buyers" />
+          </CapabilityGate>
+        </Route>
+        <Route path="/control-centre/cases">
+          <CapabilityGate capability="operator.queue.read">
+            <ControlCentre section="cases" />
+          </CapabilityGate>
+        </Route>
+        <Route path="/control-centre/reliability">
+          <CapabilityGate capability="operator.queue.read">
+            <ControlCentre section="reliability" />
+          </CapabilityGate>
+        </Route>
+        <Route path="/control-centre/evidence">
+          <CapabilityGate capability="operator.queue.read">
+            <ControlCentre section="evidence" />
+          </CapabilityGate>
+        </Route>
+        <Route path="/control-centre/clerk">
+          <CapabilityGate capability="operator.queue.read">
+            <ControlCentre section="clerk" />
+          </CapabilityGate>
+        </Route>
+        <Route path="/control-centre">
+          <Redirect to="/control-centre/activation" replace />
+        </Route>
+        <Route path="/gate-metrics">
+          <Redirect to="/control-centre/activation" replace />
         </Route>
         <Route path="/audit">
           <CapabilityGate capability="audit.read">

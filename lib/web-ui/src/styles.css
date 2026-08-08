@@ -173,6 +173,7 @@
 
 .mi-segmented {
   display: inline-flex;
+  flex-shrink: 0;
   max-width: 100%;
   gap: 0.25rem;
   overflow-x: auto;
@@ -235,6 +236,7 @@
 
 .mi-work-queue__header {
   display: flex;
+  flex-wrap: wrap;
   min-height: 4.25rem;
   align-items: center;
   justify-content: space-between;

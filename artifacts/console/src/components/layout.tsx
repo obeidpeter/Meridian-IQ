@@ -203,8 +203,8 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         capability: "operator.queue.read",
       },
       {
-        href: "/gate-metrics",
-        label: "Gate metrics",
+        href: "/control-centre",
+        label: "Control centre",
         icon: Gauge,
         capability: "operator.queue.read",
       },

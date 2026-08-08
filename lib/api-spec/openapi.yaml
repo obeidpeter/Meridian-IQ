@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.77.0
+  version: 0.78.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1868,7 +1868,7 @@ paths:
     get:
       operationId: getGateMetrics
       tags: [operator]
-      summary: Live measurements of the roadmap release-gate metrics
+      summary: Live evidence and activation measurements for roadmap release gates
       responses:
         "200":
           description: Gate metrics computed from the spine
@@ -1876,6 +1876,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GateMetrics"
+  /operator/buyer-pilots:
+    get:
+      operationId: listBuyerPilots
+      tags: [operator]
+      summary: Anchor-buyer pilot readiness and participation evidence
+      responses:
+        "200":
+          description: Buyer Rails pilot workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyerPilotWorkspace"
+  /operator/compliance-operations:
+    get:
+      operationId: getComplianceOperations
+      tags: [operator]
+      summary: Cross-domain compliance exceptions ordered by operational SLA
+      responses:
+        "200":
+          description: Compliance case and exception workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceOperationsWorkspace"
+  /operator/integration-reliability:
+    get:
+      operationId: getIntegrationReliability
+      tags: [operator]
+      summary: Connector reliability and data-quality signals across tenants
+      responses:
+        "200":
+          description: Integration reliability workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationReliabilityWorkspace"
+  /operator/evidence-vault:
+    get:
+      operationId: getEvidenceVault
+      tags: [operator]
+      summary: Indexed compliance evidence and enterprise trust controls
+      responses:
+        "200":
+          description: Evidence vault workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceVaultWorkspace"
+  /operator/clerk-assurance:
+    get:
+      operationId: getClerkAssurance
+      tags: [operator]
+      summary: Clerk operational readiness, guardrails and human-review posture
+      responses:
+        "200":
+          description: Clerk assurance workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkAssuranceWorkspace"
   /operator/dead-letters:
     get:
       operationId: listDeadLetters
@@ -10454,20 +10514,39 @@ components:
         [
           subscribedFirms,
           activeClients,
+          namedProspects,
+          onboardingProspects,
+          convertedProspects,
+          prospectConversionRate,
           stampedInvoices,
           medianHoursToStamp,
           failedInvoicesTotal,
           failureSelfResolutionRate,
           creditObservableCount,
           confirmationsLast30d,
+          confirmationRequests30d,
+          confirmationResponses30d,
+          buyerResponseRate30d,
+          anchorBuyers,
           reconciliationAcceptRate,
           openEscalations,
+          featureFlagsEnabled,
+          featureFlagsTotal,
+          releaseReadiness,
         ]
       properties:
         subscribedFirms:
           type: integer
         activeClients:
           type: integer
+        namedProspects:
+          type: integer
+        onboardingProspects:
+          type: integer
+        convertedProspects:
+          type: integer
+        prospectConversionRate:
+          type: ["number", "null"]
         stampedInvoices:
           type: integer
         medianHoursToStamp:
@@ -10480,10 +10559,482 @@ components:
           type: integer
         confirmationsLast30d:
           type: integer
+        confirmationRequests30d:
+          type: integer
+        confirmationResponses30d:
+          type: integer
+        buyerResponseRate30d:
+          type: ["number", "null"]
+        anchorBuyers:
+          type: integer
         reconciliationAcceptRate:
           type: ["number", "null"]
         openEscalations:
           type: integer
+        featureFlagsEnabled:
+          type: integer
+        featureFlagsTotal:
+          type: integer
+        releaseReadiness:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReleaseReadiness"
+
+    ReleaseReadiness:
+      type: object
+      required: [releaseTag, enabledFlags, totalFlags, status]
+      properties:
+        releaseTag:
+          type: string
+        enabledFlags:
+          type: integer
+        totalFlags:
+          type: integer
+        status:
+          type: string
+          enum: [ready, partial, dark]
+
+    BuyerPilotWorkspace:
+      type: object
+      required:
+        [
+          generatedAt,
+          anchorBuyers,
+          activeBuyers30d,
+          pendingConfirmations,
+          confirmationResponses30d,
+          buyerResponseRate30d,
+          medianResponseHours,
+          pilots,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        anchorBuyers:
+          type: integer
+        activeBuyers30d:
+          type: integer
+        pendingConfirmations:
+          type: integer
+        confirmationResponses30d:
+          type: integer
+        buyerResponseRate30d:
+          type: ["number", "null"]
+        medianResponseHours:
+          type: ["number", "null"]
+        pilots:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuyerPilot"
+
+    BuyerPilot:
+      type: object
+      required:
+        [
+          buyerPartyId,
+          buyerName,
+          tinValidated,
+          supplierCount,
+          invoiceCount,
+          stampedCount,
+          pendingConfirmations,
+          responseCount,
+          confirmedCount,
+          responseRate,
+          paidSignals,
+          medianResponseHours,
+          lastActivityAt,
+          readinessScore,
+          stage,
+          blockers,
+        ]
+      properties:
+        buyerPartyId:
+          type: string
+        buyerName:
+          type: string
+        tinValidated:
+          type: boolean
+        supplierCount:
+          type: integer
+        invoiceCount:
+          type: integer
+        stampedCount:
+          type: integer
+        pendingConfirmations:
+          type: integer
+        responseCount:
+          type: integer
+        confirmedCount:
+          type: integer
+        responseRate:
+          type: ["number", "null"]
+        paidSignals:
+          type: integer
+        medianResponseHours:
+          type: ["number", "null"]
+        lastActivityAt:
+          type: ["string", "null"]
+          format: date-time
+        readinessScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        stage:
+          type: string
+          enum: [discovery, invited, live, proving, scale_ready]
+        blockers:
+          type: array
+          items:
+            type: string
+
+    ComplianceOperationsWorkspace:
+      type: object
+      required:
+        [
+          generatedAt,
+          openItems,
+          overdueItems,
+          dueSoonItems,
+          highPriorityItems,
+          unassignedCases,
+          items,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        openItems:
+          type: integer
+        overdueItems:
+          type: integer
+        dueSoonItems:
+          type: integer
+        highPriorityItems:
+          type: integer
+        unassignedCases:
+          type: integer
+        items:
+          type: array
+          maxItems: 80
+          items:
+            $ref: "#/components/schemas/ComplianceOperationItem"
+
+    ComplianceOperationItem:
+      type: object
+      required:
+        [
+          key,
+          entityId,
+          kind,
+          title,
+          firmName,
+          clientName,
+          priority,
+          status,
+          dueAt,
+          ageHours,
+          slaState,
+          detail,
+          actionHref,
+        ]
+      properties:
+        key:
+          type: string
+        entityId:
+          type: string
+        kind:
+          type: string
+          enum: [operator_case, filing, obligation, buyer_confirmation]
+        title:
+          type: string
+        firmName:
+          type: ["string", "null"]
+        clientName:
+          type: ["string", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        status:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        ageHours:
+          type: number
+        slaState:
+          type: string
+          enum: [healthy, due_soon, overdue]
+        detail:
+          type: string
+        actionHref:
+          type: string
+
+    IntegrationReliabilityWorkspace:
+      type: object
+      required:
+        [
+          generatedAt,
+          totalConnections,
+          healthyConnections,
+          attentionConnections,
+          failedRuns24h,
+          invalidRows30d,
+          deadLetters,
+          openRails,
+          connections,
+          qualitySignals,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        totalConnections:
+          type: integer
+        healthyConnections:
+          type: integer
+        attentionConnections:
+          type: integer
+        failedRuns24h:
+          type: integer
+        invalidRows30d:
+          type: integer
+        deadLetters:
+          type: integer
+        openRails:
+          type: integer
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationConnectionHealth"
+        qualitySignals:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataQualitySignal"
+
+    IntegrationConnectionHealth:
+      type: object
+      required:
+        [
+          id,
+          type,
+          connectorKey,
+          firmName,
+          clientName,
+          connectionStatus,
+          operationalState,
+          lastSyncAt,
+          latestRunStatus,
+          recordsRead,
+          recordsWritten,
+          errorCount,
+          issue,
+        ]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [erp, bank_feed]
+        connectorKey:
+          type: string
+        firmName:
+          type: string
+        clientName:
+          type: string
+        connectionStatus:
+          type: string
+        operationalState:
+          type: string
+          enum: [healthy, stale, incident]
+        lastSyncAt:
+          type: ["string", "null"]
+          format: date-time
+        latestRunStatus:
+          type: ["string", "null"]
+        recordsRead:
+          type: integer
+        recordsWritten:
+          type: integer
+        errorCount:
+          type: integer
+        issue:
+          type: ["string", "null"]
+
+    DataQualitySignal:
+      type: object
+      required: [key, label, count, severity, detail, actionHref]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        detail:
+          type: string
+        actionHref:
+          type: string
+
+    EvidenceVaultWorkspace:
+      type: object
+      required:
+        [
+          generatedAt,
+          totalArtifacts,
+          artifactsLast30d,
+          auditChainValid,
+          auditEventCount,
+          retentionCoverageRate,
+          legalHolds,
+          items,
+          trustControls,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        totalArtifacts:
+          type: integer
+        artifactsLast30d:
+          type: integer
+        auditChainValid:
+          type: boolean
+        auditEventCount:
+          type: integer
+        retentionCoverageRate:
+          type: ["number", "null"]
+        legalHolds:
+          type: integer
+        items:
+          type: array
+          maxItems: 80
+          items:
+            $ref: "#/components/schemas/EvidenceVaultItem"
+        trustControls:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustControl"
+
+    EvidenceVaultItem:
+      type: object
+      required:
+        [
+          key,
+          entityId,
+          kind,
+          title,
+          firmName,
+          clientName,
+          reference,
+          recordedAt,
+          integrity,
+          actionHref,
+        ]
+      properties:
+        key:
+          type: string
+        entityId:
+          type: string
+        kind:
+          type: string
+          enum: [invoice_stamp, filing_acknowledgement, obligation_resolution, settlement_signal]
+        title:
+          type: string
+        firmName:
+          type: string
+        clientName:
+          type: string
+        reference:
+          type: ["string", "null"]
+        recordedAt:
+          type: string
+          format: date-time
+        integrity:
+          type: string
+          enum: [tamper_evident, append_only, recorded]
+        actionHref:
+          type: string
+
+    TrustControl:
+      type: object
+      required: [key, label, status, detail]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+          enum: [healthy, watch, critical]
+        detail:
+          type: string
+
+    ClerkAssuranceWorkspace:
+      type: object
+      required:
+        [
+          generatedAt,
+          calls30d,
+          pendingReview,
+          decidedCases30d,
+          invalidRate30d,
+          errorRate30d,
+          latencyP95Ms,
+          tokens30d,
+          latestEvalAccuracy,
+          latestInjectionResistance,
+          groundingViolations30d,
+          guardrails,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        calls30d:
+          type: integer
+        pendingReview:
+          type: integer
+        decidedCases30d:
+          type: integer
+        invalidRate30d:
+          type: number
+        errorRate30d:
+          type: number
+        latencyP95Ms:
+          type: ["integer", "null"]
+        tokens30d:
+          type: integer
+        latestEvalAccuracy:
+          type: ["number", "null"]
+        latestInjectionResistance:
+          type: ["number", "null"]
+        groundingViolations30d:
+          type: integer
+        guardrails:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkGuardrail"
+
+    ClerkGuardrail:
+      type: object
+      required: [key, label, status, detail, actionHref]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+          enum: [healthy, watch, critical]
+        detail:
+          type: string
+        actionHref:
+          type: string
 
     # ---- R2 schemas: statements & reconciliation (INT-05, SME-07) ----
     BankStatement:

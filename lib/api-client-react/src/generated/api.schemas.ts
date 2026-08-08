@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.77.0
+ * OpenAPI spec version: 0.78.0
  */
 export interface HealthStatus {
   status: string;
@@ -2806,9 +2806,30 @@ export interface UnmappedErrorCode {
   lastSeenAt: string;
 }
 
+export type ReleaseReadinessStatus = typeof ReleaseReadinessStatus[keyof typeof ReleaseReadinessStatus];
+
+
+export const ReleaseReadinessStatus = {
+  ready: 'ready',
+  partial: 'partial',
+  dark: 'dark',
+} as const;
+
+export interface ReleaseReadiness {
+  releaseTag: string;
+  enabledFlags: number;
+  totalFlags: number;
+  status: ReleaseReadinessStatus;
+}
+
 export interface GateMetrics {
   subscribedFirms: number;
   activeClients: number;
+  namedProspects: number;
+  onboardingProspects: number;
+  convertedProspects: number;
+  /** @nullable */
+  prospectConversionRate: number | null;
   stampedInvoices: number;
   /** @nullable */
   medianHoursToStamp: number | null;
@@ -2817,9 +2838,289 @@ export interface GateMetrics {
   failureSelfResolutionRate: number | null;
   creditObservableCount: number;
   confirmationsLast30d: number;
+  confirmationRequests30d: number;
+  confirmationResponses30d: number;
+  /** @nullable */
+  buyerResponseRate30d: number | null;
+  anchorBuyers: number;
   /** @nullable */
   reconciliationAcceptRate: number | null;
   openEscalations: number;
+  featureFlagsEnabled: number;
+  featureFlagsTotal: number;
+  releaseReadiness: ReleaseReadiness[];
+}
+
+export type BuyerPilotStage = typeof BuyerPilotStage[keyof typeof BuyerPilotStage];
+
+
+export const BuyerPilotStage = {
+  discovery: 'discovery',
+  invited: 'invited',
+  live: 'live',
+  proving: 'proving',
+  scale_ready: 'scale_ready',
+} as const;
+
+export interface BuyerPilot {
+  buyerPartyId: string;
+  buyerName: string;
+  tinValidated: boolean;
+  supplierCount: number;
+  invoiceCount: number;
+  stampedCount: number;
+  pendingConfirmations: number;
+  responseCount: number;
+  confirmedCount: number;
+  /** @nullable */
+  responseRate: number | null;
+  paidSignals: number;
+  /** @nullable */
+  medianResponseHours: number | null;
+  /** @nullable */
+  lastActivityAt: string | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  readinessScore: number;
+  stage: BuyerPilotStage;
+  blockers: string[];
+}
+
+export interface BuyerPilotWorkspace {
+  generatedAt: string;
+  anchorBuyers: number;
+  activeBuyers30d: number;
+  pendingConfirmations: number;
+  confirmationResponses30d: number;
+  /** @nullable */
+  buyerResponseRate30d: number | null;
+  /** @nullable */
+  medianResponseHours: number | null;
+  pilots: BuyerPilot[];
+}
+
+export type ComplianceOperationItemKind = typeof ComplianceOperationItemKind[keyof typeof ComplianceOperationItemKind];
+
+
+export const ComplianceOperationItemKind = {
+  operator_case: 'operator_case',
+  filing: 'filing',
+  obligation: 'obligation',
+  buyer_confirmation: 'buyer_confirmation',
+} as const;
+
+export type ComplianceOperationItemPriority = typeof ComplianceOperationItemPriority[keyof typeof ComplianceOperationItemPriority];
+
+
+export const ComplianceOperationItemPriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type ComplianceOperationItemSlaState = typeof ComplianceOperationItemSlaState[keyof typeof ComplianceOperationItemSlaState];
+
+
+export const ComplianceOperationItemSlaState = {
+  healthy: 'healthy',
+  due_soon: 'due_soon',
+  overdue: 'overdue',
+} as const;
+
+export interface ComplianceOperationItem {
+  key: string;
+  entityId: string;
+  kind: ComplianceOperationItemKind;
+  title: string;
+  /** @nullable */
+  firmName: string | null;
+  /** @nullable */
+  clientName: string | null;
+  priority: ComplianceOperationItemPriority;
+  status: string;
+  dueAt: string;
+  ageHours: number;
+  slaState: ComplianceOperationItemSlaState;
+  detail: string;
+  actionHref: string;
+}
+
+export interface ComplianceOperationsWorkspace {
+  generatedAt: string;
+  openItems: number;
+  overdueItems: number;
+  dueSoonItems: number;
+  highPriorityItems: number;
+  unassignedCases: number;
+  /** @maxItems 80 */
+  items: ComplianceOperationItem[];
+}
+
+export type IntegrationConnectionHealthType = typeof IntegrationConnectionHealthType[keyof typeof IntegrationConnectionHealthType];
+
+
+export const IntegrationConnectionHealthType = {
+  erp: 'erp',
+  bank_feed: 'bank_feed',
+} as const;
+
+export type IntegrationConnectionHealthOperationalState = typeof IntegrationConnectionHealthOperationalState[keyof typeof IntegrationConnectionHealthOperationalState];
+
+
+export const IntegrationConnectionHealthOperationalState = {
+  healthy: 'healthy',
+  stale: 'stale',
+  incident: 'incident',
+} as const;
+
+export interface IntegrationConnectionHealth {
+  id: string;
+  type: IntegrationConnectionHealthType;
+  connectorKey: string;
+  firmName: string;
+  clientName: string;
+  connectionStatus: string;
+  operationalState: IntegrationConnectionHealthOperationalState;
+  /** @nullable */
+  lastSyncAt: string | null;
+  /** @nullable */
+  latestRunStatus: string | null;
+  recordsRead: number;
+  recordsWritten: number;
+  errorCount: number;
+  /** @nullable */
+  issue: string | null;
+}
+
+export type DataQualitySignalSeverity = typeof DataQualitySignalSeverity[keyof typeof DataQualitySignalSeverity];
+
+
+export const DataQualitySignalSeverity = {
+  info: 'info',
+  warning: 'warning',
+  critical: 'critical',
+} as const;
+
+export interface DataQualitySignal {
+  key: string;
+  label: string;
+  count: number;
+  severity: DataQualitySignalSeverity;
+  detail: string;
+  actionHref: string;
+}
+
+export interface IntegrationReliabilityWorkspace {
+  generatedAt: string;
+  totalConnections: number;
+  healthyConnections: number;
+  attentionConnections: number;
+  failedRuns24h: number;
+  invalidRows30d: number;
+  deadLetters: number;
+  openRails: number;
+  connections: IntegrationConnectionHealth[];
+  qualitySignals: DataQualitySignal[];
+}
+
+export type EvidenceVaultItemKind = typeof EvidenceVaultItemKind[keyof typeof EvidenceVaultItemKind];
+
+
+export const EvidenceVaultItemKind = {
+  invoice_stamp: 'invoice_stamp',
+  filing_acknowledgement: 'filing_acknowledgement',
+  obligation_resolution: 'obligation_resolution',
+  settlement_signal: 'settlement_signal',
+} as const;
+
+export type EvidenceVaultItemIntegrity = typeof EvidenceVaultItemIntegrity[keyof typeof EvidenceVaultItemIntegrity];
+
+
+export const EvidenceVaultItemIntegrity = {
+  tamper_evident: 'tamper_evident',
+  append_only: 'append_only',
+  recorded: 'recorded',
+} as const;
+
+export interface EvidenceVaultItem {
+  key: string;
+  entityId: string;
+  kind: EvidenceVaultItemKind;
+  title: string;
+  firmName: string;
+  clientName: string;
+  /** @nullable */
+  reference: string | null;
+  recordedAt: string;
+  integrity: EvidenceVaultItemIntegrity;
+  actionHref: string;
+}
+
+export type TrustControlStatus = typeof TrustControlStatus[keyof typeof TrustControlStatus];
+
+
+export const TrustControlStatus = {
+  healthy: 'healthy',
+  watch: 'watch',
+  critical: 'critical',
+} as const;
+
+export interface TrustControl {
+  key: string;
+  label: string;
+  status: TrustControlStatus;
+  detail: string;
+}
+
+export interface EvidenceVaultWorkspace {
+  generatedAt: string;
+  totalArtifacts: number;
+  artifactsLast30d: number;
+  auditChainValid: boolean;
+  auditEventCount: number;
+  /** @nullable */
+  retentionCoverageRate: number | null;
+  legalHolds: number;
+  /** @maxItems 80 */
+  items: EvidenceVaultItem[];
+  trustControls: TrustControl[];
+}
+
+export type ClerkGuardrailStatus = typeof ClerkGuardrailStatus[keyof typeof ClerkGuardrailStatus];
+
+
+export const ClerkGuardrailStatus = {
+  healthy: 'healthy',
+  watch: 'watch',
+  critical: 'critical',
+} as const;
+
+export interface ClerkGuardrail {
+  key: string;
+  label: string;
+  status: ClerkGuardrailStatus;
+  detail: string;
+  actionHref: string;
+}
+
+export interface ClerkAssuranceWorkspace {
+  generatedAt: string;
+  calls30d: number;
+  pendingReview: number;
+  decidedCases30d: number;
+  invalidRate30d: number;
+  errorRate30d: number;
+  /** @nullable */
+  latencyP95Ms: number | null;
+  tokens30d: number;
+  /** @nullable */
+  latestEvalAccuracy: number | null;
+  /** @nullable */
+  latestInjectionResistance: number | null;
+  groundingViolations30d: number;
+  guardrails: ClerkGuardrail[];
 }
 
 export type BankStatementStatus = typeof BankStatementStatus[keyof typeof BankStatementStatus];
