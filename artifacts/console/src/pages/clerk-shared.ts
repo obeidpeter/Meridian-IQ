@@ -132,9 +132,7 @@ export function clerkDisabledToast(
 export { serverErrorToast } from "@/lib/errors";
 
 function fieldValue(kase: ClerkCase, field: string): string {
-  return (
-    kase.extraction?.fields.find((f) => f.field === field)?.value ?? ""
-  );
+  return kase.extraction?.fields.find((f) => f.field === field)?.value ?? "";
 }
 
 // Read a File into plain base64. Bytes are encoded directly (chunked to stay
@@ -152,8 +150,7 @@ export async function fileToBase64(file: File): Promise<string> {
 
 export function fileIsPdf(file: File): boolean {
   return (
-    file.type === "application/pdf" ||
-    file.name.toLowerCase().endsWith(".pdf")
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
   );
 }
 
@@ -312,8 +309,8 @@ export function bulkApproveFormFromCase(
     ...form,
     firmId: form.firmId || (kase.firmId ?? ""),
     supplierPartyId:
-      form.supplierPartyId || (suggestions?.supplier[0]?.partyId ?? ""),
-    buyerPartyId: form.buyerPartyId || (suggestions?.buyer[0]?.partyId ?? ""),
+      form.supplierPartyId || (suggestions?.supplier?.[0]?.partyId ?? ""),
+    buyerPartyId: form.buyerPartyId || (suggestions?.buyer?.[0]?.partyId ?? ""),
   };
 }
 
@@ -438,7 +435,10 @@ export function closedOption<T extends string>(
   raw: string | null | undefined,
 ): T | "" {
   if (!raw) return "";
-  const norm = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const norm = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   return (Object.values(catalogue) as string[]).includes(norm)
     ? (norm as T)
     : "";
@@ -504,9 +504,7 @@ export function noticeApproveFormFromCase(kase: ClerkCase): NoticeApproveForm {
 // Approve is held until the obligation the server will create is fully
 // determined: which firm, which client, what kind of notice, from whom, and
 // by when a response is due. Everything else is optional context.
-export function noticeApproveDisabled(
-  form: NoticeApproveForm | null,
-): boolean {
+export function noticeApproveDisabled(form: NoticeApproveForm | null): boolean {
   return (
     !form ||
     !form.firmId ||
@@ -546,9 +544,11 @@ export function noticeDecisionFromForm(
 // How a case presents in the queue and the detail header: source presentation
 // (icon) from intakeKind, with notice cases relabelled — a photographed
 // notice must never masquerade as an "Invoice scan".
-export function caseIntakeKind(
-  kase: Pick<ClerkCase, "kind" | "sourceType">,
-): { label: string; eyebrow: string; icon: LucideIcon } {
+export function caseIntakeKind(kase: Pick<ClerkCase, "kind" | "sourceType">): {
+  label: string;
+  eyebrow: string;
+  icon: LucideIcon;
+} {
   const base = intakeKind(kase.sourceType);
   if (kase.kind !== "notice") return base;
   return { ...base, label: "Tax notice", eyebrow: "Notice intake" };

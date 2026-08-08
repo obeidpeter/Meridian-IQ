@@ -1,5 +1,18 @@
 export { triggerDownload } from "./trigger-download";
 export {
+  CommandMenu,
+  Metric,
+  MetricStrip,
+  SegmentedControl,
+  WorkQueue,
+  WorkspaceHeader,
+  type CommandItem,
+  type MetricTone,
+  type SegmentedItem,
+  type WorkItemTone,
+  type WorkQueueItem,
+} from "./workspace";
+export {
   useActionPolicyControls,
   type ActionPolicyControls,
 } from "./use-action-policy-controls";

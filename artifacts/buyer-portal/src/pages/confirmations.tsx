@@ -44,7 +44,16 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronRight, Download, Inbox, SearchX } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronRight,
+  CircleHelp,
+  Download,
+  Inbox,
+  ReceiptText,
+  SearchX,
+  ShieldAlert,
+} from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -58,6 +67,7 @@ import { errorDescription } from "@/lib/respond";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { Metric, MetricStrip, WorkspaceHeader } from "@workspace/web-ui";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -373,7 +383,10 @@ export function Confirmations() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <WorkspaceHeader
+        eyebrow="Buyer controls"
+        title="Confirmations"
+        description="Review supplier invoices, protect input VAT evidence and record each response."
         actions={
           // CSV of the confirmation queue, as a plain same-origin navigation
           // (no react-query): the endpoint answers with a Content-Disposition
@@ -391,6 +404,37 @@ export function Confirmations() {
           </Button>
         }
       />
+
+      <MetricStrip label="Confirmation summary">
+        <Metric
+          label="Needs response"
+          value={String(awaiting.length)}
+          detail={formatNaira(awaitingTotal)}
+          icon={<ReceiptText className="size-4" aria-hidden="true" />}
+          tone={awaiting.length > 0 ? "warning" : "default"}
+        />
+        <Metric
+          label="Confirmed"
+          value={String(counts.get("confirmed") ?? 0)}
+          detail="Responses recorded"
+          icon={<BadgeCheck className="size-4" aria-hidden="true" />}
+          tone="positive"
+        />
+        <Metric
+          label="Queried"
+          value={String(counts.get("queried") ?? 0)}
+          detail="Supplier clarification needed"
+          icon={<CircleHelp className="size-4" aria-hidden="true" />}
+          tone={(counts.get("queried") ?? 0) > 0 ? "info" : "default"}
+        />
+        <Metric
+          label="Rejected"
+          value={String(counts.get("rejected") ?? 0)}
+          detail={`${invoices.length} invoices in scope`}
+          icon={<ShieldAlert className="size-4" aria-hidden="true" />}
+          tone={(counts.get("rejected") ?? 0) > 0 ? "critical" : "default"}
+        />
+      </MetricStrip>
 
       {awaiting.length > 0 && (
         <Card

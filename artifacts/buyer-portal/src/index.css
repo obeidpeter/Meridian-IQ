@@ -3,6 +3,7 @@
 @plugin "@tailwindcss/typography";
 
 @import "@workspace/format/source.css";
+@import "@workspace/web-ui/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 

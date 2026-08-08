@@ -38,7 +38,7 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
       className={
         orientation === "column"
           ? "flex flex-col gap-1"
-          : "flex flex-row gap-1 overflow-x-auto"
+          : "flex snap-x flex-row gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       }
     >
       {NAV.map(({ href, label, icon: Icon }) => (
@@ -47,7 +47,7 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
           href={href}
           aria-current={isActive(href) ? "page" : undefined}
           data-testid={`clerk-nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
-          className={`flex min-h-10 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${FOCUS_RING} ${
+          className={`flex min-h-10 snap-start items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${FOCUS_RING} ${
             isActive(href)
               ? "bg-lime-300 font-bold text-[#071a1c]"
               : "font-medium text-white/68 hover:bg-white/8 hover:text-white"

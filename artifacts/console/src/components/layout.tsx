@@ -28,6 +28,11 @@ import {
   CircleUserRound,
   LockKeyhole,
   KeyRound,
+  Inbox,
+  CalendarCheck2,
+  WalletCards,
+  BarChart3,
+  Search,
 } from "lucide-react";
 import {
   Sheet,
@@ -41,6 +46,8 @@ import { NotificationBell } from "@/components/notification-bell";
 import { roleLabel } from "@/components/capability-gate";
 import { PORTAL_URL } from "@/components/require-session";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
+import { ClerkDock } from "@/components/clerk-dock";
+import { CommandMenu, type CommandItem } from "@workspace/web-ui";
 
 // Every console page maps to the RBAC capability its API surface requires
 // (modules/auth/rbac.ts). The nav renders only what the signed-in principal
@@ -90,6 +97,24 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         capability: "engagement.write",
       },
       {
+        href: "/filing-desk",
+        label: "Filing desk",
+        icon: CalendarCheck2,
+        capability: "filing.read",
+      },
+      {
+        href: "/collections",
+        label: "Collections",
+        icon: WalletCards,
+        capability: "console.portfolio.read",
+      },
+      {
+        href: "/analytics",
+        label: "Analytics",
+        icon: BarChart3,
+        capability: "console.portfolio.read",
+      },
+      {
         href: "/invitations",
         label: "Team invitations",
         icon: UserPlus,
@@ -106,6 +131,11 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "API & webhooks",
         icon: KeyRound,
         role: "firm_admin",
+      },
+      {
+        href: "/notifications",
+        label: "Notifications",
+        icon: Inbox,
       },
     ],
   },
@@ -261,8 +291,9 @@ function BrandMark() {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
   const mainRef = useRef<HTMLElement>(null);
@@ -323,6 +354,20 @@ export function Layout({ children }: { children: ReactNode }) {
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(link.href));
   const pageTitle = activeLink?.label ?? roleContext.title;
+  const commandItems: CommandItem[] = groups.flatMap((group) =>
+    group.links.map((link) => {
+      const Icon = link.icon;
+      return {
+        id: `console-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
+        label: link.label,
+        description: `Open ${link.label.toLowerCase()} in the ${roleContext.title.toLowerCase()}.`,
+        group: group.title,
+        icon: <Icon className="size-4" aria-hidden="true" />,
+        keywords: [group.title, roleContext.badge],
+        onSelect: () => navigate(link.href),
+      };
+    }),
+  );
 
   const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
     <nav className="flex h-full min-h-0 flex-col bg-[#071a1c] px-3 py-5 text-white">
@@ -408,7 +453,14 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen overflow-x-hidden bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+      <CommandMenu
+        items={commandItems}
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        title="Go to a workspace"
+        placeholder="Search pages and tools"
+      />
       <a
         href="#main-content"
         className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-[#071a1c] ${FOCUS_RING}`}
@@ -419,26 +471,37 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
         <BrandMark />
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/10 hover:text-white"
-              aria-label="Open navigation"
-              data-testid="button-menu"
-            >
-              <Menu aria-hidden="true" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent
-            side="left"
-            className="w-[17rem] border-r-0 bg-[#071a1c] p-0 text-white [&>button]:text-white"
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 hover:text-white"
+            aria-label="Search workspaces"
+            onClick={() => setCommandOpen(true)}
           >
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <NavLinks onNavigate={() => setSheetOpen(false)} />
-          </SheetContent>
-        </Sheet>
+            <Search aria-hidden="true" />
+          </Button>
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 hover:text-white"
+                aria-label="Open navigation"
+                data-testid="button-menu"
+              >
+                <Menu aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent
+              side="left"
+              className="w-[17rem] border-r-0 bg-[#071a1c] p-0 text-white [&>button]:text-white"
+            >
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <NavLinks onNavigate={() => setSheetOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
       <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
         <p className="text-[11px] font-bold text-teal-700">
@@ -466,6 +529,22 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="flex shrink-0 items-center gap-4">
             {/* Recent-notification inbox — render-on-success, so a server
                 without the feed endpoint shows no bell at all. */}
+            <Button
+              variant="outline"
+              className="h-9 w-56 justify-between border-slate-200 bg-slate-50 px-3 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              onClick={() => setCommandOpen(true)}
+              data-testid="button-command-menu"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Search className="size-4" aria-hidden="true" />
+                <span className="truncate text-xs font-semibold">
+                  Search workspaces
+                </span>
+              </span>
+              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+                Ctrl K
+              </kbd>
+            </Button>
             <NotificationBell />
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
               <LockKeyhole
@@ -506,6 +585,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {capabilities.has("clerk.use") && <ClerkDock />}
     </div>
   );
 }

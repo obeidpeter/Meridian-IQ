@@ -5,9 +5,11 @@ import {
   ClipboardCheck,
   FileCheck2,
   Grid2x2,
+  Inbox,
   LockKeyhole,
   LogOut,
   Menu,
+  Search,
   ShieldCheck,
   Trophy,
 } from "lucide-react";
@@ -22,11 +24,13 @@ import {
 } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
+import { CommandMenu, type CommandItem } from "@workspace/web-ui";
 
 const LINKS = [
   { href: "/", label: "Confirmations", icon: ClipboardCheck },
   { href: "/suppliers", label: "Suppliers", icon: ShieldCheck },
   { href: "/scoreboard", label: "Scoreboard", icon: Trophy },
+  { href: "/notifications", label: "Notifications", icon: Inbox },
 ];
 
 const FOCUS_RING =
@@ -164,8 +168,9 @@ function NavLinks({
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
   const mainRef = useRef<HTMLElement>(null);
@@ -193,6 +198,18 @@ export function Layout({ children }: { children: ReactNode }) {
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
   const pageTitle = activeLink?.label ?? "Buyer Rails";
+  const commandItems: CommandItem[] = LINKS.map((link) => {
+    const Icon = link.icon;
+    return {
+      id: `buyer-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
+      label: link.label,
+      description: `Open ${link.label.toLowerCase()} in Buyer Rails.`,
+      group: "Verification",
+      icon: <Icon className="size-4" aria-hidden="true" />,
+      keywords: ["supplier", "invoice", "buyer", "VAT"],
+      onSelect: () => navigate(link.href),
+    };
+  });
   const navProps = {
     location,
     me,
@@ -202,6 +219,13 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#f3f6f7] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+      <CommandMenu
+        items={commandItems}
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        title="Find buyer work"
+        placeholder="Search confirmations and suppliers"
+      />
       <a
         href="#main-content"
         className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-cyan-200 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#0b2030] ${FOCUS_RING}`}
@@ -212,6 +236,15 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="flex items-center justify-between bg-[#0b2030] px-4 py-3 md:hidden">
         <BrandMark />
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white shadow-none hover:bg-white/10 hover:text-white"
+            aria-label="Search buyer workspace"
+            onClick={() => setCommandOpen(true)}
+          >
+            <Search aria-hidden="true" />
+          </Button>
           <NotificationBell />
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
@@ -259,6 +292,22 @@ export function Layout({ children }: { children: ReactNode }) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-4">
+            <Button
+              variant="outline"
+              className="h-9 w-56 justify-between border-slate-200 bg-slate-50 px-3 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              onClick={() => setCommandOpen(true)}
+              data-testid="button-command-menu"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Search className="size-4" aria-hidden="true" />
+                <span className="truncate text-xs font-semibold">
+                  Search Buyer Rails
+                </span>
+              </span>
+              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+                Ctrl K
+              </kbd>
+            </Button>
             <NotificationBell />
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
               <LockKeyhole
