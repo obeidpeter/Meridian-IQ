@@ -426,7 +426,7 @@ function PortfolioSection({
       className="scroll-mt-24 space-y-4"
       data-testid={`portfolio-section-${id}`}
     >
-      <h2 className="border-b border-slate-200 pb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-teal-700 dark:border-slate-800">
+      <h2 className="border-b border-slate-200 pb-1.5 text-[11px] font-extrabold text-teal-700 dark:border-slate-800">
         {label}
       </h2>
       {children}

@@ -48,24 +48,28 @@ function StatCard({
 }) {
   return (
     <Card data-testid={testId}>
-      <CardContent className="pt-6">
+      <CardContent className="p-5">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold mt-1 tabular-nums" title={title}>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-muted-foreground">{label}</p>
+            <p
+              className="mt-2 text-2xl font-extrabold tabular-nums"
+              title={title}
+            >
               {value}
             </p>
           </div>
-          <Icon
-            aria-hidden="true"
-            className={`w-8 h-8 ${
+          <span
+            className={`grid size-10 shrink-0 place-items-center rounded-md ${
               tone === "danger"
-                ? "text-red-500 dark:text-red-400"
+                ? "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400"
                 : tone === "success"
-                  ? "text-emerald-500 dark:text-emerald-400"
-                  : "text-primary"
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+                  : "bg-sky-50 text-primary dark:bg-sky-950/50"
             }`}
-          />
+          >
+            <Icon aria-hidden="true" className="size-5" />
+          </span>
         </div>
       </CardContent>
     </Card>
@@ -74,14 +78,14 @@ function StatCard({
 
 function PageHeader({ computedAt }: { computedAt?: string }) {
   return (
-    <div>
+    <div className="border-b border-slate-200 pb-5">
       <h1
-        className="text-2xl md:text-3xl font-bold"
+        className="text-2xl font-extrabold text-slate-950 md:text-3xl"
         data-testid="text-page-title"
       >
         Supplier verification
       </h1>
-      <p className="text-muted-foreground mt-1">
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
         Input-VAT exposure across your suppliers
         {computedAt !== undefined && (
           <>

@@ -174,20 +174,20 @@ function InvoiceRow({
 
 function PageHeader({ actions }: { actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
+    <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="min-w-0">
         <h1
-          className="text-2xl md:text-3xl font-bold"
+          className="text-2xl font-extrabold text-slate-950 md:text-3xl"
           data-testid="text-page-title"
         >
           Confirmations
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
           Invoices addressed to your organization. Respond to confirmation
           requests to keep your input VAT protected.
         </p>
       </div>
-      {actions}
+      {actions ? <div className="shrink-0">{actions}</div> : null}
     </div>
   );
 }
@@ -207,9 +207,8 @@ export function Confirmations() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMethod, setBulkMethod] = useState("portal");
   const [bulkNoSetOff, setBulkNoSetOff] = useState(false);
-  const [bulkResults, setBulkResults] = useState<BulkConfirmationsResult | null>(
-    null,
-  );
+  const [bulkResults, setBulkResults] =
+    useState<BulkConfirmationsResult | null>(null);
   const bulk = useBulkRespondConfirmations();
 
   const invoices = useMemo(() => data ?? [], [data]);
@@ -380,7 +379,11 @@ export function Confirmations() {
           // (no react-query): the endpoint answers with a Content-Disposition
           // attachment and auth rides the session cookie, so the browser just
           // downloads the file.
-          <Button asChild variant="outline" data-testid="button-export-confirmations">
+          <Button
+            asChild
+            variant="outline"
+            data-testid="button-export-confirmations"
+          >
             <a href={getExportBuyerConfirmationsUrl()}>
               <Download className="w-4 h-4 mr-2" aria-hidden="true" />
               Export CSV

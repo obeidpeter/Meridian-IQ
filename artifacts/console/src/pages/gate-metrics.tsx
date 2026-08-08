@@ -43,7 +43,9 @@ function GateCard({
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm text-muted-foreground">{label}</p>
           {met !== undefined && (
-            <span className={`${pillClasses(met ? "emerald" : "amber")} shrink-0`}>
+            <span
+              className={`${pillClasses(met ? "emerald" : "amber")} shrink-0`}
+            >
               {met ? "On gate" : "Below gate"}
             </span>
           )}
@@ -93,8 +95,9 @@ export function GateMetrics() {
       ) : (
         <>
           <div>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4" aria-hidden="true" /> R1 exit criteria
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+              <TrendingUp className="w-4 h-4" aria-hidden="true" /> R1 exit
+              criteria
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <GateCard
@@ -133,8 +136,9 @@ export function GateMetrics() {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4" aria-hidden="true" /> R2 north star & guardrails
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
+              <TrendingUp className="w-4 h-4" aria-hidden="true" /> R2 north
+              star & guardrails
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <GateCard

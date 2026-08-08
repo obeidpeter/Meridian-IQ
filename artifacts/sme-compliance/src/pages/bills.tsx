@@ -188,9 +188,9 @@ function MissingBillsAdvisory({ clientPartyId }: { clientPartyId: string }) {
           </p>
         ))}
         <p className="text-xs">
-          Advisory only, from your own capture history. An uncaptured bill
-          means unclaimed input VAT — if the vendor arrangement has ended,
-          you can ignore this.
+          Advisory only, from your own capture history. An uncaptured bill means
+          unclaimed input VAT — if the vendor arrangement has ended, you can
+          ignore this.
         </p>
       </CardContent>
     </Card>
@@ -322,7 +322,7 @@ function BillRow({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="w-full flex items-center justify-between gap-3 p-4 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex w-full items-center justify-between gap-3 rounded-lg p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           data-testid={`button-expand-bill-${bill.invoiceId}`}
         >
           <div className="min-w-0">
@@ -593,9 +593,7 @@ export function Bills() {
               onClick={() => void runFlag()}
               data-testid="button-confirm-flag"
             >
-              {pendingFlag?.status === "paid"
-                ? "Mark paid"
-                : "Mark scheduled"}
+              {pendingFlag?.status === "paid" ? "Mark paid" : "Mark scheduled"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,182 +1,271 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  LayoutDashboard,
-  FileText,
-  Calendar as CalendarIcon,
   Bell,
   Bot,
-  Upload,
+  Calendar as CalendarIcon,
+  CalendarCheck2,
+  CircleUserRound,
+  FileCheck2,
+  FileText,
+  Grid2x2,
+  HandCoins,
   Landmark,
-  Sparkles,
-  Store,
-  Menu,
+  LayoutDashboard,
+  LockKeyhole,
   LogOut,
+  Menu,
   Percent,
   Receipt,
   Repeat,
-  Grid2x2,
-  HandCoins,
   Scale,
   ShieldCheck,
-  FileCheck2,
-  CalendarCheck2,
+  Sparkles,
+  Store,
+  Upload,
 } from "lucide-react";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import type { Me } from "@workspace/api-client-react";
+import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
-import { useGetMe, useLogout } from "@workspace/api-client-react";
-import type { Me } from "@workspace/api-client-react";
-
-const ROLE_LABELS: Record<string, string> = {
-  firm_admin: "Firm admin",
-  firm_staff: "Firm staff",
-  client_user: "Client user",
-};
-
-function roleLabel(role: string): string {
-  return ROLE_LABELS[role] ?? role;
-}
 
 type NavLink = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  /** RBAC capability required to see this entry; omit for always-on links. */
   capability?: string;
 };
 
-const LINKS: NavLink[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/invoices", label: "Invoices", icon: FileText },
-  { href: "/bills", label: "Bills", icon: Receipt },
-  { href: "/vat", label: "VAT", icon: Percent },
-  { href: "/recurring", label: "Recurring", icon: Repeat },
-  { href: "/import", label: "Import", icon: Upload },
+type NavGroup = {
+  title: string;
+  links: NavLink[];
+};
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    href: "/clerk",
-    label: "Send to Clerk",
-    icon: Sparkles,
-    capability: "clerk.capture",
-  },
-  { href: "/clerk/ask", label: "Ask Clerk", icon: Bot, capability: "clerk.ask" },
-  { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
-  { href: "/b2c", label: "B2C reports", icon: Store },
-  {
-    href: "/obligations",
-    label: "Obligations",
-    icon: Scale,
-    capability: "obligation.read",
+    title: "Work",
+    links: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/invoices", label: "Invoices", icon: FileText },
+      { href: "/bills", label: "Bills", icon: Receipt },
+      { href: "/recurring", label: "Recurring", icon: Repeat },
+      { href: "/import", label: "Import", icon: Upload },
+    ],
   },
   {
-    href: "/filings",
-    label: "Filings",
-    icon: CalendarCheck2,
-    capability: "filing.read",
+    title: "Compliance",
+    links: [
+      { href: "/vat", label: "VAT", icon: Percent },
+      { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
+      { href: "/b2c", label: "B2C reports", icon: Store },
+      {
+        href: "/obligations",
+        label: "Obligations",
+        icon: Scale,
+        capability: "obligation.read",
+      },
+      {
+        href: "/filings",
+        label: "Filings",
+        icon: CalendarCheck2,
+        capability: "filing.read",
+      },
+      {
+        href: "/wht",
+        label: "WHT credits",
+        icon: HandCoins,
+        capability: "invoice.read",
+      },
+    ],
   },
   {
-    href: "/wht",
-    label: "WHT credits",
-    icon: HandCoins,
-    capability: "invoice.read",
+    title: "Clerk AI",
+    links: [
+      {
+        href: "/clerk",
+        label: "Send to Clerk",
+        icon: Sparkles,
+        capability: "clerk.capture",
+      },
+      {
+        href: "/clerk/ask",
+        label: "Ask Clerk",
+        icon: Bot,
+        capability: "clerk.ask",
+      },
+    ],
   },
-  { href: "/calendar", label: "Calendar", icon: CalendarIcon },
-  { href: "/alerts", label: "Alert settings", icon: Bell },
-  { href: "/consent", label: "Consent", icon: ShieldCheck },
+  {
+    title: "Workspace",
+    links: [
+      { href: "/calendar", label: "Calendar", icon: CalendarIcon },
+      { href: "/alerts", label: "Alert settings", icon: Bell },
+      { href: "/consent", label: "Consent", icon: ShieldCheck },
+    ],
+  },
 ];
+
+const ROLE_CONTEXT: Record<
+  string,
+  { title: string; description: string; badge: string }
+> = {
+  firm_admin: {
+    title: "Client compliance workspace",
+    description: "Invoicing, filings and firm-led controls",
+    badge: "Firm admin",
+  },
+  firm_staff: {
+    title: "Client delivery workspace",
+    description: "Daily invoicing and compliance operations",
+    badge: "Firm staff",
+  },
+  client_user: {
+    title: "Business workspace",
+    description: "Cashflow, invoices and compliance evidence",
+    badge: "Business user",
+  },
+};
+
+function accountInitials(
+  name: string | null | undefined,
+  email: string | null | undefined,
+) {
+  const source = name?.trim() || email?.split("@")[0] || "MI";
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
 
 function BrandMark() {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="rounded-lg bg-primary p-1.5 text-primary-foreground">
-        <FileCheck2 className="h-5 w-5" aria-hidden="true" />
+      <span className="grid size-9 place-items-center rounded-md bg-lime-300 text-[#071a1c]">
+        <FileCheck2 className="size-5" aria-hidden="true" />
       </span>
-      <span className="text-base font-bold leading-none">MeridianIQ</span>
+      <span>
+        <span className="block text-base font-extrabold leading-none text-white">
+          MeridianIQ
+        </span>
+        <span className="mt-1 block text-[10px] font-semibold text-white/45">
+          Compliance Workspace
+        </span>
+      </span>
     </span>
   );
 }
 
-// Hoisted to module scope so it is a stable component type: rendering it no
-// longer remounts the whole nav (and drops focus / resets scroll) on every
-// navigation the way a component defined inside Layout would.
+function isLinkActive(location: string, href: string) {
+  if (location === href) return true;
+  if (href === "/clerk" && location.startsWith("/clerk/ask")) return false;
+  return href !== "/" && location.startsWith(`${href}/`);
+}
+
 function NavLinks({
-  links,
+  groups,
   location,
   me,
+  roleContext,
   onNavigate,
   onSignOut,
   signingOut,
 }: {
-  links: NavLink[];
+  groups: NavGroup[];
   location: string;
   me: Me | undefined;
+  roleContext: { title: string; description: string; badge: string };
   onNavigate?: () => void;
   onSignOut: () => void;
   signingOut: boolean;
 }) {
   return (
-    <nav className="flex flex-col gap-1 p-4 h-full min-h-0 overflow-y-auto">
-      <div className="mb-5 px-2">
+    <nav className="flex h-full min-h-0 flex-col bg-[#071a1c] px-3 py-5 text-white">
+      <div className="mb-6 px-2">
         <BrandMark />
-        <p className="text-xs text-muted-foreground truncate mt-2">
-          {me ? "Compliance workspace" : "Loading…"}
-        </p>
+        <div className="mt-5 border-l-2 border-lime-300 pl-3">
+          <p className="text-xs font-bold text-white">
+            {me ? roleContext.title : "Loading workspace"}
+          </p>
+          <p className="mt-1 text-[11px] leading-4 text-white/45">
+            {roleContext.description}
+          </p>
+        </div>
       </div>
-      {links.map((link) => {
-        const Icon = link.icon;
-        // Ask Clerk (/clerk/ask) is its own entry — don't also light up the
-        // Send to Clerk entry when we're on it.
-        const isActive =
-          location === link.href ||
-          (link.href !== "/" &&
-            location.startsWith(link.href) &&
-            !(link.href === "/clerk" && location.startsWith("/clerk/ask")));
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            onClick={onNavigate}
-            data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
-            className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-              isActive
-                ? "bg-primary text-primary-foreground font-medium"
-                : "text-foreground hover:bg-muted"
-            }`}
-          >
-            <Icon className="w-5 h-5" aria-hidden="true" />
-            {link.label}
-          </Link>
-        );
-      })}
-      <div className="mt-auto pt-4 border-t space-y-1">
+
+      <div className="workspace-nav-scroll min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        {groups.map((group) => (
+          <div key={group.title} className="flex flex-col gap-1">
+            <p className="px-3 pb-1.5 text-[10px] font-bold text-white/35">
+              {group.title}
+            </p>
+            {group.links.map((link) => {
+              const Icon = link.icon;
+              const active = isLinkActive(location, link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={onNavigate}
+                  data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
+                  className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] ${
+                    active
+                      ? "bg-lime-300 font-bold text-[#071a1c]"
+                      : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
+                  }`}
+                >
+                  <Icon className="size-[1.1rem] shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 truncate">{link.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-auto space-y-1 border-t border-white/10 pt-4">
         {me && (
-          <div className="px-3 pb-2" data-testid="text-account">
-            <p className="text-sm font-medium truncate">
-              {me.fullName ?? me.email ?? "Signed in"}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {me.email ? `${me.email} · ` : ""}
-              {roleLabel(me.role)}
-            </p>
+          <div
+            className="mb-3 flex items-center gap-3 px-2"
+            data-testid="text-account"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-white/10 text-xs font-extrabold text-lime-200">
+              {accountInitials(me.fullName, me.email)}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-white">
+                {me.fullName ?? me.email ?? "Signed in"}
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-white/45">
+                {roleContext.badge}
+              </p>
+            </div>
           </div>
         )}
         <a
           href="/login"
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
           data-testid="link-all-apps"
         >
-          <Grid2x2 className="w-5 h-5" aria-hidden="true" />
+          <Grid2x2 className="size-[1.1rem]" aria-hidden="true" />
           All apps
         </a>
         <button
           onClick={onSignOut}
           disabled={signingOut}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors text-left disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] disabled:opacity-50"
           data-testid="button-sign-out"
         >
-          <LogOut className="w-5 h-5" aria-hidden="true" />
-          Sign out
+          <LogOut className="size-[1.1rem]" aria-hidden="true" />
+          {signingOut ? "Signing out..." : "Sign out"}
         </button>
       </div>
     </nav>
@@ -188,99 +277,147 @@ export function Layout({ children }: { children: ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
-  // The nav only offers pages the principal can use (e.g. Ask Clerk is
-  // firm-only); the pages themselves also gate, covering direct URL hits.
-  const capabilities = new Set(me?.capabilities ?? []);
-  const links = LINKS.filter(
-    (l) => !l.capability || capabilities.has(l.capability),
-  );
   const mainRef = useRef<HTMLElement>(null);
   const didMount = useRef(false);
 
-  // Move focus to the main region on route change so screen-reader and
-  // keyboard users land on the new page's content instead of being stranded
-  // where the old page's focus was. Skip the very first mount so we don't
-  // steal focus (and scroll) on initial load.
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (!didMount.current) {
       didMount.current = true;
       return;
     }
-    mainRef.current?.focus();
+    mainRef.current?.focus({ preventScroll: true });
   }, [location]);
 
   const signOut = async () => {
     try {
       await logout.mutateAsync();
     } catch {
-      /* clearing the cookie is best-effort; redirect regardless */
+      // Cookie clearing is best effort; leave the workspace regardless.
     }
     window.location.href = "/login";
   };
 
+  const capabilities = new Set(me?.capabilities ?? []);
+  const groups = NAV_GROUPS.map((group) => ({
+    ...group,
+    links: group.links.filter(
+      (link) => !link.capability || capabilities.has(link.capability),
+    ),
+  })).filter((group) => group.links.length > 0);
+  const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
+    title: "Compliance workspace",
+    description: "Role-scoped invoicing and compliance",
+    badge: me?.role ?? "Loading",
+  };
+  const activeLink = groups
+    .flatMap((group) => group.links)
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((link) => isLinkActive(location, link.href));
+  const pageTitle = activeLink?.label ?? roleContext.title;
+  const navProps = {
+    groups,
+    location,
+    me,
+    roleContext,
+    onSignOut: signOut,
+    signingOut: logout.isPending,
+  };
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#071a1c]"
       >
         Skip to content
       </a>
 
-      <StaleBuildBanner />
+      <div className="flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
+        <BrandMark />
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white shadow-none hover:bg-white/10 hover:text-white"
+                aria-label="Open navigation"
+                data-testid="button-menu"
+              >
+                <Menu aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent
+              side="left"
+              className="w-[17rem] border-r-0 bg-[#071a1c] p-0 text-white [&>button]:text-white"
+            >
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <NavLinks {...navProps} onNavigate={() => setSheetOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+      <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+        <p className="text-[11px] font-bold text-teal-700">
+          {roleContext.title}
+        </p>
+        <p className="mt-0.5 truncate text-sm font-extrabold text-slate-950">
+          {pageTitle}
+        </p>
+      </div>
 
-      <div className="flex-1 flex flex-col md:flex-row">
-        <div className="md:hidden flex items-center justify-between p-4 border-b bg-card">
-          <BrandMark />
-          <div className="flex items-center gap-1">
-            <NotificationBell />
-            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Open menu"
-                  data-testid="button-menu"
-                >
-                  <Menu />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-0">
-                <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <NavLinks
-                  links={links}
-                  location={location}
-                  me={me}
-                  onNavigate={() => setSheetOpen(false)}
-                  onSignOut={signOut}
-                  signingOut={logout.isPending}
-                />
-              </SheetContent>
-            </Sheet>
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
+        <NavLinks {...navProps} />
+      </aside>
+
+      <div className="min-w-0">
+        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white/95 px-8 backdrop-blur md:flex lg:px-10">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-teal-700">
+              {roleContext.title}
+            </p>
+            <p className="mt-0.5 truncate text-sm font-extrabold text-slate-950">
+              {pageTitle}
+            </p>
           </div>
-        </div>
-
-        <div className="hidden md:flex w-64 border-r bg-card min-h-screen sticky top-0 max-h-screen flex-col">
-          <NavLinks
-            links={links}
-            location={location}
-            me={me}
-            onSignOut={signOut}
-            signingOut={logout.isPending}
-          />
-        </div>
+          <div className="flex shrink-0 items-center gap-4">
+            <NotificationBell />
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
+              <LockKeyhole
+                className="size-3.5 text-teal-700"
+                aria-hidden="true"
+              />
+              {roleContext.badge}
+            </span>
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 place-items-center rounded-md bg-[#0b6463] text-[11px] font-extrabold text-white">
+                {me ? (
+                  accountInitials(me.fullName, me.email)
+                ) : (
+                  <CircleUserRound className="size-4" aria-hidden="true" />
+                )}
+              </span>
+              <div className="hidden max-w-48 xl:block">
+                <p className="truncate text-xs font-bold text-slate-900">
+                  {me?.fullName ?? me?.email ?? "Signed in"}
+                </p>
+                <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                  {me?.email ?? roleContext.badge}
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
 
         <main
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
-          className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus-visible:outline-none"
+          className="mx-auto w-full max-w-[90rem] px-4 py-5 focus:outline-none sm:px-6 md:px-8 md:py-8 lg:px-10"
         >
-          {/* Desktop header strip: the bell lives in the mobile top bar on
-              small screens, so this row only renders at md+. */}
-          <div className="hidden md:flex justify-end mb-4">
-            <NotificationBell />
-          </div>
+          <StaleBuildBanner />
           {children}
         </main>
       </div>

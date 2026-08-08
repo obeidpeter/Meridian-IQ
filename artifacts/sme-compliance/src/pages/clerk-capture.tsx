@@ -131,7 +131,12 @@ function UsageMeter() {
 // Read-only detail for the expanded submission row: what Clerk extracted,
 // why a read failed, and — once approved — the draft-invoice hand-off note.
 function CaseDetail({ caseId }: { caseId: string }) {
-  const { data: kase, isLoading, isError, refetch } = useGetClerkCase(caseId, {
+  const {
+    data: kase,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetClerkCase(caseId, {
     query: { queryKey: getGetClerkCaseQueryKey(caseId) },
   });
 
@@ -143,7 +148,10 @@ function CaseDetail({ caseId }: { caseId: string }) {
   }
 
   return (
-    <div className="space-y-3 border-t pt-3" data-testid={`detail-case-${kase.id}`}>
+    <div
+      className="space-y-3 border-t pt-3"
+      data-testid={`detail-case-${kase.id}`}
+    >
       {kase.status === "failed" && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" aria-hidden="true" />
@@ -315,11 +323,13 @@ function CaptureContent() {
         setCaptureVoice(null);
         toast({
           title:
-            kase.status === "failed" ? "Clerk couldn't read that" : "Sent to Clerk",
+            kase.status === "failed"
+              ? "Clerk couldn't read that"
+              : "Sent to Clerk",
           description:
             kase.status === "failed"
-              ? kase.failReason ??
-                "Try a clearer photo, or paste the invoice text instead."
+              ? (kase.failReason ??
+                "Try a clearer photo, or paste the invoice text instead.")
               : "Your accountant will review it before anything is created.",
         });
       },
@@ -518,8 +528,8 @@ function CaptureContent() {
               className="text-xs text-muted-foreground"
               data-testid="text-notice-no-voice"
             >
-              Photograph or upload the notice — voice notes aren&apos;t
-              accepted for notices.
+              Photograph or upload the notice — voice notes aren&apos;t accepted
+              for notices.
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -557,7 +567,9 @@ function CaptureContent() {
           )}
           <div className="space-y-1.5">
             <Label htmlFor="capture-text">
-              {isNotice ? "or paste the notice text" : "or paste the invoice text"}
+              {isNotice
+                ? "or paste the notice text"
+                : "or paste the invoice text"}
             </Label>
             <Textarea
               id="capture-text"
@@ -566,7 +578,9 @@ function CaptureContent() {
                 setCaptureText(e.target.value);
                 clearInputResidue();
               }}
-              placeholder={isNotice ? "NOTICE OF ASSESSMENT ..." : "INVOICE No: ..."}
+              placeholder={
+                isNotice ? "NOTICE OF ASSESSMENT ..." : "INVOICE No: ..."
+              }
               rows={5}
               disabled={captureFile != null || captureVoice != null}
               data-testid="input-capture-text"
@@ -611,7 +625,9 @@ function CaptureContent() {
           </Button>
           {activeBatch && (
             <Alert
-              variant={activeBatch.status === "failed" ? "destructive" : "default"}
+              variant={
+                activeBatch.status === "failed" ? "destructive" : "default"
+              }
               data-testid="batch-progress"
             >
               <FileCheck2 className="h-4 w-4" aria-hidden="true" />
@@ -626,8 +642,8 @@ function CaptureContent() {
               </AlertTitle>
               <AlertDescription>
                 {activeBatch.status === "failed" ? (
-                  activeBatch.failReason ??
-                  "The bundle could not be processed. Try uploading the invoices one at a time."
+                  (activeBatch.failReason ??
+                  "The bundle could not be processed. Try uploading the invoices one at a time.")
                 ) : activeBatch.status === "done" ? (
                   <>
                     {batchSummary(
@@ -693,7 +709,11 @@ function CaptureContent() {
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading ? (
-            <SkeletonList count={3} itemClassName="h-16" className="space-y-2" />
+            <SkeletonList
+              count={3}
+              itemClassName="h-16"
+              className="space-y-2"
+            />
           ) : isError ? (
             <QueryError thing="your submissions" onRetry={() => refetch()} />
           ) : sortedCases.length === 0 ? (
@@ -710,9 +730,7 @@ function CaptureContent() {
                 size="sm"
                 variant="outline"
                 className="mt-1"
-                onClick={() =>
-                  document.getElementById("capture-file")?.click()
-                }
+                onClick={() => document.getElementById("capture-file")?.click()}
                 data-testid="button-empty-first-capture"
               >
                 Snap or upload your first document
@@ -724,7 +742,7 @@ function CaptureContent() {
               return (
                 <div
                   key={c.id}
-                  className={`rounded-xl border transition-colors ${
+                  className={`rounded-lg border transition-colors ${
                     expanded ? "border-primary/50 bg-muted/30" : "border-border"
                   }`}
                 >
@@ -732,7 +750,7 @@ function CaptureContent() {
                     type="button"
                     onClick={() => setSelectedId(expanded ? null : c.id)}
                     aria-expanded={expanded}
-                    className="w-full flex items-center justify-between gap-3 p-3 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="flex w-full items-center justify-between gap-3 rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     data-testid={`row-case-${c.id}`}
                   >
                     <div className="min-w-0">

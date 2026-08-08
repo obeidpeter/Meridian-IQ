@@ -59,10 +59,7 @@ import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
 import { mfaChallengeDisposition } from "@/lib/mfa";
-import {
-  TOTP_CARD_INITIAL,
-  totpCardTransition,
-} from "@/lib/totp-card";
+import { TOTP_CARD_INITIAL, totpCardTransition } from "@/lib/totp-card";
 import LandingPage from "@/LandingPage";
 import { AcceptInvite } from "@/AcceptInvite";
 import { ResetPassword } from "@/ResetPassword";
@@ -541,7 +538,7 @@ function SignInPanel() {
               maxLength={32}
               aria-invalid={totpError ? true : undefined}
               aria-describedby={totpError ? "totp-error" : "totp-help"}
-              className="h-12 border-slate-300 bg-white px-4 font-mono text-lg tracking-[0.25em] shadow-sm"
+              className="h-12 border-slate-300 bg-white px-4 font-mono text-lg shadow-sm"
               data-testid="input-totp-code"
             />
             <p id="totp-help" className="text-xs text-slate-500">
@@ -1006,8 +1003,14 @@ function TotpSecurityCard() {
   // Enrolment material exists only in this component's state — shown once,
   // gone on unmount. Only hashes persist server-side.
   const [card, dispatch] = useReducer(totpCardTransition, TOTP_CARD_INITIAL);
-  const { material, setupError, justActivated, justDisabled, disableOpen, disableError } =
-    card;
+  const {
+    material,
+    setupError,
+    justActivated,
+    justDisabled,
+    disableOpen,
+    disableError,
+  } = card;
   const [activateCode, setActivateCode] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
   const [disableCode, setDisableCode] = useState("");
@@ -1068,7 +1071,7 @@ function TotpSecurityCard() {
           status === 401
             ? "Invalid password or code."
             : (serverErrorFrom(err) ??
-                "Could not turn off two-factor. Try again."),
+              "Could not turn off two-factor. Try again."),
       });
     }
   };
@@ -1141,8 +1144,8 @@ function TotpSecurityCard() {
                 aria-hidden="true"
               />
               These recovery codes are shown once — right now. Store them
-              somewhere safe before you continue. Each code signs you in
-              exactly once if you ever lose your authenticator.
+              somewhere safe before you continue. Each code signs you in exactly
+              once if you ever lose your authenticator.
             </p>
             <ul
               className="mt-2 grid grid-cols-2 gap-1 font-mono text-xs text-amber-900 dark:text-amber-100"
@@ -1263,7 +1266,10 @@ function TotpSecurityCard() {
               two-factor
             </Button>
           ) : (
-            <form onSubmit={onDisable} className="space-y-3 rounded-lg border p-3">
+            <form
+              onSubmit={onDisable}
+              className="space-y-3 rounded-lg border p-3"
+            >
               <p className="text-xs font-medium">Turn off two-factor</p>
               <p className="text-xs text-muted-foreground">
                 Confirm with your password and a current code (or a recovery
@@ -1356,8 +1362,8 @@ function TotpSecurityCard() {
       ) : info ? (
         <div className="mt-2 space-y-2">
           <p className="text-xs text-muted-foreground">
-            Require a code from an authenticator app at sign-in, on top of
-            your password.
+            Require a code from an authenticator app at sign-in, on top of your
+            password.
           </p>
           {justDisabled && (
             <p
@@ -1720,12 +1726,14 @@ function Portal() {
   } = useGetMe({
     query: { queryKey: getGetMeQueryKey(), retry: false },
   });
-  const role = (me?.role as Role | undefined) ?? null;
+  const hasValidSession =
+    typeof me?.role === "string" && me.role.trim().length > 0;
+  const role = hasValidSession ? (me.role as Role) : null;
   // A 401 just means "not signed in"; anything else is an outage worth surfacing.
   const meStatus = (error as { status?: number } | null)?.status;
   const isOutage = isError && meStatus !== 401;
 
-  if (!me) {
+  if (!hasValidSession) {
     return (
       <AccessPortal outage={isOutage} onRetry={() => void refetch()}>
         {isLoading ? <SessionSkeleton /> : <SignInPanel />}

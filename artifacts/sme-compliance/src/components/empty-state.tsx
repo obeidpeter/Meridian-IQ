@@ -25,14 +25,25 @@ export function EmptyState({
   testId?: string;
 }) {
   return (
-    <div className={cn("py-12 px-6 flex flex-col items-center text-center gap-2", className)}>
-      <Icon className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+    <div
+      className={cn(
+        "flex flex-col items-center gap-2 px-6 py-12 text-center",
+        className,
+      )}
+    >
+      <span className="mb-2 grid size-12 place-items-center rounded-md bg-muted text-muted-foreground">
+        <Icon className="size-5" aria-hidden="true" />
+      </span>
       {title && (
         <p className="font-semibold" data-testid={testId}>
           {title}
         </p>
       )}
-      {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      {description && (
+        <p className="max-w-md text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      )}
       {children}
     </div>
   );

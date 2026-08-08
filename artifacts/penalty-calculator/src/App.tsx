@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Copy, FileCheck2, Grid2x2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Copy,
+  FileCheck2,
+  Grid2x2,
+  ShieldCheck,
+} from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -12,7 +20,13 @@ import {
   S103_PER_ADDITIONAL_DAY,
   S104_PER_INVOICE,
 } from "@/lib/penalty";
-import { WAVES, waveForBand, waveStatus, formatWaveDate, type WaveStatus } from "@/lib/deadlines";
+import {
+  WAVES,
+  waveForBand,
+  waveStatus,
+  formatWaveDate,
+  type WaveStatus,
+} from "@/lib/deadlines";
 
 // TODO(product): confirm the advisory inbox address before wide promotion.
 const ADVISORY_EMAIL = "advisory@meridianiq.com";
@@ -21,7 +35,9 @@ const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 /** Thousands-grouped plain number, e.g. 850,000,000 (no currency symbol). */
-const GROUPED_NUMBER = new Intl.NumberFormat("en-NG", { maximumFractionDigits: 2 });
+const GROUPED_NUMBER = new Intl.NumberFormat("en-NG", {
+  maximumFractionDigits: 2,
+});
 
 interface ParsedNumber {
   /** True when the field is empty — distinct from an explicit 0. */
@@ -36,7 +52,8 @@ function parseNumberInput(raw: string): ParsedNumber {
   const trimmed = raw.trim();
   if (trimmed === "") return { isBlank: true, isValid: true, value: 0 };
   const cleaned = trimmed.replace(/^₦/, "").replace(/[,\s]/g, "");
-  if (!/^\d+(\.\d+)?$/.test(cleaned)) return { isBlank: false, isValid: false, value: 0 };
+  if (!/^\d+(\.\d+)?$/.test(cleaned))
+    return { isBlank: false, isValid: false, value: 0 };
   const n = Number(cleaned);
   if (!Number.isFinite(n)) return { isBlank: false, isValid: false, value: 0 };
   return { isBlank: false, isValid: true, value: n };
@@ -70,7 +87,11 @@ function NumberField({
   const hintId = `${id}-hint`;
   const echoId = `${id}-echo`;
   const errorId = `${id}-error`;
-  const describedBy = [error ? errorId : null, echo && !error ? echoId : null, hintId]
+  const describedBy = [
+    error ? errorId : null,
+    echo && !error ? echoId : null,
+    hintId,
+  ]
     .filter(Boolean)
     .join(" ");
   return (
@@ -93,7 +114,7 @@ function NumberField({
           placeholder="0"
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={`w-full rounded-lg border bg-card py-2.5 pr-3 text-foreground shadow-sm outline-none transition focus:ring-2 ${
+          className={`w-full rounded-md border bg-card py-2.5 pr-3 text-foreground shadow-sm outline-none transition focus:ring-2 ${
             error
               ? "border-destructive focus:border-destructive focus:ring-destructive/30"
               : "border-input focus:border-ring focus:ring-ring/30"
@@ -132,14 +153,18 @@ function ResultRow({
   return (
     <div className="flex items-start justify-between gap-4 py-3">
       <div>
-        <p className={`text-sm ${strong ? "font-semibold text-foreground" : "font-medium text-foreground"}`}>
+        <p
+          className={`text-sm ${strong ? "font-semibold text-foreground" : "font-medium text-foreground"}`}
+        >
           {label}
         </p>
         <p className="text-xs text-muted-foreground">{detail}</p>
       </div>
       <p
         className={`shrink-0 tabular-nums ${
-          strong ? "text-xl font-bold text-primary" : "text-base font-semibold text-foreground"
+          strong
+            ? "text-xl font-bold text-primary"
+            : "text-base font-semibold text-foreground"
         }`}
       >
         {formatNaira(amount)}
@@ -192,7 +217,9 @@ export default function App() {
   const turnoverError = turnoverParsed.isValid
     ? undefined
     : "Enter a number, like 850,000,000 — digits only.";
-  const daysError = daysParsed.isValid ? undefined : "Enter a whole number of days, like 3.";
+  const daysError = daysParsed.isValid
+    ? undefined
+    : "Enter a whole number of days, like 3.";
   const invoicesError = invoicesParsed.isValid
     ? undefined
     : "Enter a whole number of invoices, like 12.";
@@ -201,11 +228,15 @@ export default function App() {
     ? `= ${formatNaira(turnoverParsed.value)} — ${BAND_LABELS[result.band]} band`
     : undefined;
   const daysEcho =
-    daysParsed.isValid && !daysParsed.isBlank && !Number.isInteger(daysParsed.value)
+    daysParsed.isValid &&
+    !daysParsed.isBlank &&
+    !Number.isInteger(daysParsed.value)
       ? `Counted as ${dayCount} day${dayCount === 1 ? "" : "s"}`
       : undefined;
   const invoicesEcho =
-    invoicesParsed.isValid && !invoicesParsed.isBlank && !Number.isInteger(invoicesParsed.value)
+    invoicesParsed.isValid &&
+    !invoicesParsed.isBlank &&
+    !Number.isInteger(invoicesParsed.value)
       ? `Counted as ${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}`
       : undefined;
 
@@ -259,44 +290,50 @@ export default function App() {
     <div className="min-h-screen bg-background text-foreground">
       <a
         href="#main-content"
-        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-sm ${FOCUS_RING}`}
+        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#071a1c] focus:shadow-sm ${FOCUS_RING}`}
       >
         Skip to content
       </a>
       <Toaster />
       {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4 sm:px-6">
+      <header className="border-b border-white/10 bg-[#071a1c] text-white">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-4 sm:gap-3 sm:px-6">
           <a
             href="/"
             aria-label="MeridianIQ home"
-            className={`inline-flex items-center gap-3 rounded-lg ${FOCUS_RING}`}
+            className={`inline-flex items-center gap-3 rounded-md ${FOCUS_RING}`}
           >
-            <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
+            <div className="rounded-md bg-lime-300 p-1.5 text-[#071a1c]">
               <FileCheck2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
               <p className="text-base font-bold leading-none">MeridianIQ</p>
-              <p className="text-xs text-muted-foreground leading-tight">
-                Nigerian e-invoicing compliance
+              <p className="text-xs leading-tight text-white/50">
+                Compliance planning tools
               </p>
             </div>
           </a>
           <a
             href="/"
             data-testid="link-back-to-website"
-            className={`ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted ${FOCUS_RING}`}
+            className={`ml-auto inline-flex size-9 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10 hover:text-white sm:size-auto sm:px-3 sm:py-2 ${FOCUS_RING}`}
+            aria-label="Back to website"
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-            Back to website
+            <span className="hidden text-sm font-semibold sm:inline">
+              Back to website
+            </span>
           </a>
           <a
             href="/login"
             data-testid="link-all-apps"
-            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted ${FOCUS_RING}`}
+            className={`inline-flex size-9 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10 hover:text-white sm:size-auto sm:px-3 sm:py-2 ${FOCUS_RING}`}
+            aria-label="Open all apps"
           >
             <Grid2x2 className="h-5 w-5" aria-hidden="true" />
-            All apps
+            <span className="hidden text-sm font-semibold sm:inline">
+              All apps
+            </span>
           </a>
         </div>
       </header>
@@ -304,27 +341,36 @@ export default function App() {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto max-w-5xl px-4 py-8 focus:outline-none sm:px-6 sm:py-10"
+        className="mx-auto max-w-6xl px-4 py-8 focus:outline-none sm:px-6 sm:py-10"
       >
         {/* Intro */}
-        <div className="max-w-2xl">
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <div className="max-w-3xl border-b border-slate-200 pb-6">
+          <p className="mb-2 inline-flex items-center gap-2 text-xs font-bold text-teal-700">
+            <ShieldCheck className="size-4" aria-hidden="true" />
+            Compliance planning tool
+          </p>
+          <h1
+            className="text-2xl font-extrabold text-slate-950 md:text-3xl"
+            data-testid="text-page-title"
+          >
             E-invoicing penalty estimator
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Estimate your potential exposure under s.103 (blocking a tax-authority systems audit)
-            and s.104 (invoices issued without a valid e-invoice stamp). Everything runs in your
-            browser — nothing you enter is sent or stored.
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Estimate your potential exposure under s.103 (blocking a
+            tax-authority systems audit) and s.104 (invoices issued without a
+            valid e-invoice stamp). Everything runs in your browser — nothing
+            you enter is sent or stored.
           </p>
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-5">
           {/* Inputs */}
           <div className="order-1 lg:order-none lg:col-span-3 lg:col-start-1 lg:row-start-1">
-            <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm sm:p-6">
+            <div className="rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
               <h2 className="text-base font-semibold">Your details</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Enter figures for the affected period. Leave a field blank if it does not apply.
+                Enter figures for the affected period. Leave a field blank if it
+                does not apply.
               </p>
 
               <div className="mt-5 space-y-5">
@@ -383,7 +429,7 @@ export default function App() {
             aria-label="Estimated exposure"
             className="order-2 lg:order-none lg:col-span-2 lg:col-start-4 lg:row-span-2 lg:row-start-1"
           >
-            <div className="sticky top-6 rounded-xl border border-card-border bg-card p-5 shadow-sm sm:p-6">
+            <div className="sticky top-6 rounded-lg border border-teal-800/25 bg-card p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-base font-semibold">Estimated exposure</h2>
                 <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
@@ -393,12 +439,15 @@ export default function App() {
                 </span>
               </div>
 
-              <div aria-live="polite" className="mt-4 rounded-lg bg-primary/5 p-4 text-center">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div
+                aria-live="polite"
+                className="mt-4 rounded-md bg-[#071a1c] p-4 text-center"
+              >
+                <p className="text-xs font-semibold text-white/55">
                   Total estimate
                 </p>
                 <p
-                  className="mt-1 text-3xl font-bold tabular-nums text-primary"
+                  className="mt-1 text-3xl font-extrabold tabular-nums text-lime-300"
                   data-testid="text-total"
                 >
                   {formatNaira(result.total)}
@@ -426,18 +475,24 @@ export default function App() {
                   }
                   amount={result.section104}
                 />
-                <ResultRow label="Combined total" detail="s.103 + s.104" amount={result.total} strong />
+                <ResultRow
+                  label="Combined total"
+                  detail="s.103 + s.104"
+                  amount={result.total}
+                  strong
+                />
               </div>
 
               <p className="mt-4 text-xs text-muted-foreground">
-                This is an estimate for guidance only — not legal or tax advice, and not a demand
-                from any authority. Actual penalties are determined by the tax authority.
+                This is an estimate for guidance only — not legal or tax advice,
+                and not a demand from any authority. Actual penalties are
+                determined by the tax authority.
               </p>
 
               <a
                 href="/app/"
                 data-testid="link-product-cta"
-                className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 ${FOCUS_RING}`}
+                className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 ${FOCUS_RING}`}
               >
                 See how MeridianIQ keeps you compliant
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -447,11 +502,14 @@ export default function App() {
 
           {/* Optional contact */}
           <div className="order-3 lg:order-none lg:col-span-3 lg:col-start-1 lg:row-start-2">
-            <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm sm:p-6">
-              <h2 className="text-base font-semibold">Talk to an advisor (optional)</h2>
+            <div className="rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
+              <h2 className="text-base font-semibold">
+                Talk to an advisor (optional)
+              </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                "Request a review" opens your email app with the estimate pre-filled — nothing is
-                sent until you press send. Prefer another channel? Copy the summary instead.
+                "Request a review" opens your email app with the estimate
+                pre-filled — nothing is sent until you press send. Prefer
+                another channel? Copy the summary instead.
               </p>
               <div className="mt-4 space-y-1.5">
                 <label
@@ -467,14 +525,14 @@ export default function App() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@company.com"
-                  className="w-full rounded-lg border border-input bg-card px-3 py-2.5 text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                  className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
                 />
               </div>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <a
                   href={mailtoHref}
                   data-testid="link-request-review"
-                  className={`inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 ${FOCUS_RING}`}
+                  className={`inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 ${FOCUS_RING}`}
                 >
                   Request a review
                 </a>
@@ -482,7 +540,7 @@ export default function App() {
                   type="button"
                   onClick={handleCopySummary}
                   data-testid="button-copy-summary"
-                  className={`inline-flex items-center justify-center gap-2 rounded-lg border border-input bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted ${FOCUS_RING}`}
+                  className={`inline-flex items-center justify-center gap-2 rounded-md border border-input bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted ${FOCUS_RING}`}
                 >
                   <Copy className="h-4 w-4" aria-hidden="true" />
                   Copy estimate summary
@@ -506,8 +564,9 @@ export default function App() {
         <section className="mt-12">
           <h2 className="text-xl font-bold">Onboarding & enforcement waves</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            The e-invoicing mandate is rolling out in waves by taxpayer size. Indicative planning
-            dates — always confirm against the tax authority's official notices.
+            The e-invoicing mandate is rolling out in waves by taxpayer size.
+            Indicative planning dates — always confirm against the tax
+            authority's official notices.
           </p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -518,7 +577,7 @@ export default function App() {
                 <div
                   key={wave.band}
                   aria-current={isActive ? "true" : undefined}
-                  className={`rounded-xl border p-5 shadow-sm transition ${
+                  className={`rounded-lg border p-5 shadow-sm transition ${
                     isActive
                       ? "border-primary bg-primary/5 ring-1 ring-primary/30"
                       : "border-card-border bg-card"
@@ -533,7 +592,9 @@ export default function App() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{wave.threshold}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {wave.threshold}
+                  </p>
                   <div className="mt-3">
                     <span
                       className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border ${
@@ -546,23 +607,33 @@ export default function App() {
                   <dl className="mt-3 space-y-1.5 text-xs">
                     <div className="flex justify-between gap-2">
                       <dt className="text-muted-foreground">Onboard by</dt>
-                      <dd className="font-medium">{formatWaveDate(wave.onboardingBy)}</dd>
+                      <dd className="font-medium">
+                        {formatWaveDate(wave.onboardingBy)}
+                      </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-muted-foreground">Enforcement</dt>
-                      <dd className="font-medium">{formatWaveDate(wave.enforcementFrom)}</dd>
+                      <dd className="font-medium">
+                        {formatWaveDate(wave.enforcementFrom)}
+                      </dd>
                     </div>
                   </dl>
-                  <p className="mt-3 text-xs font-medium text-foreground">{status.detail}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-foreground/80">{wave.summary}</p>
+                  <p className="mt-3 text-xs font-medium text-foreground">
+                    {status.detail}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-foreground/80">
+                    {wave.summary}
+                  </p>
                 </div>
               );
             })}
           </div>
 
           {hasTurnover && (
-            <div className="mt-4 rounded-lg border border-border bg-secondary/40 p-4 text-sm">
-              <span className="font-medium">Your band ({BAND_LABELS[result.band]}):</span>{" "}
+            <div className="mt-4 rounded-md border border-border bg-secondary/40 p-4 text-sm">
+              <span className="font-medium">
+                Your band ({BAND_LABELS[result.band]}):
+              </span>{" "}
               <span className="text-muted-foreground">
                 {activeWaveStatus.detail}. {activeWave.summary}
               </span>
@@ -571,22 +642,24 @@ export default function App() {
         </section>
 
         {/* Methodology */}
-        <section className="mt-12 rounded-xl border border-card-border bg-card p-5 shadow-sm sm:p-6">
+        <section className="mt-12 rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
           <h2 className="text-base font-semibold">How this is calculated</h2>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>
-              <span className="font-medium text-foreground">Band</span> — set by annual turnover:
-              Small ≤ {formatNaira(SMALL_TURNOVER_CEILING)}, Medium ≤{" "}
-              {formatNaira(MEDIUM_TURNOVER_CEILING)}, Large above.
+              <span className="font-medium text-foreground">Band</span> — set by
+              annual turnover: Small ≤ {formatNaira(SMALL_TURNOVER_CEILING)},
+              Medium ≤ {formatNaira(MEDIUM_TURNOVER_CEILING)}, Large above.
             </li>
             <li>
               <span className="font-medium text-foreground">s.103</span> —{" "}
-              {formatNaira(S103_FIRST_DAY)} for the first day a systems audit is blocked, plus{" "}
-              {formatNaira(S103_PER_ADDITIONAL_DAY)} for every additional day.
+              {formatNaira(S103_FIRST_DAY)} for the first day a systems audit is
+              blocked, plus {formatNaira(S103_PER_ADDITIONAL_DAY)} for every
+              additional day.
             </li>
             <li>
-              <span className="font-medium text-foreground">s.104</span> — per invoice issued
-              without a valid e-invoice stamp: {formatNaira(S104_PER_INVOICE.small)} (Small),{" "}
+              <span className="font-medium text-foreground">s.104</span> — per
+              invoice issued without a valid e-invoice stamp:{" "}
+              {formatNaira(S104_PER_INVOICE.small)} (Small),{" "}
               {formatNaira(S104_PER_INVOICE.medium)} (Medium),{" "}
               {formatNaira(S104_PER_INVOICE.large)} (Large).
             </li>
@@ -600,8 +673,10 @@ export default function App() {
           aria-hidden="true"
           className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur lg:hidden"
         >
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-            <span className="text-sm text-muted-foreground">Total estimate</span>
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+            <span className="text-sm text-muted-foreground">
+              Total estimate
+            </span>
             <span className="text-base font-bold tabular-nums text-primary">
               {formatNaira(result.total)}
             </span>
@@ -610,9 +685,9 @@ export default function App() {
       )}
 
       <footer className="border-t border-border">
-        <div className="mx-auto max-w-5xl px-4 py-6 pb-20 text-xs text-muted-foreground sm:px-6 lg:pb-6">
-          © {new Date().getFullYear()} MeridianIQ. Estimates only — not legal or tax advice. No data
-          entered here leaves your device.
+        <div className="mx-auto max-w-6xl px-4 py-6 pb-20 text-xs text-muted-foreground sm:px-6 lg:pb-6">
+          © {new Date().getFullYear()} MeridianIQ. Estimates only — not legal or
+          tax advice. No data entered here leaves your device.
         </div>
       </footer>
     </div>

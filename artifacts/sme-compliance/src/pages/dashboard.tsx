@@ -113,24 +113,33 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <Card
-        className={`h-full transition-colors hover:border-primary/50 ${
-          danger ? "border-destructive/50 bg-destructive/5" : ""
+        className={`h-full transition-colors hover:border-primary/40 ${
+          danger ? "border-destructive/35 bg-destructive/5" : ""
         }`}
       >
-        <CardContent className="pt-6">
+        <CardContent className="p-5">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <p className="text-2xl font-bold mt-1">{value}</p>
-              <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-muted-foreground">{label}</p>
+              <p className="mt-2 text-2xl font-extrabold tabular-nums">
+                {value}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {sub}
+              </p>
             </div>
-            <Icon
-              className={`w-8 h-8 ${danger ? "text-destructive" : "text-primary"}`}
-              aria-hidden="true"
-            />
+            <span
+              className={`grid size-10 shrink-0 place-items-center rounded-md ${
+                danger
+                  ? "bg-red-50 text-destructive dark:bg-red-950/50"
+                  : "bg-teal-50 text-primary dark:bg-teal-950/50"
+              }`}
+            >
+              <Icon className="size-5" aria-hidden="true" />
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -330,7 +339,8 @@ function ReceivablesCard({
                             className="ml-1.5 text-xs text-muted-foreground"
                             data-testid={`rhythm-${debtor.buyerPartyId}`}
                           >
-                            usually pays ~{rhythmByBuyer.get(debtor.buyerPartyId)}d
+                            usually pays ~
+                            {rhythmByBuyer.get(debtor.buyerPartyId)}d
                           </span>
                         )}
                       </span>
@@ -359,13 +369,14 @@ function ReceivablesCard({
  * everything beyond — the remaining weekly buckets folded into `later`.
  * Exported for the unit tests.
  */
-export function dueLaterBucket(group: PayablesSummaryGroupsItem): CashflowBucket {
+export function dueLaterBucket(
+  group: PayablesSummaryGroupsItem,
+): CashflowBucket {
   const rest = group.dueWeeks.slice(1);
   const amount =
     rest.reduce((sum, w) => sum + Number(w.amount), 0) +
     Number(group.later.amount);
-  const count =
-    rest.reduce((sum, w) => sum + w.count, 0) + group.later.count;
+  const count = rest.reduce((sum, w) => sum + w.count, 0) + group.later.count;
   return { amount: amount.toFixed(2), count };
 }
 
@@ -424,7 +435,10 @@ export function PayablesCard({ clientPartyId }: { clientPartyId: string }) {
               bucket={primary.dueWeeks[0] ?? { amount: "0", count: 0 }}
               tone="warning"
             />
-            <AgingBucketRow label="Due later" bucket={dueLaterBucket(primary)} />
+            <AgingBucketRow
+              label="Due later"
+              bucket={dueLaterBucket(primary)}
+            />
           </div>
           {summary.topSuppliers.length > 0 && (
             <div className="pt-3 border-t">
@@ -670,8 +684,8 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{a.buyerName}</p>
                 <p className="text-xs text-muted-foreground">
-                  Usually about {formatAmount(a.medianAmount, a.currency)}{" "}
-                  every ~{a.medianGapDays} days · last invoiced{" "}
+                  Usually about {formatAmount(a.medianAmount, a.currency)} every
+                  ~{a.medianGapDays} days · last invoiced{" "}
                   {formatDate(a.lastIssueDate)}
                 </p>
               </div>
@@ -924,9 +938,7 @@ export function MonthlyAutomationStrip({
     mutation: { onSuccess: onChanged, onError },
   });
   if (!data) return null;
-  const policy = data.policies.find(
-    (p) => p.templateKey === "month_end_close",
-  );
+  const policy = data.policies.find((p) => p.templateKey === "month_end_close");
   // No grant and no way to make one: the strip has nothing to say.
   if (!policy && !data.enabled) return null;
   const busy =
@@ -1023,13 +1035,12 @@ export function MonthlyAutomationStrip({
             <DialogDescription>
               Each month, Clerk will run this close plan for your business:
               raise draft invoices for regular customers you have not billed
-              this cycle (drafts stay for your review — nothing is sent),
-              submit invoices past the reporting window, then retry failed
-              submissions. Every step re-checks eligibility at run time and
-              every action is recorded. If a run halts, or anything about the
-              engagement, consent or the approver changes, the automation
-              pauses itself and waits for you. You can pause or revoke it at
-              any time.
+              this cycle (drafts stay for your review — nothing is sent), submit
+              invoices past the reporting window, then retry failed submissions.
+              Every step re-checks eligibility at run time and every action is
+              recorded. If a run halts, or anything about the engagement,
+              consent or the approver changes, the automation pauses itself and
+              waits for you. You can pause or revoke it at any time.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1100,7 +1111,10 @@ function PenaltyExposureCard({ clientPartyId }: { clientPartyId: string }) {
         {exposure.sampleInvoices.length > 0 && (
           <div className="space-y-1 text-xs">
             {exposure.sampleInvoices.map((s) => (
-              <p key={s.invoiceId} data-testid={`penalty-invoice-${s.invoiceId}`}>
+              <p
+                key={s.invoiceId}
+                data-testid={`penalty-invoice-${s.invoiceId}`}
+              >
                 {s.invoiceNumber} · issued {formatDate(s.issueDate)} ·{" "}
                 {s.daysOverdue} day{s.daysOverdue === 1 ? "" : "s"} past the
                 window
@@ -1155,8 +1169,8 @@ function UnmatchedCreditsCard({ clientPartyId }: { clientPartyId: string }) {
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           {credits.count} bank credit{credits.count === 1 ? "" : "s"} totalling{" "}
-          {formatNaira(credits.totalAmount)} from the last{" "}
-          {credits.windowDays} days match no invoice on the platform.
+          {formatNaira(credits.totalAmount)} from the last {credits.windowDays}{" "}
+          days match no invoice on the platform.
         </p>
         <div className="space-y-2">
           {credits.rows.slice(0, 5).map((r) => (
@@ -1228,8 +1242,7 @@ function NetPositionCard({ clientPartyId }: { clientPartyId: string }) {
     <Card data-testid="net-position">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Activity className="w-5 h-5" aria-hidden="true" /> Net cash
-          position
+          <Activity className="w-5 h-5" aria-hidden="true" /> Net cash position
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
@@ -1252,9 +1265,7 @@ function NetPositionCard({ clientPartyId }: { clientPartyId: string }) {
             </span>
             <span
               className={`font-semibold tabular-nums ${
-                Number(w.net) < 0
-                  ? "text-amber-800 dark:text-amber-300"
-                  : ""
+                Number(w.net) < 0 ? "text-amber-800 dark:text-amber-300" : ""
               }`}
             >
               {formatNaira(w.net)}
@@ -1264,8 +1275,8 @@ function NetPositionCard({ clientPartyId }: { clientPartyId: string }) {
         {(group.overdueInflow.count > 0 || group.overdueOutflow.count > 0) && (
           <p className="text-xs text-muted-foreground">
             Outside these weeks: {formatNaira(group.overdueInflow.amount)}{" "}
-            expected but already late, {formatNaira(group.overdueOutflow.amount)}{" "}
-            in bills already overdue.
+            expected but already late,{" "}
+            {formatNaira(group.overdueOutflow.amount)} in bills already overdue.
           </p>
         )}
         <p className="text-xs text-muted-foreground pt-3 border-t">
@@ -1351,8 +1362,8 @@ function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
           </div>
         )}
         <p className="text-xs text-muted-foreground pt-3 border-t">
-          Projected from each customer&apos;s own payment history where we
-          have one, otherwise due dates. {group.currency} only
+          Projected from each customer&apos;s own payment history where we have
+          one, otherwise due dates. {group.currency} only
           {outlook.groups.length > 1 ? " (other currencies not shown)" : ""}.
           {accuracy &&
             accuracy.settlements >= 5 &&
@@ -1548,7 +1559,10 @@ export function Dashboard() {
         {isLoading ? (
           <DashboardSkeleton />
         ) : isError ? (
-          <QueryError thing="your compliance summary" onRetry={() => refetch()} />
+          <QueryError
+            thing="your compliance summary"
+            onRetry={() => refetch()}
+          />
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1587,11 +1601,13 @@ export function Dashboard() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Activity className="w-5 h-5" aria-hidden="true" /> Recent activity
+                    <Activity className="w-5 h-5" aria-hidden="true" /> Recent
+                    activity
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {summary?.recentActivity && summary.recentActivity.length > 0 ? (
+                  {summary?.recentActivity &&
+                  summary.recentActivity.length > 0 ? (
                     <div className="space-y-4">
                       {summary.recentActivity.map((activity) => (
                         <div
@@ -1625,7 +1641,8 @@ export function Dashboard() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" aria-hidden="true" /> Next deadline
+                    <Clock className="w-5 h-5" aria-hidden="true" /> Next
+                    deadline
                   </CardTitle>
                 </CardHeader>
                 <CardContent>

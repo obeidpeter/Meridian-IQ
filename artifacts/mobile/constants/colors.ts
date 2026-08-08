@@ -12,32 +12,32 @@
 const colors = {
   light: {
     // Legacy aliases (kept for backward compatibility)
-    text: "#111d2e",
-    tint: "#0d7a63",
+    text: "#172126",
+    tint: "#0b6b66",
 
     // Core surfaces
-    background: "#fafcfd", // 210 33% 99%
-    foreground: "#111d2e", // 222 47% 11%
+    background: "#f4f7f6",
+    foreground: "#172126",
 
     // Cards / elevated surfaces
     card: "#ffffff",
-    cardForeground: "#111d2e",
+    cardForeground: "#172126",
 
     // Primary action color (buttons, links, active states) — teal
-    primary: "#0d7c64", // 173 80% 27%
+    primary: "#0b6b66",
     primaryForeground: "#ffffff",
 
     // Secondary / less-emphasis interactive surfaces
-    secondary: "#dde5ee", // 214 32% 91%
-    secondaryForeground: "#111d2e",
+    secondary: "#e8edeb",
+    secondaryForeground: "#172126",
 
     // Muted / subdued elements (dividers, timestamps, placeholders)
-    muted: "#dde5ee",
-    mutedForeground: "#586577", // 215 18% 42%
+    muted: "#e8edeb",
+    mutedForeground: "#5b676b",
 
     // Accent highlights (badges, selected items, focus rings)
-    accent: "#cdf5ec", // 173 80% 90%
-    accentForeground: "#0b6653", // 173 80% 25%
+    accent: "#e7f5c9",
+    accentForeground: "#184c47",
 
     // Destructive actions (delete, error states)
     destructive: "#c62828", // 0 72% 45% — for FILLS with destructiveForeground
@@ -51,8 +51,8 @@ const colors = {
     destructiveSoft: "#fdeaea",
 
     // Borders and input outlines
-    border: "#dde5ee",
-    input: "#dde5ee",
+    border: "#d8dfdd",
+    input: "#cbd5d2",
 
     // Supplementary status colors (derived for badges)
     warning: "#b45309",
@@ -60,30 +60,30 @@ const colors = {
     // Soft warning SURFACE (badges, banners). Pair with `warning` as the text
     // color (5.5:1 here). The success-soft equivalent is `accent`.
     warningSoft: "#fdf1e3",
-    success: "#0d7c64",
+    success: "#0b6b66",
   },
 
   dark: {
     text: "#f1f5fb",
     tint: "#17b899",
 
-    background: "#111d2e", // 222 47% 11%
-    foreground: "#f1f5fb", // 210 40% 98%
+    background: "#0b1718",
+    foreground: "#f2f7f5",
 
-    card: "#152439",
-    cardForeground: "#f1f5fb",
+    card: "#112224",
+    cardForeground: "#f2f7f5",
 
-    primary: "#17b899", // 173 80% 40%
-    primaryForeground: "#111d2e",
+    primary: "#68d5c9",
+    primaryForeground: "#071a1c",
 
-    secondary: "#1d2a3d", // 217 33% 17%
-    secondaryForeground: "#f1f5fb",
+    secondary: "#1b2d2f",
+    secondaryForeground: "#f2f7f5",
 
-    muted: "#1d2a3d",
-    mutedForeground: "#9aa8bd", // 215 20% 65%
+    muted: "#1b2d2f",
+    mutedForeground: "#a4b2ae",
 
-    accent: "#0a3b31", // 173 80% 20%
-    accentForeground: "#cdf5ec",
+    accent: "#294129",
+    accentForeground: "#dff5a8",
 
     destructive: "#c0392b",
     destructiveForeground: "#f1f5fb",
@@ -93,18 +93,18 @@ const colors = {
     // Deep-tinted destructive surface; destructiveText on it clears AA easily.
     destructiveSoft: "#3a1d1d",
 
-    border: "#243247",
-    input: "#243247",
+    border: "#294043",
+    input: "#375154",
 
     warning: "#d98324",
     warningForeground: "#111d2e",
     // Deep-tinted warning surface; `warning` text on it reads ~5:1.
     warningSoft: "#31240f",
-    success: "#17b899",
+    success: "#68d5c9",
   },
 
-  // Border radius (in px). Synced from the web artifact's --radius (0.75rem).
-  radius: 12,
+  // Border radius (in px). Synced from the web artifact's 0.5rem geometry.
+  radius: 8,
 };
 
 export default colors;

@@ -68,19 +68,19 @@ function toCsv(rows: ScoreboardRow[]): string {
 
 function PageHeader({ actions }: { actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div>
+    <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="min-w-0">
         <h1
-          className="text-2xl md:text-3xl font-bold"
+          className="text-2xl font-extrabold text-slate-950 md:text-3xl"
           data-testid="text-page-title"
         >
           Supplier scoreboard
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
           Suppliers ranked by stamping and confirmation compliance.
         </p>
       </div>
-      {actions}
+      {actions ? <div className="shrink-0">{actions}</div> : null}
     </div>
   );
 }

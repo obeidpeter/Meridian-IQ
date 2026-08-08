@@ -39,40 +39,53 @@ const VARIANT_STYLE: Record<
     fontFamily: string;
     fontSize: number;
     lineHeight: number;
-    letterSpacing?: number;
+    letterSpacing: number;
     textTransform?: "uppercase";
   }
 > = {
-  // Negative tracking on the large sizes: Inter is spaced for body text, so
-  // headlines read airy without a slight tightening.
   display: {
     fontFamily: "Inter_700Bold",
     fontSize: 34,
     lineHeight: 40,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 24,
     lineHeight: 30,
-    letterSpacing: -0.4,
+    letterSpacing: 0,
   },
   heading: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 18,
     lineHeight: 24,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
-  body: { fontFamily: "Inter_400Regular", fontSize: 15, lineHeight: 22 },
-  label: { fontFamily: "Inter_500Medium", fontSize: 14, lineHeight: 20 },
-  caption: { fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 16 },
+  body: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  label: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0,
+  },
+  caption: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0,
+  },
   // Section eyebrows ("PENALTY RISK", "RECEIVABLES"): wide-tracked and
   // auto-uppercased, so call sites pass natural-case text and stay consistent.
   overline: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 1.1,
+    letterSpacing: 0,
     textTransform: "uppercase",
   },
 };
@@ -94,7 +107,11 @@ export function AppText({
   return (
     <Text
       numberOfLines={numberOfLines}
-      style={[VARIANT_STYLE[variant], { color: color ?? colors.foreground }, style]}
+      style={[
+        VARIANT_STYLE[variant],
+        { color: color ?? colors.foreground },
+        style,
+      ]}
     >
       {children}
     </Text>
@@ -252,7 +269,13 @@ export function AppButton({
 
 export type BadgeTone = "neutral" | "success" | "warning" | "critical" | "info";
 
-export function Badge({ label, tone = "neutral" }: { label: string; tone?: BadgeTone }) {
+export function Badge({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: BadgeTone;
+}) {
   const colors = useColors();
   // Soft-tint pill recipe (web design language §8): tinted surface + deep
   // same-hue text + a faint tone-matched border. Warning/critical previously
@@ -279,7 +302,9 @@ export function Badge({ label, tone = "neutral" }: { label: string; tone?: Badge
         alignSelf: "flex-start",
       }}
     >
-      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: t.fg }}>
+      <Text
+        style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: t.fg }}
+      >
         {label}
       </Text>
     </View>
@@ -336,12 +361,22 @@ export function TextField({
       {error ? (
         <Text
           accessibilityLiveRegion="polite"
-          style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.destructiveText }}
+          style={{
+            fontFamily: "Inter_400Regular",
+            fontSize: 12,
+            color: colors.destructiveText,
+          }}
         >
           {error}
         </Text>
       ) : hint ? (
-        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>
+        <Text
+          style={{
+            fontFamily: "Inter_400Regular",
+            fontSize: 12,
+            color: colors.mutedForeground,
+          }}
+        >
           {hint}
         </Text>
       ) : null}
@@ -372,11 +407,30 @@ export function Banner({
   // Soft tinted surfaces all round (error/warning previously sat on a plain
   // card and relied on their border alone, which looked unfinished next to
   // the tinted success/info variants).
-  const map: Record<BannerTone, { bg: string; fg: string; icon: keyof typeof Feather.glyphMap }> = {
-    success: { bg: colors.accent, fg: colors.accentForeground, icon: "check-circle" },
-    error: { bg: colors.destructiveSoft, fg: colors.destructiveText, icon: "alert-triangle" },
-    info: { bg: colors.secondary, fg: colors.secondaryForeground, icon: "info" },
-    warning: { bg: colors.warningSoft, fg: colors.warning, icon: "alert-circle" },
+  const map: Record<
+    BannerTone,
+    { bg: string; fg: string; icon: keyof typeof Feather.glyphMap }
+  > = {
+    success: {
+      bg: colors.accent,
+      fg: colors.accentForeground,
+      icon: "check-circle",
+    },
+    error: {
+      bg: colors.destructiveSoft,
+      fg: colors.destructiveText,
+      icon: "alert-triangle",
+    },
+    info: {
+      bg: colors.secondary,
+      fg: colors.secondaryForeground,
+      icon: "info",
+    },
+    warning: {
+      bg: colors.warningSoft,
+      fg: colors.warning,
+      icon: "alert-circle",
+    },
   };
   const t = map[tone];
   return (
@@ -396,7 +450,15 @@ export function Banner({
       }}
     >
       <Feather name={t.icon} size={18} color={t.fg} style={{ marginTop: 1 }} />
-      <Text style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 14, lineHeight: 20, color: t.fg }}>
+      <Text
+        style={{
+          flex: 1,
+          fontFamily: "Inter_500Medium",
+          fontSize: 14,
+          lineHeight: 20,
+          color: t.fg,
+        }}
+      >
         {message}
       </Text>
     </View>
@@ -463,7 +525,11 @@ export function CardSkeleton({ lines = 3 }: { lines?: number }) {
       <View style={{ gap: 10 }}>
         <Skeleton height={20} width="55%" />
         {Array.from({ length: lines }).map((_, i) => (
-          <Skeleton key={i} height={14} width={i === lines - 1 ? "40%" : "85%"} />
+          <Skeleton
+            key={i}
+            height={14}
+            width={i === lines - 1 ? "40%" : "85%"}
+          />
         ))}
       </View>
     </Card>
@@ -552,7 +618,13 @@ export function ErrorState({
       </AppText>
       {onRetry ? (
         <View style={{ marginTop: 16 }}>
-          <AppButton label="Try again" icon="refresh-cw" onPress={onRetry} fullWidth={false} variant="secondary" />
+          <AppButton
+            label="Try again"
+            icon="refresh-cw"
+            onPress={onRetry}
+            fullWidth={false}
+            variant="secondary"
+          />
         </View>
       ) : null}
     </View>
@@ -614,7 +686,11 @@ export function StatTile({
           />
         ) : null}
       </View>
-      <AppText variant="title" color={tone ?? colors.foreground} style={{ marginTop: 6 }}>
+      <AppText
+        variant="title"
+        color={tone ?? colors.foreground}
+        style={{ marginTop: 6 }}
+      >
         {value}
       </AppText>
     </Card>
@@ -758,10 +834,10 @@ const styles = StyleSheet.create({
   // separation, not floating panels.
   cardShadow: {
     shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   actionTile: {
     flexGrow: 1,

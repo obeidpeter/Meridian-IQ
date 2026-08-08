@@ -53,9 +53,19 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { name: "index", title: "Home", sf: "house", feather: "home" },
-  { name: "deadlines", title: "Deadlines", sf: "calendar", feather: "calendar" },
+  {
+    name: "deadlines",
+    title: "Deadlines",
+    sf: "calendar",
+    feather: "calendar",
+  },
   { name: "b2c", title: "B2C Reports", sf: "bag", feather: "shopping-bag" },
-  { name: "invoice", title: "New Invoice", sf: "doc.badge.plus", feather: "file-plus" },
+  {
+    name: "invoice",
+    title: "New Invoice",
+    sf: "doc.badge.plus",
+    feather: "file-plus",
+  },
   { name: "estimator", title: "Estimator", sf: "percent", feather: "percent" },
   { name: "settings", title: "Settings", sf: "gearshape", feather: "settings" },
 ];
@@ -73,22 +83,27 @@ function ClassicTabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: true,
-        headerStyle: { backgroundColor: colors.background },
-        headerShadowVisible: false,
+        headerStyle: { backgroundColor: colors.card },
+        headerShadowVisible: true,
         headerTitleStyle: {
           fontFamily: "Inter_600SemiBold",
           color: colors.foreground,
         },
-        tabBarLabelStyle: { fontFamily: "Inter_500Medium", fontSize: 11 },
+        tabBarLabelStyle: {
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 10,
+          letterSpacing: 0,
+        },
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.background,
+          backgroundColor: isIOS ? "transparent" : colors.card,
           // iOS separates via the blur layer; Android/web need a hairline or
           // the bar melts into the content scrolling behind it.
           borderTopWidth: isIOS ? 0 : isWeb ? 1 : StyleSheet.hairlineWidth,
           borderTopColor: colors.border,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          paddingTop: 6,
+          ...(isWeb ? { height: 78, paddingBottom: 8 } : { height: 68 }),
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -101,7 +116,7 @@ function ClassicTabLayout() {
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.background },
+                { backgroundColor: colors.card },
               ]}
             />
           ) : null,
