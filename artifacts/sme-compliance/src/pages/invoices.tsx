@@ -184,7 +184,9 @@ function BulkSubmitDialog({
   onClose: () => void;
 }) {
   const bulkRows = report?.rows ?? [];
-  const bulkSubmitted = bulkRows.filter((r) => r.outcome === "submitted").length;
+  const bulkSubmitted = bulkRows.filter(
+    (r) => r.outcome === "submitted",
+  ).length;
   const bulkNeedsAttention = bulkRows.filter((r) => r.outcome !== "submitted");
 
   return (
@@ -200,19 +202,15 @@ function BulkSubmitDialog({
             <DialogHeader>
               <DialogTitle>Submit all pending drafts?</DialogTitle>
               <DialogDescription>
-                This validates every pending draft (draft or validated,
-                oldest first) and submits the valid ones to the FIRS stamping
-                rail, in batches of up to 200. Submission cannot be undone.
-                Drafts that fail validation stay pending, with their issues
-                listed so you can fix them.
+                This validates every pending draft (draft or validated, oldest
+                first) and submits the valid ones to the FIRS stamping rail, in
+                batches of up to 200. Submission cannot be undone. Drafts that
+                fail validation stay pending, with their issues listed so you
+                can fix them.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button
-                variant="ghost"
-                onClick={onClose}
-                disabled={isPending}
-              >
+              <Button variant="ghost" onClick={onClose} disabled={isPending}>
                 Cancel
               </Button>
               <Button
@@ -325,7 +323,10 @@ function AdvancedFiltersCard({
   onClear: () => void;
 }) {
   const hasValues =
-    !!values.fromDate || !!values.toDate || !!values.minAmount || !!values.maxAmount;
+    !!values.fromDate ||
+    !!values.toDate ||
+    !!values.minAmount ||
+    !!values.maxAmount;
   return (
     <Card>
       <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6">
@@ -429,12 +430,16 @@ export function Invoices() {
   } = useAccumulatedInvoicePages(search);
 
   const partyName = useMemo(
-    () => idMap(parties, (p) => p.id, (p) => p.legalName),
+    () =>
+      idMap(
+        parties,
+        (p) => p.id,
+        (p) => p.legalName,
+      ),
     [parties],
   );
 
-  const hasAdvanced =
-    !!fromDate || !!toDate || !!minAmount || !!maxAmount;
+  const hasAdvanced = !!fromDate || !!toDate || !!minAmount || !!maxAmount;
   const hasAnyFilter = hasAdvanced || !!search.trim() || filter !== "all";
 
   const clearAdvanced = () => {
@@ -527,7 +532,9 @@ export function Invoices() {
     const min = minAmount && Number.isFinite(minParsed) ? minParsed : null;
     const max = maxAmount && Number.isFinite(maxParsed) ? maxParsed : null;
     return scoped
-      .filter((inv) => (filter === "all" ? true : statusTone(inv.status) === filter))
+      .filter((inv) =>
+        filter === "all" ? true : statusTone(inv.status) === filter,
+      )
       .filter((inv) => (fromDate ? inv.issueDate >= fromDate : true))
       .filter((inv) => (toDate ? inv.issueDate <= toDate : true))
       .filter((inv) => (min !== null ? Number(inv.grandTotal) >= min : true))
@@ -652,8 +659,8 @@ export function Invoices() {
               title="No invoices yet"
               description={
                 <>
-                  Create your first invoice, or bring your whole book across in one
-                  go with{" "}
+                  Create your first invoice, or bring your whole book across in
+                  one go with{" "}
                   <Link href="/import" className="text-primary hover:underline">
                     bulk import
                   </Link>
@@ -673,7 +680,11 @@ export function Invoices() {
               title="No matches"
               description="No invoices match the current search and filters."
             >
-              <Button variant="outline" className="mt-2" onClick={clearAllFilters}>
+              <Button
+                variant="outline"
+                className="mt-2"
+                onClick={clearAllFilters}
+              >
                 Clear filters
               </Button>
             </EmptyState>
@@ -682,7 +693,11 @@ export function Invoices() {
       ) : (
         <div className="space-y-3">
           {rows.map((inv) => (
-            <Link key={inv.id} href={`/invoices/${inv.id}`} className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <Link
+              key={inv.id}
+              href={`/invoices/${inv.id}`}
+              className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <Card className="hover:border-primary/50 transition-colors cursor-pointer">
                 <CardContent className="flex items-center justify-between p-4 gap-3">
                   <div className="min-w-0">
@@ -703,7 +718,10 @@ export function Invoices() {
                     <span className="font-semibold tabular-nums">
                       {formatNaira(inv.grandTotal)}
                     </span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                    <ChevronRight
+                      className="w-4 h-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
                   </div>
                 </CardContent>
               </Card>

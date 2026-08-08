@@ -47,38 +47,37 @@
 }
 
 :root {
-  --background: 210 33% 99%;
-  --foreground: 222 47% 11%;
+  --background: 210 20% 98%;
+  --foreground: 216 34% 12%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 216 34% 12%;
+  --card-border: 212 20% 88%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 216 34% 12%;
+  --popover-border: 212 20% 88%;
 
-  /* Bold deliberate color: a confident corporate blue for the buyer portal */
-  --primary: 221 83% 45%;
+  --primary: 205 74% 36%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 214 32% 91%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 210 18% 94%;
+  --secondary-foreground: 216 34% 12%;
 
-  --muted: 214 32% 91%;
-  --muted-foreground: 215 18% 42%;
+  --muted: 210 18% 94%;
+  --muted-foreground: 215 14% 40%;
 
-  --accent: 221 83% 93%;
-  --accent-foreground: 221 83% 32%;
+  --accent: 190 60% 90%;
+  --accent-foreground: 205 74% 26%;
 
   --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 221 83% 45%;
+  --border: 212 20% 88%;
+  --input: 212 20% 84%;
+  --ring: 205 74% 38%;
 
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 }
 
 .dark {
@@ -121,7 +120,30 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    min-width: 320px;
+    overflow-x: clip;
   }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: 0;
+  }
+}
+
+.workspace-nav-scroll {
+  scrollbar-color: rgb(255 255 255 / 20%) transparent;
+  scrollbar-width: thin;
+}
+
+.workspace-nav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.workspace-nav-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgb(255 255 255 / 20%);
 }
 
 /* Respect the OS reduced-motion preference (WCAG 2.3.3 / 2.2.2). */

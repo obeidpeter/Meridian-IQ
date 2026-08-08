@@ -239,7 +239,7 @@ function LandingNav() {
   ];
 
   return (
-    <header className="relative z-20 border-b border-white/15">
+    <header className="relative z-20 border-b border-white/15 bg-[#071a1c]/90">
       <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
         <BrandLockup inverted />
 

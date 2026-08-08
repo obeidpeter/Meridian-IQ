@@ -47,38 +47,37 @@
 }
 
 :root {
-  --background: 210 33% 99%;
-  --foreground: 222 47% 11%;
+  --background: 210 20% 98%;
+  --foreground: 216 34% 12%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 216 34% 12%;
+  --card-border: 212 20% 88%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 216 34% 12%;
+  --popover-border: 212 20% 88%;
 
-  /* Bold deliberate color: A rich teal for trust and calm */
-  --primary: 173 80% 27%;
+  --primary: 177 72% 24%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 214 32% 91%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 210 18% 94%;
+  --secondary-foreground: 216 34% 12%;
 
-  --muted: 214 32% 91%;
-  --muted-foreground: 215 18% 42%;
+  --muted: 210 18% 94%;
+  --muted-foreground: 215 14% 40%;
 
-  --accent: 173 80% 90%;
-  --accent-foreground: 173 80% 25%;
+  --accent: 82 68% 88%;
+  --accent-foreground: 177 72% 18%;
 
   --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 173 80% 30%;
+  --border: 212 20% 88%;
+  --input: 212 20% 84%;
+  --ring: 177 72% 26%;
 
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 }
 
 .dark {
@@ -119,6 +118,15 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    min-width: 320px;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: 0;
   }
 }
 

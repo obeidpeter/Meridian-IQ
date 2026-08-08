@@ -1,29 +1,70 @@
-import { ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Building2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
 
 function goToPortal() {
-  // Full navigation back to the origin's login portal (not a wouter route) —
-  // sign-in and role selection live at "/login", outside this app's basename.
   window.location.href = "/login";
 }
 
-function BrandSplash({ children }: { children: ReactNode }) {
+function formatRole(role: string) {
+  return role.replaceAll("_", " ");
+}
+
+function BrandSplash({
+  title,
+  description,
+  icon,
+  children,
+  testId,
+}: {
+  title: string;
+  description: ReactNode;
+  icon: ReactNode;
+  children?: ReactNode;
+  testId?: string;
+}) {
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <span className="text-2xl font-bold text-primary">MeridianIQ</span>
-      {children}
-    </div>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-muted/40 px-5 py-28 text-foreground">
+      <header className="absolute inset-x-0 top-0 border-b border-border bg-card/95">
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-5 sm:px-8">
+          <span className="grid size-9 place-items-center rounded-lg bg-[#0b2545] text-[#66e6f2] shadow-sm">
+            <Building2 className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-base font-extrabold leading-none">MeridianIQ</p>
+            <p className="mt-1 text-xs font-medium text-muted-foreground">
+              Buyer portal
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <section
+        className="w-full max-w-md rounded-lg border border-border bg-card p-6 text-center shadow-sm sm:p-8"
+        data-testid={testId}
+      >
+        <div className="mx-auto grid size-12 place-items-center rounded-lg bg-primary/10 text-primary">
+          {icon}
+        </div>
+        <h1 className="mt-5 text-xl font-bold sm:text-2xl">{title}</h1>
+        <div className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+          {description}
+        </div>
+        {children ? (
+          <div className="mt-6 flex justify-center">{children}</div>
+        ) : null}
+      </section>
+    </main>
   );
 }
 
 /**
- * Gates the buyer portal behind the origin-wide session cookie. The principal
- * is resolved once here via useGetMe; every page then reads the buyer party
- * from the same session (server-side buyer scoping), so no page passes it in.
+ * Resolves the buyer principal once. Buyer scoping is then enforced by the
+ * server for every page in this workspace.
  */
 export function RequireSession({
   allow,
@@ -32,11 +73,15 @@ export function RequireSession({
   allow: string[];
   children: ReactNode;
 }) {
-  const { data: me, isLoading, error, refetch } = useGetMe({
+  const {
+    data: me,
+    isLoading,
+    error,
+    refetch,
+  } = useGetMe({
     query: { queryKey: getGetMeQueryKey(), retry: false },
   });
 
-  // No session (or it expired) — GET /api/me answered 401. Leave the app.
   const unauthenticated = errorStatus(error) === 401;
   useEffect(() => {
     if (unauthenticated) goToPortal();
@@ -44,8 +89,11 @@ export function RequireSession({
 
   if (isLoading) {
     return (
-      <BrandSplash>
-        <Spinner className="size-6 text-muted-foreground" />
+      <BrandSplash
+        title="Opening your buyer workspace"
+        description="Verifying your secure MeridianIQ session."
+        icon={<Spinner className="size-6 text-primary" aria-hidden="true" />}
+      >
         <span className="sr-only" role="status">
           Loading your session
         </span>
@@ -54,48 +102,49 @@ export function RequireSession({
   }
 
   if (error && !unauthenticated) {
-    // A transient failure (network blip, 5xx) is not a missing session —
-    // offer a retry instead of ejecting the user mid-confirmation.
     return (
-      <BrandSplash>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Couldn't reach MeridianIQ right now. Check your connection and try
-          again.
-        </p>
+      <BrandSplash
+        title="MeridianIQ is temporarily unavailable"
+        description="We could not reach the service. Check your connection, then try again."
+        icon={<WifiOff className="size-6" aria-hidden="true" />}
+      >
         <Button
           variant="outline"
           onClick={() => refetch()}
           data-testid="button-retry-session"
         >
-          Retry
+          <RefreshCw className="size-4" aria-hidden="true" />
+          Try again
         </Button>
       </BrandSplash>
     );
   }
 
   if (error || !me) {
-    // Redirecting via the effect above; render nothing in the meantime.
     return null;
   }
 
   if (!allow.includes(me.role)) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md" data-testid="card-wrong-workspace">
-          <CardContent className="pt-6 space-y-4">
-            <div>
-              <h1 className="text-xl font-bold">Wrong workspace</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Signed in as {me.role}. This workspace needs a{" "}
-                {allow.join(" or ")} account.
-              </p>
-            </div>
-            <Button onClick={goToPortal} data-testid="button-back-to-portal">
-              Back to the MeridianIQ portal
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <BrandSplash
+        title="Wrong workspace"
+        description={
+          <>
+            You are signed in as{" "}
+            <span className="font-semibold text-foreground">
+              {formatRole(me.role)}
+            </span>
+            . This portal requires a {allow.map(formatRole).join(" or ")}{" "}
+            account.
+          </>
+        }
+        icon={<ShieldAlert className="size-6" aria-hidden="true" />}
+        testId="card-wrong-workspace"
+      >
+        <Button onClick={goToPortal} data-testid="button-back-to-portal">
+          Back to the MeridianIQ portal
+        </Button>
+      </BrandSplash>
     );
   }
 

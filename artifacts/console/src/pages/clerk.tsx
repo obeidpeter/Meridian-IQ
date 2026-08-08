@@ -2117,7 +2117,7 @@ export function ClerkWorkspace() {
                           type="button"
                           onClick={() => setSelectedId(c.id)}
                           aria-current={selectedId === c.id ? "true" : undefined}
-                          className={`w-full text-left flex items-start gap-3 rounded-xl border p-3 transition-colors hover:bg-muted/50 ${
+                          className={`w-full text-left flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
                             selectedId === c.id
                               ? "border-primary/50 ring-1 ring-primary/30 bg-muted/40"
                               : "border-border"
@@ -2178,7 +2178,7 @@ export function ClerkWorkspace() {
                       return (
                         <div
                           key={`batch-${g.batchId}`}
-                          className="space-y-2 rounded-xl border border-dashed border-border p-2"
+                          className="space-y-2 rounded-lg border border-dashed border-border p-2"
                           data-testid={`group-batch-${g.batchId}`}
                         >
                           <p className="px-1 text-xs text-muted-foreground">
@@ -2222,7 +2222,7 @@ export function ClerkWorkspace() {
                 {selected ? (
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      <p className="text-xs font-semibold text-muted-foreground">
                         {caseIntakeKind(selected).eyebrow}
                       </p>
                       <CardTitle className="text-xl mt-1 truncate">
@@ -2252,7 +2252,7 @@ export function ClerkWorkspace() {
                         pasted text, with its provenance line. */}
                     {selected.sourceText ? (
                       <div
-                        className="rounded-xl border bg-muted/30 p-4 space-y-2.5"
+                        className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
                         data-testid="card-source-text"
                       >
                         <div className="flex items-center gap-2.5">
@@ -2285,7 +2285,7 @@ export function ClerkWorkspace() {
                         paper is the whole point of the review pane. */}
                     {selected.sourceImageB64 ? (
                       <div
-                        className="rounded-xl border bg-muted/30 p-4 space-y-2.5"
+                        className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
                         data-testid="card-source-image"
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -2320,7 +2320,7 @@ export function ClerkWorkspace() {
                     !selected.sourceText &&
                     !selected.sourceImageB64 ? (
                       <div
-                        className="rounded-xl border bg-muted/30 p-4 space-y-2.5"
+                        className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
                         data-testid="card-source-pages"
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -2391,10 +2391,10 @@ export function ClerkWorkspace() {
                         falls back to plain humanization. */}
                     {selected.kind === "notice" && selected.noticeExtraction && (
                       <div
-                        className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30"
+                        className="rounded-lg border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30"
                         data-testid="card-notice-type"
                       >
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        <p className="text-xs font-semibold text-muted-foreground">
                           Tax authority notice
                         </p>
                         <p

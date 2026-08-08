@@ -3,11 +3,12 @@ import { Link, useLocation } from "wouter";
 import {
   Activity,
   ArrowLeft,
+  FileCheck2,
   FileStack,
   ListChecks,
   MessageCircleQuestion,
   PowerOff,
-  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
@@ -18,7 +19,7 @@ import { StaleBuildBanner } from "@/components/stale-build-banner";
 // dark-on-teal in BOTH color schemes; content inherits the app theme.
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-teal-950";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]";
 
 const NAV = [
   { href: "/clerk", label: "Intake queue", icon: ListChecks },
@@ -46,10 +47,10 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
           href={href}
           aria-current={isActive(href) ? "page" : undefined}
           data-testid={`clerk-nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
-          className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${FOCUS_RING} ${
+          className={`flex min-h-10 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${FOCUS_RING} ${
             isActive(href)
-              ? "bg-white/10 text-white"
-              : "text-teal-100/80 hover:bg-white/5 hover:text-white"
+              ? "bg-lime-300 font-bold text-[#071a1c]"
+              : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
           }`}
         >
           <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -62,16 +63,25 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5 px-3">
-      <Sparkles className="h-6 w-6 text-lime-300" aria-hidden="true" />
-      <span className="text-xl font-bold text-white leading-none">Clerk</span>
+    <div className="flex items-center gap-2.5 px-2">
+      <span className="grid size-9 place-items-center rounded-md bg-lime-300 text-[#071a1c]">
+        <FileCheck2 className="size-5" aria-hidden="true" />
+      </span>
+      <span>
+        <span className="block text-base font-extrabold leading-none text-white">
+          Clerk AI
+        </span>
+        <span className="mt-1 block text-[10px] font-semibold text-white/45">
+          Governed operations
+        </span>
+      </span>
     </div>
   );
 }
 
 export function ClerkShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <a
         href="#clerk-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
@@ -80,27 +90,46 @@ export function ClerkShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Mobile: compact top bar with horizontal nav. */}
-      <div className="md:hidden bg-teal-950 px-3 py-3 space-y-3">
-        <Brand />
-        <NavLinks orientation="row" />
+      <div className="bg-[#071a1c] md:hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <Brand />
+          <Link
+            href="/"
+            className={`grid size-9 place-items-center rounded-md border border-white/15 text-white/75 hover:bg-white/8 hover:text-white ${FOCUS_RING}`}
+            aria-label="Back to console"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+        <div className="border-t border-white/10 px-3 py-2">
+          <NavLinks orientation="row" />
+        </div>
       </div>
 
       {/* Desktop rail. */}
-      <aside className="hidden md:flex w-60 shrink-0 flex-col bg-teal-950 p-4 sticky top-0 max-h-screen min-h-screen">
-        <div className="py-2">
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col bg-[#071a1c] px-3 py-5 md:flex">
+        <div>
           <Brand />
+          <div className="mt-5 border-l-2 border-lime-300 pl-3">
+            <p className="text-xs font-bold text-white">
+              AI operations workspace
+            </p>
+            <p className="mt-1 text-[11px] leading-4 text-white/45">
+              Intake, evidence and governed review
+            </p>
+          </div>
         </div>
-        <div className="mt-6 flex-1 min-h-0 overflow-y-auto">
+        <div className="mt-7 min-h-0 flex-1 overflow-y-auto">
           <NavLinks orientation="column" />
         </div>
-        <div className="mt-auto pt-4 border-t border-white/10 space-y-3">
-          {/* The product's standing rule, stated where the operator works. */}
-          <p className="px-3 text-[13px] leading-snug text-teal-100/70">
-            Human review is required before a case changes a record.
-          </p>
+        <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+          <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-lime-200">
+            <ShieldCheck className="size-4" aria-hidden="true" />
+            Human review on
+          </div>
           <Link
             href="/"
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-teal-100/80 hover:bg-white/5 hover:text-white transition-colors ${FOCUS_RING}`}
+            className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white ${FOCUS_RING}`}
             data-testid="clerk-back-to-console"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -109,14 +138,28 @@ export function ClerkShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main
-        id="clerk-main"
-        tabIndex={-1}
-        className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus:outline-none"
-      >
-        <StaleBuildBanner />
-        {children}
-      </main>
+      <div className="min-w-0">
+        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-8 backdrop-blur md:flex lg:px-10">
+          <div>
+            <p className="text-[11px] font-bold text-teal-700">Clerk AI</p>
+            <p className="mt-0.5 text-sm font-extrabold text-slate-950">
+              Governed operations
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
+            <ShieldCheck className="size-3.5" aria-hidden="true" />
+            Human reviewed
+          </span>
+        </header>
+        <main
+          id="clerk-main"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-[90rem] px-4 py-5 focus:outline-none sm:px-6 md:px-8 md:py-8 lg:px-10"
+        >
+          <StaleBuildBanner />
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
@@ -157,13 +200,11 @@ export function ClerkPageHeader({
   right?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-          {eyebrow}
-        </p>
+        <p className="text-xs font-bold text-primary">{eyebrow}</p>
         <h1
-          className="mt-1 text-3xl font-bold tracking-tight"
+          className="mt-1 text-2xl font-extrabold md:text-3xl"
           data-testid={titleTestId}
         >
           {title}

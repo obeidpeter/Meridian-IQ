@@ -46,38 +46,37 @@
 }
 
 :root {
-  --background: 210 33% 99%;
-  --foreground: 222 47% 11%;
+  --background: 210 20% 98%;
+  --foreground: 216 34% 12%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 216 34% 12%;
+  --card-border: 212 20% 88%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 216 34% 12%;
+  --popover-border: 212 20% 88%;
 
-  /* Bold deliberate color: A rich teal for trust and calm */
-  --primary: 173 80% 27%;
+  --primary: 177 72% 24%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 214 32% 91%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 210 18% 94%;
+  --secondary-foreground: 216 34% 12%;
 
-  --muted: 214 32% 91%;
-  --muted-foreground: 215 18% 42%;
+  --muted: 210 18% 94%;
+  --muted-foreground: 215 14% 40%;
 
-  --accent: 173 80% 90%;
-  --accent-foreground: 173 80% 25%;
+  --accent: 82 68% 88%;
+  --accent-foreground: 177 72% 18%;
 
   --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 173 80% 30%;
+  --border: 212 20% 88%;
+  --input: 212 20% 84%;
+  --ring: 177 72% 26%;
 
-  --radius: 0.75rem;
+  --radius: 0.5rem;
 }
 
 .dark {
@@ -122,7 +121,15 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    min-width: 320px;
     overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: 0;
   }
 }
 
@@ -142,10 +149,44 @@
   isolation: isolate;
   overflow: hidden;
   background-color: #071a1c;
-  background-image:
-    radial-gradient(60rem 40rem at 85% -10%, rgb(190 242 100 / 10%), transparent 60%),
-    radial-gradient(50rem 36rem at -10% 110%, rgb(13 55 58 / 85%), transparent 65%),
-    linear-gradient(160deg, #0a2426 0%, #071a1c 55%, #04181a 100%);
+  background-image: url("/compliance-dashboard.jpg");
+  background-position: right center;
+  background-repeat: no-repeat;
+  background-size: auto 110%;
+}
+
+.landing-hero::before {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  content: "";
+  background: rgb(4 24 26 / 55%);
+}
+
+.landing-hero::after {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0;
+  left: 0;
+  width: 100%;
+  content: "";
+  background: rgb(4 24 26 / 72%);
+}
+
+@media (min-width: 1024px) {
+  .landing-hero {
+    background-size: auto 125%;
+  }
+
+  .landing-hero::before {
+    background: rgb(4 24 26 / 42%);
+  }
+
+  .landing-hero::after {
+    width: 72%;
+    clip-path: polygon(0 0, 92% 0, 100% 100%, 0 100%);
+    background: rgb(4 24 26 / 82%);
+  }
 }
 
 .landing-preview-body {

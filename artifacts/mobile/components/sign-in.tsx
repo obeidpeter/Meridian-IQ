@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLogin, useTotpChallenge } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -159,25 +158,20 @@ export function SignIn() {
         bottomOffset={24}
       >
         <View style={styles.hero}>
-          {/* Brand tile: teal gradient reads as the product mark rather than a
-              flat tinted square. Decorative — the wordmark below carries the
-              name for assistive tech. */}
-          <LinearGradient
-            colors={
-              colors.scheme === "dark"
-                ? ["#17b899", "#0b6653"]
-                : ["#12a284", "#0b6653"]
-            }
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          {/* The same lime document mark used by the web workspaces. */}
+          <View
             style={[
               styles.logo,
+              {
+                backgroundColor:
+                  colors.scheme === "dark" ? "#dff5a8" : "#bef264",
+              },
               colors.scheme === "light" ? styles.logoShadow : null,
             ]}
           >
-            <Feather name="shield" size={30} color="#ffffff" />
-          </LinearGradient>
-          <AppText variant="display" style={{ marginTop: 20 }}>
+            <Feather name="file-text" size={28} color="#071a1c" />
+          </View>
+          <AppText variant="display" style={{ marginTop: 18 }}>
             MeridianIQ
           </AppText>
           <AppText
@@ -185,7 +179,7 @@ export function SignIn() {
             color={colors.mutedForeground}
             style={{ marginTop: 6, textAlign: "center" }}
           >
-            Stay ahead of e-invoicing deadlines and penalties.
+            Your Nigerian invoicing and compliance workspace.
           </AppText>
         </View>
 
@@ -204,8 +198,8 @@ export function SignIn() {
                   {email.trim()}
                 </AppText>{" "}
                 is protected by two-factor authentication. Enter the 6-digit
-                code from your authenticator app — or one of your saved
-                recovery codes.
+                code from your authenticator app — or one of your saved recovery
+                codes.
               </AppText>
             </View>
             <TextField
@@ -299,7 +293,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
     paddingVertical: 48,
-    ...(Platform.OS === "web" ? { maxWidth: 480, alignSelf: "center", width: "100%" } : {}),
+    ...(Platform.OS === "web"
+      ? { maxWidth: 480, alignSelf: "center", width: "100%" }
+      : {}),
   },
   hero: {
     alignItems: "center",
@@ -307,7 +303,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
