@@ -1770,7 +1770,7 @@ export function Dashboard() {
                 </>
               )}
 
-              {view === "money" && (
+              {(view === "today" || view === "money") && (
                 <ReceivablesCard
                   summary={receivables}
                   isLoading={receivablesLoading}
