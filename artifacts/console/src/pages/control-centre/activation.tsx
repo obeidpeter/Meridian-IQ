@@ -178,6 +178,9 @@ export function ActivationWorkspace() {
           {gates.map((gate, index) => (
             <div
               key={gate.key}
+              data-testid={
+                gate.key === "stamp" ? "gate-time-to-stamp" : undefined
+              }
               className={`px-4 py-5 ${index < gates.length - 2 ? "border-b" : ""} border-slate-200 lg:[&:nth-child(odd)]:border-r lg:[&:nth-last-child(2)]:border-b-0`}
             >
               <div className="flex items-start justify-between gap-3">

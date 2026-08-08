@@ -85,10 +85,10 @@ async function journeyOperatorDesk(page, BASE, check) {
   await page.waitForSelector('[data-testid="card-messages"]', { timeout: 10000 });
   check("platform ops renders rails and message log", true);
 
-  // Gate metrics + audit evidence
-  await page.getByTestId("nav-gate-metrics").click();
+  // Control centre activation evidence + audit evidence
+  await page.getByTestId("nav-control-centre").click();
   await page.waitForSelector('[data-testid="gate-time-to-stamp"]', { timeout: 10000 });
-  check("gate metrics render", true);
+  check("control centre activation evidence renders", true);
   await page.getByTestId("nav-audit-&-evidence").click();
   await page.waitForSelector('[data-testid="card-chain-valid"]', { timeout: 10000 });
   check("audit chain verifies", true);
