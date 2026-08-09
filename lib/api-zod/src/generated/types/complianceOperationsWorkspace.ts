@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.79.0
+ * OpenAPI spec version: 0.80.0
  */
 import type { ComplianceOperationItem } from './complianceOperationItem';
 
@@ -16,4 +16,6 @@ export interface ComplianceOperationsWorkspace {
   unassignedCases: number;
   /** @maxItems 80 */
   items: ComplianceOperationItem[];
+  /** True when more open items exist than the SLA-ranked list carries; truncation only ever hides the healthiest tail. The summary counts always cover the full set. */
+  itemsTruncated: boolean;
 }

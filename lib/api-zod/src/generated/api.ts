@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.79.0
+ * OpenAPI spec version: 0.80.0
  */
 import * as zod from 'zod';
 
@@ -2287,6 +2287,8 @@ export const GetGateMetricsResponse = zod.object({
 export const listBuyerPilotsResponsePilotsItemReadinessScoreMin = 0;
 export const listBuyerPilotsResponsePilotsItemReadinessScoreMax = 100;
 
+export const listBuyerPilotsResponsePilotsMax = 200;
+
 
 
 export const ListBuyerPilotsResponse = zod.object({
@@ -2314,7 +2316,8 @@ export const ListBuyerPilotsResponse = zod.object({
   "readinessScore": zod.number().min(listBuyerPilotsResponsePilotsItemReadinessScoreMin).max(listBuyerPilotsResponsePilotsItemReadinessScoreMax),
   "stage": zod.enum(['discovery', 'invited', 'live', 'proving', 'scale_ready']),
   "blockers": zod.array(zod.string())
-}))
+})).max(listBuyerPilotsResponsePilotsMax),
+  "pilotsTruncated": zod.boolean().describe('True when more anchor buyers exist than the pilots list carries; the list holds the most recently active. The summary counts always cover the full set.')
 })
 
 
@@ -2346,13 +2349,18 @@ export const GetComplianceOperationsResponse = zod.object({
   "slaState": zod.enum(['healthy', 'due_soon', 'overdue']),
   "detail": zod.string(),
   "actionHref": zod.string()
-})).max(getComplianceOperationsResponseItemsMax)
+})).max(getComplianceOperationsResponseItemsMax),
+  "itemsTruncated": zod.boolean().describe('True when more open items exist than the SLA-ranked list carries; truncation only ever hides the healthiest tail. The summary counts always cover the full set.')
 })
 
 
 /**
  * @summary Connector reliability and data-quality signals across tenants
  */
+export const getIntegrationReliabilityResponseConnectionsMax = 200;
+
+
+
 export const GetIntegrationReliabilityResponse = zod.object({
   "generatedAt": zod.coerce.date(),
   "totalConnections": zod.number(),
@@ -2376,7 +2384,8 @@ export const GetIntegrationReliabilityResponse = zod.object({
   "recordsWritten": zod.number(),
   "errorCount": zod.number(),
   "issue": zod.string().nullable()
-})),
+})).max(getIntegrationReliabilityResponseConnectionsMax),
+  "connectionsTruncated": zod.boolean().describe('True when more connections exist than the list carries; the list is worst-first, so truncation only ever hides healthy connections. The summary counts always cover the full set.'),
   "qualitySignals": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),

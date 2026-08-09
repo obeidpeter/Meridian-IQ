@@ -117,6 +117,13 @@ export function BuyerPilotsWorkspace() {
           />
         </div>
 
+        {data.pilotsTruncated && (
+          <p className="text-xs text-slate-500">
+            Showing the {data.pilots.length} most recently active of{" "}
+            {data.anchorBuyers} anchor buyers — the counts above cover
+            everything.
+          </p>
+        )}
         {filtered.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white px-5 py-12 text-center">
             <p className="font-bold text-slate-900">No pilots in this view</p>

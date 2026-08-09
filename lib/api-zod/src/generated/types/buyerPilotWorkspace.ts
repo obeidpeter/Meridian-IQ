@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.79.0
+ * OpenAPI spec version: 0.80.0
  */
 import type { BuyerPilot } from './buyerPilot';
 
@@ -17,5 +17,8 @@ export interface BuyerPilotWorkspace {
   buyerResponseRate30d: number | null;
   /** @nullable */
   medianResponseHours: number | null;
+  /** @maxItems 200 */
   pilots: BuyerPilot[];
+  /** True when more anchor buyers exist than the pilots list carries; the list holds the most recently active. The summary counts always cover the full set. */
+  pilotsTruncated: boolean;
 }

@@ -21,8 +21,16 @@ interface RawOperationItem {
   created_at: Date | string;
   detail: string;
   unassigned: boolean;
+  sla_rank: number;
 }
 
+/**
+ * Reference implementation of the SLA classification, pinned in lockstep
+ * with the sla_rank CASE in the workspace query below (0 overdue, 1 due
+ * soon within 72 hours, 2 healthy). The query computes the rank in SQL so
+ * the ranking, the summary counts and the row labels all share one clock;
+ * the unit tests exercise the boundaries against this function.
+ */
 export function classifySla(
   dueAt: Date,
   now = new Date(),
@@ -40,11 +48,13 @@ function actionHref(item: RawOperationItem): string {
   return "/audit";
 }
 
-const PRIORITY_RANK: Record<Priority, number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
-};
+// SLA-ranked display cap: the exception queue shows the worst rows first
+// (overdue, then due-soon, by priority, by due date), so truncation only
+// ever hides the healthiest tail. The summary counts ride window
+// aggregates computed BEFORE the LIMIT, so they always cover every open
+// item. The contract mirrors this cap (ComplianceOperationsWorkspace.items
+// maxItems + itemsTruncated).
+const ITEM_LIST_CAP = 80;
 
 export async function getComplianceOperationsWorkspace() {
   const result = await getDb().execute(sql`
@@ -56,7 +66,7 @@ export async function getComplianceOperationsWorkspace() {
         created_at
       FROM confirmations
       ORDER BY invoice_id, created_at DESC, id DESC
-    )
+    ), item AS (
     SELECT
       operator_case.id::text AS entity_id,
       'operator_case'::text AS kind,
@@ -154,56 +164,81 @@ export async function getComplianceOperationsWorkspace() {
     JOIN parties supplier ON supplier.id = invoice.supplier_party_id
     JOIN parties buyer ON buyer.id = invoice.buyer_party_id
     WHERE latest.state = 'requested'
+    ), classified AS (
+      SELECT
+        item.*,
+        -- Lockstep with classifySla (above): 0 overdue, 1 due-soon within
+        -- 72 hours, 2 healthy.
+        CASE
+          WHEN item.due_at < now() THEN 0
+          WHEN item.due_at <= now() + interval '72 hours' THEN 1
+          ELSE 2
+        END AS sla_rank,
+        CASE item.priority
+          WHEN 'high' THEN 0
+          WHEN 'medium' THEN 1
+          ELSE 2
+        END AS priority_rank
+      FROM item
+    )
+    SELECT
+      classified.*,
+      count(*) OVER ()::int AS total_open,
+      count(*) FILTER (WHERE classified.sla_rank = 0) OVER ()::int AS total_overdue,
+      count(*) FILTER (WHERE classified.sla_rank = 1) OVER ()::int AS total_due_soon,
+      count(*) FILTER (WHERE classified.priority = 'high') OVER ()::int AS total_high_priority,
+      count(*) FILTER (
+        WHERE classified.kind = 'operator_case' AND classified.unassigned
+      ) OVER ()::int AS total_unassigned_cases
+    FROM classified
+    ORDER BY classified.sla_rank, classified.priority_rank, classified.due_at
+    LIMIT ${ITEM_LIST_CAP}
   `);
 
   const now = new Date();
-  const rawItems = result.rows as unknown as RawOperationItem[];
-  const allItems = rawItems
-    .map((item) => {
-      const dueAt = new Date(item.due_at);
-      const createdAt = new Date(item.created_at);
-      const slaState = classifySla(dueAt, now);
-      return {
-        key: `${item.kind}:${item.entity_id}`,
-        entityId: item.entity_id,
-        kind: item.kind,
-        title: item.title,
-        firmName: item.firm_name,
-        clientName: item.client_name,
-        priority: item.priority,
-        status: item.status,
-        dueAt: dueAt.toISOString(),
-        ageHours: Number(
-          Math.max(
-            0,
-            (now.getTime() - createdAt.getTime()) / 3_600_000,
-          ).toFixed(1),
+  const rawItems = result.rows as unknown as (RawOperationItem &
+    Record<string, unknown>)[];
+  const items = rawItems.map((item) => {
+    const dueAt = new Date(item.due_at);
+    const createdAt = new Date(item.created_at);
+    const slaRank = Number(item.sla_rank);
+    return {
+      key: `${item.kind}:${item.entity_id}`,
+      entityId: item.entity_id,
+      kind: item.kind,
+      title: item.title,
+      firmName: item.firm_name,
+      clientName: item.client_name,
+      priority: item.priority,
+      status: item.status,
+      dueAt: dueAt.toISOString(),
+      ageHours: Number(
+        Math.max(0, (now.getTime() - createdAt.getTime()) / 3_600_000).toFixed(
+          1,
         ),
-        slaState,
-        detail: item.detail,
-        actionHref: actionHref(item),
-      };
-    })
-    .sort(
-      (a, b) =>
-        (a.slaState === "overdue" ? 0 : a.slaState === "due_soon" ? 1 : 2) -
-          (b.slaState === "overdue" ? 0 : b.slaState === "due_soon" ? 1 : 2) ||
-        PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] ||
-        Date.parse(a.dueAt) - Date.parse(b.dueAt),
-    );
-  const items = allItems.slice(0, 80);
+      ),
+      slaState:
+        slaRank === 0
+          ? ("overdue" as const)
+          : slaRank === 1
+            ? ("due_soon" as const)
+            : ("healthy" as const),
+      detail: item.detail,
+      actionHref: actionHref(item),
+    };
+  });
+  // Window totals ride every row identically; no rows means no open items.
+  const totals = (result.rows[0] ?? {}) as Record<string, unknown>;
+  const openItems = Number(totals.total_open ?? 0);
 
   return {
     generatedAt: now.toISOString(),
-    openItems: rawItems.length,
-    overdueItems: allItems.filter((item) => item.slaState === "overdue").length,
-    dueSoonItems: allItems.filter((item) => item.slaState === "due_soon")
-      .length,
-    highPriorityItems: allItems.filter((item) => item.priority === "high")
-      .length,
-    unassignedCases: rawItems.filter(
-      (item) => item.kind === "operator_case" && item.unassigned,
-    ).length,
+    openItems,
+    overdueItems: Number(totals.total_overdue ?? 0),
+    dueSoonItems: Number(totals.total_due_soon ?? 0),
+    highPriorityItems: Number(totals.total_high_priority ?? 0),
+    unassignedCases: Number(totals.total_unassigned_cases ?? 0),
     items,
+    itemsTruncated: openItems > items.length,
   };
 }

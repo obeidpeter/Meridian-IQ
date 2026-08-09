@@ -79,8 +79,8 @@ const VARIANT_STYLE: Record<
     lineHeight: 16,
     letterSpacing: 0,
   },
-  // Section eyebrows ("PENALTY RISK", "RECEIVABLES"): wide-tracked and
-  // auto-uppercased, so call sites pass natural-case text and stay consistent.
+  // Section eyebrows ("PENALTY RISK", "RECEIVABLES"): auto-uppercased, so
+  // call sites pass natural-case text and stay consistent.
   overline: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,

@@ -176,6 +176,12 @@ export function ComplianceOperationsWorkspace() {
           />
         }
       />
+      {data.itemsTruncated && (
+        <p className="text-xs text-slate-500">
+          Showing the {data.items.length} most urgent of {data.openItems} open
+          items — the counts above cover everything.
+        </p>
+      )}
     </div>
   );
 }

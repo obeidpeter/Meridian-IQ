@@ -363,3 +363,23 @@ export function decisionLine(decision: {
 // helpers shared by the console and SME notification bells.
 
 export * from "./notifications";
+
+// ---- Role vocabulary ------------------------------------------------------
+
+/**
+ * Display labels for principal roles — the one home shared by the console
+ * shell, and the SME / buyer wrong-workspace cards, so a renamed role
+ * cannot drift between apps.
+ */
+export function roleLabel(role: string | undefined): string {
+  return (
+    {
+      firm_admin: "Firm admin",
+      firm_staff: "Firm staff",
+      client_user: "Client user",
+      operator: "Operator",
+      buyer_user: "Buyer",
+      auditor: "Auditor",
+    }[role ?? ""] ?? (role || "Unknown role")
+  );
+}
