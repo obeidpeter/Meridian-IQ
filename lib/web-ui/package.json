@@ -13,6 +13,10 @@
   "peerDependencies": {
     "react": ">=18"
   },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.7",
+    "lucide-react": "catalog:"
+  },
   "devDependencies": {
     "@radix-ui/react-toast": "^1.2.7",
     "@testing-library/dom": "^10.4.1",
