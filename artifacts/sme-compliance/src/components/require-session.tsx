@@ -4,15 +4,13 @@ import { FileCheck2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
+import { roleLabel } from "@workspace/format";
 
 // Authentication uses the origin-wide session cookie set by the portal login.
 // This app serves SME client and firm users.
 const ALLOWED = ["firm_admin", "firm_staff", "client_user"];
 const PORTAL = "/login";
 
-function formatRole(role: string) {
-  return role.replaceAll("_", " ");
-}
 
 function BrandSplash({
   title,
@@ -119,7 +117,7 @@ export function RequireSession({ children }: { children: ReactNode }) {
           <>
             You are signed in as{" "}
             <span className="font-semibold text-foreground">
-              {formatRole(me.role)}
+              {roleLabel(me.role)}
             </span>
             . Compliance is available to SME and firm accounts.
           </>

@@ -14,18 +14,11 @@ import { Lock } from "lucide-react";
 // the server gates on an EXPLICIT role rather than a capability (the
 // firm-admin integration controls — routes/integrations.ts firmAdminScope).
 
-export function roleLabel(role: string | undefined): string {
-  return (
-    {
-      firm_admin: "Firm admin",
-      firm_staff: "Firm staff",
-      client_user: "Client user",
-      operator: "Operator",
-      buyer_user: "Buyer",
-      auditor: "Auditor",
-    }[role ?? ""] ?? (role || "Unknown role")
-  );
-}
+// Role display vocabulary lives in @workspace/format (shared with the SME
+// and buyer wrong-workspace cards); imported for this component's own
+// badges and re-exported for this app's existing importers.
+import { roleLabel } from "@workspace/format";
+export { roleLabel };
 
 function AccessDenied({ me, needs }: { me: Me; needs: ReactNode }) {
   return (

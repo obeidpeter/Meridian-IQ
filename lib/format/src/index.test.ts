@@ -20,6 +20,7 @@ import {
   statusLabel,
   statusTone,
   summaryPillClasses,
+  roleLabel,
 } from "./index";
 
 describe("formatNaira", () => {
@@ -273,5 +274,14 @@ describe("buyer-rails confirmation", () => {
     expect(confirmationBadgeClasses("rejected")).toContain("red");
     expect(confirmationBadgeClasses("none")).toContain("slate");
     expect(confirmationBadgeClasses("something-new")).toContain("slate");
+  });
+});
+
+describe("roleLabel", () => {
+  test("labels every known role and passes unknowns through readably", () => {
+    expect(roleLabel("firm_admin")).toBe("Firm admin");
+    expect(roleLabel("buyer_user")).toBe("Buyer");
+    expect(roleLabel("mystery_role")).toBe("mystery_role");
+    expect(roleLabel(undefined)).toBe("Unknown role");
   });
 });

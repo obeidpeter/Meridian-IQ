@@ -5,14 +5,12 @@ import { Building2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
+import { roleLabel } from "@workspace/format";
 
 function goToPortal() {
   window.location.href = "/login";
 }
 
-function formatRole(role: string) {
-  return role.replaceAll("_", " ");
-}
 
 function BrandSplash({
   title,
@@ -132,9 +130,9 @@ export function RequireSession({
           <>
             You are signed in as{" "}
             <span className="font-semibold text-foreground">
-              {formatRole(me.role)}
+              {roleLabel(me.role)}
             </span>
-            . This portal requires a {allow.map(formatRole).join(" or ")}{" "}
+            . This portal requires a {allow.map(roleLabel).join(" or ")}{" "}
             account.
           </>
         }
