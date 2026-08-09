@@ -27,6 +27,7 @@ export function webAppVitestConfig(appDir: string): ViteUserConfig {
     test: {
       environment: "node",
       include: ["src/**/*.test.{ts,tsx}"],
+      setupFiles: [path.join(import.meta.dirname, "vitest-setup.ts")],
     },
   });
 }

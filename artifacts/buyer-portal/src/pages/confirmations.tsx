@@ -74,7 +74,12 @@ import { errorDescription } from "@/lib/respond";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { Metric, MetricStrip, WorkspaceHeader } from "@workspace/web-ui";
+import {
+  Metric,
+  MetricStrip,
+  WorkspaceHeader,
+  useUrlTab,
+} from "@workspace/web-ui";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -86,6 +91,7 @@ const FILTERS = [
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
+const FILTER_KEYS = FILTERS.map((item) => item.key);
 
 const PAGE_SIZE = 25;
 const SERVER_PAGE_SIZE = 100;
@@ -218,7 +224,7 @@ function PageHeader({ actions }: { actions?: ReactNode }) {
 
 export function Confirmations() {
   usePageTitle("Confirmations");
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter, setFilter] = useUrlTab<FilterKey>("status", "all", FILTER_KEYS);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [serverPage, setServerPage] = useState(0);

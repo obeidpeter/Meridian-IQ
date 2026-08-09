@@ -101,6 +101,7 @@ import {
   WorkQueue,
   WorkspaceHeader,
   type WorkQueueItem,
+  useUrlTab,
 } from "@workspace/web-ui";
 
 // Receivables amounts arrive as decimal strings. NGN rows use the shared
@@ -1664,13 +1665,15 @@ export function PortfolioSkeleton() {
   );
 }
 
-type PortfolioView =
-  | "today"
-  | "clients"
-  | "money"
-  | "compliance"
-  | "automation"
-  | "connections";
+const PORTFOLIO_VIEWS = [
+  "today",
+  "clients",
+  "money",
+  "compliance",
+  "automation",
+  "connections",
+] as const;
+type PortfolioView = (typeof PORTFOLIO_VIEWS)[number];
 type ClientRiskFilter = "all" | "high" | "medium" | "low";
 type ClientSort = "risk" | "name" | "unsubmitted" | "deadline";
 
@@ -1886,7 +1889,11 @@ function PortfolioHeader({
 
 export function Portfolio() {
   usePageTitle("Client portfolio");
-  const [view, setView] = useState<PortfolioView>("today");
+  const [view, setView] = useUrlTab<PortfolioView>(
+    "view",
+    "today",
+    PORTFOLIO_VIEWS,
+  );
   const [clientSearch, setClientSearch] = useState("");
   const [clientRisk, setClientRisk] = useState<ClientRiskFilter>("all");
   const [clientSort, setClientSort] = useState<ClientSort>("risk");

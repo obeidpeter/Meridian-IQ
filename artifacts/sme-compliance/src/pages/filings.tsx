@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   useListFilings,
   getListFilingsQueryKey,
@@ -36,6 +35,7 @@ import {
   MetricStrip,
   SegmentedControl,
   WorkspaceHeader,
+  useUrlTab,
 } from "@workspace/web-ui";
 
 // Read-only by design: the filings register is minted and walked by the firm
@@ -104,6 +104,7 @@ const FILTERS = [
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
+const FILTER_KEYS = FILTERS.map((item) => item.key);
 
 function FilingRow({ filing, todayIso }: { filing: Filing; todayIso: string }) {
   // Only an unfiled return escalates on its due date.
@@ -165,7 +166,11 @@ function FilingRow({ filing, todayIso }: { filing: Filing; todayIso: string }) {
 }
 
 function FilingsContent() {
-  const [filter, setFilter] = useState<FilterKey>("upcoming");
+  const [filter, setFilter] = useUrlTab<FilterKey>(
+    "status",
+    "upcoming",
+    FILTER_KEYS,
+  );
   const todayIso = localDayIso(new Date());
 
   // The server pins a client_user to its own party — no clientPartyId is

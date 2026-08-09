@@ -1,5 +1,15 @@
 export { triggerDownload } from "./trigger-download";
 export {
+  ClerkDock,
+  type ClerkDockAnswer,
+  type ClerkDockFact,
+} from "./clerk-dock";
+export {
+  NotificationFeed,
+  type NotificationFeedRow,
+} from "./notification-feed";
+export { useUrlTab } from "./use-url-tab";
+export {
   CommandMenu,
   Metric,
   MetricStrip,

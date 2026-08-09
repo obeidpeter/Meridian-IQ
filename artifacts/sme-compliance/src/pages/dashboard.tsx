@@ -89,6 +89,7 @@ import {
   WorkQueue,
   WorkspaceHeader,
   type WorkQueueItem,
+  useUrlTab,
 } from "@workspace/web-ui";
 import {
   formatAmount,
@@ -1465,11 +1466,16 @@ function DashboardSkeleton() {
   );
 }
 
-type DashboardView = "today" | "money" | "compliance" | "clerk";
+const DASHBOARD_VIEWS = ["today", "money", "compliance", "clerk"] as const;
+type DashboardView = (typeof DASHBOARD_VIEWS)[number];
 
 export function Dashboard() {
   usePageTitle("Dashboard");
-  const [view, setView] = useState<DashboardView>("today");
+  const [view, setView] = useUrlTab<DashboardView>(
+    "view",
+    "today",
+    DASHBOARD_VIEWS,
+  );
   const { data: me } = useGetMe();
   // Same capability check CapabilityGate applies, minus its denial card: a
   // dashboard tile should simply be absent for roles that can't use it.

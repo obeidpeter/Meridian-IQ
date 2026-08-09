@@ -93,9 +93,10 @@
   --popover-foreground: 210 40% 98%;
   --popover-border: 217 33% 17%;
 
-  /* Bold deliberate color: the buyer portal's corporate blue, hue-aligned
-     with the light-mode primary (221) and lifted for dark surfaces */
-  --primary: 221 91% 60%;
+  /* Bold deliberate color: the buyer portal's corporate sky blue,
+     hue-aligned with the light-mode primary (205) and lifted for dark
+     surfaces */
+  --primary: 205 74% 52%;
   --primary-foreground: 222 47% 11%;
 
   --secondary: 217 33% 17%;
@@ -104,15 +105,15 @@
   --muted: 217 33% 17%;
   --muted-foreground: 215 20% 65%;
 
-  --accent: 221 83% 22%;
-  --accent-foreground: 221 83% 92%;
+  --accent: 205 74% 22%;
+  --accent-foreground: 190 60% 90%;
 
   --destructive: 0 62% 30%;
   --destructive-foreground: 210 40% 98%;
 
   --border: 217 33% 17%;
   --input: 217 33% 17%;
-  --ring: 221 91% 60%;
+  --ring: 205 74% 52%;
 }
 
 @layer base {

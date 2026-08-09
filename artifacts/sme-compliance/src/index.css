@@ -93,7 +93,7 @@
   --popover-foreground: 210 40% 98%;
   --popover-border: 217 33% 17%;
 
-  --primary: 173 80% 40%;
+  --primary: 177 72% 40%;
   --primary-foreground: 222 47% 11%;
 
   --secondary: 217 33% 17%;
@@ -102,15 +102,15 @@
   --muted: 217 33% 17%;
   --muted-foreground: 215 20% 65%;
 
-  --accent: 173 80% 20%;
-  --accent-foreground: 173 80% 90%;
+  --accent: 82 45% 22%;
+  --accent-foreground: 82 68% 88%;
 
   --destructive: 0 62% 30%;
   --destructive-foreground: 210 40% 98%;
 
   --border: 217 33% 17%;
   --input: 217 33% 17%;
-  --ring: 173 80% 40%;
+  --ring: 177 72% 40%;
 }
 
 @layer base {

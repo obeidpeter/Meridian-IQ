@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,8 +11,10 @@ import { Bell, CheckCheck, MailCheck, Radio } from "lucide-react";
 import {
   Metric,
   MetricStrip,
+  NotificationFeed,
   SegmentedControl,
   WorkspaceHeader,
+  useUrlTab,
 } from "@workspace/web-ui";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,7 +28,8 @@ import {
   relativeTime,
 } from "@/lib/notifications";
 
-type FeedView = "all" | "unread" | "delivery";
+const FEED_VIEWS = ["all", "unread", "delivery"] as const;
+type FeedView = (typeof FEED_VIEWS)[number];
 const PARAMS = { limit: 100 };
 
 function entityHref(item: NotificationFeedItemsItem) {
@@ -40,7 +43,7 @@ function entityHref(item: NotificationFeedItemsItem) {
 
 export function Notifications() {
   usePageTitle("Notifications");
-  const [view, setView] = useState<FeedView>("all");
+  const [view, setView] = useUrlTab<FeedView>("view", "all", FEED_VIEWS);
   const queryClient = useQueryClient();
   const query = useListNotifications(PARAMS, {
     query: {
@@ -76,11 +79,15 @@ export function Notifications() {
       </div>
     );
   }
+
   if (query.isError) {
     return (
       <div className="space-y-6">
         <WorkspaceHeader eyebrow="Inbox" title="Notifications" />
-        <QueryError thing="notifications" onRetry={() => query.refetch()} />
+        <QueryError
+          thing="your notifications"
+          onRetry={() => query.refetch()}
+        />
       </div>
     );
   }
@@ -154,65 +161,30 @@ export function Notifications() {
         ]}
       />
 
-      <section className="overflow-hidden border-y border-slate-200 bg-white">
-        {filtered.length === 0 ? (
-          <div className="px-5 py-16 text-center">
-            <p className="font-bold text-slate-900">No notifications here</p>
-            <p className="mt-1 text-sm text-slate-500">
-              Change the filter or return when a new alert is delivered.
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-200">
-            {filtered.map((item) => {
-              const href = entityHref(item);
-              const row = (
-                <>
-                  <span
-                    className={`mt-1.5 size-2 shrink-0 rounded-full ${
-                      item.read ? "bg-slate-200" : "bg-teal-600"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`block text-sm ${
-                        item.read
-                          ? "font-medium text-slate-700"
-                          : "font-bold text-slate-950"
-                      }`}
-                    >
-                      {item.title}
-                    </span>
-                    <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className={channelBadgeClasses(item.channel)}>
-                        {channelLabel(item.channel)}
-                      </span>
-                      <span title={formatDateTime(item.createdAt)}>
-                        {relativeTime(item.createdAt)}
-                      </span>
-                      <span>{item.status}</span>
-                    </span>
-                  </span>
-                </>
-              );
-              return href ? (
-                <Link
-                  key={item.id}
-                  href={href}
-                  className="flex items-start gap-3 px-5 py-4 transition-colors hover:bg-slate-50"
-                >
-                  {row}
-                </Link>
-              ) : (
-                <div key={item.id} className="flex items-start gap-3 px-5 py-4">
-                  {row}
-                </div>
-              );
-            })}
-          </div>
+      <NotificationFeed
+        rows={filtered.map((item) => ({
+          id: item.id,
+          title: item.title,
+          read: item.read,
+          channelBadgeClass: channelBadgeClasses(item.channel),
+          channelLabel: channelLabel(item.channel),
+          timeLabel: relativeTime(item.createdAt),
+          timeTitle: formatDateTime(item.createdAt),
+          status: item.status,
+          href: entityHref(item),
+        }))}
+        emptyTitle="No notifications here"
+        emptyHint="Change the filter or return when a new alert is delivered."
+        renderLink={(href, children, key) => (
+          <Link
+            key={key}
+            href={href}
+            className="flex items-start gap-3 px-5 py-4 transition-colors hover:bg-slate-50"
+          >
+            {children}
+          </Link>
         )}
-      </section>
+      />
     </div>
   );
 }

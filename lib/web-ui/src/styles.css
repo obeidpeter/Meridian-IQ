@@ -25,7 +25,13 @@
   --mi-canvas: #0a1416;
   --mi-line: #263638;
   --mi-muted: #9eb0ae;
+  --mi-teal: #2bb3ae;
   --mi-teal-soft: #123331;
+  --mi-critical: #f97066;
+  --mi-warning: #fdb022;
+  --mi-positive: #32d583;
+  --mi-info: #84adff;
+  --mi-shadow: 0 16px 40px rgb(0 0 0 / 45%);
 }
 
 .mi-sr-only {

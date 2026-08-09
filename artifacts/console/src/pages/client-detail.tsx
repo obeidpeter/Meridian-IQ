@@ -79,15 +79,18 @@ import {
   WorkQueue,
   WorkspaceHeader,
   type WorkQueueItem,
+  useUrlTab,
 } from "@workspace/web-ui";
 
-type ClientView =
-  | "today"
-  | "invoices"
-  | "money"
-  | "compliance"
-  | "clerk"
-  | "setup";
+const CLIENT_VIEWS = [
+  "today",
+  "invoices",
+  "money",
+  "compliance",
+  "clerk",
+  "setup",
+] as const;
+type ClientView = (typeof CLIENT_VIEWS)[number];
 
 // ---- Export & offboarding helpers -------------------------------------------
 // The data-subject export saves the server's bundle verbatim as JSON; the
@@ -568,7 +571,7 @@ export function ClientDetail() {
   const [offboardOpen, setOffboardOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [offboardNote, setOffboardNote] = useState<string | null>(null);
-  const [view, setView] = useState<ClientView>("today");
+  const [view, setView] = useUrlTab<ClientView>("view", "today", CLIENT_VIEWS);
 
   const openOffboard = () => {
     setConfirmText("");
