@@ -70,6 +70,14 @@ function nullableIso(value: unknown): string | null {
   return new Date(value as string | number | Date).toISOString();
 }
 
+// The pilots list is bounded so the payload cannot grow with every buyer
+// party on the platform. The bound keeps the most recently ACTIVE pilots
+// (activity is what an operator reviews), while the workspace's summary
+// counts come from window aggregates over the full grouped set — so the
+// numbers stay exact even when the list truncates. The contract mirrors
+// this cap (BuyerPilotWorkspace.pilots maxItems + pilotsTruncated).
+const PILOT_LIST_CAP = 200;
+
 export async function getBuyerPilotWorkspace() {
   const db = getDb();
   const result = await db.execute(sql`
@@ -106,6 +114,14 @@ export async function getBuyerPilotWorkspace() {
       GROUP BY invoice_id
     )
     SELECT
+      grouped.*,
+      count(*) OVER ()::int AS total_buyers,
+      sum(grouped.pending_confirmations) OVER ()::int AS total_pending_confirmations,
+      count(*) FILTER (
+        WHERE grouped.last_activity_at >= now() - interval '30 days'
+      ) OVER ()::int AS total_active_buyers_30d
+    FROM (
+    SELECT
       buyer.id AS buyer_party_id,
       buyer.legal_name AS buyer_name,
       buyer.tin_validated,
@@ -139,7 +155,9 @@ export async function getBuyerPilotWorkspace() {
     WHERE buyer.type = 'buyer'
       AND invoice.category IN ('b2b', 'b2g')
     GROUP BY buyer.id, buyer.legal_name, buyer.tin_validated
-    ORDER BY buyer.legal_name
+    ) grouped
+    ORDER BY grouped.last_activity_at DESC NULLS LAST, grouped.buyer_name
+    LIMIT ${PILOT_LIST_CAP}
   `);
 
   const pilots = result.rows.map((raw) => {
@@ -200,20 +218,16 @@ export async function getBuyerPilotWorkspace() {
   const cohort = (cohortResult.rows[0] ?? {}) as Record<string, unknown>;
   const requests30d = number(cohort.requests);
   const responses30d = number(cohort.responses);
-  const activeCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  // Window totals ride every row identically; an empty platform has no rows
+  // and every total is zero.
+  const totals = (result.rows[0] ?? {}) as Record<string, unknown>;
+  const anchorBuyers = number(totals.total_buyers);
 
   return {
     generatedAt: new Date().toISOString(),
-    anchorBuyers: pilots.length,
-    activeBuyers30d: pilots.filter(
-      (pilot) =>
-        pilot.lastActivityAt !== null &&
-        new Date(pilot.lastActivityAt).getTime() >= activeCutoff,
-    ).length,
-    pendingConfirmations: pilots.reduce(
-      (total, pilot) => total + pilot.pendingConfirmations,
-      0,
-    ),
+    anchorBuyers,
+    activeBuyers30d: number(totals.total_active_buyers_30d),
+    pendingConfirmations: number(totals.total_pending_confirmations),
     confirmationResponses30d: responses30d,
     buyerResponseRate30d:
       requests30d > 0 ? Number((responses30d / requests30d).toFixed(4)) : null,
@@ -223,5 +237,6 @@ export async function getBuyerPilotWorkspace() {
         b.readinessScore - a.readinessScore ||
         a.buyerName.localeCompare(b.buyerName),
     ),
+    pilotsTruncated: anchorBuyers > pilots.length,
   };
 }

@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.79.0
+  version: 0.80.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -10875,6 +10875,7 @@ components:
           buyerResponseRate30d,
           medianResponseHours,
           pilots,
+          pilotsTruncated,
         ]
       properties:
         generatedAt:
@@ -10894,8 +10895,15 @@ components:
           type: ["number", "null"]
         pilots:
           type: array
+          maxItems: 200
           items:
             $ref: "#/components/schemas/BuyerPilot"
+        pilotsTruncated:
+          description: >-
+            True when more anchor buyers exist than the pilots list carries;
+            the list holds the most recently active. The summary counts always
+            cover the full set.
+          type: boolean
 
     BuyerPilot:
       type: object
@@ -10969,6 +10977,7 @@ components:
           highPriorityItems,
           unassignedCases,
           items,
+          itemsTruncated,
         ]
       properties:
         generatedAt:
@@ -10989,6 +10998,12 @@ components:
           maxItems: 80
           items:
             $ref: "#/components/schemas/ComplianceOperationItem"
+        itemsTruncated:
+          description: >-
+            True when more open items exist than the SLA-ranked list carries;
+            truncation only ever hides the healthiest tail. The summary counts
+            always cover the full set.
+          type: boolean
 
     ComplianceOperationItem:
       type: object
@@ -11053,6 +11068,7 @@ components:
           deadLetters,
           openRails,
           connections,
+          connectionsTruncated,
           qualitySignals,
         ]
       properties:
@@ -11075,8 +11091,15 @@ components:
           type: integer
         connections:
           type: array
+          maxItems: 200
           items:
             $ref: "#/components/schemas/IntegrationConnectionHealth"
+        connectionsTruncated:
+          description: >-
+            True when more connections exist than the list carries; the list
+            is worst-first, so truncation only ever hides healthy connections.
+            The summary counts always cover the full set.
+          type: boolean
         qualitySignals:
           type: array
           items:

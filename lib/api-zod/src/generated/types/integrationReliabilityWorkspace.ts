@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.79.0
+ * OpenAPI spec version: 0.80.0
  */
 import type { DataQualitySignal } from './dataQualitySignal';
 import type { IntegrationConnectionHealth } from './integrationConnectionHealth';
@@ -17,6 +17,9 @@ export interface IntegrationReliabilityWorkspace {
   invalidRows30d: number;
   deadLetters: number;
   openRails: number;
+  /** @maxItems 200 */
   connections: IntegrationConnectionHealth[];
+  /** True when more connections exist than the list carries; the list is worst-first, so truncation only ever hides healthy connections. The summary counts always cover the full set. */
+  connectionsTruncated: boolean;
   qualitySignals: DataQualitySignal[];
 }

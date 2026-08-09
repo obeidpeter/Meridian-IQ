@@ -59,9 +59,39 @@ function nullableIso(value: unknown): string | null {
   return new Date(value as string | number | Date).toISOString();
 }
 
+// The connections list is bounded so the payload cannot grow with every
+// tenant connection. Ordering is worst-first (incident, stale, healthy —
+// the SQL state_rank below mirrors assessConnectionHealth in lockstep), so
+// truncation only ever hides HEALTHY connections; the workspace's summary
+// counts come from window aggregates over the full set. The contract
+// mirrors this cap (IntegrationReliabilityWorkspace.connections maxItems +
+// connectionsTruncated).
+const CONNECTION_LIST_CAP = 200;
+
 export async function getIntegrationReliabilityWorkspace() {
   const db = getDb();
   const connectionResult = await db.execute(sql`
+    SELECT
+      unioned.*,
+      count(*) OVER ()::int AS total_connections,
+      count(*) FILTER (
+        WHERE unioned.state_rank < 2
+      ) OVER ()::int AS total_attention_connections
+    FROM (
+    SELECT
+      base.*,
+      -- Lockstep with assessConnectionHealth (above): 0 incident, 1 stale,
+      -- 2 healthy. Ranked here so the cap keeps the worst rows and the
+      -- attention count covers rows the cap hides.
+      CASE
+        WHEN base.connection_status = 'error'
+          OR base.latest_run_status = 'failed' THEN 0
+        WHEN base.connection_status IN ('paused', 'disabled')
+          OR base.last_sync_at IS NULL
+          OR base.last_sync_at < now() - interval '24 hours' THEN 1
+        ELSE 2
+      END AS state_rank
+    FROM (
     SELECT
       connection.id::text,
       'erp'::text AS type,
@@ -111,6 +141,10 @@ export async function getIntegrationReliabilityWorkspace() {
       ORDER BY candidate.started_at DESC, candidate.id DESC
       LIMIT 1
     ) run ON true
+    ) base
+    ) unioned
+    ORDER BY unioned.state_rank, unioned.client_name, unioned.id
+    LIMIT ${CONNECTION_LIST_CAP}
   `);
 
   const now = new Date();
@@ -191,9 +225,11 @@ export async function getIntegrationReliabilityWorkspace() {
   const deadWebhooks = number(quality.dead_webhooks);
   const deadLetters = deadOutboxEvents + deadWebhooks;
   const openRails = number(quality.open_rails);
-  const attentionConnections = connections.filter(
-    (connection) => connection.operationalState !== "healthy",
-  ).length;
+  // Full-set counts from the window aggregates, not the capped list — a
+  // truncated list must not under-report attention.
+  const totals = (connectionResult.rows[0] ?? {}) as Record<string, unknown>;
+  const totalConnections = number(totals.total_connections);
+  const attentionConnections = number(totals.total_attention_connections);
 
   const qualitySignals = [
     {
@@ -250,14 +286,15 @@ export async function getIntegrationReliabilityWorkspace() {
 
   return {
     generatedAt: now.toISOString(),
-    totalConnections: connections.length,
-    healthyConnections: connections.length - attentionConnections,
+    totalConnections,
+    healthyConnections: totalConnections - attentionConnections,
     attentionConnections,
     failedRuns24h,
     invalidRows30d,
     deadLetters,
     openRails,
     connections,
+    connectionsTruncated: totalConnections > connections.length,
     qualitySignals,
   };
 }

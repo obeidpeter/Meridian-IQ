@@ -146,6 +146,13 @@ export function IntegrationReliabilityWorkspace() {
           />
         </div>
 
+        {data.connectionsTruncated && (
+          <p className="px-4 pb-3 text-xs text-slate-500">
+            Showing the {data.connections.length} most affected of{" "}
+            {data.totalConnections} connections — the counts above cover
+            everything.
+          </p>
+        )}
         {connections.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-slate-500">
             No connections in this view.
