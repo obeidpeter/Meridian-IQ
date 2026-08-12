@@ -5,6 +5,7 @@ import {
   clerkMemoryEmbeddingsTable,
   EMBEDDING_DIMS,
 } from "@workspace/db";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { lagosMonthStart } from "./client-statement";
 import { isFeatureEnabled } from "../flags/flags";
@@ -463,11 +464,7 @@ export async function memoryRailReady(): Promise<boolean> {
 // duplicate batch spend.
 async function sweepMemoryIndex(): Promise<void> {
   const due = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${MEMORY_LOCK_ID}) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(MEMORY_LOCK_ID);
     if (!locked) return false;
     return memoryRailReady();
   });

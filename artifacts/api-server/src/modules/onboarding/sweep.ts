@@ -13,6 +13,7 @@ import {
   runInBypassContext,
   clientOnboardingRunsTable,
 } from "@workspace/db";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
@@ -25,11 +26,7 @@ export async function sweepOnboardingRuns(): Promise<{
   refreshed: number;
 }> {
   const candidates = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${ONBOARDING_SWEEP_LOCK_ID}) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(ONBOARDING_SWEEP_LOCK_ID);
     if (!locked) return [];
     return (
       await getDb().execute<{ id: string; firm_id: string }>(sql`

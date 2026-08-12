@@ -249,7 +249,7 @@ export async function draftEngagementNarrative(
   // TOCTOU history lives with it) — is clerk/phrase-grounded.ts, one home
   // with the obligation response letter.
   const user = `Advisory facts computed by the platform:\n${facts}`;
-  const narrative = await phraseGroundedDraft<z.infer<typeof narrativeOutput>>(
+  const data = await phraseGroundedDraft<z.infer<typeof narrativeOutput>>(
     gateway,
     tenantFirmId(principal),
     {
@@ -265,7 +265,7 @@ export async function draftEngagementNarrative(
       text: (data) => data.narrative,
     },
   );
-  return narrative === null
+  return data === null
     ? fallback
-    : { engagementId, narrative, source: "clerk" };
+    : { engagementId, narrative: data.narrative, source: "clerk" };
 }

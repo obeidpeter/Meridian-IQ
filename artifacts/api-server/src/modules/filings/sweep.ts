@@ -7,6 +7,7 @@
 // (firm, client, tax, period) index inside mintFilingsForFirm.
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext, engagementsTable } from "@workspace/db";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { mintFilingsForFirm } from "./filings";
 
 // Fresh advisory lock id (731_842..846 are taken by the clerk watch sweeps).
@@ -20,11 +21,7 @@ export async function sweepFilingMint(
   now = new Date(),
 ): Promise<{ firms: number; minted: number }> {
   const firmIds = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${FILING_MINT_LOCK_ID}) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(FILING_MINT_LOCK_ID);
     if (!locked) return [];
     // A register is owed to every firm that actively serves at least one
     // client (open/in_progress engagements — the same live-engagement wall

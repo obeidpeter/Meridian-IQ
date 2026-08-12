@@ -11,7 +11,6 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { computeAutomationShadowPending } from "./automation-evidence";
-import { ensureGrounded } from "./grounding";
 import { pendingApprovals } from "../invoice/approvals";
 import { countFirmUnmatchedCollections } from "../collections/unmatched";
 import { bandExposure } from "../invoice/penalty-exposure";
@@ -20,6 +19,7 @@ import { sendMessage } from "../messaging/messaging";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
 import { registerSweep } from "../pipeline/pipeline";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import {
   lagosDateString,
@@ -50,8 +50,8 @@ import { statutoryDueDay } from "../filings/statutory-calendar";
 import { countWhtChase } from "../wht/credits";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
-import { assertFirmClerkBudget } from "./budget";
-import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
+import { type ClerkGateway } from "./gateway";
+import { phraseGroundedDraft } from "./phrase-grounded";
 import { gatewayOrNull } from "./provider";
 import { isAre, ordinal, plural } from "./text";
 
@@ -658,59 +658,34 @@ export async function generateFirmDigest(
   let bullets = template.bullets;
   let source: "clerk" | "template" = "template";
 
-  let clerkAvailable = gateway !== null && (await isFeatureEnabled(CLERK_FLAG_KEY));
-  if (clerkAvailable) {
-    try {
-      await assertFirmClerkBudget(firmId);
-    } catch {
-      clerkAvailable = false;
-    }
-  }
-  if (clerkAvailable && gateway) {
-    const user = buildDigestUser(facts);
-    // One phrasing call under the digest posture (fix round, after #93): the
-    // bare gateway.infer here was a kill-switch TOCTOU — a clerk_ai flip
-    // between the clerkAvailable check and the call made the gateway's own
-    // assert throw CLERK_DISABLED out of the sweep, failing a generation
-    // pass this module documents as NEVER blocked by the kill switch.
-    // inferPhrasing re-checks the flag and folds every typed gateway failure
-    // to null → template; the outer try keeps the stronger draft-reply.ts
-    // guarantee that even a ledger-insert failure after the provider
-    // answered, or a grounding-check crash, stores the template row with
-    // source tagged honestly.
-    try {
-      const data = await inferPhrasing<z.infer<typeof digestOutput>>(gateway, {
-        purpose: "digest",
-        firmId,
-        promptVersion: DIGEST_PROMPT_VERSION,
-        system: DIGEST_SYSTEM,
-        user,
-        schemaName: "weekly_digest",
-        jsonSchema: digestJsonSchema,
-        validator: digestOutput,
-        inputForHash: `${firmId}:${weekStart.toISOString()}:${JSON.stringify(facts)}`,
-      });
-      // Number grounding: a numeral the facts never stated means the template
-      // answers instead (grounding.ts) — the phrased digest may only re-say
-      // the computed numbers. The grounded text is assembled by the SAME
-      // joinOutput the phrasing eval scores, so the eval grades exactly what
-      // production grounds.
-      if (
-        data &&
-        (await ensureGrounded(
-          "digest",
-          firmId,
-          DIGEST_PHRASING.joinOutput(data),
-          user,
-        ))
-      ) {
-        headline = data.headline;
-        bullets = data.bullets.length ? data.bullets : bullets;
-        source = "clerk";
-      }
-    } catch {
-      // The template narrative stands; the row below stores it as-is.
-    }
+  // The FULL phrase-or-template gate ladder — kill switch, firm budget
+  // pre-check, then one phrasing call + number grounding inside a try (the
+  // #93 kill-switch TOCTOU history lives with it) — is
+  // clerk/phrase-grounded.ts, one home with the letter surfaces. Every
+  // failure folds to null and the template narrative stands; the row below
+  // stores it as-is. The grounded text is assembled by the SAME joinOutput
+  // the phrasing eval scores, so the eval grades exactly what production
+  // grounds.
+  const data = await phraseGroundedDraft<z.infer<typeof digestOutput>>(
+    gateway,
+    firmId,
+    {
+      purpose: "digest",
+      promptVersion: DIGEST_PROMPT_VERSION,
+      system: DIGEST_SYSTEM,
+      user: buildDigestUser(facts),
+      schemaName: "weekly_digest",
+      jsonSchema: digestJsonSchema,
+      validator: digestOutput,
+      groundingSurface: "digest",
+      inputForHash: `${firmId}:${weekStart.toISOString()}:${JSON.stringify(facts)}`,
+      text: DIGEST_PHRASING.joinOutput,
+    },
+  );
+  if (data) {
+    headline = data.headline;
+    bullets = data.bullets.length ? data.bullets : bullets;
+    source = "clerk";
   }
 
   // Two instances racing resolve on the (firm_id, week_start) unique key: the
@@ -914,11 +889,7 @@ registerSweep(async function sweepClerkDigests(): Promise<void> {
     // key — so a rare concurrent pass wastes at most one phrasing call per firm
     // and never stores a duplicate.
     const firms = await runInBypassContext(async () => {
-      const [{ locked }] = (
-        await getDb().execute<{ locked: boolean }>(
-          sql`SELECT pg_try_advisory_xact_lock(${DIGEST_LOCK_ID}) AS locked`,
-        )
-      ).rows;
+      const locked = await tryAdvisoryXactLock(DIGEST_LOCK_ID);
       if (!locked) return [];
 
       const weekStart = digestWeekStart();

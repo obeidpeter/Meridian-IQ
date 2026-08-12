@@ -9,13 +9,13 @@ import {
   type ClientStatementFacts,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
-import { ensureGrounded } from "./grounding";
 import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
 import { registerSweep } from "../pipeline/pipeline";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { lagosMonthStart, lagosWindowSql } from "../../lib/lagos-time";
-import { assertFirmClerkBudget } from "./budget";
-import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
+import { type ClerkGateway } from "./gateway";
+import { phraseGroundedDraft } from "./phrase-grounded";
 import { gatewayOrNull } from "./provider";
 import { MONTH_NAMES, plural } from "./text";
 
@@ -284,64 +284,39 @@ export async function generateClientStatement(
   let bullets = template.bullets;
   let source: "clerk" | "template" = "template";
 
-  let clerkAvailable =
-    !statementIsQuiet(facts) &&
-    gateway !== null &&
-    (await isFeatureEnabled(CLERK_FLAG_KEY));
-  if (clerkAvailable) {
-    try {
-      await assertFirmClerkBudget(firmId);
-    } catch {
-      clerkAvailable = false;
-    }
-  }
-  if (clerkAvailable && gateway) {
-    const user = buildStatementUser(facts, monthStart);
-    // One phrasing call under the digest posture (fix round, after #93): the
-    // bare gateway.infer here was a kill-switch TOCTOU — a clerk_ai flip
-    // between the clerkAvailable check and the call made the gateway's own
-    // assert throw CLERK_DISABLED out of the sweep, failing a generation
-    // pass this module documents as NEVER blocked by the kill switch.
-    // inferPhrasing re-checks the flag and folds every typed gateway failure
-    // to null → template; the outer try keeps the stronger draft-reply.ts
-    // guarantee that even a ledger-insert failure after the provider
-    // answered, or a grounding-check crash, stores the template row with
-    // source tagged honestly. (Scope of the guarantee, round 53: it covers
-    // AI-path failures. Inside a sweep pair's transaction a genuine PG
-    // error aborts the whole pair — template insert included — and the
-    // sweep's per-pair catch re-offers it next pass.)
-    try {
-      const data = await inferPhrasing<z.infer<typeof statementOutput>>(
-        gateway,
-        {
-          purpose: "client_statement",
-          firmId,
-          promptVersion: STATEMENT_PROMPT_VERSION,
-          system: STATEMENT_SYSTEM,
-          user,
-          schemaName: "client_statement",
-          jsonSchema: statementJsonSchema,
-          validator: statementOutput,
-          inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
-        },
-      );
-      // Number grounding: a numeral the facts never stated → template answers
-      // (grounding.ts).
-      if (
-        data &&
-        (await ensureGrounded(
-          "client_statement",
-          firmId,
-          [data.headline, ...data.bullets].join("\n"),
-          user,
-        ))
-      ) {
-        headline = data.headline;
-        bullets = data.bullets.length ? data.bullets : bullets;
-        source = "clerk";
-      }
-    } catch {
-      // The template narrative stands; the row below stores it as-is.
+  // The FULL phrase-or-template gate ladder — kill switch, firm budget
+  // pre-check, then one phrasing call + number grounding inside a try (the
+  // #93 kill-switch TOCTOU history lives with it) — is
+  // clerk/phrase-grounded.ts, one home with the digest and letter surfaces.
+  // Every failure folds to null and the template narrative stands; the row
+  // below stores it as-is. (Scope of the guarantee, round 53: it covers
+  // AI-path failures. Inside a sweep pair's transaction a genuine PG error
+  // aborts the whole pair — template insert included — and the sweep's
+  // per-pair catch re-offers it next pass.) A quiet month skips the ladder
+  // outright: no flag read, no budget touch, no model call. The grounded
+  // text is assembled by the SAME joinOutput the phrasing eval scores, so
+  // the eval grades exactly what production grounds.
+  if (!statementIsQuiet(facts)) {
+    const data = await phraseGroundedDraft<z.infer<typeof statementOutput>>(
+      gateway,
+      firmId,
+      {
+        purpose: "client_statement",
+        promptVersion: STATEMENT_PROMPT_VERSION,
+        system: STATEMENT_SYSTEM,
+        user: buildStatementUser(facts, monthStart),
+        schemaName: "client_statement",
+        jsonSchema: statementJsonSchema,
+        validator: statementOutput,
+        groundingSurface: "client_statement",
+        inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
+        text: STATEMENT_PHRASING.joinOutput,
+      },
+    );
+    if (data) {
+      headline = data.headline;
+      bullets = data.bullets.length ? data.bullets : bullets;
+      source = "clerk";
     }
   }
 
@@ -425,11 +400,7 @@ export async function sweepClientStatements(): Promise<void> {
     // (firm_id, client_party_id, month_start) key.
     const monthStart = lagosMonthStart(1);
     const pairs = await runInBypassContext(async () => {
-      const [{ locked }] = (
-        await getDb().execute<{ locked: boolean }>(
-          sql`SELECT pg_try_advisory_xact_lock(${STATEMENT_LOCK_ID}) AS locked`,
-        )
-      ).rows;
+      const locked = await tryAdvisoryXactLock(STATEMENT_LOCK_ID);
       if (!locked) return [];
 
       // A statement is owed to every client the firm actively serves: open or

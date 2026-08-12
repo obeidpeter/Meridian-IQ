@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, isNotNull } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { getClerkGateway } from "./provider";
 import { runEvalCorpus } from "./eval";
@@ -206,11 +207,7 @@ registerSweep(async function sweepEvalGrowth(): Promise<void> {
   // second run row (startedBy null), which the due-today check then ignores
   // for the rest of the day.
   const runEval = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${EVAL_GROWTH_LOCK_ID}) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(EVAL_GROWTH_LOCK_ID);
     if (!locked) return false;
 
     const grown = await growEvalFixtures();

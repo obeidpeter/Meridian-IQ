@@ -175,7 +175,7 @@ async function phraseResponseLetter(
   fallback: ObligationResponseDraft,
 ): Promise<ObligationResponseDraft> {
   const user = buildResponseLetterUser(facts);
-  const letter = await phraseGroundedDraft<z.infer<typeof letterOutput>>(
+  const data = await phraseGroundedDraft<z.infer<typeof letterOutput>>(
     gateway,
     tenantFirmId(principal),
     {
@@ -191,7 +191,7 @@ async function phraseResponseLetter(
       text: RESPONSE_PHRASING.joinOutput,
     },
   );
-  return letter === null
+  return data === null
     ? fallback
-    : { ...fallback, letter, source: "clerk" };
+    : { ...fallback, letter: RESPONSE_PHRASING.joinOutput(data), source: "clerk" };
 }

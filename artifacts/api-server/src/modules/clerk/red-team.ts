@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { getClerkGateway } from "./provider";
@@ -270,11 +271,7 @@ export async function growRedTeamFixtures(
   return runInBypassContext(async () => {
     // Hold the advisory lock across the count re-check + inserts so a
     // concurrent instance serialises behind us and sees the updated count.
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${RED_TEAM_LOCK_ID}) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(RED_TEAM_LOCK_ID);
     if (!locked) return 0;
     const [{ count }] = (
       await getDb().execute<{ count: number }>(

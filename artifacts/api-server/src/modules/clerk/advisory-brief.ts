@@ -9,6 +9,7 @@ import {
   type ClerkAdvisoryBriefRow,
   type ProtectedFact,
 } from "@workspace/db";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
 import { registerSweep } from "../pipeline/pipeline";
@@ -16,9 +17,8 @@ import { gatewayOrNull } from "./provider";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { appendAudit } from "../audit/audit";
-import { assertFirmClerkBudget } from "./budget";
-import { ensureGrounded } from "./grounding";
-import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
+import { type ClerkGateway } from "./gateway";
+import { phraseGroundedDraft } from "./phrase-grounded";
 import { lagosMonthStart } from "./client-statement";
 import { plural } from "./text";
 import {
@@ -512,48 +512,33 @@ export async function generateAdvisoryBrief(
   let note = template.note;
   let source: "clerk" | "template" = "template";
 
-  let clerkAvailable =
-    gateway !== null && (await isFeatureEnabled(CLERK_FLAG_KEY));
-  if (clerkAvailable) {
-    try {
-      await assertFirmClerkBudget(firmId);
-    } catch {
-      clerkAvailable = false;
-    }
-  }
-  if (clerkAvailable && gateway) {
-    const user = buildBriefUser(sections);
-    try {
-      const data = await inferPhrasing<z.infer<typeof briefOutput>>(gateway, {
-        purpose: "advisory_brief",
-        firmId,
-        promptVersion: BRIEF_PROMPT_VERSION,
-        system: BRIEF_SYSTEM,
-        user,
-        schemaName: BRIEF_PHRASING.schemaName,
-        jsonSchema: briefJsonSchema,
-        validator: briefOutput,
-        inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(sections)}`,
-      });
-      if (
-        data &&
-        (await ensureGrounded(
-          "advisory_brief",
-          firmId,
-          BRIEF_PHRASING.joinOutput(data),
-          user,
-        ))
-      ) {
-        headline = data.headline;
-        note = data.note;
-        source = "clerk";
-      }
-    } catch {
-      // The template note stands; the row below stores it as-is. (AI-path
-      // failures only — inside a sweep pair's transaction a genuine PG
-      // error aborts the pair, template insert included; the per-pair
-      // catch re-offers it next pass.)
-    }
+  // The FULL phrase-or-template gate ladder — kill switch, firm budget
+  // pre-check, then one phrasing call + number grounding inside a try — is
+  // clerk/phrase-grounded.ts, one home with the digest and letter surfaces.
+  // Every failure folds to null and the template note stands; the row below
+  // stores it as-is. (AI-path failures only — inside a sweep pair's
+  // transaction a genuine PG error aborts the pair, template insert
+  // included; the per-pair catch re-offers it next pass.)
+  const data = await phraseGroundedDraft<z.infer<typeof briefOutput>>(
+    gateway,
+    firmId,
+    {
+      purpose: "advisory_brief",
+      promptVersion: BRIEF_PROMPT_VERSION,
+      system: BRIEF_SYSTEM,
+      user: buildBriefUser(sections),
+      schemaName: BRIEF_PHRASING.schemaName,
+      jsonSchema: briefJsonSchema,
+      validator: briefOutput,
+      groundingSurface: "advisory_brief",
+      inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(sections)}`,
+      text: BRIEF_PHRASING.joinOutput,
+    },
+  );
+  if (data) {
+    headline = data.headline;
+    note = data.note;
+    source = "clerk";
   }
 
   const values = {
@@ -702,11 +687,7 @@ export async function sweepAdvisoryBriefs(
   if (await isFeatureEnabled(BRIEF_FLAG_KEY)) {
     const monthStart = lagosMonthStart(0);
     const pairs = await runInBypassContext(async () => {
-      const [{ locked }] = (
-        await getDb().execute<{ locked: boolean }>(
-          sql`SELECT pg_try_advisory_xact_lock(${BRIEF_SWEEP_LOCK_ID}) AS locked`,
-        )
-      ).rows;
+      const locked = await tryAdvisoryXactLock(BRIEF_SWEEP_LOCK_ID);
       if (!locked) return [];
       return getDb()
         .selectDistinct({
