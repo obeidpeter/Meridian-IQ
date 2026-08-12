@@ -24,7 +24,7 @@ import { pointerEntityRef } from "../messaging/recipient-ref";
 import { lagosDateString } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS, submissionDeadline } from "./compliance-window";
 
-// Mirrors the dashboard's classification exactly (routes/sme.ts): due_soon at
+// Mirrors the dashboard's classification exactly (routes/sme/dashboard.ts): due_soon at
 // <= 3 days to the submission deadline, overdue past it. A reminder fires once
 // per invoice per threshold — the deadline_reminder_sends ledger is the
 // idempotency guard, not the sweep cadence.

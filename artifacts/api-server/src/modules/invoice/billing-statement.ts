@@ -64,7 +64,7 @@ export interface BillingStatement {
 }
 
 // The tier the firm is billed on: subscription join, with the essential row
-// as the no-subscription fallback. THE shared resolution — routes/console.ts
+// as the no-subscription fallback. THE shared resolution — routes/console/billing.ts
 // imports this for revenue-share statements, so the two billing surfaces
 // cannot disagree about which tier a firm is on.
 export async function billingTierForFirm(firmId: string): Promise<BillingTier> {
@@ -93,7 +93,7 @@ export async function billingTierForFirm(firmId: string): Promise<BillingTier> {
 }
 
 // Pure fee maths, exported so the overage arithmetic is testable without a
-// tier row in the database — and shared with routes/console.ts's revenue-share
+// tier row in the database — and shared with routes/console/billing.ts's revenue-share
 // statements (which layer the share percentage on top of this fee core).
 // 2dp strings (kobo), never floats in the output.
 export function computeBillingFee(

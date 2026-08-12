@@ -1,6 +1,6 @@
 // Filing Desk statutory calendar: the ONE home for "which return covers which
 // period and when is it due". The four older surfaces that predated this
-// module (routes/sme.ts client deadlines, modules/invoice/compliance-calendar,
+// module (routes/sme/dashboard.ts client deadlines, modules/invoice/compliance-calendar,
 // the pack's nextVatReturnDue, the digest's vatReturnInDays) draw their due
 // day from statutoryDueDay below (round 41) — the literal day numbers exist
 // in exactly this file. Everything
