@@ -50,7 +50,7 @@ interface MonthRow extends Record<string, unknown> {
 // One firm's human verdicts on ≥threshold receipt proposals, bucketed by
 // decision month. Explicit AT TIME ZONE 'UTC': bare date_trunc on a
 // timestamptz follows the SESSION timezone (the quality-watch rule).
-export async function reconcileAgreementMonths(
+async function reconcileAgreementMonths(
   firmId: string,
   monthsBack = 5,
 ): Promise<AgreementMonth[]> {
@@ -131,7 +131,7 @@ export async function reconcileAgreementMonths(
     .sort((a, b) => (a.month < b.month ? -1 : 1));
 }
 
-export interface AgreementDrop {
+interface AgreementDrop {
   fromMonth: string;
   toMonth: string;
   fromRate: number;
@@ -164,7 +164,7 @@ export function detectAgreementDrop(
   };
 }
 
-export interface AgreementWatchDeps {
+interface AgreementWatchDeps {
   litFirms(): Promise<string[]>;
   months(firmId: string): Promise<AgreementMonth[]>;
 }
@@ -202,7 +202,7 @@ const alertAgreementDrop = alertOnceViaAuditLedger({
   actorId: "agreement-watch",
 });
 
-export interface AgreementWatchResult {
+interface AgreementWatchResult {
   checked: number;
   dropped: number;
   alerted: number;

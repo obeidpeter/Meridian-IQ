@@ -834,7 +834,7 @@ export function fenceDocument(text: string): string {
 // shapes as the invoice trio below, with the document noun corrected so the
 // prompt never calls a notice an invoice. Shared by first-time intake and
 // retries (retryExtraction re-fences with the case's own kind).
-export function fenceNoticeDocument(text: string): string {
+function fenceNoticeDocument(text: string): string {
   return fenceUntrusted(
     "tax-authority notice content",
     "NOTICE DOCUMENT",
@@ -842,14 +842,14 @@ export function fenceNoticeDocument(text: string): string {
   );
 }
 
-export function noticeImageUserContent(
+function noticeImageUserContent(
   contentType: string,
   b64: string,
 ): UserContent {
   return docImageUserContent("The tax-authority notice", contentType, b64);
 }
 
-export function noticeScanUserContent(pagesB64: string[]): UserContent {
+function noticeScanUserContent(pagesB64: string[]): UserContent {
   return docScanUserContent("The tax-authority notice", pagesB64);
 }
 
@@ -857,7 +857,7 @@ export function noticeScanUserContent(pagesB64: string[]): UserContent {
 // builder (prompts.ts) with the invoice noun. Shared by first-time intake and
 // retries so the injection-hardening text for images is maintained in one
 // place.
-export function imageUserContent(
+function imageUserContent(
   contentType: string,
   b64: string,
 ): UserContent {

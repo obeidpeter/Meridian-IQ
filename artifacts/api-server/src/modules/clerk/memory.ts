@@ -53,7 +53,7 @@ export const EMBED_PROMPT_VERSION = "embed.v1";
 export const EMBED_QUERY_PROMPT_VERSION = "embed.v1+q";
 // Sources per indexer pass — the eval-growth batch discipline: slices, not
 // marathons; the sweep's hourly cadence drains a backlog across passes.
-export const MEMORY_INDEX_BATCH = 20;
+const MEMORY_INDEX_BATCH = 20;
 // The exemplar cap, reused: embedding input is capped the same way prompt
 // injection of the same text would be.
 export const MEMORY_TEXT_CAP = 6_000;
@@ -91,12 +91,12 @@ const MEMORY_LOCK_ID = 731_850;
 //    note — platform-composed, never client-authored). Purge story:
 //    briefs have no delete path; retrieval re-reads the source row under
 //    scope, so an orphan embedding yields nothing.
-export const MEMORY_CORPORA = [
+const MEMORY_CORPORA = [
   "ask_questions",
   "escalation_replies",
   "advisory_briefs",
 ] as const;
-export type MemoryCorpusKey = (typeof MEMORY_CORPORA)[number];
+type MemoryCorpusKey = (typeof MEMORY_CORPORA)[number];
 
 interface IndexCandidate {
   firmId: string;
@@ -366,7 +366,7 @@ export async function indexMemoryBatch(
   return { indexed, skippedFirms };
 }
 
-export interface MemoryMatch {
+interface MemoryMatch {
   refId: string;
   similarity: number;
 }
@@ -461,7 +461,7 @@ export async function memoryRailReady(): Promise<boolean> {
 // only dedupes one instance's pass; correctness rests on the natural key
 // and the per-firm budget, so a cross-instance race costs at most one
 // duplicate batch spend.
-export async function sweepMemoryIndex(): Promise<void> {
+async function sweepMemoryIndex(): Promise<void> {
   const due = await runInBypassContext(async () => {
     const [{ locked }] = (
       await getDb().execute<{ locked: boolean }>(
