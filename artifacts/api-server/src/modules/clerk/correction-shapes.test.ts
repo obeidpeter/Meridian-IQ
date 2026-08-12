@@ -4,7 +4,7 @@ import {
   classifyCorrectionShape,
   computeCorrectionShapes,
   normalizeCorrectionField,
-} from "./metrics.ts";
+} from "./correction-shapes.ts";
 
 // Correction-shape mining: deterministic classification of the corrections
 // exhaust by the SHAPE of each override. Pure functions, table-driven — no

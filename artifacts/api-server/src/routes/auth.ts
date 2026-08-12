@@ -1,4 +1,9 @@
-import { Router, type IRouter } from "express";
+import {
+  Router,
+  type IRouter,
+  type Request,
+  type Response,
+} from "express";
 import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb, membershipsTable, usersTable } from "@workspace/db";
 import {
@@ -134,6 +139,40 @@ function accountPayload(
   };
 }
 
+// The shared success tail of both sign-in doors (password login and the TOTP
+// challenge): issue the session, set the cookie, audit, and return the
+// response payload — each caller parses it through its own contract schema.
+async function completeSignIn(
+  req: Request,
+  res: Response,
+  user: { id: string; email: string; fullName: string | null },
+  sessionEpoch: number,
+  membership: Membership,
+  audit: { action: string; after: Record<string, unknown> },
+) {
+  const token = await issueSessionToken(user.id, sessionEpoch);
+  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+  // Only native/mobile clients (which cannot use HttpOnly cookies) receive the
+  // bearer token in the response body; they identify themselves with the
+  // X-Meridian-Client header. Browser apps stay cookie-only so an XSS cannot
+  // read a replayable session token out of the sign-in response (SEC-02).
+  const isMobileClient = req.get("x-meridian-client") === "mobile";
+  await appendAudit({
+    actorId: user.id,
+    firmId: membership.firmId,
+    action: audit.action,
+    entityType: "user",
+    entityId: user.id,
+    after: audit.after,
+  });
+  return {
+    ...accountPayload(user, membership),
+    // Same signed session token as the cookie, for native mobile clients
+    // that cannot use HttpOnly cookies (sent as Authorization: Bearer).
+    ...(isMobileClient ? { token } : {}),
+  };
+}
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(LoginBody, req.body);
   const ipRetryAfter = await throttleLoginAttempt(req);
@@ -206,31 +245,17 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     );
     return;
   }
-  const token = await issueSessionToken(result.userId, result.sessionEpoch);
-  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
-  // Only native/mobile clients (which cannot use HttpOnly cookies) receive the
-  // bearer token in the response body; they identify themselves with the
-  // X-Meridian-Client header. Browser apps stay cookie-only so an XSS cannot
-  // read a replayable session token out of the login response (SEC-02).
-  const isMobileClient = req.get("x-meridian-client") === "mobile";
-  await appendAudit({
-    actorId: result.userId,
-    firmId: membership.firmId,
-    action: "auth.login",
-    entityType: "user",
-    entityId: result.userId,
-    after: { role: membership.role },
-  });
   res.json(
-    LoginResponse.parse({
-      ...accountPayload(
+    LoginResponse.parse(
+      await completeSignIn(
+        req,
+        res,
         { id: result.userId, email: result.email, fullName: result.fullName },
+        result.sessionEpoch,
         membership,
+        { action: "auth.login", after: { role: membership.role } },
       ),
-      // Same signed session token as the cookie, for native mobile clients
-      // that cannot use HttpOnly cookies (sent as Authorization: Bearer).
-      ...(isMobileClient ? { token } : {}),
-    }),
+    ),
   );
 });
 
@@ -358,25 +383,16 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
   const membership = memberships[0];
   // From here this is exactly the login success path: cookie for browsers,
   // bearer token in the body only for the self-identified mobile client.
-  const token = await issueSessionToken(user.id, user.sessionEpoch);
-  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
-  const isMobileClient = req.get("x-meridian-client") === "mobile";
-  await appendAudit({
-    actorId: user.id,
-    firmId: membership.firmId,
-    action: "auth.totp.challenge",
-    entityType: "user",
-    entityId: user.id,
-    after: {
-      role: membership.role,
-      method: usedRecoveryCode ? "recovery_code" : "totp",
-    },
-  });
   res.json(
-    TotpChallengeResponse.parse({
-      ...accountPayload(user, membership),
-      ...(isMobileClient ? { token } : {}),
-    }),
+    TotpChallengeResponse.parse(
+      await completeSignIn(req, res, user, user.sessionEpoch, membership, {
+        action: "auth.totp.challenge",
+        after: {
+          role: membership.role,
+          method: usedRecoveryCode ? "recovery_code" : "totp",
+        },
+      }),
+    ),
   );
 });
 

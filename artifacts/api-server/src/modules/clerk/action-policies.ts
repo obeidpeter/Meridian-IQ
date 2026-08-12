@@ -101,7 +101,10 @@ function isPolicyKind(kind: string): kind is PolicyKind {
   return (POLICY_KINDS as readonly string[]).includes(kind);
 }
 
-async function policiesEnabled(firmId: string): Promise<boolean> {
+// Both kill switches must be lit. Shared with plan-policies.ts — recurring
+// plan grants are the same standing-instruction risk class, behind the same
+// double fail-closed gate.
+export async function policiesEnabled(firmId: string): Promise<boolean> {
   return (
     (await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId)) &&
     (await isFeatureEnabled(POLICIES_FLAG_KEY, firmId))
@@ -110,12 +113,14 @@ async function policiesEnabled(firmId: string): Promise<boolean> {
 
 // Live engagement = open/in_progress — the client-statement sweep's exact
 // enumeration of "clients the firm actively serves" (completed/archived is a
-// closed book of work). Deliberately a LOCAL helper: rbac's firmEngagesParty
-// counts ANY engagement, archived included, because retention-era reads need
-// that — this stricter wall must not replace it. Reads via the ambient
-// getDb(): the grant path runs in the caller's request context (engagements
-// are firm-keyed RLS), the sweep wraps it in its own firm-bound context.
-async function hasLiveEngagement(
+// closed book of work). Shared with plan-policies.ts but deliberately NOT in
+// rbac: rbac's firmEngagesParty counts ANY engagement, archived included,
+// because retention-era reads need that — this stricter wall must not
+// replace it. Reads via the ambient getDb(): the grant paths already run in
+// the caller's request context (engagements are firm-keyed RLS) — wrapping
+// again would hold a SECOND pool connection per grant — and the sweeps,
+// which have no ambient context, wrap this at THEIR call sites firm-bound.
+export async function hasLiveEngagement(
   firmId: string,
   clientPartyId: string,
 ): Promise<boolean> {

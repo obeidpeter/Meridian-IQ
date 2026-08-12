@@ -19,6 +19,7 @@ import { registerSweep } from "../pipeline/pipeline";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { assertBuyerPartyAccess, type Principal } from "../auth/rbac";
+import { partyNamesById } from "../party/party";
 
 // Buyer Rails v1 read models (BR-01, BR-05).
 //
@@ -460,14 +461,9 @@ export async function computeScoreboard(
   buyerPartyId: string,
 ): Promise<ScoreboardEntry[]> {
   const book = await loadBuyerBook(buyerPartyId);
-  const supplierIds = [...new Set(book.map((f) => f.invoice.supplierPartyId))];
-  const suppliers = supplierIds.length
-    ? await getDb()
-        .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-        .from(partiesTable)
-        .where(inArray(partiesTable.id, supplierIds))
-    : [];
-  const nameById = new Map(suppliers.map((s) => [s.id, s.legalName]));
+  const nameById = await partyNamesById(
+    book.map((f) => f.invoice.supplierPartyId),
+  );
 
   const perSupplier = new Map<
     string,

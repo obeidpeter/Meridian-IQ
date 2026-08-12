@@ -73,6 +73,7 @@ import {
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
+import { partyNamesById } from "../modules/party/party";
 import {
   draftEscalationReply,
   sendEscalationReply,
@@ -134,6 +135,29 @@ type ClientRisk = {
   failingInvoiceIds: string[];
 };
 
+// The one "overdue submission" nextDeadline literal, shared by the JS fold
+// (computeClientRisk) and the SQL-aggregate view (riskFromAggregate) so the
+// two read paths cannot drift. invoiceId is string | null because the fold's
+// earliest-overdue pair narrows together but TS cannot see it.
+function overdueSubmissionDeadline(
+  clientPartyId: string,
+  invoiceId: string | null,
+  dueDate: Date,
+): NonNullable<ClientRisk["nextDeadline"]> {
+  return {
+    id: `submit-${invoiceId}`,
+    clientPartyId,
+    kind: "penalty_watch",
+    title: "Overdue invoice submission",
+    description:
+      "Past the submission window — may attract penalties until stamped.",
+    dueDate,
+    status: "overdue",
+    severity: "critical",
+    invoiceId,
+  };
+}
+
 // Penalty-risk view for one client, computed from its invoice book plus the
 // statutory submission window (CON-02). Deterministic so risk flags reflect the
 // current data on every read (recompute-on-read, well under five minutes).
@@ -182,18 +206,11 @@ function computeClientRisk(
   const penaltyRisk = computePenaltyRisk(overdueCount, failedCount, dueSoon);
 
   const nextDeadline = earliestOverdue
-    ? {
-        id: `submit-${earliestOverdueInvoice}`,
+    ? overdueSubmissionDeadline(
         clientPartyId,
-        kind: "penalty_watch",
-        title: "Overdue invoice submission",
-        description:
-          "Past the submission window — may attract penalties until stamped.",
-        dueDate: earliestOverdue,
-        status: "overdue",
-        severity: "critical",
-        invoiceId: earliestOverdueInvoice,
-      }
+        earliestOverdueInvoice,
+        earliestOverdue,
+      )
     : null;
 
   return {
@@ -348,18 +365,11 @@ function riskFromAggregate(
   }
   const nextDeadline =
     agg.earliestOverdueAt && agg.earliestOverdueId
-      ? {
-          id: `submit-${agg.earliestOverdueId}`,
+      ? overdueSubmissionDeadline(
           clientPartyId,
-          kind: "penalty_watch",
-          title: "Overdue invoice submission",
-          description:
-            "Past the submission window — may attract penalties until stamped.",
-          dueDate: agg.earliestOverdueAt,
-          status: "overdue",
-          severity: "critical",
-          invoiceId: agg.earliestOverdueId,
-        }
+          agg.earliestOverdueId,
+          agg.earliestOverdueAt,
+        )
       : null;
   return {
     clientPartyId,
@@ -434,14 +444,7 @@ router.get("/console/clients/:id", async (req, res): Promise<void> => {
     )
     .orderBy(desc(invoicesTable.createdAt));
 
-  const buyerIds = [...new Set(invoices.map((i) => i.buyerPartyId))];
-  const buyers = buyerIds.length
-    ? await getDb()
-        .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-        .from(partiesTable)
-        .where(inArray(partiesTable.id, buyerIds))
-    : [];
-  const buyerName = new Map(buyers.map((b) => [b.id, b.legalName]));
+  const buyerName = await partyNamesById(invoices.map((i) => i.buyerPartyId));
 
   const risk = computeClientRisk(client.id, client.legalName, invoices);
   const detail = {

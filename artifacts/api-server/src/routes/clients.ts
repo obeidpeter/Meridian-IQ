@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
-import { getDb, engagementsTable, partiesTable } from "@workspace/db";
+import { getDb, engagementsTable } from "@workspace/db";
 import {
   CreateClientBody,
   CreateClientResponse,
@@ -20,7 +19,11 @@ import {
 } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
-import { createParty, validateTin } from "../modules/party/party";
+import {
+  createParty,
+  findEngagedClientId,
+  validateTin,
+} from "../modules/party/party";
 import { offboardClient } from "../modules/party/offboard";
 import { exportClientData } from "../modules/audit/client-export";
 
@@ -61,47 +64,16 @@ router.post("/clients", async (req, res): Promise<void> => {
   const firmId = requireFirmScope(req.principal);
   const parsed = parseOrThrow(CreateClientBody, req.body);
 
-  // Duplicate guard, scoped to THIS firm's ENGAGED clients (by normalized
-  // TIN, then exact legal name — the clients-import detection order). Parties
-  // are shared reference data, so an unscoped lookup would be a cross-tenant
-  // oracle: any firm could probe arbitrary TINs and harvest other
-  // organizations' rosters (routes/whitelabel.ts precedent). A TIN that
-  // exists elsewhere on the platform simply creates a new party here; the
-  // operator-driven merge workflow (CORE-08) reconciles duplicates with
-  // lineage. Format validation stays inside createParty (single source of
+  // Duplicate guard, scoped to THIS firm's ENGAGED clients — the shared probe
+  // (modules/party/party.ts findEngagedClientId) owns the cross-tenant-oracle
+  // rationale. Format validation stays inside createParty (single source of
   // truth) — an invalid TIN skips the TIN probe and fails there with 400.
   const tinCheck = parsed.tin ? validateTin(parsed.tin) : null;
-  let duplicateId: string | null = null;
-  if (tinCheck?.valid) {
-    const [byTin] = await getDb()
-      .select({ id: partiesTable.id })
-      .from(partiesTable)
-      .innerJoin(
-        engagementsTable,
-        and(
-          eq(engagementsTable.clientPartyId, partiesTable.id),
-          eq(engagementsTable.firmId, firmId),
-        ),
-      )
-      .where(eq(partiesTable.tin, tinCheck.normalized))
-      .limit(1);
-    duplicateId = byTin?.id ?? null;
-  }
-  if (!duplicateId) {
-    const [byName] = await getDb()
-      .select({ id: partiesTable.id })
-      .from(partiesTable)
-      .innerJoin(
-        engagementsTable,
-        and(
-          eq(engagementsTable.clientPartyId, partiesTable.id),
-          eq(engagementsTable.firmId, firmId),
-        ),
-      )
-      .where(eq(partiesTable.legalName, parsed.legalName))
-      .limit(1);
-    duplicateId = byName?.id ?? null;
-  }
+  const duplicateId = await findEngagedClientId(
+    firmId,
+    tinCheck?.valid ? tinCheck.normalized : null,
+    parsed.legalName,
+  );
   if (duplicateId) {
     throw new DomainError(
       "DUPLICATE_CLIENT",

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -6,7 +6,6 @@ import {
   auditEventsTable,
   clerkPlanPoliciesTable,
   clerkPlanRunsTable,
-  engagementsTable,
   membershipsTable,
   type ClerkPlanPolicy,
 } from "@workspace/db";
@@ -20,15 +19,14 @@ import {
   assertClientPartyScope,
   type Principal,
 } from "../auth/rbac";
-import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
 import { registerSweep } from "../pipeline/pipeline";
 import { alertOnceViaAuditLedger, atMostHourly } from "./watch-shared";
-import { ACTIONS_FLAG_KEY } from "./actions";
 import {
-  POLICIES_FLAG_KEY,
+  hasLiveEngagement,
   notifyAutoPause,
   notifyPolicyGranted,
+  policiesEnabled,
 } from "./action-policies";
 import {
   PLAN_TEMPLATES,
@@ -67,35 +65,6 @@ export type PlanPolicyPauseReason =
   | "unknown_template"
   | "run_error";
 
-async function planPoliciesEnabled(firmId: string): Promise<boolean> {
-  return (
-    (await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId)) &&
-    (await isFeatureEnabled(POLICIES_FLAG_KEY, firmId))
-  );
-}
-
-// Reads via the ambient getDb() (the action-policies discipline): the grant
-// path already runs in the caller's request context — wrapping again would
-// hold a SECOND pool connection per grant — and the sweep, which has no
-// ambient context, wraps this at ITS call site firm-bound.
-async function hasLiveEngagement(
-  firmId: string,
-  clientPartyId: string,
-): Promise<boolean> {
-  const rows = await getDb()
-    .select({ id: engagementsTable.id })
-    .from(engagementsTable)
-    .where(
-      and(
-        eq(engagementsTable.firmId, firmId),
-        eq(engagementsTable.clientPartyId, clientPartyId),
-        sql`${engagementsTable.status} IN ('open', 'in_progress')`,
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
-}
-
 // ---- Lifecycle -------------------------------------------------------------
 
 export interface PlanPolicyList {
@@ -117,7 +86,7 @@ export async function listPlanPolicies(
         isNull(clerkPlanPoliciesTable.revokedAt),
       ),
     );
-  return { policies, enabled: await planPoliciesEnabled(firmId) };
+  return { policies, enabled: await policiesEnabled(firmId) };
 }
 
 export async function grantPlanPolicy(
@@ -134,7 +103,7 @@ export async function grantPlanPolicy(
       400,
     );
   }
-  if (!(await planPoliciesEnabled(firmId))) {
+  if (!(await policiesEnabled(firmId))) {
     throw new DomainError(
       "POLICIES_DISABLED",
       "Standing approvals are not enabled for this deployment",
@@ -487,7 +456,7 @@ export async function runOnePlanPolicy(
   closing: boolean,
 ): Promise<PlanPolicyRunOutcome> {
   // Kill switches beat grants — and a dark flag must NOT consume the month.
-  if (!(await planPoliciesEnabled(policy.firmId))) return "skipped_dark";
+  if (!(await policiesEnabled(policy.firmId))) return "skipped_dark";
 
   if (!PLAN_TEMPLATES[policy.templateKey]) {
     return (await autoPausePlanPolicy(policy, "unknown_template"))

@@ -2,13 +2,15 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { CompletionRequest } from "./gateway.ts";
 import {
-  PHRASING_FIXTURES,
   listPhrasingEvalRuns,
   runPhrasingCanary,
   runPhrasingEval,
   scorePhrasingOutput,
-  type PhrasingFixture,
 } from "./phrasing-eval.ts";
+import {
+  PHRASING_FIXTURES,
+  type PhrasingFixture,
+} from "./phrasing-fixtures.ts";
 import { DIGEST_PHRASING } from "./digest.ts";
 import { CHASER_PHRASING } from "./draft-chaser.ts";
 import { STATEMENT_PHRASING } from "./client-statement.ts";

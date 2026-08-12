@@ -13,7 +13,6 @@ import {
 } from "@workspace/db";
 import type { CompletionRequest } from "./gateway.ts";
 import {
-  INTENT_FIXTURES,
   listIntentFixtures,
   loadGrownIntentFixtures,
   mintIntentFixture,
@@ -22,6 +21,7 @@ import {
   runIntentEval,
   scrubIntentQuestion,
 } from "./intent-eval.ts";
+import { INTENT_FIXTURES } from "./intent-fixtures.ts";
 import { DomainError } from "../errors.ts";
 import {
   fakeGateway,

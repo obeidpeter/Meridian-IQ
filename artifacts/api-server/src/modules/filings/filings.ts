@@ -28,6 +28,7 @@ import {
 } from "../auth/rbac";
 import { DomainError } from "../errors";
 import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
+import { assertCalendarDate } from "../../lib/parse";
 import { BILL_ORIENTATION } from "../invoice/receivables";
 import {
   FILING_KINDS,
@@ -61,33 +62,6 @@ export function filingDueSoon(today: SQL): SQL {
   return sql`${FILING_UNFILED}
     AND ${filingReturnsTable.dueDate} >= ${today}
     AND ${filingReturnsTable.dueDate} <= ${today} + ${FILING_DUE_SOON_DAYS}::int`;
-}
-
-const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
-
-// YYYY-MM-DD and a real calendar date (the obligations assertObligationDate
-// posture, local so the module carries its own validation). The round-trip
-// through Date.UTC is the overflow check — V8's parser would happily read
-// 2026-02-30 as March 2 — and the date columns are mode "string", so nothing
-// else normalizes these.
-function isRealCalendarDate(value: string): boolean {
-  const [y, m, d] = value.split("-").map(Number);
-  const roundTrip = new Date(Date.UTC(y, m - 1, d));
-  return (
-    roundTrip.getUTCFullYear() === y &&
-    roundTrip.getUTCMonth() === m - 1 &&
-    roundTrip.getUTCDate() === d
-  );
-}
-
-function assertFilingDate(value: string, field: string): void {
-  if (!DATE_SHAPE.test(value) || !isRealCalendarDate(value)) {
-    throw new DomainError(
-      "FILING_BAD_DATE",
-      `${field} must be a real calendar date in YYYY-MM-DD form`,
-      400,
-    );
-  }
 }
 
 // The engagement statuses under which the firm ACTIVELY serves a client (the
@@ -312,7 +286,7 @@ export async function updateFilingStatus(
         400,
       );
     }
-    assertFilingDate(input.filedDate, "filedDate");
+    assertCalendarDate(input.filedDate, "filedDate", "FILING_BAD_DATE");
   } else if (input.filedDate !== undefined || input.filedReference !== undefined) {
     // "Prepared" carries no filing evidence — accepting it here would let a
     // row look half-filed without the status that makes the claim.

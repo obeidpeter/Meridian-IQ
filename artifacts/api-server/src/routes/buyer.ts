@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, invoicesTable, partiesTable } from "@workspace/db";
 import {
   ListBuyerInvoicesQueryParams,
@@ -28,6 +28,8 @@ import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 import { canTransition, recordTransition } from "../modules/invoice/lifecycle";
+import { isStamped } from "../modules/invoice/compliance-window";
+import { partyNamesById } from "../modules/party/party";
 import {
   loadBuyerBook,
   getOrRefreshExposure,
@@ -64,16 +66,9 @@ router.get(
       confirmationState: query.confirmationState,
       search: query.search,
     });
-    const supplierIds = [
-      ...new Set(book.map((f) => f.invoice.supplierPartyId)),
-    ];
-    const suppliers = supplierIds.length
-      ? await getDb()
-          .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-          .from(partiesTable)
-          .where(inArray(partiesTable.id, supplierIds))
-      : [];
-    const nameById = new Map(suppliers.map((s) => [s.id, s.legalName]));
+    const nameById = await partyNamesById(
+      book.map((f) => f.invoice.supplierPartyId),
+    );
     res.json(
       ListBuyerInvoicesResponse.parse(
         book.map((f) =>
@@ -143,16 +138,9 @@ router.get(
         413,
       );
     }
-    const supplierIds = [
-      ...new Set(awaiting.map((f) => f.invoice.supplierPartyId)),
-    ];
-    const suppliers = supplierIds.length
-      ? await getDb()
-          .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-          .from(partiesTable)
-          .where(inArray(partiesTable.id, supplierIds))
-      : [];
-    const nameById = new Map(suppliers.map((s) => [s.id, s.legalName]));
+    const nameById = await partyNamesById(
+      awaiting.map((f) => f.invoice.supplierPartyId),
+    );
     const csv = toCsv(
       [
         "invoiceNumber",
@@ -218,7 +206,7 @@ router.post(
       .limit(1);
     if (!invoice) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
     assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
-    if (!["stamped", "confirmed", "settled"].includes(invoice.status)) {
+    if (!isStamped(invoice.status)) {
       throw new DomainError(
         "NOT_FLAGGABLE",
         `Invoice is ${invoice.status}; only stamped, confirmed or settled invoices carry payment flags`,
