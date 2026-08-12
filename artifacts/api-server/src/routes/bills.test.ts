@@ -16,7 +16,7 @@ import {
 } from "@workspace/db";
 import billsRouter from "./bills.ts";
 import invoicesRouter from "./invoices/index.ts";
-import smeRouter from "./sme.ts";
+import smeRouter from "./sme/index.ts";
 import { createDraft } from "../modules/invoice/service.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import {

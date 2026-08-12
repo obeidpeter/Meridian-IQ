@@ -84,7 +84,7 @@ test("statutoryDueDay is the one home; no folded surface open-codes a due day", 
   assert.equal(statutoryDueDay("paye"), 10);
   assert.equal(statutoryDueDay("wht"), 21);
   const folded = [
-    "routes/sme.ts",
+    "routes/sme/dashboard.ts",
     "modules/invoice/compliance-calendar.ts",
     "modules/invoice/compliance-pack.ts",
     "modules/clerk/digest.ts",

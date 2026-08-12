@@ -20,7 +20,7 @@ import {
   loadGrownFixtures,
 } from "./eval-growth.ts";
 import { explainInvoiceFailure } from "./explain.ts";
-import { createExtractionCase } from "./cases.ts";
+import { createExtractionCase } from "./cases/index.ts";
 import type { Principal } from "../auth/rbac.ts";
 import { createDraft } from "../invoice/service.ts";
 import {

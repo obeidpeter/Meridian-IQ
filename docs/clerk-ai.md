@@ -62,7 +62,7 @@ config, canary first.
 Every intake path ends at the same place: a `clerk_cases` row awaiting human
 review.
 
-- **Capture** (`modules/clerk/cases.ts`) — text or vision extraction from an
+- **Capture** (`modules/clerk/cases/`) — text or vision extraction from an
   uploaded document (5MB/type caps, duplicate guard).
 - **Pre-flight** (`modules/clerk/preflight.ts`) — pure model-free validation
   stored on the case at extraction time (empty list = review fast lane).
@@ -77,7 +77,7 @@ review.
   issue text. Line-item memory (see Memories) adds a capture pre-flight
   advisory when a line's unit price is far (×4) off that item's own history
   (3+ lines).
-- **Scanned-PDF intake** (`rasterizePdfScan` in `modules/clerk/cases.ts`) —
+- **Scanned-PDF intake** (`rasterizePdfScan` in `modules/clerk/cases/documents.ts`) —
   renders a textless PDF's pages (max 4) to images and walks the ordinary
   vision-extraction path. Pages are stored on the case for retry
   (`source_scan_pages_b64`, purged by the content-retention sweep, stripped
@@ -135,7 +135,7 @@ review.
   status, so concurrent decisions can never double-apply. Approval creates a
   DRAFT invoice only.
 - **Vendor bootstrap (payables).** Approval validates the chosen parties'
-  firm membership explicitly (`assertPartyInFirm` in cases.ts — operators
+  firm membership explicitly (`assertPartyInFirm` in cases/lifecycle.ts — operators
   run with RLS bypassed, so the check cannot be left to policy): an
   engagement, an existing invoice reference, or — the payables round's
   addition — the firm-created provenance arm (`created_by_firm_id`, the

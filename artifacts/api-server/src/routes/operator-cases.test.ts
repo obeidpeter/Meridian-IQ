@@ -10,7 +10,7 @@ import {
   escalationsTable,
   errorCatalogueTable,
 } from "@workspace/db";
-import consoleRouter from "./console.ts";
+import consoleRouter from "./console/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { createDraft } from "../modules/invoice/service.ts";
 import { appFor, listen, closeAllServers } from "../test-helpers/route-harness.ts";

@@ -20,7 +20,7 @@ import {
   decideCase,
   getCase,
   type CaseDecisionInput,
-} from "./cases.ts";
+} from "./cases/index.ts";
 import { bulkApproveCases, fastLaneBlocker } from "./bulk-approve.ts";
 import { FAST_LANE_DEFAULT } from "./metrics.ts";
 

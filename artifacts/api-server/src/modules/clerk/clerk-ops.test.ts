@@ -23,7 +23,7 @@ import {
   createExtractionCase,
   decideCase,
   releaseCase,
-} from "./cases.ts";
+} from "./cases/index.ts";
 import { computeCorrections } from "./corrections.ts";
 import { sha256 } from "./gateway.ts";
 import { runClerkWatchdog, sweepStuckPendingCases } from "./watchdog.ts";

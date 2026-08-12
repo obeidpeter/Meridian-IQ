@@ -9,7 +9,7 @@ import {
 } from "@workspace/db";
 import clerkRouter from "./clerk/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
-import { createExtractionCase } from "../modules/clerk/cases.ts";
+import { createExtractionCase } from "../modules/clerk/cases/index.ts";
 import {
   fakeGateway,
   saveAndEnableClerkFlag,

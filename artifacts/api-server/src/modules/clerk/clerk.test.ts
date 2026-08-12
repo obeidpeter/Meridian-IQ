@@ -30,7 +30,7 @@ import {
   createExtractionCase,
   decideCase,
   getCase,
-} from "./cases.ts";
+} from "./cases/index.ts";
 import { computeStatusLight } from "./status-light.ts";
 import { formatFact, renderProposition, askClerk } from "./ask.ts";
 import {

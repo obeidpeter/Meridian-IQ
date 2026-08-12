@@ -16,7 +16,7 @@ import invoicesRouter from "./invoices/index.ts";
 import partiesRouter from "./parties.ts";
 import healthRouter from "./health.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
-import { listCases } from "../modules/clerk/cases.ts";
+import { listCases } from "../modules/clerk/cases/index.ts";
 import { getReceivablesSummary } from "../modules/invoice/receivables.ts";
 import {
   appFor,

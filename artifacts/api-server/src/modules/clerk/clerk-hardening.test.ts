@@ -9,7 +9,7 @@ import {
   firmsTable,
 } from "@workspace/db";
 import { DomainError } from "../errors.ts";
-import { createExtractionCase, decideCase } from "./cases.ts";
+import { createExtractionCase, decideCase } from "./cases/index.ts";
 import { sha256 } from "./gateway.ts";
 import {
   ensureClerkFixtures,

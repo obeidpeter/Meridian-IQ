@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import { getDb, usersTable, clerkInferenceCallsTable } from "@workspace/db";
 import { sha256 } from "./gateway.ts";
-import { createExtractionCase } from "./cases.ts";
+import { createExtractionCase } from "./cases/index.ts";
 import { getClerkMetrics } from "./metrics.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";

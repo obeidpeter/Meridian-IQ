@@ -9,7 +9,7 @@ import {
 } from "./red-team.ts";
 import { runEvalCorpus, scoreFixture } from "./eval.ts";
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures.ts";
-import { normalizeExtraction } from "./cases.ts";
+import { normalizeExtraction } from "./cases/index.ts";
 import type { CompletionRequest } from "./gateway.ts";
 import type { ExtractionOutput } from "./prompts.ts";
 import {

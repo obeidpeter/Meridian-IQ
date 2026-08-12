@@ -10,7 +10,7 @@ import {
 } from "@workspace/db";
 import engagementsRouter from "./engagements.ts";
 import advisoryRouter from "./advisory.ts";
-import smeRouter from "./sme.ts";
+import smeRouter from "./sme/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { createDraft } from "../modules/invoice/service.ts";
 import {

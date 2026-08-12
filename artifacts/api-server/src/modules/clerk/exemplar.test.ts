@@ -12,7 +12,7 @@ import {
   partiesTable,
   usersTable,
 } from "@workspace/db";
-import { createExtractionCase } from "./cases.ts";
+import { createExtractionCase } from "./cases/index.ts";
 import { growEvalFixtures } from "./eval-growth.ts";
 import {
   demotedExemplars,
