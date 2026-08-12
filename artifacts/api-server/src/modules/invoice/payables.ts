@@ -324,7 +324,7 @@ export interface BillDeadlineRow {
   dueDate: string;
 }
 
-// Due-date-bearing unpaid bills for the SME deadline surfaces (routes/sme.ts
+// Due-date-bearing unpaid bills for the SME deadline surfaces (routes/sme/dashboard.ts
 // computeDeadlines kind=bill_due). Tenant scoping mirrors loadClientInvoices:
 // cross-tenant staff pass a null firm and see the party's whole book.
 export async function listBillDeadlines(

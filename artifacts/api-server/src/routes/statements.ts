@@ -41,6 +41,7 @@ import {
   narrowToClientPartyScope,
   requireFirmScope,
   tenantFirmId,
+  type Principal,
 } from "../modules/auth/rbac";
 import { loadStatementScoped } from "../modules/statements/load-scoped";
 import { requireFlag } from "../modules/flags/flags";
@@ -358,22 +359,30 @@ router.delete("/statement-formats/:id", async (req, res): Promise<void> => {
 
 // ---- reconciliation decisions ----
 
+// Tenant guard shared by proposal accept/reject: the proposal row itself
+// carries the firm.
+async function assertProposalTenant(
+  principal: Principal,
+  id: string,
+): Promise<void> {
+  const [proposal] = await getDb()
+    .select({ firmId: matchProposalsTable.firmId })
+    .from(matchProposalsTable)
+    .where(eq(matchProposalsTable.id, id))
+    .limit(1);
+  if (!proposal) {
+    throw new DomainError("NOT_FOUND", "Proposal not found", 404);
+  }
+  assertSameTenant(principal, proposal.firmId);
+}
+
 router.post(
   "/reconciliation/proposals/:id/accept",
   requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "reconciliation.act");
     const params = parseOrThrow(AcceptMatchProposalParams, req.params);
-    // Tenant guard: the proposal row itself carries the firm.
-    const [proposal] = await getDb()
-      .select({ firmId: matchProposalsTable.firmId })
-      .from(matchProposalsTable)
-      .where(eq(matchProposalsTable.id, params.id))
-      .limit(1);
-    if (!proposal) {
-      throw new DomainError("NOT_FOUND", "Proposal not found", 404);
-    }
-    assertSameTenant(req.principal, proposal.firmId);
+    await assertProposalTenant(req.principal, params.id);
     const result = await acceptProposal(params.id, {
       userId: req.principal.userId,
       role: req.principal.role,
@@ -408,15 +417,7 @@ router.post(
   async (req, res): Promise<void> => {
     assertCan(req.principal, "reconciliation.act");
     const params = parseOrThrow(RejectMatchProposalParams, req.params);
-    const [proposal] = await getDb()
-      .select({ firmId: matchProposalsTable.firmId })
-      .from(matchProposalsTable)
-      .where(eq(matchProposalsTable.id, params.id))
-      .limit(1);
-    if (!proposal) {
-      throw new DomainError("NOT_FOUND", "Proposal not found", 404);
-    }
-    assertSameTenant(req.principal, proposal.firmId);
+    await assertProposalTenant(req.principal, params.id);
     const result = await rejectProposal(params.id, {
       userId: req.principal.userId,
       role: req.principal.role,

@@ -10,7 +10,7 @@ import { RECEIVABLE_ORIENTATION } from "./receivables";
 import { statutoryDueDay } from "../filings/statutory-calendar";
 
 // Firm-level compliance calendar (round-6 idea #5). The SME dashboard already
-// computes per-client deadlines (routes/sme.ts computeDeadlines); this is the
+// computes per-client deadlines (routes/sme/dashboard.ts computeDeadlines); this is the
 // FIRM's month-ahead view of the same statutory clocks, aggregated across
 // every client in one SQL pass — zero model calls, nothing stored. The
 // predicates deliberately reuse the same constants and Lagos-calendar

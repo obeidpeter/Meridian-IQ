@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { getDb, invoicesTable, partiesTable } from "@workspace/db";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { getDb, invoicesTable } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
   ListInvoicesResponse,
@@ -17,6 +17,7 @@ import {
   type Principal,
 } from "../../modules/auth/rbac";
 import { createDraft } from "../../modules/invoice/service";
+import { partyNamesById } from "../../modules/party/party";
 import { sendCsvAttachment, toCsv } from "../../lib/csv";
 import { likePattern } from "../../lib/sql";
 
@@ -110,18 +111,8 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
     .orderBy(desc(invoicesTable.createdAt))
     .limit(50_000);
 
-  const partyIds = [
-    ...new Set(rows.flatMap((r) => [r.supplierPartyId, r.buyerPartyId])),
-  ];
-  const names = new Map(
-    partyIds.length
-      ? (
-          await getDb()
-            .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-            .from(partiesTable)
-            .where(inArray(partiesTable.id, partyIds))
-        ).map((p) => [p.id, p.legalName])
-      : [],
+  const names = await partyNamesById(
+    rows.flatMap((r) => [r.supplierPartyId, r.buyerPartyId]),
   );
 
   // Naira view of the grand total (contract 0.45.0): NGN rows ARE naira; a

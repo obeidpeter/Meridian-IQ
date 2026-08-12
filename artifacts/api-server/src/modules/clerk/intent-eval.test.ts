@@ -2,12 +2,11 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { CompletionRequest } from "./gateway.ts";
 import {
-  INTENT_FIXTURES,
   listIntentEvalRuns,
   runIntentCanary,
   runIntentEval,
-  type IntentFixture,
 } from "./intent-eval.ts";
+import { INTENT_FIXTURES, type IntentFixture } from "./intent-fixtures.ts";
 import {
   fakeGateway,
   restoreClerkFlag,

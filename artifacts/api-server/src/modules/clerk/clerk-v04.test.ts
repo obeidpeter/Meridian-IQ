@@ -21,7 +21,7 @@ import {
   restoreClerkFlag,
   fakeGateway,
 } from "./test-support.ts";
-import { createExtractionCase, decideCase, retryExtraction } from "./cases.ts";
+import { createExtractionCase, decideCase, retryExtraction } from "./cases/index.ts";
 import {
   nameScore,
   scorePartyCandidates,

@@ -21,7 +21,7 @@ import {
   FAST_LANE_FLOOR,
   firmFastLaneThreshold,
 } from "./metrics.ts";
-import { createExtractionCase, type CaseDecisionInput } from "./cases.ts";
+import { createExtractionCase, type CaseDecisionInput } from "./cases/index.ts";
 import { bulkApproveCases, fastLaneBlocker } from "./bulk-approve.ts";
 
 // Adaptive fast lane (round 7). Invariants pinned here:

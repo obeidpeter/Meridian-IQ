@@ -8,6 +8,7 @@ import {
 } from "../auth/rbac";
 import { DomainError } from "../errors";
 import { lagosTodaySql } from "../../lib/lagos-time";
+import { assertCalendarDate } from "../../lib/parse";
 
 // Notice Desk obligations (Task #199): the structured record of "this client
 // must respond to this authority by this date". Compliance-spine data like
@@ -48,34 +49,11 @@ export function obligationDueSoon(today: SQL): SQL {
     AND ${obligationsTable.responseDueDate} <= ${today} + ${OBLIGATION_DUE_SOON_DAYS}::int`;
 }
 
-const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 // numeric(18,2) column: reject anything that is not a plain decimal before it
 // becomes a DB 500 (the assertPlainDecimalAmount posture, local so the module
-// carries its own validation).
+// carries its own validation; the date guard is the shared assertCalendarDate
+// in lib/parse.ts, with this module's own error code).
 const AMOUNT_SHAPE = /^\d+(\.\d{1,2})?$/;
-
-// YYYY-MM-DD and a real calendar date. The round-trip through Date.UTC is
-// the overflow check (V8's parser would happily read 2026-02-30 as March 2);
-// the date columns are mode "string", so nothing else normalizes these.
-function isRealCalendarDate(value: string): boolean {
-  const [y, m, d] = value.split("-").map(Number);
-  const roundTrip = new Date(Date.UTC(y, m - 1, d));
-  return (
-    roundTrip.getUTCFullYear() === y &&
-    roundTrip.getUTCMonth() === m - 1 &&
-    roundTrip.getUTCDate() === d
-  );
-}
-
-function assertObligationDate(value: string, field: string): void {
-  if (!DATE_SHAPE.test(value) || !isRealCalendarDate(value)) {
-    throw new DomainError(
-      "OBLIGATION_BAD_DATE",
-      `${field} must be a real calendar date in YYYY-MM-DD form`,
-      400,
-    );
-  }
-}
 
 export interface ListObligationsFilter {
   clientPartyId?: string;
@@ -132,9 +110,13 @@ export async function createObligation(
   input: CreateObligationInput,
   actorId: string,
 ): Promise<Obligation> {
-  assertObligationDate(input.responseDueDate, "responseDueDate");
+  assertCalendarDate(
+    input.responseDueDate,
+    "responseDueDate",
+    "OBLIGATION_BAD_DATE",
+  );
   if (input.issueDate !== undefined) {
-    assertObligationDate(input.issueDate, "issueDate");
+    assertCalendarDate(input.issueDate, "issueDate", "OBLIGATION_BAD_DATE");
   }
   if (input.amount !== undefined && !AMOUNT_SHAPE.test(input.amount)) {
     throw new DomainError(

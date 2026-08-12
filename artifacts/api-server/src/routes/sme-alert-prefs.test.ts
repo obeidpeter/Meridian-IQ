@@ -9,7 +9,7 @@ import {
   engagementsTable,
   alertPreferencesTable,
 } from "@workspace/db";
-import smeRouter from "./sme.ts";
+import smeRouter from "./sme/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import {
   appFor,

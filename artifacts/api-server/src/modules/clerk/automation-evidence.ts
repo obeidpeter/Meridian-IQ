@@ -50,7 +50,7 @@ import {
 
 export const EVIDENCE_WINDOW_MONTHS = 6;
 
-export type EvidenceKindKey =
+type EvidenceKindKey =
   | "reconcile_matches"
   | "submit_overdue"
   | "retry_failed"
@@ -148,7 +148,7 @@ const MACHINE_SUBMITTED = sql`EXISTS (
 // Distinct credit lines carrying a live ≥threshold proposal on a
 // still-settleable invoice — the reconcileCandidates universe, uncapped
 // (the per-run cap is a pacing device, not a ceiling on the backlog).
-export async function pendingReconcileMatches(
+async function pendingReconcileMatches(
   firmId: string,
   clientPartyId?: string,
 ): Promise<number> {
@@ -176,7 +176,7 @@ export async function pendingReconcileMatches(
 // Today's overdue unsubmitted receivables — the submit_overdue assembly
 // predicate, firm- or client-wide (the penalty-exposure spelling plus the
 // machine-draft wall).
-export async function pendingSubmitOverdue(
+async function pendingSubmitOverdue(
   firmId: string,
   asOf: string,
   clientPartyId?: string,
@@ -202,7 +202,7 @@ export async function pendingSubmitOverdue(
 
 // Currently-failed receivables still under the attempt cap — the exact
 // universe the autopilot's retry_failed pass would touch.
-export async function pendingRetryFailed(
+async function pendingRetryFailed(
   firmId: string,
   clientPartyId?: string,
 ): Promise<number> {
@@ -571,7 +571,7 @@ async function loadRecurringGroups(
 }
 
 // Patterns alerting TODAY under the replay — the draft step's act-now count.
-export async function pendingDraftRecurring(
+async function pendingDraftRecurring(
   firmId: string,
   asOf: string,
   clientPartyId?: string,

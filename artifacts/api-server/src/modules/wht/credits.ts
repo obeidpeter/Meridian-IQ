@@ -23,38 +23,13 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { DomainError } from "../errors";
+import { assertCalendarDate } from "../../lib/parse";
 import { whtExpectedSql } from "./rates";
-
-const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
-
-// YYYY-MM-DD and a real calendar date — the filings assertFilingDate posture
-// (kept local, like every module carrying its own date validation): the
-// round-trip through Date.UTC is the overflow check (V8 would happily read
-// 2026-02-30 as March 2), and the date columns are mode "string", so nothing
-// else normalizes these.
-function isRealCalendarDate(value: string): boolean {
-  const [y, m, d] = value.split("-").map(Number);
-  const roundTrip = new Date(Date.UTC(y, m - 1, d));
-  return (
-    roundTrip.getUTCFullYear() === y &&
-    roundTrip.getUTCMonth() === m - 1 &&
-    roundTrip.getUTCDate() === d
-  );
-}
-
-function assertWhtDate(value: string, field: string): void {
-  if (!DATE_SHAPE.test(value) || !isRealCalendarDate(value)) {
-    throw new DomainError(
-      "WHT_BAD_DATE",
-      `${field} must be a real calendar date in YYYY-MM-DD form`,
-      400,
-    );
-  }
-}
 
 // The amount column is numeric(18,2): reject anything the insert would turn
 // into an opaque DB error, and zero/negative figures that would corrupt the
-// chase totals (the assertValidFxRate posture).
+// chase totals (the assertValidFxRate posture; the date guard is the shared
+// assertCalendarDate in lib/parse.ts, with this module's own error code).
 function assertValidAmount(amount: string): void {
   if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
     throw new DomainError(
@@ -133,7 +108,7 @@ export async function recordWhtCredit(
   invoiceId: string,
   input: RecordWhtCreditInput,
 ): Promise<WhtCreditView> {
-  assertWhtDate(input.deductedDate, "deductedDate");
+  assertCalendarDate(input.deductedDate, "deductedDate", "WHT_BAD_DATE");
   if (input.amount !== undefined) assertValidAmount(input.amount);
   const [invoice] = await getDb()
     .select({
@@ -246,7 +221,7 @@ export async function markWhtNoteReceived(
   input: WhtNoteInput,
   userId?: string,
 ): Promise<WhtCreditView | null> {
-  assertWhtDate(input.noteDate, "noteDate");
+  assertCalendarDate(input.noteDate, "noteDate", "WHT_BAD_DATE");
   const [existing] = await getDb()
     .select({ status: whtCreditsTable.status })
     .from(whtCreditsTable)

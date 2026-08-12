@@ -18,7 +18,7 @@ import {
   createExtractionCase,
   decideCase,
   retryExtraction,
-} from "./cases.ts";
+} from "./cases/index.ts";
 import { computeLineCorrections } from "./corrections.ts";
 import {
   createClaimDraft,

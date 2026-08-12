@@ -1,6 +1,7 @@
-import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
+  engagementsTable,
   partiesTable,
   type Party,
   type PartyType,
@@ -95,6 +96,51 @@ export function partySphereCondition(principal: Principal): SQL | null {
               OR i.buyer_party_id = ${partiesTable.id})
         )
       )`;
+}
+
+// Duplicate-client probe for a firm's ENGAGED roster (by already-normalized
+// TIN, then exact legal name — the clients-import detection order). Parties
+// are shared reference data, so an unscoped lookup would be a cross-tenant
+// oracle: any firm could probe arbitrary TINs and harvest other
+// organizations' rosters — the firm-pinned innerJoin keeps the answer inside
+// the caller's own roster. A TIN that exists elsewhere on the platform simply
+// creates a new party here; the operator-driven merge workflow (CORE-08)
+// reconciles duplicates with lineage. Never validates or throws: callers pass
+// an already-normalized TIN or null (an invalid TIN skips the TIN probe and
+// still name-probes).
+export async function findEngagedClientId(
+  firmId: string,
+  tin: string | null,
+  legalName: string,
+): Promise<string | null> {
+  if (tin) {
+    const [byTin] = await getDb()
+      .select({ id: partiesTable.id })
+      .from(partiesTable)
+      .innerJoin(
+        engagementsTable,
+        and(
+          eq(engagementsTable.clientPartyId, partiesTable.id),
+          eq(engagementsTable.firmId, firmId),
+        ),
+      )
+      .where(eq(partiesTable.tin, tin))
+      .limit(1);
+    if (byTin) return byTin.id;
+  }
+  const [byName] = await getDb()
+    .select({ id: partiesTable.id })
+    .from(partiesTable)
+    .innerJoin(
+      engagementsTable,
+      and(
+        eq(engagementsTable.clientPartyId, partiesTable.id),
+        eq(engagementsTable.firmId, firmId),
+      ),
+    )
+    .where(eq(partiesTable.legalName, legalName))
+    .limit(1);
+  return byName?.id ?? null;
 }
 
 export interface CreatePartyInput {
@@ -226,6 +272,22 @@ export async function getParty(id: string): Promise<Party | null> {
     .where(eq(partiesTable.id, id))
     .limit(1);
   return row ?? null;
+}
+
+// Batched party-name lookup: one query for a page's worth of rows, not one
+// per row. Ids are deduped internally; an empty input returns an empty Map.
+// The parties spine is un-RLS'd, so the ids MUST come from rows the caller
+// already read under its own scoping — this helper adds none.
+export async function partyNamesById(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const uniq = [...new Set(ids)];
+  if (uniq.length === 0) return new Map();
+  const rows = await getDb()
+    .select({ id: partiesTable.id, legalName: partiesTable.legalName })
+    .from(partiesTable)
+    .where(inArray(partiesTable.id, uniq));
+  return new Map(rows.map((r) => [r.id, r.legalName]));
 }
 
 // Merge a duplicate into a survivor. History is preserved: the duplicate row is

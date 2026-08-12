@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getDb, invoicesTable, partiesTable } from "@workspace/db";
-import { createExtractionCase, decideCase } from "./cases.ts";
+import { createExtractionCase, decideCase } from "./cases/index.ts";
 import {
   ensureClerkFixtures,
   fakeGateway,

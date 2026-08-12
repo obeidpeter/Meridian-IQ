@@ -346,7 +346,7 @@ export function tenantFirmId(principal: Principal): string | null {
 }
 
 // The firm a CONSOLE rollup request is scoped to (refactoring round — one
-// definition; routes/console.ts and routes/vat-position.ts previously each
+// definition; routes/console/ and routes/vat-position.ts previously each
 // carried a verbatim copy so their gates could not drift, which one home
 // makes structural): firm roles use their bound firm; cross-tenant staff
 // (operator/auditor) fall back to their bound firm if any.

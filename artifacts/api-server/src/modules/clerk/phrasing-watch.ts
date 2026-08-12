@@ -1,4 +1,4 @@
-import { desc, isNull, sql } from "drizzle-orm";
+import { desc, isNull } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -6,6 +6,7 @@ import {
   type ClerkPhrasingEvalRun,
 } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../flags/flags";
 import { CLERK_FLAG_KEY } from "./gateway";
@@ -125,11 +126,7 @@ async function autoPhrasingDueToday(): Promise<boolean> {
 
 registerSweep(async function sweepPhrasingAutoEval(): Promise<void> {
   const runEval = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${PHRASING_SWEEP_LOCK_ID}) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(PHRASING_SWEEP_LOCK_ID);
     if (!locked) return false;
     // Each run spends platform tokens: opt-in flag, at most once per UTC
     // day. Race losers record a second startedBy-null row, which the

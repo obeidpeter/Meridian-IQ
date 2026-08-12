@@ -19,53 +19,18 @@
 // are pinned by the compliance-pack tests and the e2e journeys.
 import PDFDocument from "pdfkit";
 import { lagosMidnight } from "../../lib/lagos-time";
-import { formatMoney, hslTripleToHex } from "./pdf";
+import { formatMoney, resolvePackTheme, type PackTheme } from "./pdf";
 import { OBLIGATION_DUE_SOON_DAYS } from "../obligations/obligations";
 import { FILING_DUE_SOON_DAYS } from "../filings/filings";
 import { monthLabel } from "../clerk/client-statement";
 import type { CompliancePackFacts } from "./compliance-pack";
 
 // --- Theme resolution --------------------------------------------------------
-// Mirrors pdf.ts (its DEFAULT_* theme constants and resolution helpers are
-// module-private by design); hslTripleToHex and formatMoney are the shared,
-// exported pieces so a malformed theme falls back — and money formats —
-// identically on both papers.
-const DEFAULT_PRIMARY_HSL = "152 60% 30%";
-const DEFAULT_BRAND = "MeridianIQ";
-
-function themeString(
-  theme: Record<string, unknown> | null,
-  key: string,
-): string {
-  const v = theme?.[key];
-  return typeof v === "string" ? v.trim() : "";
-}
-
-function initialsFor(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean);
-  const initials = parts.map((p) => p[0]).join("");
-  return (initials || "MQ").slice(0, 2).toUpperCase();
-}
-
-export interface PackTheme {
-  brandName: string;
-  primary: string;
-  logoInitials: string;
-}
-
-// firms.theme jsonb -> the resolved brand triple both pack-family papers use.
-export function resolvePackTheme(
-  theme: Record<string, unknown> | null,
-): PackTheme {
-  const brandName = themeString(theme, "brandName") || DEFAULT_BRAND;
-  const primary = hslTripleToHex(
-    themeString(theme, "primary") || DEFAULT_PRIMARY_HSL,
-  );
-  const logoInitials =
-    themeString(theme, "logoInitials").slice(0, 2).toUpperCase() ||
-    initialsFor(brandName);
-  return { brandName, primary, logoInitials };
-}
+// One-homed in pdf.ts with its DEFAULT_* theme constants and resolution
+// helpers (this file used to mirror them verbatim); re-exported here so the
+// pack-family consumers (onboarding/report-pdf.ts, obligations/
+// response-pack-pdf.ts) keep importing theme resolution from the pack seam.
+export { resolvePackTheme, type PackTheme } from "./pdf";
 
 const KIND_LABELS: Record<string, string> = {
   invoice: "Invoice",

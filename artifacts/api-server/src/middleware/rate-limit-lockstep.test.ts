@@ -250,7 +250,7 @@ const BARE_INFER_ALLOWED = new Map<string, string>([
   // and a mid-request kill-switch throw is their documented 503 posture.
   ["clerk/ask.ts", "intent classification — failure refuses and escalates"],
   ["clerk/batch.ts", "segmentation — failure fails the batch (typed 502)"],
-  ["clerk/cases.ts", "extraction — failure marks the case failed"],
+  ["clerk/cases/extraction.ts", "extraction — failure marks the case failed"],
   ["clerk/scan-batch.ts", "vision segmentation — coverage-validated, fails the scan"],
   ["statements/scan-intake.ts", "statement extraction — typed operator-facing failure"],
   ["desk/triage.ts", "closed-enum triage — failure marks the item failed, sweep moves on"],

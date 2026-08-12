@@ -9,21 +9,22 @@ import {
 import { ensureGrounded } from "./grounding";
 import { isFeatureEnabled } from "../flags/flags";
 
-// The FULL phrase-or-template gate ladder shared by the letter surfaces
-// (advisory/narrative.ts draftEngagementNarrative and obligations/
-// response-pack.ts's letter draft): gateway missing → null; clerk_ai flag
-// off → null; firm budget exhausted (route pre-check) → null; then ONE
-// phrasing call and the number-grounding check inside a try, so ANYTHING
-// failing past the checks still folds to null — the caller's deterministic
-// template always answers, and these surfaces never error for
-// AI-availability reasons.
+// The FULL phrase-or-template gate ladder shared by the phrasing surfaces
+// with a template fallback (advisory/narrative.ts draftEngagementNarrative,
+// obligations/response-pack.ts's letter draft, and the three periodic
+// narratives — digest.ts, advisory-brief.ts, client-statement.ts): gateway
+// missing → null; clerk_ai flag off → null; firm budget exhausted (the
+// pre-check) → null; then ONE phrasing call and the number-grounding check
+// inside a try, so ANYTHING failing past the checks still folds to null —
+// the caller's deterministic template always answers, and these surfaces
+// never error for AI-availability reasons.
 //
 // This is the cover-note.ts rule applied to the wider ladder: hand-copying
 // exactly this block is how the kill-switch TOCTOU drift shipped four times
 // (see narrative.ts's #93 history, now here). It is DELIBERATELY a sibling of
-// phraseCoverNote, not a replacement: cover-note surfaces omit the route
-// budget pre-check (the gateway backstop answers with the template — see
-// cover-note.ts), while these letter surfaces perform it, and the check order
+// phraseCoverNote, not a replacement: cover-note surfaces omit the budget
+// pre-check (the gateway backstop answers with the template — see
+// cover-note.ts), while the surfaces here perform it, and the check order
 // (flag BEFORE budget) is part of the observable posture — a disabled flag
 // never touches the budget counter.
 //
@@ -49,11 +50,14 @@ export async function phraseGroundedDraft<T>(
     // The surface key ensureGrounded stamps on a violation audit row.
     groundingSurface: string;
     inputForHash: string;
-    // The validated output's text field (the surfaces' schemas name it
-    // differently: narrative vs letter).
+    // The validated output's grounded text (the surfaces compose it
+    // differently: a narrative field, a letter join, headline + bullets/note
+    // — the seam objects' joinOutput where one exists). The VALIDATED output
+    // is returned so multi-field surfaces adopt every field; single-text
+    // callers derive their string through this same selector.
     text(data: T): string;
   },
-): Promise<string | null> {
+): Promise<T | null> {
   if (!gateway) return null;
   if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return null;
   if (tenant) {
@@ -82,7 +86,7 @@ export async function phraseGroundedDraft<T>(
     if (!(await ensureGrounded(opts.groundingSurface, tenant, text, opts.user))) {
       return null;
     }
-    return text;
+    return data;
   } catch {
     return null;
   }

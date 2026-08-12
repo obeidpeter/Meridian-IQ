@@ -7,7 +7,7 @@ import {
 import { DomainError } from "../../modules/errors";
 
 // The SEC-03 invoice tenancy loader, shared by every /invoices/:id group in
-// this directory and with the SME escalation routes (routes/sme.ts): one
+// this directory and with the SME escalation routes (routes/sme/escalations.ts): one
 // definition of "this principal may reach this invoice".
 export async function loadForTenant(
   req: { principal: Principal },

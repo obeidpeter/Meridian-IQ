@@ -98,6 +98,28 @@ export function hslTripleToHex(triple: string): string {
   return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
+export interface PackTheme {
+  brandName: string;
+  primary: string;
+  logoInitials: string;
+}
+
+// firms.theme jsonb -> the resolved brand triple every branded paper uses —
+// the invoice paper below and the pack family (via pack-pdf.ts's re-export),
+// so no two papers can resolve the same theme differently.
+export function resolvePackTheme(
+  theme: Record<string, unknown> | null,
+): PackTheme {
+  const brandName = themeString(theme, "brandName") || DEFAULT_BRAND;
+  const primary = hslTripleToHex(
+    themeString(theme, "primary") || DEFAULT_PRIMARY_HSL,
+  );
+  const logoInitials =
+    themeString(theme, "logoInitials").slice(0, 2).toUpperCase() ||
+    initialsFor(brandName);
+  return { brandName, primary, logoInitials };
+}
+
 // --- Formatting --------------------------------------------------------------
 // Exported (like hslTripleToHex) so the pack-family papers format money
 // identically to the invoice paper — one home, refactor round 7.
@@ -203,13 +225,7 @@ export async function renderInvoicePdf(
   input: InvoicePdfInput,
 ): Promise<Buffer> {
   const { invoice, lines, supplier, buyer, stamp, theme } = input;
-  const brandName = themeString(theme, "brandName") || DEFAULT_BRAND;
-  const primary = hslTripleToHex(
-    themeString(theme, "primary") || DEFAULT_PRIMARY_HSL,
-  );
-  const logoInitials =
-    themeString(theme, "logoInitials").slice(0, 2).toUpperCase() ||
-    initialsFor(brandName);
+  const { brandName, primary, logoInitials } = resolvePackTheme(theme);
 
   const doc = new PDFDocument({
     size: "A4",

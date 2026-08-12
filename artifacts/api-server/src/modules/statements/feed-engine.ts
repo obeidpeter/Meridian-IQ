@@ -5,6 +5,7 @@ import {
   statementSyncRunsTable,
   type OutboxEvent,
 } from "@workspace/db";
+import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { DomainError } from "../errors.ts";
 import { appendAudit } from "../audit/audit";
 import { registerHandler, type HandlerOutcome } from "../pipeline/pipeline";
@@ -90,11 +91,9 @@ export async function runFeedSync(
     // plain Error (never DomainError), so the outbox handler below RETRIES it
     // with backoff once the holder has finished — the run is not lost, just
     // deferred.
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(hashtext(${connectionId}::text)) AS locked`,
-      )
-    ).rows;
+    const locked = await tryAdvisoryXactLock(
+      sql`hashtext(${connectionId}::text)`,
+    );
     if (!locked) {
       throw new Error(
         `Feed sync already in progress for connection ${connectionId}`,

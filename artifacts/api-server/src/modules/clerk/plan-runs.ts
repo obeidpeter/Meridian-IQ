@@ -79,7 +79,7 @@ const PLAN_RUN_EXPIRY_MS = 72 * 60 * 60_000;
 // would burn the firm's model tokens and hand the text to nobody. Chaser
 // sections are approved individually, where the drafts land in front of
 // the approver.
-export const PLAN_RUNNABLE_KINDS: ReadonlySet<ActionKind> = new Set([
+const PLAN_RUNNABLE_KINDS: ReadonlySet<ActionKind> = new Set([
   "submit_overdue",
   "retry_failed",
 ]);
@@ -88,7 +88,7 @@ export const PLAN_RUNNABLE_KINDS: ReadonlySet<ActionKind> = new Set([
 // (round 34, Close with Clerk — see plan-steps.ts). Case-origin plans can
 // only carry catalogue kinds (Ask's sections are catalogue-shaped);
 // deterministic kinds enter through templates alone.
-export type PlanStepKind = ActionKind | DeterministicStepKind;
+type PlanStepKind = ActionKind | DeterministicStepKind;
 
 // The deterministic template registry. Kinds run in order; each step is
 // assembled per the run's client at CREATION time (approval approves what
@@ -850,7 +850,7 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
 }
 
 // Fire-and-forget drive-to-terminal; the sweep is the retry.
-export function kickPlanRunProcessing(runId: string): void {
+function kickPlanRunProcessing(runId: string): void {
   void (async () => {
     let outcome: PlanSliceOutcome;
     do {
@@ -869,7 +869,7 @@ export function kickPlanRunProcessing(runId: string): void {
 // other firm's runs behind it at the head of the line. Expired runs are
 // processed regardless of the flag so their expiry halt can terminalize
 // them.
-export async function sweepPlanRuns(): Promise<void> {
+async function sweepPlanRuns(): Promise<void> {
   const staleBefore = new Date(Date.now() - RECLAIM_AFTER_MS);
   const candidates = await runInBypassContext(() =>
     getDb()

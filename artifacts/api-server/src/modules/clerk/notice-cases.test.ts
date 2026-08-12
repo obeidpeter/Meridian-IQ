@@ -29,7 +29,7 @@ import {
   getCase,
   retryExtraction,
   type NoticeDecisionInput,
-} from "./cases.ts";
+} from "./cases/index.ts";
 import { fastLaneBlocker } from "./bulk-approve.ts";
 import { sweepStuckPendingCases } from "./watchdog.ts";
 import { sha256 } from "./gateway.ts";

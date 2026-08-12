@@ -11,7 +11,7 @@ import {
   type ExtractionLine,
 } from "@workspace/db";
 import { preflightChecks } from "./preflight.ts";
-import { createExtractionCase } from "./cases.ts";
+import { createExtractionCase } from "./cases/index.ts";
 import { createBatchCases } from "./batch.ts";
 import {
   buildTemplateDigest,

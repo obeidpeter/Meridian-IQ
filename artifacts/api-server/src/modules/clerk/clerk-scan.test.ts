@@ -6,7 +6,7 @@ import {
   MAX_SCAN_PAGES,
   createExtractionCase,
   retryExtraction,
-} from "./cases.ts";
+} from "./cases/index.ts";
 import { createBatchCases } from "./batch.ts";
 import type { CompletionRequest } from "./gateway.ts";
 import {

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb, firmsTable, partiesTable, engagementsTable } from "@workspace/db";
 import {
   GetPublicThemeQueryParams,
@@ -19,7 +19,11 @@ import {
 import { requireFlag } from "../modules/flags/flags";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
-import { validateTin, validateCac } from "../modules/party/party";
+import {
+  findEngagedClientId,
+  validateTin,
+  validateCac,
+} from "../modules/party/party";
 
 // White-label at scale (CON-05): firm theming resolved by subdomain from one
 // deployment (no per-firm builds), and bulk client import from
@@ -144,44 +148,14 @@ router.post("/clients/import", requireFlag("white_label"), async (req, res): Pro
       continue;
     }
 
-    // Existing-client detection is scoped to THIS firm's engaged clients (by
-    // TIN, then exact legal name). Parties are shared reference data, so an
-    // unscoped TIN lookup would be a cross-tenant oracle: any firm could probe
-    // arbitrary TINs and harvest other organizations' party ids. A TIN that
-    // exists elsewhere on the platform simply creates a new party here; the
-    // operator-driven merge workflow (CORE-08) reconciles duplicates with
-    // lineage.
-    let existingPartyId: string | null = null;
-    if (tin) {
-      const [byTin] = await getDb()
-        .select({ id: partiesTable.id })
-        .from(partiesTable)
-        .innerJoin(
-          engagementsTable,
-          and(
-            eq(engagementsTable.clientPartyId, partiesTable.id),
-            eq(engagementsTable.firmId, firmId),
-          ),
-        )
-        .where(eq(partiesTable.tin, tin))
-        .limit(1);
-      existingPartyId = byTin?.id ?? null;
-    }
-    if (!existingPartyId) {
-      const [byName] = await getDb()
-        .select({ id: partiesTable.id })
-        .from(partiesTable)
-        .innerJoin(
-          engagementsTable,
-          and(
-            eq(engagementsTable.clientPartyId, partiesTable.id),
-            eq(engagementsTable.firmId, firmId),
-          ),
-        )
-        .where(eq(partiesTable.legalName, row.legalName))
-        .limit(1);
-      existingPartyId = byName?.id ?? null;
-    }
+    // Existing-client detection is scoped to THIS firm's engaged clients —
+    // the shared probe (modules/party/party.ts findEngagedClientId) owns the
+    // cross-tenant-oracle rationale.
+    const existingPartyId = await findEngagedClientId(
+      firmId,
+      tin,
+      row.legalName,
+    );
     if (existingPartyId) {
       results.push({
         rowNumber,
