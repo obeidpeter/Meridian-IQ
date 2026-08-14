@@ -9,14 +9,10 @@ import {
   buyerExposureSnapshotsTable,
   type Invoice,
 } from "@workspace/db";
-import {
-  canTransition,
-  isPresentableAsEligible,
-  recordTransition,
-} from "../invoice/lifecycle.ts";
+import { isPresentableAsEligible } from "../invoice/lifecycle.ts";
+import { recordConfirmation } from "../invoice/confirmations.ts";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
-import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { assertBuyerPartyAccess, type Principal } from "../auth/rbac";
 import { partyNamesById } from "../party/party";
@@ -29,7 +25,7 @@ import { partyNamesById } from "../party/party";
 // on-demand compute when the latest snapshot is stale or absent, and the
 // pipeline worker sweeps proactively.
 
-export const SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface SupplierSummary {
   supplierPartyId: string;
@@ -625,32 +621,17 @@ export async function supplierDetail(
 // ---------------------------------------------------------------------------
 // Bulk confirmation response (contract 0.42.0). A buyer clears up to 50
 // awaiting invoices in one action while the per-invoice machinery stays
-// EXACTLY what a single response runs. confirmInvoiceForBuyer below is a
-// deliberate re-implementation of the respond branch of the single
-// confirmation write — whose domain rules now live in
-// modules/invoice/confirmations.ts recordConfirmation (the invoices.ts
-// split extracted them from the route) — mirrored rather than shared,
-// because the bulk path repurposes several refusals as per-item skip
-// reasons; if recordConfirmation's semantics change, change this helper
-// too. The mirrored rules, piece by piece:
-//   - route fork: load the invoice, 404 unknown, assertBuyerPartyAccess;
-//   - BUYER_PARTY_MISMATCH — structurally impossible here (bulk carries no
-//     body buyerPartyId; the row below is always written with the invoice's
-//     own buyer);
-//   - TIN gate: an unvalidated buyer party never enters the workflow
-//     (TIN_NOT_VALIDATED, the 422 becomes a skip reason);
-//   - the latest lineage row must be an open `requested` (NO_OPEN_REQUEST)
-//     — a duplicate id later in the same batch lands here too, because the
-//     first occurrence closed the lane;
-//   - METHOD_REQUIRED — the bulk contract requires `method` (minLength 1),
-//     so every item carries the caller's method;
-//   - CORE-09: a cancelled/credited invoice collects no confirmation
-//     (INVOICE_NOT_ELIGIBLE);
-//   - the append-only row, confirmingUserId captured (BR-02);
-//   - compare-and-set status transition + lifecycle ledger row;
-//   - the invoice.confirmation audit event.
-// (The single path's request-side buyer NUDGE is respond-only-irrelevant:
-// neither path sends anything on a response.)
+// EXACTLY what a single response runs — confirmInvoiceForBuyer keeps only the
+// route fork (load the invoice, 404 unknown, assertBuyerPartyAccess: the same
+// scope resolution the single-response route performs) and delegates every
+// domain rule to modules/invoice/confirmations.ts recordConfirmation, whose
+// DomainError messages become per-item skip reasons in respondBulk's catch
+// (TIN_NOT_VALIDATED, NO_OPEN_REQUEST — where a duplicate id later in the
+// same batch also lands, because the first occurrence closed the lane —
+// INVOICE_NOT_ELIGIBLE). Two of its guards cannot trip for a bulk caller:
+// BUYER_PARTY_MISMATCH (we pass the invoice's own buyer) and METHOD_REQUIRED
+// (the bulk contract requires `method` minLength 1). The request-only buyer
+// nudge cannot fire on a response.
 // ---------------------------------------------------------------------------
 
 async function confirmInvoiceForBuyer(
@@ -666,82 +647,11 @@ async function confirmInvoiceForBuyer(
     .limit(1);
   if (!invoice) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertBuyerPartyAccess(principal, invoice.buyerPartyId);
-  const [buyer] = await getDb()
-    .select({ tinValidated: partiesTable.tinValidated })
-    .from(partiesTable)
-    .where(eq(partiesTable.id, invoice.buyerPartyId))
-    .limit(1);
-  if (!buyer?.tinValidated) {
-    throw new DomainError(
-      "TIN_NOT_VALIDATED",
-      "Buyer TIN must be validated before entering the confirmation workflow",
-      422,
-    );
-  }
-  const [latest] = await getDb()
-    .select()
-    .from(confirmationsTable)
-    .where(eq(confirmationsTable.invoiceId, invoiceId))
-    .orderBy(desc(confirmationsTable.createdAt))
-    .limit(1);
-  if (!latest || latest.state !== "requested") {
-    throw new DomainError(
-      "NO_OPEN_REQUEST",
-      "A confirmation response requires an open request",
-      409,
-    );
-  }
-  if (!isPresentableAsEligible(invoice.status)) {
-    throw new DomainError(
-      "INVOICE_NOT_ELIGIBLE",
-      `Invoice is ${invoice.status}; the confirmation request is void`,
-      409,
-    );
-  }
-  const [row] = await getDb()
-    .insert(confirmationsTable)
-    .values({
-      invoiceId,
-      buyerPartyId: invoice.buyerPartyId,
-      state: "confirmed",
-      method,
-      noSetOff,
-      note: null,
-      confirmingUserId: principal.userId,
-    })
-    .returning();
-  if (canTransition(invoice.status, "confirmed")) {
-    // Compare-and-set: if the invoice moved concurrently (cancel/credit), the
-    // confirmation row stands as lineage but the status transition is skipped.
-    const [moved] = await getDb()
-      .update(invoicesTable)
-      .set({ status: "confirmed" })
-      .where(
-        and(
-          eq(invoicesTable.id, invoiceId),
-          eq(invoicesTable.status, invoice.status),
-        ),
-      )
-      .returning({ id: invoicesTable.id });
-    if (moved) {
-      await recordTransition({
-        invoiceId: invoice.id,
-        firmId: invoice.firmId,
-        fromStatus: invoice.status,
-        toStatus: "confirmed",
-        actorId: principal.userId,
-        actorRole: principal.role,
-      });
-    }
-  }
-  await appendAudit({
-    actorId: principal.userId,
-    firmId: invoice.firmId,
-    action: "invoice.confirmation",
-    entityType: "confirmation",
-    entityId: row.id,
-    after: { state: row.state, method: row.method, noSetOff: row.noSetOff },
-  });
+  await recordConfirmation(
+    invoice,
+    { buyerPartyId: invoice.buyerPartyId, state: "confirmed", method, noSetOff },
+    principal,
+  );
 }
 
 export interface BulkConfirmItem {
@@ -756,7 +666,7 @@ export interface BulkConfirmResult {
   items: BulkConfirmItem[];
 }
 
-export const BULK_CONFIRM_MAX = 50;
+const BULK_CONFIRM_MAX = 50;
 
 // Confirm a batch, one savepoint per item (the bulk-approve idiom,
 // modules/clerk/bulk-approve.ts): each item runs in a nested transaction

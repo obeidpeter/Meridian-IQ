@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { getDb, alertPreferencesTable, firmsTable } from "@workspace/db";
+import { getDb, alertPreferencesTable } from "@workspace/db";
 import {
   GetCompliancePackQueryParams,
   NotifyCompliancePackBody,
@@ -15,7 +15,8 @@ import {
 import { computeCompliancePack } from "../modules/invoice/compliance-pack";
 import { resolveVatPositionMonth } from "../modules/invoice/vat-position";
 import { renderCompliancePackPdf } from "../modules/invoice/pack-pdf";
-import { sendPdfAttachment, themeWithBrandFallback } from "../modules/invoice/pdf";
+import { sendPdfAttachment } from "../modules/invoice/pdf";
+import { loadFirmBrand } from "../modules/invoice/pdf-brand";
 import { draftPackCoverNote } from "../modules/clerk/pack-note";
 import { gatewayOrNull } from "../modules/clerk/provider";
 import { fanOutAlert } from "../modules/messaging/fan-out";
@@ -66,14 +67,7 @@ router.get("/compliance-pack", async (req, res): Promise<void> => {
     gateway,
     facts,
   );
-  const [firm] = await getDb()
-    .select({ name: firmsTable.name, theme: firmsTable.theme })
-    .from(firmsTable)
-    .where(eq(firmsTable.id, firmId))
-    .limit(1);
-  // brandName falls back to the firm's own name — the whitelabel page's rule
-  // (themeWithBrandFallback, the invoice-PDF route's exact fallback).
-  const theme = themeWithBrandFallback(firm?.theme, firm?.name);
+  const { theme } = await loadFirmBrand(firmId);
   const pdf = await renderCompliancePackPdf({
     facts,
     coverNote: note.note,

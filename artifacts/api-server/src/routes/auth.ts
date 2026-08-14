@@ -173,6 +173,39 @@ async function completeSignIn(
   };
 }
 
+// The shared tail of every authenticated security-state change that bumps the
+// session epoch (TOTP activate/disable, change-password): clear the
+// credential-guess throttle, audit the change, and re-issue THIS device's
+// cookie under the new epoch — the hardening action must not sign out the very
+// session that performed it, while every OTHER outstanding token is now stale
+// (SEC-02). Step order is load-bearing and mirrors the previous inline tails:
+// throttle clear, then audit, then token+cookie. (Deliberately NOT merged with
+// completeSignIn: that tail orders token→cookie→audit and carries the
+// mobile-bearer branch; this one does not.)
+async function commitSecurityStateChange(
+  req: Request,
+  res: Response,
+  args: {
+    userId: string;
+    throttleKey: string;
+    newEpoch: number;
+    action: string;
+    after: Record<string, unknown>;
+  },
+): Promise<void> {
+  await clearActionFailures(args.throttleKey);
+  await appendAudit({
+    actorId: args.userId,
+    firmId: req.principal.firmId,
+    action: args.action,
+    entityType: "user",
+    entityId: args.userId,
+    after: args.after,
+  });
+  const token = await issueSessionToken(args.userId, args.newEpoch);
+  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+}
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(LoginBody, req.body);
   const ipRetryAfter = await throttleLoginAttempt(req);
@@ -539,17 +572,13 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
       400,
     );
   }
-  await clearActionFailures(throttleKey);
-  await appendAudit({
-    actorId: user.id,
-    firmId: req.principal.firmId,
+  await commitSecurityStateChange(req, res, {
+    userId: user.id,
+    throttleKey,
+    newEpoch: activated[0].sessionEpoch,
     action: "auth.totp.activate",
-    entityType: "user",
-    entityId: user.id,
     after: { totpEnabled: true, sessionsRevoked: true },
   });
-  const token = await issueSessionToken(user.id, activated[0].sessionEpoch);
-  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.json(
     ActivateTotpResponse.parse({
       enabled: true,
@@ -643,17 +672,13 @@ router.post("/auth/totp/disable", async (req, res): Promise<void> => {
       409,
     );
   }
-  await clearActionFailures(throttleKey);
-  await appendAudit({
-    actorId: user.id,
-    firmId: req.principal.firmId,
+  await commitSecurityStateChange(req, res, {
+    userId: user.id,
+    throttleKey,
+    newEpoch: disabled.sessionEpoch,
     action: "auth.totp.disable",
-    entityType: "user",
-    entityId: user.id,
     after: { totpEnabled: false, sessionsRevoked: true },
   });
-  const token = await issueSessionToken(user.id, disabled.sessionEpoch);
-  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.json(
     DisableTotpResponse.parse({
       enabled: false,
@@ -751,22 +776,15 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
       409,
     );
   }
-  await clearActionFailures(throttleKey);
-  await appendAudit({
-    actorId: user.id,
-    firmId: req.principal.firmId,
+  // The mobile app does not expose this endpoint, so a bearer-token caller
+  // (rare) simply re-authenticates — the contract response stays 204.
+  await commitSecurityStateChange(req, res, {
+    userId: user.id,
+    throttleKey,
+    newEpoch: updated.sessionEpoch,
     action: "auth.password_change",
-    entityType: "user",
-    entityId: user.id,
     after: { rotated: true, sessionsRevoked: true },
   });
-  // Keep the caller's current (browser) session alive under the new epoch so a
-  // routine password change does not log the user out of the device they
-  // changed it on; every OTHER outstanding token is now stale. The mobile app
-  // does not expose this endpoint, so a bearer-token caller (rare) simply
-  // re-authenticates — the contract response stays 204.
-  const token = await issueSessionToken(user.id, updated.sessionEpoch);
-  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.sendStatus(204);
 });
 

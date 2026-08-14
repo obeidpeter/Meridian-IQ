@@ -1,17 +1,12 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   getDb,
   confirmationsTable,
-  invoicesTable,
   partiesTable,
   type Invoice,
 } from "@workspace/db";
 import { DomainError } from "../errors";
-import {
-  canTransition,
-  isPresentableAsEligible,
-  recordTransition,
-} from "./lifecycle";
+import { isPresentableAsEligible, tryTransition } from "./lifecycle";
 import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled } from "../flags/flags";
 import { sendMessage } from "../messaging/messaging";
@@ -137,29 +132,14 @@ export async function recordConfirmation(
       confirmingUserId: isRequest ? null : principal.userId,
     })
     .returning();
-  if (input.state === "confirmed" && canTransition(invoice.status, "confirmed")) {
-    // Compare-and-set: if the invoice moved concurrently (cancel/credit), the
-    // confirmation row stands as lineage but the status transition is skipped.
-    const [moved] = await getDb()
-      .update(invoicesTable)
-      .set({ status: "confirmed" })
-      .where(
-        and(
-          eq(invoicesTable.id, invoice.id),
-          eq(invoicesTable.status, invoice.status),
-        ),
-      )
-      .returning({ id: invoicesTable.id });
-    if (moved) {
-      await recordTransition({
-        invoiceId: invoice.id,
-        firmId: invoice.firmId,
-        fromStatus: invoice.status,
-        toStatus: "confirmed",
-        actorId: principal.userId,
-        actorRole: principal.role,
-      });
-    }
+  if (input.state === "confirmed") {
+    // Compare-and-set (tryTransition): if the invoice moved concurrently
+    // (cancel/credit), the confirmation row stands as lineage but the status
+    // transition is skipped.
+    await tryTransition(invoice, "confirmed", {
+      actorId: principal.userId,
+      actorRole: principal.role,
+    });
   }
   if (isRequest) {
     // Best-effort nudge to the buyer organization: a confirmation request is

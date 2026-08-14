@@ -41,7 +41,7 @@ export { computeLineFinancials, type LineInput };
 // document to the rails under the client's name, and only the vendor's
 // missing consent would (accidentally) block it. Shared by validateInvoice,
 // submitInvoice and the credit-note route (routes/invoices/lifecycle.ts).
-export const NOT_SUBMITTABLE_MESSAGE =
+const NOT_SUBMITTABLE_MESSAGE =
   "Only your own issued invoices can be submitted for stamping — this document's supplier is not a client of your practice.";
 
 export async function assertReceivableOriented(invoice: {

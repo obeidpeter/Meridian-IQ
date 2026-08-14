@@ -26,7 +26,7 @@ import {
   requireFirmScope,
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
-import { themeWithBrandFallback } from "../modules/invoice/pdf";
+import { loadFirmBrand } from "../modules/invoice/pdf-brand";
 import {
   abandonOnboardingRun,
   createOnboardingRun,
@@ -42,8 +42,6 @@ import type { OpeningPosition } from "../modules/onboarding/opening-position";
 import { renderOnboardingReportPdf } from "../modules/onboarding/report-pdf";
 import { sendPdfAttachment } from "../modules/invoice/pdf";
 import { DomainError } from "../modules/errors";
-import { eq } from "drizzle-orm";
-import { getDb, firmsTable } from "@workspace/db";
 import type { ClientOnboardingRun } from "@workspace/db";
 
 // Onboard with Clerk (contract 0.70.0): the evidence-based onboarding
@@ -230,20 +228,17 @@ router.get(
     const frozen = run.openingPosition
       ? GetOnboardingOpeningPositionResponse.safeParse(run.openingPosition)
       : null;
-    const [firm] = await getDb()
-      .select({ name: firmsTable.name, theme: firmsTable.theme })
-      .from(firmsTable)
-      .where(eq(firmsTable.id, firmId))
-      .limit(1);
+    const brand = await loadFirmBrand(firmId);
     const pdf = await renderOnboardingReportPdf({
       run: await onboardingRunView(run),
       position: frozen?.success
         ? (frozen.data as unknown as OpeningPosition)
         : null,
-      firmName: firm?.name ?? "",
+      firmName: brand.name ?? "",
       // A firm without an explicit brandName gets its own name in the brand
-      // header — themeWithBrandFallback, the one home every paper route uses.
-      theme: themeWithBrandFallback(firm?.theme, firm?.name),
+      // header — loadFirmBrand (pdf-brand.ts), the one home every paper
+      // route uses.
+      theme: brand.theme,
     });
     // Pointer-only download audit (SEC-12): who pulled which run's report —
     // never the content (the pack-download precedent).

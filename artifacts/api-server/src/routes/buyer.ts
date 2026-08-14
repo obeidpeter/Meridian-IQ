@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb, invoicesTable, partiesTable } from "@workspace/db";
 import {
   ListBuyerInvoicesQueryParams,
@@ -27,7 +27,7 @@ import {
 import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
-import { canTransition, recordTransition } from "../modules/invoice/lifecycle";
+import { tryTransition } from "../modules/invoice/lifecycle";
 import { isStamped } from "../modules/invoice/compliance-window";
 import { partyNamesById } from "../modules/party/party";
 import {
@@ -233,34 +233,14 @@ router.post(
       },
       { compareOccurredAt: body.occurredAt !== undefined },
     );
-    if (
-      created &&
-      body.paymentStatus === "paid" &&
-      canTransition(invoice.status, "settled")
-    ) {
-      // Compare-and-set: a concurrent cancel/credit wins; the flag event stands
-      // as lineage but the settled transition is skipped.
-      const [moved] = await getDb()
-        .update(invoicesTable)
-        .set({ status: "settled" })
-        .where(
-          and(
-            eq(invoicesTable.id, invoice.id),
-            eq(invoicesTable.status, invoice.status),
-          ),
-        )
-        .returning({ id: invoicesTable.id });
-      if (moved) {
-        await recordTransition({
-          invoiceId: invoice.id,
-          firmId: invoice.firmId,
-          fromStatus: invoice.status,
-          toStatus: "settled",
-          actorId: req.principal.userId,
-          actorRole: req.principal.role,
-          reason: "buyer_flag:paid",
-        });
-      }
+    if (created && body.paymentStatus === "paid") {
+      // Compare-and-set (tryTransition): a concurrent cancel/credit wins; the
+      // flag event stands as lineage but the settled transition is skipped.
+      await tryTransition(invoice, "settled", {
+        actorId: req.principal.userId,
+        actorRole: req.principal.role,
+        reason: "buyer_flag:paid",
+      });
     }
     if (created) {
       await appendAudit({

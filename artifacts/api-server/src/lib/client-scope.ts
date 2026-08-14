@@ -2,6 +2,7 @@ import {
   assertClientPartyScope,
   clientPartyScope,
   requireFirmScope,
+  tenantFirmId,
   type Principal,
 } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
@@ -33,6 +34,46 @@ export function resolveClientAnalyticsScope(
   requestedClientPartyId: string | undefined,
 ): { firmId: string; clientPartyId: string } {
   const firmId = requireFirmScope(principal);
+  const clientPartyId = clientPartyScope(principal) ?? requestedClientPartyId;
+  if (!clientPartyId) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(principal, clientPartyId);
+  return { firmId, clientPartyId };
+}
+
+// The clerk read surfaces' bound-firm resolver, distinct from the THREE
+// firm resolvers above/in rbac by its failure shape:
+//  - rbac's requireFirmScope refuses cross-tenant staff with a 403;
+//  - rbac's firmScope is the same bound-firm fallback but answers 403;
+//  - resolveClientAnalyticsScope (above) rides requireFirmScope.
+// This one answers 400 NO_TENANT — which is contract-observable on the clerk
+// read surfaces (digest, client statements, usage, advisory briefs), so do
+// NOT swap it to firmScope.
+export function resolveBoundFirm(principal: Principal, surface: string): string {
+  const tenant = tenantFirmId(principal) ?? principal.firmId;
+  if (!tenant) {
+    throw new DomainError(
+      "NO_TENANT",
+      `A firm scope is required for ${surface}`,
+      400,
+    );
+  }
+  return tenant;
+}
+
+// Bound firm + SEC-03 client-party wall for the clerk client surfaces: a
+// client_user resolves to its OWN party whatever the query says; a firm
+// principal must name the client. assertClientPartyScope is the sibling wall
+// (no-op for firm principals, 403 for a client_user naming another party) —
+// firm-keyed RLS alone is NOT a sibling wall, so the party is enforced here
+// regardless.
+export function resolveBoundClientScope(
+  principal: Principal,
+  requestedClientPartyId: string | undefined,
+  surface: string,
+): { firmId: string; clientPartyId: string } {
+  const firmId = resolveBoundFirm(principal, surface);
   const clientPartyId = clientPartyScope(principal) ?? requestedClientPartyId;
   if (!clientPartyId) {
     throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);

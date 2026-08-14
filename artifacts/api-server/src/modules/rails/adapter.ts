@@ -18,7 +18,7 @@ import { isPresentableAsEligible } from "../invoice/lifecycle";
 // contract: idempotent submission, stamp issuance, verification, failover and a
 // circuit breaker (INT-09).
 
-export const RAILS: Rail[] = ["rail_primary", "rail_secondary"];
+const RAILS: Rail[] = ["rail_primary", "rail_secondary"];
 
 export interface StampResult {
   status: "accepted" | "rejected" | "error";

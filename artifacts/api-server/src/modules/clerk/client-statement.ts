@@ -15,7 +15,11 @@ import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { lagosMonthStart, lagosWindowSql } from "../../lib/lagos-time";
 import { type ClerkGateway } from "./gateway";
-import { phraseGroundedDraft } from "./phrase-grounded";
+import {
+  headlineBulletsJsonSchema,
+  headlineBulletsOutput,
+  phraseGroundedDraft,
+} from "./phrase-grounded";
 import { gatewayOrNull } from "./provider";
 import { MONTH_NAMES, plural } from "./text";
 
@@ -52,21 +56,6 @@ const STATEMENT_SYSTEM = [
   "Tone: plain, encouraging, addressed to the business owner. One headline sentence, then up to 5 short bullets.",
   'Return JSON: {"headline": string, "bullets": string[]}.',
 ].join("\n");
-
-const statementOutput = z.object({
-  headline: z.string().min(1).max(300),
-  bullets: z.array(z.string().min(1).max(400)).max(5),
-});
-
-const statementJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["headline", "bullets"],
-  properties: {
-    headline: { type: "string" },
-    bullets: { type: "array", items: { type: "string" }, maxItems: 5 },
-  },
-};
 
 // lagosMonthStart lives in lib/lagos-time.ts since round 54 (it is a
 // platform-wide Lagos-calendar primitive, not a statement detail);
@@ -214,7 +203,7 @@ export function buildTemplateStatement(
 // The user prompt the model phrases — extracted so the phrasing eval
 // (modules/clerk/phrasing-eval.ts) replays the BYTE-IDENTICAL assembly
 // production sends (the buildDigestUser precedent). Pure.
-export function buildStatementUser(
+function buildStatementUser(
   facts: ClientStatementFacts,
   monthStart: string,
 ): string {
@@ -242,11 +231,11 @@ export const STATEMENT_PHRASING = {
   promptVersion: STATEMENT_PROMPT_VERSION,
   system: STATEMENT_SYSTEM,
   schemaName: "client_statement",
-  jsonSchema: statementJsonSchema,
-  validator: statementOutput,
+  jsonSchema: headlineBulletsJsonSchema,
+  validator: headlineBulletsOutput,
   buildUser: (input: StatementPhrasingInput): string =>
     buildStatementUser(input.facts, input.monthStart),
-  joinOutput: (data: z.infer<typeof statementOutput>): string =>
+  joinOutput: (data: z.infer<typeof headlineBulletsOutput>): string =>
     [data.headline, ...data.bullets].join("\n"),
 };
 
@@ -297,7 +286,7 @@ export async function generateClientStatement(
   // text is assembled by the SAME joinOutput the phrasing eval scores, so
   // the eval grades exactly what production grounds.
   if (!statementIsQuiet(facts)) {
-    const data = await phraseGroundedDraft<z.infer<typeof statementOutput>>(
+    const data = await phraseGroundedDraft<z.infer<typeof headlineBulletsOutput>>(
       gateway,
       firmId,
       {
@@ -306,8 +295,8 @@ export async function generateClientStatement(
         system: STATEMENT_SYSTEM,
         user: buildStatementUser(facts, monthStart),
         schemaName: "client_statement",
-        jsonSchema: statementJsonSchema,
-        validator: statementOutput,
+        jsonSchema: headlineBulletsJsonSchema,
+        validator: headlineBulletsOutput,
         groundingSurface: "client_statement",
         inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
         text: STATEMENT_PHRASING.joinOutput,

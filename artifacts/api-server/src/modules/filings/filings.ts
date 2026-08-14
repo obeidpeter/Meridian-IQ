@@ -58,7 +58,7 @@ export function filingOverdue(today: SQL): SQL {
 }
 
 // Due between today and today + FILING_DUE_SOON_DAYS inclusive.
-export function filingDueSoon(today: SQL): SQL {
+function filingDueSoon(today: SQL): SQL {
   return sql`${FILING_UNFILED}
     AND ${filingReturnsTable.dueDate} >= ${today}
     AND ${filingReturnsTable.dueDate} <= ${today} + ${FILING_DUE_SOON_DAYS}::int`;
@@ -218,7 +218,7 @@ export async function listFilings(
     .offset(filter.offset ?? 0);
 }
 
-export async function getFiling(id: string): Promise<FilingReturn | null> {
+async function getFiling(id: string): Promise<FilingReturn | null> {
   const [row] = await getDb()
     .select()
     .from(filingReturnsTable)

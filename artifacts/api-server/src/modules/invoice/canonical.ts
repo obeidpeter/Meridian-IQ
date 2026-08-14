@@ -26,7 +26,7 @@ const lineSchema = z.object({
   vatAmount: z.string().min(1),
 });
 
-export const canonicalInvoiceSchema = z.object({
+const canonicalInvoiceSchema = z.object({
   invoiceNumber: z.string().min(1),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

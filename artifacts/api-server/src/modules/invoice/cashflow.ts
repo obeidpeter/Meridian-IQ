@@ -134,18 +134,31 @@ export function projectReceivables(
   });
 }
 
-// Pure roll-up, exported for tests.
-export function bucketProjections(
-  projections: ReceivableProjection[],
+export interface CurrencyWeekGroup {
+  currency: string;
+  overdue: CashflowBucket;
+  weeks: { startDate: string; amount: string; count: number }[];
+  later: CashflowBucket;
+  total: CashflowBucket;
+}
+
+// THE per-currency week-bucket engine, shared by the receivables outlook
+// (bucketProjections below) and payablesSummary — the two sides of the
+// net-position merge MUST bucket with identical geometry. daysPast > 0 is
+// overdue; today is week 0; a null daysPast (a bill without a due date)
+// still counts in the total but lands in `later` — it cannot be "due" on
+// any week.
+export function bucketByCurrencyWeek(
+  entries: { currency: string; amount: string; daysPast: number | null }[],
   today: string,
-): CashflowOutlook["groups"] {
-  const byCurrency = new Map<string, ReceivableProjection[]>();
-  for (const p of projections) {
-    const list = byCurrency.get(p.currency) ?? [];
-    list.push(p);
-    byCurrency.set(p.currency, list);
+): CurrencyWeekGroup[] {
+  const byCurrency = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const list = byCurrency.get(e.currency) ?? [];
+    list.push(e);
+    byCurrency.set(e.currency, list);
   }
-  const groups: CashflowOutlook["groups"] = [];
+  const groups: CurrencyWeekGroup[] = [];
   for (const [currency, list] of byCurrency) {
     const zero = () => ({ amount: 0, count: 0 });
     const overdue = zero();
@@ -155,16 +168,21 @@ export function bucketProjections(
       startDate: addDays(today, i * 7),
       ...zero(),
     }));
-    for (const p of list) {
-      const amount = Number(p.grandTotal);
+    for (const e of list) {
+      const amount = Number(e.amount);
       if (!Number.isFinite(amount)) continue;
       total.amount += amount;
       total.count += 1;
-      if (p.daysBeyondExpected > 0) {
+      if (e.daysPast === null) {
+        later.amount += amount;
+        later.count += 1;
+        continue;
+      }
+      if (e.daysPast > 0) {
         overdue.amount += amount;
         overdue.count += 1;
       } else {
-        const weekIndex = Math.floor(-p.daysBeyondExpected / 7);
+        const weekIndex = Math.floor(-e.daysPast / 7);
         const target = weekIndex < WEEK_COUNT ? weeks[weekIndex] : later;
         target.amount += amount;
         target.count += 1;
@@ -176,7 +194,7 @@ export function bucketProjections(
     });
     groups.push({
       currency,
-      overdueExpected: money(overdue),
+      overdue: money(overdue),
       weeks: weeks.map((w) => ({
         startDate: w.startDate,
         amount: w.amount.toFixed(2),
@@ -188,6 +206,27 @@ export function bucketProjections(
   }
   groups.sort((a, b) => Number(b.total.amount) - Number(a.total.amount));
   return groups;
+}
+
+// Pure roll-up, exported for tests.
+export function bucketProjections(
+  projections: ReceivableProjection[],
+  today: string,
+): CashflowOutlook["groups"] {
+  return bucketByCurrencyWeek(
+    projections.map((p) => ({
+      currency: p.currency,
+      amount: p.grandTotal,
+      daysPast: p.daysBeyondExpected,
+    })),
+    today,
+  ).map((g) => ({
+    currency: g.currency,
+    overdueExpected: g.overdue,
+    weeks: g.weeks,
+    later: g.later,
+    total: g.total,
+  }));
 }
 
 // Pure ranking, exported for tests: only invoices past their expected date

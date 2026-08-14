@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   getDb,
-  featureFlagsTable,
   firmsTable,
   partiesTable,
   usersTable,
@@ -17,6 +16,7 @@ import {
 import buyerRouter from "./buyer.ts";
 import invoicesRouter from "./invoices/index.ts";
 import { setFlag } from "../modules/flags/flags.ts";
+import { makeFlagGuard } from "../test-helpers/flags.ts";
 import { pointerEntityRef } from "../modules/messaging/recipient-ref.ts";
 import { parseCsv } from "../lib/csv.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
@@ -44,9 +44,9 @@ const SALT = makeRunSalt();
 const RAILS_FLAG = "buyer_rails";
 const CONFIRM_FLAG = "buyer_confirmations";
 const MESSAGING_FLAG = "messaging_notifications";
-let railsWasEnabled: boolean | null = null;
-let confirmWasEnabled: boolean | null = null;
-let messagingWasEnabled: boolean | null = null;
+const railsGuard = makeFlagGuard(RAILS_FLAG);
+const confirmGuard = makeFlagGuard(CONFIRM_FLAG);
+const messagingGuard = makeFlagGuard(MESSAGING_FLAG);
 
 const firmId = randomUUID();
 const staffUserId = randomUUID();
@@ -83,33 +83,6 @@ const buyerNoTinUser: Principal = buyerPrincipal(buyerNoTin, {
   userId: buyerUser2,
 });
 
-async function saveAndEnable(key: string): Promise<boolean | null> {
-  const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, key))
-    .limit(1);
-  await db
-    .insert(featureFlagsTable)
-    .values({ key, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
-  return existing ? existing.enabled : null;
-}
-
-async function restore(key: string, was: boolean | null): Promise<void> {
-  if (was === null) {
-    await getDb()
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, key));
-  } else {
-    await setFlag(key, was);
-  }
-}
-
 function invoiceSeed(over: {
   id: string;
   buyerPartyId: string;
@@ -131,9 +104,9 @@ function invoiceSeed(over: {
 }
 
 before(async () => {
-  railsWasEnabled = await saveAndEnable(RAILS_FLAG);
-  confirmWasEnabled = await saveAndEnable(CONFIRM_FLAG);
-  messagingWasEnabled = await saveAndEnable(MESSAGING_FLAG);
+  await railsGuard.saveAndSet(true);
+  await confirmGuard.saveAndSet(true);
+  await messagingGuard.saveAndSet(true);
   const db = getDb();
   await db
     .insert(usersTable)
@@ -223,9 +196,9 @@ before(async () => {
 });
 
 after(async () => {
-  await restore(RAILS_FLAG, railsWasEnabled);
-  await restore(CONFIRM_FLAG, confirmWasEnabled);
-  await restore(MESSAGING_FLAG, messagingWasEnabled);
+  await railsGuard.restore();
+  await confirmGuard.restore();
+  await messagingGuard.restore();
   await closeAllServers();
 });
 

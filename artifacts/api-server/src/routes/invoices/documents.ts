@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { asc, eq, inArray } from "drizzle-orm";
 import {
   getDb,
-  firmsTable,
   stampRecordsTable,
   submissionAttemptsTable,
   confirmationsTable,
@@ -30,11 +29,8 @@ import { awaitingApproval } from "../../modules/invoice/approvals";
 import { computeRejectionRisk } from "../../modules/invoice/rejection-risk";
 import { buildCanonical } from "../../modules/invoice/service";
 import { serializeToUbl } from "../../modules/invoice/canonical";
-import {
-  renderInvoicePdf,
-  sendPdfAttachment,
-  themeWithBrandFallback,
-} from "../../modules/invoice/pdf";
+import { renderInvoicePdf, sendPdfAttachment } from "../../modules/invoice/pdf";
+import { loadFirmBrand } from "../../modules/invoice/pdf-brand";
 import { DomainError } from "../../modules/errors";
 import { loadForTenant } from "./shared";
 
@@ -56,7 +52,7 @@ router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const params = parseOrThrow(GetInvoicePdfParams, req.params);
   const { invoice, lines } = await loadForTenant(req, params.id);
-  const [parties, stamps, firms] = await Promise.all([
+  const [parties, stamps, brand] = await Promise.all([
     getDb()
       .select()
       .from(partiesTable)
@@ -72,27 +68,20 @@ router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
       .where(eq(stampRecordsTable.invoiceId, params.id))
       .orderBy(asc(stampRecordsTable.createdAt))
       .limit(1),
-    getDb()
-      .select({ name: firmsTable.name, theme: firmsTable.theme })
-      .from(firmsTable)
-      .where(eq(firmsTable.id, invoice.firmId))
-      .limit(1),
+    loadFirmBrand(invoice.firmId),
   ]);
   const supplier = parties.find((p) => p.id === invoice.supplierPartyId);
   const buyer = parties.find((p) => p.id === invoice.buyerPartyId);
   if (!supplier || !buyer) {
     throw new DomainError("NOT_FOUND", "Invoice parties not found", 404);
   }
-  // brandName falls back to the firm's own name — the whitelabel page's rule
-  // (themeWithBrandFallback, modules/invoice/pdf.ts).
-  const theme = themeWithBrandFallback(firms[0]?.theme, firms[0]?.name);
   const pdf = await renderInvoicePdf({
     invoice,
     lines,
     supplier,
     buyer,
     stamp: stamps[0] ?? null,
-    theme,
+    theme: brand.theme,
   });
   sendPdfAttachment(res, `invoice-${invoice.invoiceNumber}.pdf`, pdf);
 });

@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
-import { addDays, daysBetween } from "./date-math";
-import { WEEK_COUNT } from "./cashflow";
+import { daysBetween } from "./date-math";
+import { bucketByCurrencyWeek } from "./cashflow";
 import { BILL_ORIENTATION, RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Supplier payables (contract 0.44.0). A BILL is an invoice row where the
@@ -228,60 +228,20 @@ export async function payablesSummary(
     `)
   ).rows;
 
-  const byCurrency = new Map<string, typeof bills>();
-  for (const b of bills) {
-    const list = byCurrency.get(b.currency) ?? [];
-    list.push(b);
-    byCurrency.set(b.currency, list);
-  }
-  const groups: PayablesSummary["groups"] = [];
-  for (const [currency, list] of byCurrency) {
-    const zero = () => ({ amount: 0, count: 0 });
-    const overdue = zero();
-    const later = zero();
-    const total = zero();
-    const weeks = Array.from({ length: WEEK_COUNT }, (_, i) => ({
-      startDate: addDays(today, i * 7),
-      ...zero(),
-    }));
-    for (const b of list) {
-      const amount = Number(b.grand_total);
-      if (!Number.isFinite(amount)) continue;
-      total.amount += amount;
-      total.count += 1;
-      if (b.due_date === null) {
-        later.amount += amount;
-        later.count += 1;
-        continue;
-      }
-      const daysPast = daysBetween(b.due_date, today);
-      if (daysPast > 0) {
-        overdue.amount += amount;
-        overdue.count += 1;
-      } else {
-        const weekIndex = Math.floor(-daysPast / 7);
-        const target = weekIndex < WEEK_COUNT ? weeks[weekIndex] : later;
-        target.amount += amount;
-        target.count += 1;
-      }
-    }
-    const money = (b: { amount: number; count: number }) => ({
-      amount: b.amount.toFixed(2),
-      count: b.count,
-    });
-    groups.push({
-      currency,
-      overdue: money(overdue),
-      dueWeeks: weeks.map((w) => ({
-        startDate: w.startDate,
-        amount: w.amount.toFixed(2),
-        count: w.count,
-      })),
-      later: money(later),
-      total: money(total),
-    });
-  }
-  groups.sort((a, b) => Number(b.total.amount) - Number(a.total.amount));
+  const groups: PayablesSummary["groups"] = bucketByCurrencyWeek(
+    bills.map((b) => ({
+      currency: b.currency,
+      amount: b.grand_total,
+      daysPast: b.due_date === null ? null : daysBetween(b.due_date, today),
+    })),
+    today,
+  ).map((g) => ({
+    currency: g.currency,
+    overdue: g.overdue,
+    dueWeeks: g.weeks,
+    later: g.later,
+    total: g.total,
+  }));
 
   const topSuppliers = (
     await getDb().execute<{

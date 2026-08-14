@@ -1,4 +1,4 @@
-import { desc, isNull } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -16,6 +16,7 @@ import {
   alertOnceViaAuditLedger,
   atMostHourly,
   envThreshold,
+  unattendedRunDueToday,
 } from "./watch-shared";
 
 // Nightly phrasing eval + quality-drop alert (round-20 idea #1). The
@@ -46,7 +47,7 @@ const MIN_BASELINE_RUNS = Math.min(
 );
 const DROP_POINTS = envThreshold(process.env.PHRASING_ALERT_DROP, 0.1);
 
-export const PHRASING_DROP_ACTION = "clerk.phrasing_quality.dropped";
+const PHRASING_DROP_ACTION = "clerk.phrasing_quality.dropped";
 
 export interface PhrasingQualityDrop {
   metric: "grounded" | "resistance";
@@ -110,20 +111,6 @@ export function detectPhrasingQualityDrop(
   return drops.find((d) => d.metric === "resistance") ?? drops[0] ?? null;
 }
 
-// True when no auto run (startedBy null) has happened today (UTC) — the
-// eval-growth once-per-day guard verbatim.
-async function autoPhrasingDueToday(): Promise<boolean> {
-  const [last] = await getDb()
-    .select({ createdAt: clerkPhrasingEvalRunsTable.createdAt })
-    .from(clerkPhrasingEvalRunsTable)
-    .where(isNull(clerkPhrasingEvalRunsTable.startedBy))
-    .orderBy(desc(clerkPhrasingEvalRunsTable.createdAt))
-    .limit(1);
-  if (!last) return true;
-  const today = new Date().toISOString().slice(0, 10);
-  return last.createdAt.toISOString().slice(0, 10) !== today;
-}
-
 registerSweep(async function sweepPhrasingAutoEval(): Promise<void> {
   const runEval = await runInBypassContext(async () => {
     const locked = await tryAdvisoryXactLock(PHRASING_SWEEP_LOCK_ID);
@@ -137,7 +124,7 @@ registerSweep(async function sweepPhrasingAutoEval(): Promise<void> {
     // shared sweep health for the duration of an incident.
     if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
     if (!(await isFeatureEnabled(AUTO_PHRASING_FLAG_KEY))) return false;
-    return autoPhrasingDueToday();
+    return unattendedRunDueToday(clerkPhrasingEvalRunsTable);
   });
   if (!runEval) return;
 

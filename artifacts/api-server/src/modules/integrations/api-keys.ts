@@ -84,7 +84,7 @@ export interface MintedApiKey {
 // preserving order and deduplicating. Rejects — never silently drops — an
 // unknown or non-machine capability, so a caller learns exactly what a key
 // can carry.
-export function vetCapabilities(requested: string[]): Capability[] {
+function vetCapabilities(requested: string[]): Capability[] {
   const seen = new Set<string>();
   const vetted: Capability[] = [];
   for (const cap of requested) {

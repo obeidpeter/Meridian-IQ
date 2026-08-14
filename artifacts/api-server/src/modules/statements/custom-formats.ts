@@ -22,7 +22,7 @@ import {
 // against real sample lines: a mapping that cannot parse its own sample is
 // rejected, so a wrong proposal (Clerk's or a human's) can never be stored.
 
-export const CUSTOM_KEY_PREFIX = "custom_";
+const CUSTOM_KEY_PREFIX = "custom_";
 const MAX_SAMPLE_CHARS = 100_000;
 
 export interface MappingValidation {

@@ -15,7 +15,7 @@ import {
   requireFirmScope,
   type Principal,
 } from "../auth/rbac";
-import { canTransition, recordTransition } from "../invoice/lifecycle";
+import { tryTransition } from "../invoice/lifecycle";
 import { OUTSTANDING_STATUSES } from "../invoice/receivables";
 import { provisionAccount } from "./provider";
 import { decimalToMinorUnits } from "../../lib/money";
@@ -349,33 +349,17 @@ export async function recordInboundCollection(
       decimalToMinorUnits(paid?.amount ?? "0") >=
       decimalToMinorUnits(invoice.grandTotal);
 
-    // Mirror the buyer paid-flag branch exactly (routes/buyer.ts):
+    // The shared skip-if-lost fold (tryTransition, modules/invoice/lifecycle):
     // compare-and-set so a concurrent cancel/credit (or an earlier replay
     // that already settled) wins — the event stands as lineage but the
     // settled transition is skipped. A `submitted` receivable records the
     // event only (the state machine settles from stamped/confirmed).
-    if (fullyPaid && canTransition(invoice.status, "settled")) {
-      const [moved] = await getDb()
-        .update(invoicesTable)
-        .set({ status: "settled" })
-        .where(
-          and(
-            eq(invoicesTable.id, invoice.id),
-            eq(invoicesTable.status, invoice.status),
-          ),
-        )
-        .returning({ id: invoicesTable.id });
-      if (moved) {
-        await recordTransition({
-          invoiceId: invoice.id,
-          firmId: invoice.firmId,
-          fromStatus: invoice.status,
-          toStatus: "settled",
-          actorId: null,
-          actorRole: "system",
-          reason: "collection_account",
-        });
-      }
+    if (fullyPaid) {
+      await tryTransition(invoice, "settled", {
+        actorId: null,
+        actorRole: "system",
+        reason: "collection_account",
+      });
     }
 
     // Pointer-only audit (never amounts): the settlement event carries the

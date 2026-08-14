@@ -19,6 +19,7 @@ import {
 } from "@workspace/db";
 import { createDraft } from "../invoice/service.ts";
 import { setFirmOverride } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { recordConsent } from "../consent/consent.ts";
 import type { Principal } from "../auth/rbac.ts";
 import { ACTIONS_FLAG_KEY, MAX_ACTION_TARGETS } from "./actions.ts";
@@ -152,27 +153,13 @@ let clientA: string; // the lifecycle + walls party (no invoices ever)
 // The pause signals ride the platform-wide messaging rail, which every
 // sweep-side sender gates on (PL-02). This suite lights it to observe the
 // sends and puts it back exactly as found (delete when it did not
-// pre-exist) — the health-watch/digest suites' save/restore idiom.
+// pre-exist) — the shared makeFlagGuard idiom.
 const MESSAGING_FLAG = "messaging_notifications";
-let messagingFlagWasEnabled: boolean | null = null;
+const messagingFlagGuard = makeFlagGuard(MESSAGING_FLAG);
 
 before(async () => {
   const db = getDb();
-  const [existingMessaging] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, MESSAGING_FLAG))
-    .limit(1);
-  messagingFlagWasEnabled = existingMessaging
-    ? existingMessaging.enabled
-    : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: MESSAGING_FLAG, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  await messagingFlagGuard.saveAndSet(true);
   // Both action flag rows exactly as boot seeding ships them: DARK. Tests
   // opt the firm in via per-firm overrides only.
   await db
@@ -245,17 +232,7 @@ after(async () => {
       ),
     );
   // Put the messaging flag back exactly as found.
-  const db = getDb();
-  if (messagingFlagWasEnabled === null) {
-    await db
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  } else {
-    await db
-      .update(featureFlagsTable)
-      .set({ enabled: messagingFlagWasEnabled })
-      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  }
+  await messagingFlagGuard.restore();
 });
 
 test("dark flags: granting refuses, the list says so, and clerk_actions alone is not enough", async () => {

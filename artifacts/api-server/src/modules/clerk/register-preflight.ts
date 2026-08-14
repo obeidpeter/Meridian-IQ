@@ -17,6 +17,7 @@ import {
 } from "../invoice/line-items";
 import { firmPartySphereCondition } from "../party/party";
 import { GENERIC_TOKENS, normalizeTin } from "./alias";
+import { num } from "./preflight";
 
 // Register-history pre-flight (exhaust idea #6). The pure pre-flight checks
 // internal consistency; the firm's own register and invoice history can catch
@@ -83,7 +84,7 @@ function meaningfulTokens(name: string): Set<string> {
 // Strong name evidence: at least two meaningful tokens shared between the
 // extracted name and the register name. A single shared token ("Adaeze")
 // would let any register party sharing it trigger false TIN warnings.
-export function strongNameMatch(
+function strongNameMatch(
   extracted: string | null,
   partyName: string,
 ): boolean {
@@ -96,13 +97,8 @@ export function strongNameMatch(
   return hits >= 2;
 }
 
-// Amounts come back as printed — "1,250,000.00" included (same dialect rule
-// as preflight.ts).
-function num(value: string | null): number | null {
-  if (value === null || value.trim() === "") return null;
-  const n = Number(value.replace(/,/g, ""));
-  return Number.isFinite(n) ? n : null;
-}
+// Amounts come back as printed — "1,250,000.00" included (the shared
+// preflight.ts dialect parser).
 
 function fieldValue(
   extraction: ClerkExtraction,

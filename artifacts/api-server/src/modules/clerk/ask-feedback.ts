@@ -10,7 +10,7 @@ import { getDb } from "@workspace/db";
 
 // Trailing window, mirroring claim-gaps' default: recent enough to reflect
 // the catalogue in force, long enough to accumulate signal.
-export const ASK_FEEDBACK_WINDOW_DAYS = 90;
+const ASK_FEEDBACK_WINDOW_DAYS = 90;
 
 // Newest not-helpful questions the operator should actually read.
 const RECENT_NOT_HELPFUL_LIMIT = 20;

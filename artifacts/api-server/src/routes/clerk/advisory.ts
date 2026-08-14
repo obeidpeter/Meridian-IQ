@@ -8,14 +8,8 @@ import {
 } from "@workspace/api-zod";
 import type { ClerkAdvisoryBriefRow } from "@workspace/db";
 import { parseOrThrow } from "../../lib/parse";
-import {
-  assertCan,
-  assertClientPartyScope,
-  clientPartyScope,
-  requireFirmScope,
-  tenantFirmId,
-} from "../../modules/auth/rbac";
-import { DomainError } from "../../modules/errors";
+import { resolveBoundClientScope } from "../../lib/client-scope";
+import { assertCan, requireFirmScope } from "../../modules/auth/rbac";
 import { gatewayOrNull } from "../../modules/clerk/provider";
 import {
   generateAdvisoryBrief,
@@ -50,25 +44,13 @@ const briefView = (
 router.get("/clerk/advisory-briefs", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const query = parseOrThrow(ListAdvisoryBriefsQueryParams, req.query);
-  // The client-statements route's exact resolution: firm principals use
-  // their tenant; a cross-tenant operator falls back to a bound firm.
-  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
-  if (!tenant) {
-    throw new DomainError(
-      "NO_TENANT",
-      "A firm scope is required for advisory briefs",
-      400,
-    );
-  }
-  // A client_user resolves to its OWN party whatever the query says; a firm
-  // principal must name the client. assertClientPartyScope is the SEC-03
-  // wall (no-op for firm principals, 403 for a client_user naming another
-  // party).
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
+  // The client-statements route's exact resolution (lib/client-scope):
+  // bound firm, then the SEC-03 client-party wall.
+  const { firmId: tenant, clientPartyId: target } = resolveBoundClientScope(
+    req.principal,
+    query.clientPartyId,
+    "advisory briefs",
+  );
   const rows = await listAdvisoryBriefs(tenant, target);
   // Stored-durably read posture (the onboarding opening-position rule): a
   // brief's sections jsonb outlives the contract that wrote it. Per-row

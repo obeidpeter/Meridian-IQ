@@ -112,7 +112,7 @@ export interface ReplyPhrasingInput {
   escalationReason: string;
 }
 
-export function buildReplyUser(input: ReplyPhrasingInput): string {
+function buildReplyUser(input: ReplyPhrasingInput): string {
   return [
     `Catalogue cause: ${input.cause}`,
     `Catalogue fix: ${input.fix}`,

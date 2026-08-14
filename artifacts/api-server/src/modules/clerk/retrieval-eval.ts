@@ -1,4 +1,4 @@
-import { desc, isNull } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -19,6 +19,7 @@ import {
   alertOnceViaAuditLedger,
   atMostHourly,
   envThreshold,
+  unattendedRunDueToday,
 } from "./watch-shared";
 
 // Retrieval eval lane (round 47, Phase 3): does the LIVE embedding model
@@ -237,18 +238,6 @@ const AUTO_RETRIEVAL_FLAG_KEY = "clerk_auto_retrieval_eval";
 // in memory.ts).
 const RETRIEVAL_SWEEP_LOCK_ID = 731_851;
 
-async function autoRetrievalDueToday(): Promise<boolean> {
-  const [last] = await getDb()
-    .select({ createdAt: clerkRetrievalEvalRunsTable.createdAt })
-    .from(clerkRetrievalEvalRunsTable)
-    .where(isNull(clerkRetrievalEvalRunsTable.startedBy))
-    .orderBy(desc(clerkRetrievalEvalRunsTable.createdAt))
-    .limit(1);
-  if (!last) return true;
-  const today = new Date().toISOString().slice(0, 10);
-  return last.createdAt.toISOString().slice(0, 10) !== today;
-}
-
 registerSweep(async function sweepRetrievalAutoEval(): Promise<void> {
   const due = await runInBypassContext(async () => {
     const locked = await tryAdvisoryXactLock(RETRIEVAL_SWEEP_LOCK_ID);
@@ -258,7 +247,7 @@ registerSweep(async function sweepRetrievalAutoEval(): Promise<void> {
     // rationale — a dark clerk_ai must not redden sweep health all day).
     if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
     if (!(await isFeatureEnabled(AUTO_RETRIEVAL_FLAG_KEY))) return false;
-    return autoRetrievalDueToday();
+    return unattendedRunDueToday(clerkRetrievalEvalRunsTable);
   });
   if (!due) return;
   try {
@@ -288,7 +277,7 @@ const MIN_BASELINE_RUNS = Math.min(
 );
 const DROP_POINTS = envThreshold(process.env.RETRIEVAL_ALERT_DROP, 0.15);
 
-export const RETRIEVAL_DROP_ACTION = "clerk.retrieval_quality.dropped";
+const RETRIEVAL_DROP_ACTION = "clerk.retrieval_quality.dropped";
 
 export interface RetrievalQualityDrop {
   metric: "recall" | "mrr";

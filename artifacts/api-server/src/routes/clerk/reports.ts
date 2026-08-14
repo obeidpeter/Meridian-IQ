@@ -14,11 +14,10 @@ import {
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import {
-  assertCan,
-  assertClientPartyScope,
-  clientPartyScope,
-  tenantFirmId,
-} from "../../modules/auth/rbac";
+  resolveBoundFirm,
+  resolveBoundClientScope,
+} from "../../lib/client-scope";
+import { assertCan } from "../../modules/auth/rbac";
 import {
   budgetPace,
   firmClerkUsage,
@@ -100,14 +99,7 @@ router.get("/clerk/digest", async (req, res): Promise<void> => {
       403,
     );
   }
-  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
-  if (!tenant) {
-    throw new DomainError(
-      "NO_TENANT",
-      "A firm scope is required for the digest",
-      400,
-    );
-  }
+  const tenant = resolveBoundFirm(req.principal, "the digest");
   const digest = await latestDigestForFirm(tenant);
   if (!digest) {
     res.status(404).json({ error: "No digest has been generated yet" });
@@ -125,26 +117,11 @@ router.get("/clerk/digest", async (req, res): Promise<void> => {
 router.get("/clerk/client-statements", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const query = parseOrThrow(ListClientStatementsQueryParams, req.query);
-  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
-  if (!tenant) {
-    throw new DomainError(
-      "NO_TENANT",
-      "A firm scope is required for client statements",
-      400,
-    );
-  }
-  // A client_user resolves to its OWN party whatever the query says; a firm
-  // principal must name the client. assertClientPartyScope is the SEC-03 wall
-  // (no-op for firm principals, 403 for a client_user naming another party).
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError(
-      "MISSING_CLIENT",
-      "clientPartyId is required",
-      400,
-    );
-  }
-  assertClientPartyScope(req.principal, target);
+  const { firmId: tenant, clientPartyId: target } = resolveBoundClientScope(
+    req.principal,
+    query.clientPartyId,
+    "client statements",
+  );
   const rows = await listClientStatements(tenant, target);
   res.json(ListClientStatementsResponse.parse(rows));
 });
@@ -153,14 +130,7 @@ router.get("/clerk/client-statements", async (req, res): Promise<void> => {
 // usage meter on the client-facing surfaces. Firm-scoped by construction.
 router.get("/clerk/usage", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
-  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
-  if (!tenant) {
-    throw new DomainError(
-      "NO_TENANT",
-      "A firm scope is required for Clerk usage",
-      400,
-    );
-  }
+  const tenant = resolveBoundFirm(req.principal, "Clerk usage");
   const usage = await firmClerkUsage(tenant);
   // Per-purpose split of the same month window — which feature is spending
   // the allowance. monthStart comes from the usage read so the two queries

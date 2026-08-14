@@ -19,7 +19,7 @@ import { statutoryDueDay } from "../filings/statutory-calendar";
 // 21st of the following month), so this view can never disagree with what
 // each client sees.
 
-export const CALENDAR_HORIZON_DAYS = 35;
+const CALENDAR_HORIZON_DAYS = 35;
 
 export interface CalendarEvent {
   kind: "invoice_submission" | "vat_return";
