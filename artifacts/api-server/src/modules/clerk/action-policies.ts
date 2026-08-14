@@ -761,15 +761,14 @@ async function autoPauseAndNotify(
   return won;
 }
 
-// The grantor's CURRENT standing: a membership in this firm whose role
-// still carries invoice.submit — and for a client_user, pinned to this very
-// party (SEC-03: a client grantor automating a sibling client is exactly
-// the wall this platform never lets RLS alone hold). Returns the role to
-// reconstruct the principal with, or null when the grant must pause.
-async function grantorRole(
-  policy: ClerkActionPolicy,
-): Promise<Principal["role"] | null> {
-  const memberships = await runInBypassContext(() =>
+// The one bypass-wrapped membership fetch behind every policy/plan
+// re-check (grantorRole here; grantorStillValid, approverRole and
+// notifyClosePack in plan-policies/plan-runs). Bypass is deliberate — the
+// sweeps run outside any request context. This helper only FETCHES: each
+// caller's validity predicate (with its client_user party pin) is the
+// SEC-03 wall and stays local to the caller.
+export async function membershipRolesFor(userId: string, firmId: string) {
+  return runInBypassContext(() =>
     getDb()
       .select({
         role: membershipsTable.role,
@@ -778,11 +777,22 @@ async function grantorRole(
       .from(membershipsTable)
       .where(
         and(
-          eq(membershipsTable.userId, policy.grantedBy),
-          eq(membershipsTable.firmId, policy.firmId),
+          eq(membershipsTable.userId, userId),
+          eq(membershipsTable.firmId, firmId),
         ),
       ),
   );
+}
+
+// The grantor's CURRENT standing: a membership in this firm whose role
+// still carries invoice.submit — and for a client_user, pinned to this very
+// party (SEC-03: a client grantor automating a sibling client is exactly
+// the wall this platform never lets RLS alone hold). Returns the role to
+// reconstruct the principal with, or null when the grant must pause.
+async function grantorRole(
+  policy: ClerkActionPolicy,
+): Promise<Principal["role"] | null> {
+  const memberships = await membershipRolesFor(policy.grantedBy, policy.firmId);
   const valid = memberships.find(
     (m) =>
       ROLE_CAPABILITIES[m.role]?.includes("invoice.submit") &&

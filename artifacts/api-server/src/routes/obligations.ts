@@ -1,6 +1,4 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { getDb, firmsTable } from "@workspace/db";
 import {
   ListObligationsQueryParams,
   ListObligationsResponse,
@@ -25,10 +23,8 @@ import {
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
-import {
-  sendPdfAttachment,
-  themeWithBrandFallback,
-} from "../modules/invoice/pdf";
+import { sendPdfAttachment } from "../modules/invoice/pdf";
+import { loadFirmBrand } from "../modules/invoice/pdf-brand";
 import {
   createObligation,
   listObligations,
@@ -116,14 +112,7 @@ router.get("/obligation-response-pack", async (req, res): Promise<void> => {
     req.principal,
     query.month,
   );
-  // brandName falls back to the firm's own name — the whitelabel page's rule
-  // (themeWithBrandFallback, the compliance-pack route's exact fallback).
-  const [firm] = await getDb()
-    .select({ name: firmsTable.name, theme: firmsTable.theme })
-    .from(firmsTable)
-    .where(eq(firmsTable.id, pack.firmId))
-    .limit(1);
-  const theme = themeWithBrandFallback(firm?.theme, firm?.name);
+  const { theme } = await loadFirmBrand(pack.firmId);
   const pdf = await renderObligationResponsePdf({
     obligation,
     pack,

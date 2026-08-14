@@ -11,6 +11,9 @@ import type { ClerkNoticeExtraction, PreflightIssue } from "@workspace/db";
 // pure/no-DB posture holds.
 import { lagosDateString } from "../../lib/lagos-time";
 import { FLAG_CONFIDENCE_THRESHOLD } from "./prompts";
+import { isIsoDate, num } from "./preflight";
+// Re-exported for cases/decisions.ts (imported there as isIsoNoticeDate).
+export { isIsoDate };
 
 // Notice Desk (Task #199) — the closed catalogues and versioned prompt for
 // reading a tax-authority notice into a PROPOSAL (kind "notice" cases). The
@@ -138,21 +141,6 @@ export const EXTRACT_NOTICE_JSON_SCHEMA: Record<string, unknown> = {
 // no gateway — trivially unit-testable, can never touch tenant data).
 // ---------------------------------------------------------------------------
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-export function isIsoDate(value: string): boolean {
-  if (!ISO_DATE.test(value)) return false;
-  const t = Date.parse(`${value}T00:00:00Z`);
-  if (Number.isNaN(t)) return false;
-  // Reject well-formed-but-impossible dates (e.g. 2026-02-31 rolls over).
-  return new Date(t).toISOString().slice(0, 10) === value;
-}
-
-function num(value: string | null): number | null {
-  if (value === null || value.trim() === "") return null;
-  const n = Number(value.replace(/,/g, ""));
-  return Number.isFinite(n) ? n : null;
-}
 
 const FIELD_LABELS: Record<NoticeField, string> = {
   referenceNumber: "reference number",

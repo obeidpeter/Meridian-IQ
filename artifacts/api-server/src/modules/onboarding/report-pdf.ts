@@ -40,7 +40,7 @@ export interface OnboardingReportInput {
 // certifying record of where the client started, and the backtest is
 // advisory consent copy, not a record fact — it stays on the screen
 // surfaces.
-export function openingReportRows(
+function openingReportRows(
   p: OpeningPosition,
 ): { label: string; value: string }[] {
   const rows: { label: string; value: string }[] = [];
@@ -82,7 +82,7 @@ export function openingReportRows(
 
 // One compact evidence phrase per step for the checklist table — the
 // step-specific detection facts reduced to a line (never the raw jsonb).
-export function stepEvidenceSummary(
+function stepEvidenceSummary(
   step: OnboardingRunView["steps"][number],
 ): string {
   if (step.status === "skipped") {

@@ -28,9 +28,9 @@ import { registerSweep } from "../pipeline/pipeline";
 //      pointer-only (SEC-12).
 //   3. Mark open batches whose deadline has passed as breached.
 
-export const B2C_THRESHOLD_NGN = 50_000;
+const B2C_THRESHOLD_NGN = 50_000;
 export const WINDOW_MS = 24 * 60 * 60 * 1000;
-export const ALERT_MARGIN_MS = 4 * 60 * 60 * 1000;
+const ALERT_MARGIN_MS = 4 * 60 * 60 * 1000;
 
 // A transaction qualifies once affirmed beyond draft; cancelled/credited
 // records are corrections, not reportable sales.

@@ -11,6 +11,7 @@ import {
 import { type ClerkGateway } from "../clerk/gateway";
 import { phraseGroundedDraft } from "../clerk/phrase-grounded";
 import { fenceUntrusted } from "../clerk/prompts";
+import { plural } from "../clerk/text";
 
 // Advisory narrative drafting (Clerk idea #10). Readiness assessments and
 // VAT-risk checks compute their findings deterministically (ADV-01/02); the
@@ -97,9 +98,6 @@ const BAND_PHRASES: Record<ReadinessFindings["band"], string> = {
     "Your current setup needs attention in several areas before you can meet the e-invoicing mandate confidently.",
 };
 
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
 
 // Deterministic letter bodies — also the grounding shown to the model. Gap
 // prompts and remediation text are PLATFORM questionnaire template strings;

@@ -259,12 +259,12 @@ Rules:
 - A "Previous question context" line, when present, is platform-recorded and trusted: use it ONLY to resolve a follow-up ("and for June?", "same for that client?") to the same data key with updated parameter keys, carrying over parameters the follow-up does not change. A question that stands on its own overrides the context entirely.
 - Output JSON only, matching the provided schema.`;
 
-export const INTENT_CATEGORIES = ["b2b", "b2g", "b2c", "unknown"] as const;
+const INTENT_CATEGORIES = ["b2b", "b2g", "b2c", "unknown"] as const;
 
 // The plan's hard step cap (intent.v6). Three lookups answer any genuinely
 // multi-part question the surface supports; anything longer is a scattergun
 // (or an injection) and refuses via the schema, never app-side truncation.
-export const PLAN_MAX_STEPS = 3;
+const PLAN_MAX_STEPS = 3;
 
 // One resolved plan step. month/client are the closed option keys ("none" =
 // unset) — the validator defaults them, so they are always present here.

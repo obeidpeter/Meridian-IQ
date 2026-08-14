@@ -49,7 +49,7 @@ export function normalizeContentType(contentType: string): string {
 
 // contentType → capture source. Anything unmapped is skipped (audited by the
 // caller), never an error back to the provider.
-export function attachmentSource(
+function attachmentSource(
   att: InboundAttachment,
 ): CreateCaseInput | null {
   const contentType = normalizeContentType(att.contentType);
@@ -114,7 +114,7 @@ export async function withInboundSlot<T>(fn: () => Promise<T>): Promise<T> {
 // response). Read per call so operators (and tests) can adjust without a
 // restart. Each rail has its own env knob and its own count.
 const DEFAULT_DAILY_CAP = 100;
-export function dailyCapFromEnv(envName: string): number {
+function dailyCapFromEnv(envName: string): number {
   const raw = Number(process.env[envName]);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_DAILY_CAP;
 }
@@ -125,7 +125,7 @@ export function dailyCapFromEnv(envName: string): number {
 // attachment exactly once. Deterministic, cheap (one indexed-ish aggregate
 // over today's rows), and shared across instances/restarts because the audit
 // ledger is the state.
-export async function inboundAttachmentsToday(
+async function inboundAttachmentsToday(
   action: string,
   firmId: string,
 ): Promise<number> {

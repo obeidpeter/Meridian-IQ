@@ -66,7 +66,7 @@ export interface ExplainPhrasingInput {
   fix: string;
 }
 
-export function buildExplainUser(input: ExplainPhrasingInput): string {
+function buildExplainUser(input: ExplainPhrasingInput): string {
   return [
     `Invoice number: ${input.invoiceNumber}`,
     `Error code: ${input.errorCode}`,

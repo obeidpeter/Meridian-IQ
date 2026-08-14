@@ -7,7 +7,6 @@ import {
   firmsTable,
   membershipsTable,
   usersTable,
-  featureFlagsTable,
   messagesTable,
   pushDevicesTable,
   staffNotificationPreferencesTable,
@@ -17,6 +16,7 @@ import { deliverFirmDigests, digestWeekStart } from "./digest.ts";
 import { pointerEntityRef } from "../messaging/recipient-ref.ts";
 import { setPushTransport, resetPushTransport } from "../push/push.ts";
 import { setFlag } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Weekly-digest delivery to opted-in firm staff. Pinned invariants:
@@ -48,7 +48,7 @@ const unverifiedBothStaff = randomUUID();
 const unverifiedEmailOnlyStaff = randomUUID();
 
 const MESSAGING_FLAG = "messaging_notifications";
-let messagingFlagWasEnabled: boolean | null = null;
+const messagingFlagGuard = makeFlagGuard(MESSAGING_FLAG);
 
 // Only rows written by THIS run: pointer refs are 6 letters of a uuid, so a
 // long-lived scratch DB could hold colliding rows from earlier runs.
@@ -104,19 +104,7 @@ async function digestById(id: string) {
 
 before(async () => {
   const db = getDb();
-  const [existingFlag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, MESSAGING_FLAG))
-    .limit(1);
-  messagingFlagWasEnabled = existingFlag ? existingFlag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: MESSAGING_FLAG, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  await messagingFlagGuard.saveAndSet(true);
 
   await db.insert(firmsTable).values([
     { id: firmDeliver, name: `Digest Deliver Firm ${SALT}` },
@@ -270,13 +258,7 @@ before(async () => {
 
 after(async () => {
   resetPushTransport();
-  if (messagingFlagWasEnabled === null) {
-    await getDb()
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  } else {
-    await setFlag(MESSAGING_FLAG, messagingFlagWasEnabled);
-  }
+  await messagingFlagGuard.restore();
 });
 
 test("delivery: a digest is offered exactly once across two passes, pointer-only", async () => {

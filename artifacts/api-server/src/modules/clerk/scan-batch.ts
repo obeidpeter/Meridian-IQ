@@ -25,7 +25,7 @@ import type { ClerkGateway, UserContent } from "./gateway";
 
 // Pages per bundle. Bounds rasterization cost, the segmentation call's
 // image count, and the row size of the stored PDF.
-export const MAX_BATCH_SCAN_PAGES = 24;
+const MAX_BATCH_SCAN_PAGES = 24;
 // Thumbnails are for BOUNDARY detection (layout, headers, totals blocks) —
 // small deliberately, so a 24-page segmentation call stays cheap.
 const THUMB_WIDTH = 500;
@@ -96,7 +96,7 @@ function assertBundlePageCap(total: number): void {
 
 // Render the bundle's pages. Throws SCAN_TOO_LONG past the page cap and
 // PDF_UNREADABLE when nothing renders — both fail the batch with the message.
-export async function rasterizeBundle(
+async function rasterizeBundle(
   buf: Buffer,
   width: number,
 ): Promise<string[]> {

@@ -36,7 +36,7 @@ import {
 // see — never a silent drop, never a value the model gets to smuggle past
 // the parse pipeline.
 
-export const STATEMENT_EXTRACT_PROMPT_VERSION = "extract-statement.v1";
+const STATEMENT_EXTRACT_PROMPT_VERSION = "extract-statement.v1";
 
 // A text-layer statement is fed to the model as text. The 5MB decoded-PDF cap
 // (decodeBase64Checked) bounds the upload; this bounds the TOKEN bill of the

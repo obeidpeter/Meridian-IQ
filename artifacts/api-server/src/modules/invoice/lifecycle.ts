@@ -36,7 +36,7 @@ const IMMUTABLE_STATUSES: InvoiceStatus[] = [
   "credited",
 ];
 
-export const TERMINAL_STATUSES: InvoiceStatus[] = ["cancelled", "credited"];
+const TERMINAL_STATUSES: InvoiceStatus[] = ["cancelled", "credited"];
 
 export function canTransition(
   from: InvoiceStatus,
@@ -132,4 +132,35 @@ export async function recordTransition(
       actorRole: record.actorRole ?? null,
       reason: record.reason ?? null,
     });
+}
+
+// Skip-if-lost sibling of applyTransition (CORE-09): the same compare-and-set,
+// but a lost race is a SKIP, not a 409 — the caller's evidence row (settlement
+// event, confirmation) stands as lineage while a concurrently cancelled/credited
+// invoice is never resurrected. Appends the lifecycle ledger row only when the
+// CAS actually moved the invoice.
+export async function tryTransition(
+  invoice: Pick<Invoice, "id" | "status" | "firmId">,
+  to: InvoiceStatus,
+  actor: { actorId: string | null; actorRole: string | null; reason?: string | null },
+): Promise<boolean> {
+  if (!canTransition(invoice.status, to)) return false;
+  const [moved] = await getDb()
+    .update(invoicesTable)
+    .set({ status: to })
+    .where(
+      and(eq(invoicesTable.id, invoice.id), eq(invoicesTable.status, invoice.status)),
+    )
+    .returning({ id: invoicesTable.id });
+  if (!moved) return false;
+  await recordTransition({
+    invoiceId: invoice.id,
+    firmId: invoice.firmId,
+    fromStatus: invoice.status,
+    toStatus: to,
+    actorId: actor.actorId,
+    actorRole: actor.actorRole,
+    reason: actor.reason ?? null,
+  });
+  return true;
 }

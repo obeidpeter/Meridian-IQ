@@ -21,6 +21,7 @@ import {
 } from "@workspace/db";
 import { createDraft } from "../invoice/service.ts";
 import { setFirmOverride } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { recordConsent } from "../consent/consent.ts";
 import type { Principal } from "../auth/rbac.ts";
 import {
@@ -218,27 +219,13 @@ async function grantedMessagesForUser(userId: string) {
 const pausedPolicyIds: string[] = [];
 
 const MESSAGING_FLAG = "messaging_notifications";
-let messagingFlagWasEnabled: boolean | null = null;
+const messagingFlagGuard = makeFlagGuard(MESSAGING_FLAG);
 
 before(async () => {
   const db = getDb();
-  // The messaging rail, save/restore exactly as found (the action-policies
-  // suite's idiom): every grant/pause signal gates on it (PL-02).
-  const [existingMessaging] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, MESSAGING_FLAG))
-    .limit(1);
-  messagingFlagWasEnabled = existingMessaging
-    ? existingMessaging.enabled
-    : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: MESSAGING_FLAG, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  // The messaging rail, save/restore exactly as found (makeFlagGuard):
+  // every grant/pause signal gates on it (PL-02).
+  await messagingFlagGuard.saveAndSet(true);
   // Both action flag rows exactly as boot seeding ships them: DARK. This
   // firm opts in via per-firm overrides only.
   await db
@@ -317,16 +304,7 @@ after(async () => {
         isNull(clerkActionPoliciesTable.revokedAt),
       ),
     );
-  if (messagingFlagWasEnabled === null) {
-    await db
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  } else {
-    await db
-      .update(featureFlagsTable)
-      .set({ enabled: messagingFlagWasEnabled })
-      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  }
+  await messagingFlagGuard.restore();
 });
 
 test("a grant refuses without a live engagement — completed/archived books of work do not count", async () => {

@@ -43,7 +43,7 @@ export function obligationOverdue(today: SQL): SQL {
 }
 
 // Due between today and today + OBLIGATION_DUE_SOON_DAYS inclusive.
-export function obligationDueSoon(today: SQL): SQL {
+function obligationDueSoon(today: SQL): SQL {
   return sql`${OBLIGATION_OPEN}
     AND ${obligationsTable.responseDueDate} >= ${today}
     AND ${obligationsTable.responseDueDate} <= ${today} + ${OBLIGATION_DUE_SOON_DAYS}::int`;

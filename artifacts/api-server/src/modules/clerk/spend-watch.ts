@@ -3,6 +3,7 @@ import { LEDGER_TOKENS_SQL } from "./budget";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
 import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
+import { median } from "../invoice/date-math";
 
 // Firm spend anomaly watch. The per-firm monthly budget is a hard monthly
 // cap, and the platform spend meter is a chart someone has to look at — but a
@@ -68,14 +69,6 @@ export async function firmSpendDays(days = 15): Promise<FirmSpendDay[]> {
   }));
 }
 
-// Even-length samples average the middle pair (the conventional median).
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
-}
 
 // Pure detection, exported for tests: per firm, the LATEST measured day is
 // compared against the median of that firm's OTHER days in the window. Both

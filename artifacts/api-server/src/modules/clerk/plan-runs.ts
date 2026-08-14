@@ -5,7 +5,6 @@ import {
   runRequestContext,
   clerkCasesTable,
   clerkPlanRunsTable,
-  membershipsTable,
   partiesTable,
   type ClerkPlanRun,
   type PlanRunStep,
@@ -29,7 +28,11 @@ import {
   proposalForKind,
   type ActionKind,
 } from "./actions";
-import { notifyGrantorSignal, tooManyFailures } from "./action-policies";
+import {
+  membershipRolesFor,
+  notifyGrantorSignal,
+  tooManyFailures,
+} from "./action-policies";
 import {
   assembleDraftRecurring,
   assembleReconcileMatches,
@@ -477,20 +480,7 @@ async function approverRole(
   run: ClerkPlanRun,
   step: PlanRunStep,
 ): Promise<Principal["role"] | null> {
-  const memberships = await runInBypassContext(() =>
-    getDb()
-      .select({
-        role: membershipsTable.role,
-        clientPartyId: membershipsTable.clientPartyId,
-      })
-      .from(membershipsTable)
-      .where(
-        and(
-          eq(membershipsTable.userId, run.approvedBy),
-          eq(membershipsTable.firmId, run.firmId),
-        ),
-      ),
-  );
+  const memberships = await membershipRolesFor(run.approvedBy, run.firmId);
   const capability = capabilityFor(step.kind as PlanStepKind);
   const valid = memberships.find(
     (m) =>
@@ -572,20 +562,7 @@ async function notifyClosePack(run: ClerkPlanRun): Promise<void> {
   // re-verifies membership itself and sends nothing to non-staff.
   let role = run.approvedByRole;
   if (!role) {
-    const memberships = await runInBypassContext(() =>
-      getDb()
-        .select({
-          role: membershipsTable.role,
-          clientPartyId: membershipsTable.clientPartyId,
-        })
-        .from(membershipsTable)
-        .where(
-          and(
-            eq(membershipsTable.userId, run.approvedBy),
-            eq(membershipsTable.firmId, run.firmId),
-          ),
-        ),
-    );
+    const memberships = await membershipRolesFor(run.approvedBy, run.firmId);
     role = memberships.some(
       (m) => m.role === "client_user" && m.clientPartyId === clientPartyId,
     )

@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { getDb, auditEventsTable } from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
@@ -98,4 +99,25 @@ export function atMostHourly(
     lastRun = Date.now();
     return sweep();
   };
+}
+
+// True when no unattended run (startedBy null) has landed today (UTC) — the
+// once-per-UTC-day cadence shared by the nightly auto-eval sweeps
+// (eval-growth, phrasing, retrieval). Race losers merely record an extra
+// startedBy-null row, which this check then ignores for the rest of the day.
+export async function unattendedRunDueToday(
+  runsTable: PgTable & {
+    createdAt: AnyPgColumn<{ data: Date; notNull: true }>;
+    startedBy: AnyPgColumn;
+  },
+): Promise<boolean> {
+  const [last] = await getDb()
+    .select({ createdAt: runsTable.createdAt })
+    .from(runsTable)
+    .where(isNull(runsTable.startedBy))
+    .orderBy(desc(runsTable.createdAt))
+    .limit(1);
+  if (!last) return true;
+  const today = new Date().toISOString().slice(0, 10);
+  return last.createdAt.toISOString().slice(0, 10) !== today;
 }

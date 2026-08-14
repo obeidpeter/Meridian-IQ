@@ -12,7 +12,6 @@ import {
   clerkClientStatementsTable,
   clerkInferenceCallsTable,
   consentRecordsTable,
-  featureFlagsTable,
   messagesTable,
   type ClientStatementFacts,
 } from "@workspace/db";
@@ -33,7 +32,7 @@ import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
-import { setFlag } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { recipientRefFor } from "../messaging/recipient-ref.ts";
 
@@ -57,8 +56,8 @@ const noConsentClient = randomUUID();
 
 const MESSAGING_FLAG = "messaging_notifications";
 // Flag save/restore: the delivery tests need messaging live, so put the flag
-// back exactly as found (delete when it did not pre-exist).
-let messagingFlagWasEnabled: boolean | null = null;
+// back exactly as found (makeFlagGuard deletes when it did not pre-exist).
+const messagingFlagGuard = makeFlagGuard(MESSAGING_FLAG);
 
 // The fan-out's own recipient derivation (recipientRefFor — the one helper
 // whose doc comment forbids drifted copies): the assertion key tying message
@@ -150,19 +149,7 @@ const FOREIGN = `CS-FOREIGN-${SALT}`;
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  const [existingFlag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, MESSAGING_FLAG))
-    .limit(1);
-  messagingFlagWasEnabled = existingFlag ? existingFlag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: MESSAGING_FLAG, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  await messagingFlagGuard.saveAndSet(true);
   await db.insert(firmsTable).values([
     { id: firmA, name: `CS Firm A ${SALT}` },
     { id: firmB, name: `CS Firm B ${SALT}` },
@@ -241,14 +228,7 @@ before(async () => {
 
 after(async () => {
   await restoreClerkFlag();
-  const db = getDb();
-  if (messagingFlagWasEnabled === null) {
-    await db
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  } else {
-    await setFlag(MESSAGING_FLAG, messagingFlagWasEnabled);
-  }
+  await messagingFlagGuard.restore();
 });
 
 test("lagosMonthStart returns closed-month firsts with year carry", () => {
@@ -450,19 +430,8 @@ test("the sweep delivers even while the generation flag is off", async () => {
   // blast out as a stale backlog on re-enable). Force the flag off, seed an
   // undelivered row, and run the real sweep.
   const STATEMENT_FLAG = "clerk_client_statements";
-  const [existing] = await getDb()
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, STATEMENT_FLAG))
-    .limit(1);
-  const statementFlagWasEnabled = existing ? existing.enabled : null;
-  await getDb()
-    .insert(featureFlagsTable)
-    .values({ key: STATEMENT_FLAG, enabled: false, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: false },
-    });
+  const statementFlagGuard = makeFlagGuard(STATEMENT_FLAG);
+  await statementFlagGuard.saveAndSet(false);
   try {
     // A quiet row (fresh month — the unique key already holds this client's
     // MONTH row from the quiet-delivery test): the claim retires it without
@@ -481,13 +450,7 @@ test("the sweep delivers even while the generation flag is off", async () => {
       "delivery ran despite the dark generation flag",
     );
   } finally {
-    if (statementFlagWasEnabled === null) {
-      await getDb()
-        .delete(featureFlagsTable)
-        .where(eq(featureFlagsTable.key, STATEMENT_FLAG));
-    } else {
-      await setFlag(STATEMENT_FLAG, statementFlagWasEnabled);
-    }
+    await statementFlagGuard.restore();
   }
 });
 

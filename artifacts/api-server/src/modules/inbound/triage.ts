@@ -44,7 +44,7 @@ Rules:
 
 // Closed output catalogue: the model may only pick from this list; anything
 // else fails schema validation and is discarded (→ invoice lane).
-export const triageOutputSchema = z.object({
+const triageOutputSchema = z.object({
   kind: z.enum(["invoice", "notice", "unknown"]),
 });
 

@@ -51,7 +51,11 @@ import { countWhtChase } from "../wht/credits";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { type ClerkGateway } from "./gateway";
-import { phraseGroundedDraft } from "./phrase-grounded";
+import {
+  headlineBulletsJsonSchema,
+  headlineBulletsOutput,
+  phraseGroundedDraft,
+} from "./phrase-grounded";
 import { gatewayOrNull } from "./provider";
 import { isAre, ordinal, plural } from "./text";
 
@@ -102,21 +106,6 @@ const DIGEST_SYSTEM = [
   "Tone: professional, plain, encouraging. One headline sentence, then up to 5 short bullets.",
   'Return JSON: {"headline": string, "bullets": string[]}.',
 ].join("\n");
-
-const digestOutput = z.object({
-  headline: z.string().min(1).max(300),
-  bullets: z.array(z.string().min(1).max(400)).max(5),
-});
-
-const digestJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["headline", "bullets"],
-  properties: {
-    headline: { type: "string" },
-    bullets: { type: "array", items: { type: "string" }, maxItems: 5 },
-  },
-};
 
 export interface DigestFacts {
   unsubmittedCount: number;
@@ -598,10 +587,10 @@ export const DIGEST_PHRASING = {
   promptVersion: DIGEST_PROMPT_VERSION,
   system: DIGEST_SYSTEM,
   schemaName: "weekly_digest",
-  jsonSchema: digestJsonSchema,
-  validator: digestOutput,
+  jsonSchema: headlineBulletsJsonSchema,
+  validator: headlineBulletsOutput,
   buildUser: buildDigestUser,
-  joinOutput: (data: z.infer<typeof digestOutput>): string =>
+  joinOutput: (data: z.infer<typeof headlineBulletsOutput>): string =>
     [data.headline, ...data.bullets].join("\n"),
 };
 
@@ -666,7 +655,7 @@ export async function generateFirmDigest(
   // stores it as-is. The grounded text is assembled by the SAME joinOutput
   // the phrasing eval scores, so the eval grades exactly what production
   // grounds.
-  const data = await phraseGroundedDraft<z.infer<typeof digestOutput>>(
+  const data = await phraseGroundedDraft<z.infer<typeof headlineBulletsOutput>>(
     gateway,
     firmId,
     {
@@ -675,8 +664,8 @@ export async function generateFirmDigest(
       system: DIGEST_SYSTEM,
       user: buildDigestUser(facts),
       schemaName: "weekly_digest",
-      jsonSchema: digestJsonSchema,
-      validator: digestOutput,
+      jsonSchema: headlineBulletsJsonSchema,
+      validator: headlineBulletsOutput,
       groundingSurface: "digest",
       inputForHash: `${firmId}:${weekStart.toISOString()}:${JSON.stringify(facts)}`,
       text: DIGEST_PHRASING.joinOutput,

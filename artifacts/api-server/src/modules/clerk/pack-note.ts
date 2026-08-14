@@ -72,7 +72,7 @@ export function packFigureLines(
 }
 
 // The facts the model may phrase — nothing else reaches the prompt.
-export function packNoteFacts(facts: CompliancePackFacts): string {
+function packNoteFacts(facts: CompliancePackFacts): string {
   return [
     `Month: ${facts.monthLabel}`,
     `Client: ${facts.clientName}`,

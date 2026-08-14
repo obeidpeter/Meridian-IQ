@@ -25,7 +25,7 @@ function totalsTolerance(lineCount: number): number {
   return 0.01 * Math.max(1, lineCount) + 0.01;
 }
 
-function isIsoDate(value: string): boolean {
+export function isIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
   const t = Date.parse(`${value}T00:00:00Z`);
   if (Number.isNaN(t)) return false;
@@ -33,7 +33,7 @@ function isIsoDate(value: string): boolean {
   return new Date(t).toISOString().slice(0, 10) === value;
 }
 
-function num(value: string | null): number | null {
+export function num(value: string | null): number | null {
   if (value === null || value.trim() === "") return null;
   const n = Number(value.replace(/,/g, ""));
   return Number.isFinite(n) ? n : null;

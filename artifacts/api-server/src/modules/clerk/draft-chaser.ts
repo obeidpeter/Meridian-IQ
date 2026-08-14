@@ -17,6 +17,7 @@ import {
 import { chaseHistory } from "../invoice/chase-log";
 import { inferPhrasing, type ClerkGateway } from "./gateway";
 import { OUTSTANDING_STATUSES } from "../invoice/receivables";
+import { daysBetween } from "../invoice/date-math";
 
 // Payment-chaser drafts (round-9 idea #2). The receivables card says "chase
 // payment" and leaves the awkward letter to the client; this writes it.
@@ -96,13 +97,6 @@ export interface ChaserFactsInput {
   lastReminderAt: string | null;
 }
 
-function daysBetween(a: string, b: string): number {
-  return Math.round(
-    (new Date(`${b}T00:00:00Z`).getTime() -
-      new Date(`${a}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
-}
 
 // The facts the model may phrase — nothing else reaches the prompt. Pure and
 // exported for tests.

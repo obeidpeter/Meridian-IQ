@@ -35,7 +35,7 @@ const TRIAGE_PROMPT_VERSION = "triage.v1";
 const TRIAGE_BATCH = 10;
 
 // Closed category set — the model picks, never invents (Ask Clerk posture).
-export const TRIAGE_CATEGORIES = [
+const TRIAGE_CATEGORIES = [
   "submission_failure",
   "data_correction",
   "deadline_risk",

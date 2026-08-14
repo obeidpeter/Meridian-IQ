@@ -6,7 +6,6 @@ import {
   auditEventsTable,
   clerkPlanPoliciesTable,
   clerkPlanRunsTable,
-  membershipsTable,
   type ClerkPlanPolicy,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
@@ -24,6 +23,7 @@ import { registerSweep } from "../pipeline/pipeline";
 import { alertOnceViaAuditLedger, atMostHourly } from "./watch-shared";
 import {
   hasLiveEngagement,
+  membershipRolesFor,
   notifyAutoPause,
   notifyPolicyGranted,
   policiesEnabled,
@@ -375,19 +375,9 @@ async function autoPausePlanPolicy(
 // in this firm still carrying EVERY capability the template's steps demand,
 // and a client_user grantor still pinned to this very party.
 async function grantorStillValid(policy: ClerkPlanPolicy): Promise<Principal["role"] | null> {
-  const memberships = await runInBypassContext(() =>
-    getDb()
-      .select({
-        role: membershipsTable.role,
-        clientPartyId: membershipsTable.clientPartyId,
-      })
-      .from(membershipsTable)
-      .where(
-        and(
-          eq(membershipsTable.userId, policy.grantedBy),
-          eq(membershipsTable.firmId, policy.firmId),
-        ),
-      ),
+  const memberships = await membershipRolesFor(
+    policy.grantedBy,
+    policy.firmId,
   );
   // Derived from the TEMPLATE, not hard-coded (round-34 review m4): the
   // month-end template now carries an invoice.write draft step beside the
@@ -669,7 +659,7 @@ const SWEEP_ACTOR = "plan-policy-sweep";
 // sweep's round-30 discipline): the append-only audit ledger is the
 // cross-instance dedup key; counts only — per-policy detail lives on each
 // policy's own clerk.plan_policy_auto_paused row.
-export const PLAN_POLICY_AUTO_PAUSE_ALERT = "ops.plan_policy.auto_paused";
+const PLAN_POLICY_AUTO_PAUSE_ALERT = "ops.plan_policy.auto_paused";
 
 const alertAutoPaused = alertOnceViaAuditLedger({
   action: PLAN_POLICY_AUTO_PAUSE_ALERT,

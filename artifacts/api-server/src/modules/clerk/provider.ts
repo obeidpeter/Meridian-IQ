@@ -230,7 +230,7 @@ export async function embedderOrNull(): Promise<MemoryEmbedder | null> {
 // provider so tests can inject a fake transcriber the same way they inject a
 // fake gateway. Format is sniffed from the bytes; mp4/ogg are converted where
 // the runtime supports it, everything else transcribes directly.
-export const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
 
 export type VoiceTranscriber = (audio: Buffer) => Promise<string>;
 

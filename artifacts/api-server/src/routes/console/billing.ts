@@ -1,15 +1,12 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   getDb,
-  invoicesTable,
-  firmsTable,
   billingTiersTable,
   firmSubscriptionsTable,
   priceReviewsTable,
   onboardingProspectsTable,
   revenueShareStatementsTable,
-  type BillingTier,
 } from "@workspace/db";
 import {
   GetUnearnedIncomeResponse,
@@ -34,38 +31,13 @@ import {
 } from "../../modules/auth/rbac";
 import { appendAudit } from "../../modules/audit/audit";
 import { DomainError } from "../../modules/errors";
+import { billingTierForFirm } from "../../modules/invoice/billing-statement";
 import {
-  billingTierForFirm,
-  computeBillingFee,
-} from "../../modules/invoice/billing-statement";
+  firmNamesById,
+  generateRevenueShareStatement,
+} from "../../modules/billing/revenue-share";
 
 const router: IRouter = Router();
-
-// Invoice statuses that count as processed volume for billing/overages.
-const BILLED_STATUSES = ["submitted", "stamped", "confirmed", "settled"] as const;
-
-// --- Billing helpers --------------------------------------------------------
-// Tier resolution AND the base+overage fee core are shared with the monthly
-// platform-billing statement (modules/invoice/billing-statement.ts:
-// billingTierForFirm / computeBillingFee), so the two billing surfaces cannot
-// disagree about which tier a firm is on or what its fee is. This wrapper
-// layers the revenue-share maths (statement-only concern) on top, rounded to
-// two decimals (kobo) so statements and the unearned-income view reconcile to
-// the naira.
-function computeBilling(tier: BillingTier, billedInvoices: number) {
-  const fee = computeBillingFee(tier, billedInvoices);
-  const pct = Number(tier.revenueSharePct);
-  const revenueShareAmount = Number(fee.total) * pct;
-  return {
-    includedInvoices: tier.includedInvoices,
-    overageInvoices: fee.overageInvoices,
-    subscriptionAmount: fee.base,
-    overageAmount: fee.overage,
-    billingAmount: fee.total,
-    revenueSharePct: pct.toString(),
-    revenueShareAmount: revenueShareAmount.toFixed(2),
-  };
-}
 
 router.get("/console/unearned-income", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
@@ -288,27 +260,9 @@ router.put("/billing/subscription", async (req, res): Promise<void> => {
 });
 
 // --- Revenue-share statements ----------------------------------------------
-function periodBounds(period: string): { start: Date; end: Date } {
-  const [y, m] = period.split("-").map(Number);
-  if (!y || !m || m < 1 || m > 12) {
-    throw new DomainError("BAD_PERIOD", "Period must be YYYY-MM", 400);
-  }
-  const start = new Date(Date.UTC(y, m - 1, 1));
-  const end = new Date(Date.UTC(y, m, 1));
-  return { start, end };
-}
-
-// Batched firm-name lookup (same idiom as caseViews): one query for the whole
-// statement page, not one per firm. Missing firms simply have no entry.
-async function firmNames(firmIds: string[]): Promise<Map<string, string>> {
-  const uniq = [...new Set(firmIds)];
-  if (uniq.length === 0) return new Map();
-  const firms = await getDb()
-    .select({ id: firmsTable.id, name: firmsTable.name })
-    .from(firmsTable)
-    .where(inArray(firmsTable.id, uniq));
-  return new Map(firms.map((f) => [f.id, f.name]));
-}
+// Generation and the batched firm-name lookup live in
+// modules/billing/revenue-share.ts; the routes keep gating, the operator
+// all-firms fan-out and the audit row.
 
 router.get("/billing/statements", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.read");
@@ -322,61 +276,13 @@ router.get("/billing/statements", async (req, res): Promise<void> => {
     .where(scope ? eq(revenueShareStatementsTable.firmId, scope) : undefined)
     .orderBy(desc(revenueShareStatementsTable.period));
 
-  const names = await firmNames(rows.map((r) => r.firmId));
+  const names = await firmNamesById(rows.map((r) => r.firmId));
   res.json(
     ListStatementsResponse.parse(
       rows.map((r) => ({ ...r, firmName: names.get(r.firmId) ?? null })),
     ),
   );
 });
-
-async function generateStatement(firmId: string, period: string) {
-  const { start, end } = periodBounds(period);
-  const tier = await billingTierForFirm(firmId);
-  const [{ count }] = await getDb()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(invoicesTable)
-    .where(
-      and(
-        eq(invoicesTable.firmId, firmId),
-        inArray(invoicesTable.status, [...BILLED_STATUSES]),
-        sql`${invoicesTable.issueDate} >= ${start.toISOString().slice(0, 10)}`,
-        sql`${invoicesTable.issueDate} < ${end.toISOString().slice(0, 10)}`,
-      ),
-    );
-  const billedInvoices = Number(count) || 0;
-  const billing = computeBilling(tier, billedInvoices);
-  const values = {
-    firmId,
-    period,
-    tierKey: tier.key,
-    billedInvoices,
-    includedInvoices: billing.includedInvoices,
-    overageInvoices: billing.overageInvoices,
-    subscriptionAmount: billing.subscriptionAmount,
-    overageAmount: billing.overageAmount,
-    billingAmount: billing.billingAmount,
-    revenueSharePct: billing.revenueSharePct,
-    revenueShareAmount: billing.revenueShareAmount,
-    breakdown: {
-      tierName: tier.name,
-      monthlyPrice: tier.monthlyPrice,
-      overagePrice: tier.overagePrice,
-    },
-  };
-  const [row] = await getDb()
-    .insert(revenueShareStatementsTable)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [
-        revenueShareStatementsTable.firmId,
-        revenueShareStatementsTable.period,
-      ],
-      set: { ...values, generatedAt: new Date() },
-    })
-    .returning();
-  return row;
-}
 
 router.post("/billing/statements/generate", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.write");
@@ -394,10 +300,10 @@ router.post("/billing/statements/generate", async (req, res): Promise<void> => {
     firmIds = subs.map((s) => s.firmId);
   }
 
-  const names = await firmNames(firmIds);
+  const names = await firmNamesById(firmIds);
   const out = [];
   for (const firmId of firmIds) {
-    const row = await generateStatement(firmId, parsed.period);
+    const row = await generateRevenueShareStatement(firmId, parsed.period);
     out.push({ ...row, firmName: names.get(firmId) ?? null });
   }
   await appendAudit({

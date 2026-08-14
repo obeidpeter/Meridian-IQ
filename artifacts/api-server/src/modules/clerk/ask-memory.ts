@@ -63,11 +63,11 @@ export interface AskAnswerMemory {
   items: AskAnswerMemoryItem[];
 }
 
-export const ASK_MEMORY_K = 3;
+const ASK_MEMORY_K = 3;
 // A question has to be genuinely similar to be worth mentioning — the Ask
 // floor sits above the reply-draft's (0.3): a wrong "you asked this
 // before" is noise on every answer, not just a discarded draft.
-export const ASK_MEMORY_MIN_SIMILARITY = 0.35;
+const ASK_MEMORY_MIN_SIMILARITY = 0.35;
 export const ASK_MEMORY_MAX_ITEMS = 2;
 export const ASK_MEMORY_TITLE = "Last time something like this happened";
 // The note is garnish on the USER-FACING Ask response path: a degraded
@@ -76,7 +76,7 @@ export const ASK_MEMORY_TITLE = "Last time something like this happened";
 // keeps running to completion in the background — its ledger row still
 // lands, nothing is half-written (the note performs no writes) — we
 // simply stop waiting for it.
-export const ASK_MEMORY_DEADLINE_MS = 2_000;
+const ASK_MEMORY_DEADLINE_MS = 2_000;
 
 // ask.ts runs OUTSIDE the per-request transaction (NO_CONTEXT route), so
 // every tenant-data read here opens its own short firm scope (inClerkScope)

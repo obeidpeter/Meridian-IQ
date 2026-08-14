@@ -34,7 +34,7 @@ export const WHT_NOTE_CHASE_DAYS = 30;
 
 // Same runway as the statutory sweeps: the "due soon" warning lands a week
 // before the chase deadline.
-export const WHT_CHASE_DUE_SOON_DAYS = 7;
+const WHT_CHASE_DUE_SOON_DAYS = 7;
 
 // A credit this far past its chase deadline predates the reminder feature
 // (or sat in a dead book): claim its slot silently instead of sending — the

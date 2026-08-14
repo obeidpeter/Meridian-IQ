@@ -14,6 +14,7 @@ import { registerSweep } from "../pipeline/pipeline";
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { getClerkGateway } from "./provider";
+import { unattendedRunDueToday } from "./watch-shared";
 import { runEvalCorpus } from "./eval";
 import type { EvalFixture } from "./eval-fixtures";
 
@@ -183,19 +184,6 @@ export async function growEvalFixtures(
   return grown;
 }
 
-// True when no auto run (startedBy null) has happened today (UTC).
-async function autoEvalDueToday(): Promise<boolean> {
-  const [last] = await getDb()
-    .select({ createdAt: clerkEvalRunsTable.createdAt })
-    .from(clerkEvalRunsTable)
-    .where(isNull(clerkEvalRunsTable.startedBy))
-    .orderBy(desc(clerkEvalRunsTable.createdAt))
-    .limit(1);
-  if (!last) return true;
-  const today = new Date().toISOString().slice(0, 10);
-  return last.createdAt.toISOString().slice(0, 10) !== today;
-}
-
 registerSweep(async function sweepEvalGrowth(): Promise<void> {
   // Fixture growth (free, DB-only) runs in a SHORT bypass transaction; the
   // nightly auto-eval — one model call per fixture, potentially minutes of
@@ -217,7 +205,7 @@ registerSweep(async function sweepEvalGrowth(): Promise<void> {
 
     // Auto-eval spends tokens: opt-in flag, at most once per UTC day.
     if (!(await isFeatureEnabled(AUTO_EVAL_FLAG_KEY))) return false;
-    return autoEvalDueToday();
+    return unattendedRunDueToday(clerkEvalRunsTable);
   });
   if (!runEval) return;
 

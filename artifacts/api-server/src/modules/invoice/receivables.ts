@@ -94,7 +94,7 @@ export const BILL_ORIENTATION = sql`(EXISTS (
 // remaining inline spellers are the drizzle-flavored sites (the statement /
 // brief sweep enumerations and filings' own LIVE_ENGAGEMENT const), which
 // cannot take this alias-`e` raw fragment verbatim.
-export const LIVE_ENGAGEMENT_STATUSES = ["open", "in_progress"] as const;
+const LIVE_ENGAGEMENT_STATUSES = ["open", "in_progress"] as const;
 export const LIVE_ENGAGEMENT = sql`e.status IN (${sql.raw(LIVE_ENGAGEMENT_STATUSES.map((s) => `'${s}'`).join(", "))})`;
 
 // The single definition of a receivable's reference date: age is measured

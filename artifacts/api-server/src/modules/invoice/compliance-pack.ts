@@ -42,7 +42,7 @@ import {
 
 // Register cap: a month's register beyond this many rows renders a truncation
 // disclosure instead of an unbounded table (LIMIT+1 probe, rows stay capped).
-export const PACK_REGISTER_LIMIT = 200;
+const PACK_REGISTER_LIMIT = 200;
 
 export interface PackRegisterRow {
   invoiceNumber: string;

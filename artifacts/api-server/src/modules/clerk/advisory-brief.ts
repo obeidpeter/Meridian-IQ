@@ -61,7 +61,7 @@ import { countClientUnmatchedCollections } from "../collections/unmatched";
 // Phase 2 adds the monthly sweep + delivery (the statement rail); Phase 3
 // adds continuity and the advisory memory corpus.
 
-export const BRIEF_PROMPT_VERSION = "advisory-brief.v1";
+const BRIEF_PROMPT_VERSION = "advisory-brief.v1";
 
 const BRIEF_SYSTEM = [
   "You write the short adviser's note that opens an accounting firm's monthly advisory brief to a Nigerian small-business client.",

@@ -1,4 +1,4 @@
-import type { z } from "zod/v4";
+import { z } from "zod/v4";
 import { assertFirmClerkBudget } from "./budget";
 import {
   CLERK_FLAG_KEY,
@@ -34,6 +34,23 @@ import { isFeatureEnabled } from "../flags/flags";
 // failing past that — a ledger-insert failure inside the gateway after the
 // provider answered, even a grounding-check crash — still answers with the
 // template, source tagged honestly by the caller.
+// The digest-posture headline+bullets output shape shared by digest.ts and
+// client-statement.ts (300/400-char and 5-bullet caps). advisory-brief's
+// 200-cap headline pair deliberately stays local to it.
+export const headlineBulletsOutput = z.object({
+  headline: z.string().min(1).max(300),
+  bullets: z.array(z.string().min(1).max(400)).max(5),
+});
+export const headlineBulletsJsonSchema: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["headline", "bullets"],
+  properties: {
+    headline: { type: "string" },
+    bullets: { type: "array", items: { type: "string" }, maxItems: 5 },
+  },
+};
+
 export async function phraseGroundedDraft<T>(
   gateway: ClerkGateway | null,
   // tenantFirmId(principal) — null for operator principals; the budget

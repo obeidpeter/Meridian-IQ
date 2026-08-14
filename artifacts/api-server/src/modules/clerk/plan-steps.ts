@@ -53,7 +53,7 @@ import { logger } from "../../lib/logger";
 
 export type DeterministicStepKind = "draft_recurring" | "reconcile_matches";
 
-export const DETERMINISTIC_STEP_KINDS: ReadonlySet<string> = new Set([
+const DETERMINISTIC_STEP_KINDS: ReadonlySet<string> = new Set([
   "draft_recurring",
   "reconcile_matches",
 ] satisfies DeterministicStepKind[]);
