@@ -54,6 +54,23 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # Security floors, migrated from package.json's "pnpm.overrides" (a field
+  # pnpm no longer reads — the floors survived only as baked lockfile state,
+  # which a future re-resolution would silently drop). Each targets a ranged
+  # vulnerable window so out-of-range consumers keep their own resolutions.
+  # nanoid's floor is raised to the >=3.3.18 patched line (Aug 2026 advisory);
+  # the esbuild rule replaces a stale `esbuild: 0.27.3` blanket pin that
+  # contradicted both the resolved tree (0.18/0.25/0.28 coexist) and the floor.
+  'postcss@<8.5.18': '>=8.5.18'
+  'xcode>uuid': '>=11.1.1'
+  'brace-expansion@<5.0.9': '>=5.0.9'
+  'tar@<7.5.21': '>=7.5.21'
+  'js-yaml@>=4.0.0 <4.3.1': '>=4.3.1 <5.0.0'
+  'js-yaml@>=3.0.0 <3.15.1': '>=3.15.1 <4.0.0'
+  'fast-uri@>=3.0.0 <3.1.5': '>=3.1.5 <4.0.0'
+  'undici@<6.28.0': '>=6.28.0 <7.0.0'
+  'esbuild@>=0.27.3 <0.28.1': '>=0.28.1'
+  'nanoid@<3.3.18': '>=3.3.18 <4.0.0'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
@@ -75,7 +92,6 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
-  esbuild: 0.27.3
   esbuild>@esbuild/aix-ppc64: '-'
   esbuild>@esbuild/android-arm: '-'
   esbuild>@esbuild/android-arm64: '-'
