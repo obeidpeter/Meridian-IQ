@@ -1,8 +1,14 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "0P_deD4bikaAZbDwQqgIv"
 uri = "file://artifacts/mobile/assets/images/icon.png"
 type = "image"
 title = "MeridianIQ app icon"
+
+[[outputs]]
+id = "GMC-mYCggdDdJK-nT38rk"
+uri = "file://exports/meridianiq-source-code.zip"
+type = "unspecified"
+title = "MeridianIQ source code"
+description = "Complete MeridianIQ source and project configuration, excluding installed dependencies and Git history."
