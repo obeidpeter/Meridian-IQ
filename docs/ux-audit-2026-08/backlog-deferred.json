@@ -1,0 +1,888 @@
+[
+ {
+  "title": "Filing cockpit cells hide which returns are overdue",
+  "area": "Console filing desk (statutory_desks, staged)",
+  "files": [
+   "artifacts/console/src/components/filing-matrix-card.tsx",
+   "artifacts/console/src/components/filings-card.tsx",
+   "lib/api-spec/openapi.yaml"
+  ],
+  "severity": "high",
+  "nng": [
+   "learnability",
+   "error-recovery"
+  ],
+  "userGroups": [
+   "accountant"
+  ],
+  "launchActive": false,
+  "problem": "The firm-wide matrix answers 'who has filed, who hasn't' but not 'who is late': an unfiled return past its statutory date still renders as slate 'Upcoming', identical to a return with weeks of runway. Overdue exists only as a footer total ('N overdue'), so a partner cannot see which client or which return is overdue without cross-checking three due dates against every row \u2014 and the per-client filings-card beside it does paint overdue red, so the two surfaces disagree.",
+  "evidence": "FilingMatrixRow (openapi.yaml lines 13440-13451) only carries upcoming/prepared/filed/null per cell while the payload includes dueDates per kind and totals.overdue; matrixCellClass/matrixCellLabel in filing-matrix-card.tsx (lines 35-83) never consult dueDates, so an overdue cell gets 'Upcoming' in text-slate-600. filings-card.tsx already ships the exact pattern (filingOverdue + filingPill, lines 50-78) that overrides to a red 'Overdue' pill using localDayIso.",
+  "fix": "In filing-matrix-card.tsx, compute per-cell overdue exactly like filings-card (cell status !== 'filed' && data.dueDates[kind] < localDayIso(new Date())) and render those cells with the word 'Overdue' in the red classes (text-red-600 dark:text-red-400), also bumping overdue rows into urgency bucket 0's front in sortMatrixRows \u2014 no contract or backend change needed since dueDates are already in the payload.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 24
+ },
+ {
+  "title": "Console Ask Clerk swallows every error silently",
+  "area": "console-ask",
+  "files": [
+   "artifacts/console/src/pages/clerk-ask.tsx",
+   "artifacts/console/src/components/clerk-shell.tsx",
+   "artifacts/sme-compliance/src/pages/clerk-ask.tsx"
+  ],
+  "severity": "high",
+  "nng": [
+   "error-recovery",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "When an ask fails on the console's primary Q&A page (kill switch 503, monthly budget 429, network error), nothing visible happens: the button returns from 'Checking the register\u2026' to 'Ask' and the previous answer (or blank space) stays on screen. The operator cannot tell whether the question was answered, refused, or lost, and never learns Clerk is switched off or the allowance is exhausted.",
+  "evidence": "In ClerkAskPage (artifacts/console/src/pages/clerk-ask.tsx lines 446-448), onError only runs setAnswer(prev => heldAnswer(prev, {type:'error'})) \u2014 which by design keeps the previous answer. No toast, no banner, no inline message; AskPanel (lines 467-548) has no error prop and renders no failure state; the page imports neither useToast nor ClerkDisabledBanner, even though clerk-shell.tsx exports ClerkDisabledBanner (lines 173-183) and the sibling SME page routes the identical mutation's errors through handleClerkGatewayError (sme clerk-ask.tsx lines 517-523: 503 raises the banner, everything else toasts the server's words).",
+  "fix": "Mirror the SME split on this page: in onError call killSwitchTripped(err) to set a disabledBanner state that renders the existing ClerkDisabledBanner from @/components/clerk-shell, and otherwise show the server's message \u2014 either via the console's serverErrorToast helper (already used in clerk.tsx) or an inline destructive line added to AskPanel via a new optional error prop.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 25
+ },
+ {
+  "title": "Ask action approvals omit why, client, truncation, and draft semantics",
+  "area": "ask-actions",
+  "files": [
+   "artifacts/console/src/pages/clerk-ask.tsx",
+   "artifacts/sme-compliance/src/pages/clerk-ask.tsx",
+   "artifacts/sme-compliance/src/components/clerk-actions-card.tsx"
+  ],
+  "severity": "high",
+  "nng": [
+   "error-recovery",
+   "learnability",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "accountant",
+   "internal",
+   "sme"
+  ],
+  "launchActive": false,
+  "problem": "The 'Approve & run (N)' block under an Ask action proposal executes on one click without stating what it covers. The server sends why, clientName, targetCount and truncated on every AskSectionAction, but none are rendered: a truncated proposal (invoiceIds capped at 50 of e.g. 62 targets) is approved as if it covered everything, leaving the rest unhandled while the user believes the matter is closed \u2014 a compliance exposure for submit_overdue. And for draft_chasers the outcome reads 'N of N ran', implying chasers were sent when only drafts were prepared.",
+  "evidence": "SectionActionApproval renders only `Approve & run (${action.invoiceIds.length})` and an outcome line saying 'ran' (sme clerk-ask.tsx lines 181-212; console clerk-ask.tsx lines 126-161). AskSectionAction carries why, clientName, targetCount, truncated (lib/api-client-react/src/generated/api.schemas.ts lines 3900-3918) \u2014 all unused in Ask, while the same repo's actions card renders action.why and a truncation note and gates execution behind a 'Review & approve' dialog listing targets (sme clerk-actions-card.tsx lines 305-347), and the mobile lib phrases truncation explicitly (artifacts/mobile/lib/automation.ts line 96). PlanRunProgress knows drafts need review ('drafted \u2014 review before submitting', console clerk-ask.tsx line 54) but the single-section outcome does not.",
+  "fix": "Render action.why and clientName above the button; when action.truncated, add the existing mobile copy pattern ('covers the oldest {invoiceIds.length} of {targetCount} \u2014 approve, then come back for the rest'); make the label and outcome kind-aware for draft_chasers ('Prepare N chaser drafts' / 'N drafts prepared \u2014 review before sending'). Optionally reuse the actions-card confirm-dialog pattern so Ask approvals match that surface's two-step consent.",
+  "effort": "M",
+  "source": "",
+  "registerIndex": 26
+ },
+ {
+  "title": "SME batch progress and failures vanish after leaving the page",
+  "area": "sme-capture-batch",
+  "files": [
+   "artifacts/sme-compliance/src/pages/clerk-capture.tsx",
+   "artifacts/console/src/pages/clerk.tsx"
+  ],
+  "severity": "high",
+  "nng": [
+   "error-recovery",
+   "memorability"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": false,
+  "problem": "The batch progress alert promises 'you can leave this page; the work continues', but the batch id lives only in component state. A client who leaves and returns sees no trace of a queued or processing bundle, and if the bundle fails after they leave (a failed batch creates no cases), the failure is never surfaced anywhere \u2014 the invoices they believe they sent silently never appear.",
+  "evidence": "clerk-capture.tsx line 663 renders ' \u2014 you can leave this page; the work continues.'; activeBatchId is useState (line 265) set only in createBatch.onSuccess (line 355) and the only batch query is useGetClerkBatch by that held id (lines 363-372). failReason renders only in the mounted alert (lines 643-646). No useListClerkBatches call exists anywhere in sme-compliance (grep returns nothing), though the hook exists and the console uses it (console clerk.tsx line 1690).",
+  "fix": "On mount, query useListClerkBatches and rehydrate: if any batch is queued/processing, restore the existing progress Alert (re-using the current activeBatch rendering by setting activeBatchId); if the most recent batch failed and created no cases, show the same destructive Alert with its failReason so the failure survives navigation.",
+  "effort": "M",
+  "source": "",
+  "registerIndex": 27
+ },
+ {
+  "title": "Bulk-confirm dialog omits the consequences the single flow states",
+  "area": "buyer-portal",
+  "files": [
+   "artifacts/buyer-portal/src/pages/confirmations.tsx",
+   "artifacts/buyer-portal/src/lib/respond.ts"
+  ],
+  "severity": "high",
+  "nng": [
+   "error-recovery",
+   "learnability"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "Confirming a single invoice shows RESPONSE_DESCRIPTIONS.confirmed ('Accepts the invoice as issued. The supplier is notified, and with the no-set-off acknowledgement\u2026 the invoice becomes financeable') plus 'Confirming without set-off makes this invoice financeable.' The bulk path \u2014 up to 50 invoices at once \u2014 asks only 'Confirm N invoices?' / 'Each records who confirmed and how, permanently.' The dialog states neither the total Naira value being confirmed, nor that suppliers are notified, nor whether the no-set-off acknowledgement (ticked or not in the bar behind the dialog) is being applied to every one of the N invoices and what that makes them (financeable). The buyer's largest single action carries the thinnest consequence statement in the app.",
+  "evidence": "confirmations.tsx AlertDialog ~728-751: title 'Confirm {selected.size} invoices?', description 'Each records who confirmed and how, permanently.' The bulk noSetOff checkbox (~696-711) has no financeability hint, unlike invoice-respond.tsx ~532-534. The selected set's total value is computable client-side (grandTotal is on every BuyerInvoice in `invoices`), but never shown.",
+  "fix": "Extend the AlertDialogDescription: compute the selected total from `invoices` (numbersById already proves ids are in scope) and render e.g. 'Confirms {formatNaira(total)} across N invoices as issued. Suppliers are notified{bulkNoSetOff ? ', and with your no-set-off acknowledgement these invoices become financeable' : ''}. Each response is recorded permanently.' Reuse the existing dialog \u2014 do not add steps.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 28
+ },
+ {
+  "title": "Month-end close checklist speaks dark-feature accountant vocabulary to launch-profile SMEs",
+  "area": "month-end",
+  "files": [
+   "artifacts/sme-compliance/src/pages/dashboard.tsx",
+   "artifacts/api-server/src/modules/invoice/month-end-close.ts",
+   "artifacts/api-server/src/modules/flags/releases.ts"
+  ],
+  "severity": "medium",
+  "nng": [
+   "learnability",
+   "efficiency"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "The Month-end close card renders every server-computed checklist line regardless of the launch profile, so a launch SME's Today view lists ~9 rows including 'Statutory returns', 'WHT credit notes', 'Authority obligations', 'Bank credits with no invoice', 'Collection-account payments matching no invoice' and 'Expected vendor bills not captured' \u2014 all checks for desks (statutory_desks, reconciliation, collection_accounts, money_analytics) that are launch-dark and whose nav links the sidebar deliberately hides. A new business owner reads a wall of jargon about features they cannot reach anywhere in the app, on the largest card of the launch landing view.",
+  "evidence": "month-end-close.ts lines 104-209 build the fixed item list (keys open_filings, wht_credits, open_obligations, unmatched_credits, unmatched_collections, missing_bills, double_payments) with no feature filtering; dashboard.tsx MonthEndCloseCard maps close.items unfiltered (lines 720-757) and is mounted unconditionally in the today view (lines 1773-1775). releases.ts: statutory_desks, money_analytics, collection_accounts, reconciliation all launchDefault: false; layout.tsx hides the corresponding nav links via feature gates (lines 67-119).",
+  "fix": "Frontend-only filter: define a key\u2192feature map in the card (open_filings/wht_credits/open_obligations \u2192 statutory_desks; missing_bills/double_payments \u2192 money_analytics; unmatched_credits \u2192 reconciliation; unmatched_collections \u2192 collection_accounts) and drop items whose feature is absent from me.features, deriving the shown attention/clear counts from the filtered list. Launch users then see only the invoice-core checks (overdue submissions, unbilled income, pending approvals).",
+  "effort": "M",
+  "source": "",
+  "registerIndex": 33
+ },
+ {
+  "title": "Pipeline 'Active' stage is a dead end \u2014 no way to turn a won prospect into a client",
+  "area": "console/pipeline",
+  "files": [
+   "artifacts/console/src/pages/pipeline.tsx",
+   "artifacts/console/src/components/add-client-dialog.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "efficiency",
+   "learnability"
+  ],
+  "userGroups": [
+   "accountant"
+  ],
+  "launchActive": true,
+  "problem": "The page promises to 'Track prospects from lead to active client', and the portfolio empty state routes new firms here, but moving a prospect to Active only shows a toast \u2014 the client book is untouched and the Active column offers no 'Add as client' action, so the accountant must remember to re-type the prospect's name (and re-find the contact email, which is captured at creation but never displayed on any card afterwards) in the separate Add client dialog. First-run is also bare: five columns each containing a lone em dash with no guidance.",
+  "evidence": "pipeline.tsx: advanceStage (108-124) only PATCHes the stage and toasts 'Moved {name} to Active'; the file imports no AddClientDialog and contains no link to client creation. Prospect cards render only name and '~N inv/mo' (261-263) \u2014 contactEmail from the create form (161-167) is never shown or editable again (updateProspect sends stage only, line 111). Empty columns render `<p>\u2014</p>` (250-251).",
+  "fix": "When a stage change lands on 'active', open the existing AddClientDialog prefilled with the prospect's name (it already accepts onCreated), or render an 'Add to client book' button on Active-column cards; show contactEmail on the card; replace the em dash in empty columns with one line of copy ('Drag-free: use each card's stage picker') or a page-level EmptyState when data.length === 0.",
+  "effort": "M",
+  "source": "",
+  "registerIndex": 47
+ },
+ {
+  "title": "Advisory with zero clients: guidance is a dead paragraph inside a dropdown, pointing at a launch-dark page",
+  "area": "console/advisory",
+  "files": [
+   "artifacts/console/src/pages/advisory.tsx",
+   "artifacts/console/src/components/layout.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "learnability",
+   "error-recovery"
+  ],
+  "userGroups": [
+   "accountant"
+  ],
+  "launchActive": true,
+  "problem": "A first-run firm opening the launch-active Advisory page sees a normal-looking 'Pick the client being assessed' select; only after opening it do they find a non-interactive paragraph telling them to visit 'the Client import page' \u2014 a page that is hidden from the nav at launch (white_label feature) and cannot be linked from inside SelectContent anyway. Meanwhile the full questionnaire renders below and 'Run assessment' sits disabled with no visible reason, so the page reads as broken rather than as 'add a client first'.",
+  "evidence": "advisory.tsx:218-231 \u2014 the zero-client case renders `<p className=\"px-2 py-1.5\u2026\">No clients yet \u2014 import your client book from the Client import page first.</p>` inside SelectContent; the submit button disables on !clientPartyId (279-284) with only the answered-count caption beside it. layout.tsx:94-100 gates /clients/import behind feature 'white_label' (launch-dark).",
+  "fix": "When portfolio loads with zero clients, replace the picker card's content with the existing EmptyState component ('Add a client to run an assessment') carrying a real Link to '/' (or a button opening AddClientDialog), and drop the import-page reference; keep the Select for the non-empty case.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 51
+ },
+ {
+  "title": "Internal architecture jargon 'the spine' leaks into user-facing console copy",
+  "area": "Console advisory, feature flags, gate metrics, control centre",
+  "files": [
+   "artifacts/console/src/pages/advisory.tsx",
+   "artifacts/console/src/pages/feature-flags.tsx",
+   "artifacts/console/src/pages/gate-metrics.tsx",
+   "artifacts/console/src/pages/control-centre/index.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "learnability",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "accountant",
+   "internal"
+  ],
+  "launchActive": true,
+  "problem": "\"The spine\" is the engineering team's internal name for the api-server data layer (see CLAUDE.md: \"the data spine\"), but it is rendered verbatim to users in four places: the Advisory page (launch-lit) describes itself as \"The field kit behind paid engagements \u2014 findings land in the spine as engagement data\" (advisory.tsx:515\u2013516); feature-flags empty state: \"they appear here once the spine registers them\" (feature-flags.tsx:183); gate-metrics header: \"measured live from the spine\" (gate-metrics.tsx:81\u201382); control-centre tab description: \"live proof from the operational spine\" (control-centre/index.tsx:42). Accountants (firm admins see Advisory at launch) have no way to know what a 'spine' is.",
+  "evidence": "grep 'spine' across **/*.tsx returns exactly these four user-visible strings plus code comments. The same Advisory page already contains the plain-language version of the sentence in a toast: \"Findings are recorded on the client's engagement.\" (advisory.tsx:175).",
+  "fix": "Rewrite the four strings without the internal noun, reusing the page's own plainer phrasing: e.g. advisory.tsx \u2192 \"findings are recorded on the client's engagement\"; feature-flags \u2192 \"they appear here once the platform registers them\"; gate-metrics \u2192 \"measured live from platform data\"; control-centre \u2192 \"live proof from platform records\". No component changes needed.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 69
+ },
+ {
+  "title": "Buyer portal hides stamp-validity and VAT-eligibility badges on every screen below lg",
+  "area": "buyer-portal / confirmations and supplier detail",
+  "files": [
+   "artifacts/buyer-portal/src/pages/confirmations.tsx",
+   "artifacts/buyer-portal/src/pages/supplier-detail.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "error-recovery",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "The confirmation list's StampBadges component (stamp valid/invalid + input-VAT eligible/at-risk) is `hidden lg:flex`, and the supplier-detail invoice row's stamp badge is `hidden lg:inline-flex` \u2014 so on phones AND tablets the buyer sees no stamp or eligibility signal at all in the lists. Unlike the amount, which gets a `sm:hidden` duplicate folded into the secondary line, these badges have no small-screen fallback. The portal's whole pitch is 'protect your input VAT': a mobile buyer bulk-selecting requested invoices can check a row's checkbox and confirm without any visible cue that its stamp is invalid or the invoice ineligible, unless they open each invoice individually.",
+  "evidence": "confirmations.tsx lines 114-123: `function StampBadges(...)` returns `<span className=\"hidden lg:flex items-center gap-1\">` containing both badges; the row (lines 145-201) renders no alternative below lg, while the amount does get the mobile fallback via `<span className=\"sm:hidden tabular-nums\">` (lines 175-178). supplier-detail.tsx lines 96-101: `className={`hidden lg:inline-flex ${stamp.classes}`}`.",
+  "fix": "Reuse the existing sm:hidden fallback pattern: below lg, append a compact stamp/eligibility token to the secondary line (e.g. `<span className=\"lg:hidden\"> \u00b7 {stamp.label}</span>` with the amber/red tone classes when invalid or ineligible, rendering nothing when both are fine). Keeps rows one line tall while surfacing only the risk states on small screens.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 74
+ },
+ {
+  "title": "One confirmation state, three names on one buyer-portal screen: 'Requested' / 'Needs response' / 'Awaiting response'",
+  "area": "Buyer portal confirmations queue",
+  "files": [
+   "artifacts/buyer-portal/src/pages/confirmations.tsx",
+   "lib/format/src/index.ts"
+  ],
+  "severity": "medium",
+  "nng": [
+   "learnability",
+   "memorability",
+   "efficiency"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "The buyer confirmations page names the same 'requested' state three different ways on a single screen: the filter tab says \"Requested\" (confirmations.tsx:87), the summary metric says \"Needs response\" (line 461), and each row's status pill \u2014 rendered via the shared confirmationLabel \u2014 says \"Awaiting response\" (line 194, from lib/format/src/index.ts:263 CONFIRMATION_LABELS). The select-all checkbox adds a fourth variant, \"awaiting your response\" (line 645). A buyer scanning tab counts against pill labels cannot tell whether these are the same bucket.",
+  "evidence": "confirmations.tsx FILTERS array (lines 85\u201390) hand-codes labels including { key: \"requested\", label: \"Requested\" } while the row pill at line 194 calls confirmationLabel(invoice.confirmationState), which maps requested \u2192 \"Awaiting response\" in lib/format. The MetricStrip at lines 459\u2013466 introduces \"Needs response\" for the same count.",
+  "fix": "Derive the filter-tab and metric labels from the shared vocabulary: use confirmationLabel(\"requested\") (\"Awaiting response\") for both the tab and the \"Needs response\" metric label, keeping the shared lib/format map as the single source. One-line changes in the FILTERS array and Metric label.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 75
+ },
+ {
+  "title": "Dock collapses kill switch, budget, and outages into one generic error",
+  "area": "clerk-dock",
+  "files": [
+   "lib/web-ui/src/clerk-dock.tsx",
+   "artifacts/sme-compliance/src/components/clerk-dock.tsx",
+   "artifacts/console/src/components/clerk-dock.tsx",
+   "artifacts/sme-compliance/src/lib/clerk.ts"
+  ],
+  "severity": "medium",
+  "nng": [
+   "error-recovery",
+   "efficiency"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "In the floating dock, a disabled Clerk (503 kill switch), an exhausted monthly allowance (429), and a transient network error all render the identical line 'Clerk could not answer that question. Nothing was changed.' The user is invited to retry states that cannot succeed until next month or until an operator flips a flag, and is never told why or what to do \u2014 failing the requirement that the disabled state explain itself.",
+  "evidence": "Both wrappers pass only a boolean: ask.mutate with just onSuccess and error={ask.isError} (sme clerk-dock.tsx lines 73-79; console clerk-dock.tsx lines 53-62). The shared dock renders one fixed string for that boolean (lib/web-ui/src/clerk-dock.tsx lines 155-159). The full Ask pages split these exact cases via handleClerkGatewayError \u2014 banner for killSwitchTripped, 'Monthly Clerk allowance used up' title for clerkBudgetExhausted, server words otherwise (sme lib/clerk.ts lines 55-78).",
+  "fix": "Replace the error boolean with an optional errorMessage (or {title, detail}) prop on SharedClerkDock; in each wrapper's onError compute it with the existing killSwitchTripped / clerkBudgetExhausted / serverErrorMessage helpers ('Clerk is unavailable right now \u2014 try again later or use the full workspace' / 'Monthly allowance used up \u2014 submissions decline until next month').",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 76
+ },
+ {
+  "title": "Dock asserts grounding it never shows and truncates answers silently",
+  "area": "clerk-dock",
+  "files": [
+   "lib/web-ui/src/clerk-dock.tsx",
+   "artifacts/sme-compliance/src/components/clerk-dock.tsx",
+   "artifacts/console/src/components/clerk-dock.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "satisfaction",
+   "learnability"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "Every dock answer carries the same ShieldCheck line ('Grounded in approved claims and your live records') regardless of whether it came from a register claim or a live lookup \u2014 a static assertion where the full pages print the actual citation, claim key/version, and resolved scope. Meanwhile dockAnswer flattens sections and slices facts to 6, silently dropping section titles, deep links, and any proposed actions with no cue that more exists beyond the generic 'Full workspace' footer button.",
+  "evidence": "DockAnswer prints the groundingNote prop verbatim under every answered response (lib/web-ui/src/clerk-dock.tsx lines 56-59); both wrappers pass fixed copy (sme line 69, console line 52). dockAnswer keeps only answered/refusalReason/proposition and facts.slice(0,6), discarding answer.citation, claimKey/claimVersion, dataParams, links, and section actions (sme clerk-dock.tsx lines 19-29). Compare the full page's real source line: 'From your records (\u2026scope\u2026) \u00b7 {citation}' or 'approved claim {claimKey} v{claimVersion}' (sme clerk-ask.tsx lines 383-414).",
+  "fix": "Extend ClerkDockAnswer with a sourceLine string (wrappers compute it from citation / dataAnswerScope / claimKey exactly as the full pages do) and a hasMore flag set when facts were truncated or sections carried actions/links; render sourceLine in place of the static note and, when hasMore, an inline 'More detail and proposed actions in the full workspace' button wired to onOpenFull.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 77
+ },
+ {
+  "title": "No Ask history: answers are ephemeral and memory items are dead text",
+  "area": "clerk-ask",
+  "files": [
+   "artifacts/sme-compliance/src/pages/clerk-ask.tsx",
+   "artifacts/console/src/pages/clerk-ask.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "memorability",
+   "efficiency"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "An answer exists only in component state \u2014 navigate away and it is gone, with no way to retrieve yesterday's answer except re-asking (which re-spends the token budget). The 'similar past questions' memory card deepens the gap: code comments promise 'the answers live one tap away in Ask history', but the items are non-interactive paragraphs and no Ask-history surface exists in either web app.",
+  "evidence": "SME page holds lastAnswer/lastCaseId in useState (clerk-ask.tsx lines 490-494); console likewise (console clerk-ask.tsx lines 405-411). Memory items render as plain <p> elements with question text and date \u2014 no href or onClick (sme lines 419-443; console lines 297-321) despite the 'one tap away in Ask history' comment (sme line 418). No frontend lists question cases (grep for kind:\"question\" matches only api-server code/tests), yet the generated ListClerkCasesKind already includes 'question' (lib/api-client-react/src/generated/api.schemas.ts lines 7315-7319), so useListClerkCases({kind:'question'}) is available today.",
+  "fix": "Add a compact 'Recent questions' list under the Ask card (or a /clerk/ask/history route in the console shell nav) using the existing useListClerkCases hook with kind:'question', each row loading that case's stored answer via useGetClerkCase into the existing AnswerCard; make memory-card items buttons that do the same.",
+  "effort": "M",
+  "source": "",
+  "registerIndex": 78
+ },
+ {
+  "title": "Escalated and reason-less rejected submissions unexplained to clients",
+  "area": "sme-capture",
+  "files": [
+   "artifacts/sme-compliance/src/pages/clerk-capture.tsx",
+   "artifacts/sme-compliance/src/lib/clerk.ts"
+  ],
+  "severity": "medium",
+  "nng": [
+   "learnability",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": false,
+  "problem": "A client whose submission shows the amber 'Escalated' badge or a red 'Rejected' badge without a recorded reason expands the row and finds only the 'What Clerk read' field list \u2014 no sentence saying what happened, whether they should act, or who to talk to. Escalation, the system's own uncertainty signal, is the one status the client-facing detail never explains.",
+  "evidence": "CaseDetail's status branches (clerk-capture.tsx lines 155-204) cover failed, approved, rejected-with-decisionReason (the render is gated on kase.decisionReason at line 188), pending, and extracted/in_review. There is no branch for status 'escalated', and rejected without a decisionReason renders nothing \u2014 while the row badge still labels both states via CAPTURE_STATUS_LABELS (lib/clerk.ts lines 15-23).",
+  "fix": "Add two muted-copy branches beside the existing ones: escalated \u2014 'Your accountant has escalated this for a closer look. Nothing is needed from you yet; they may contact you.'; rejected without reason \u2014 'Your accountant decided not to create an invoice from this submission. Send a corrected copy or ask them why.' Reuse the existing text-muted-foreground paragraph pattern from the pending branch.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 79
+ },
+ {
+  "title": "Single response flow never says the decision is final before submit",
+  "area": "buyer-portal",
+  "files": [
+   "artifacts/buyer-portal/src/lib/respond.ts",
+   "artifacts/buyer-portal/src/pages/invoice-respond.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "error-recovery"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "A confirm/query/reject response is one-shot: the 409 copy says 'This invoice was already responded to', the no-request card says 'You have already responded', and the bulk dialog says responses are recorded 'permanently'. But nothing in the single-response form \u2014 the RESPONSE_DESCRIPTIONS panel, the note field, or the submit button area \u2014 tells the buyer their choice cannot be changed afterwards. A buyer who rejects thinking they can revise after the supplier replies learns of the permanence only from the post-hoc states.",
+  "evidence": "lib/respond.ts RESPONSE_DESCRIPTIONS (~15-22) describe what each action does but not finality; errorDescription 409 (~86) reveals one-shot behavior only on failure. invoice-respond.tsx submits directly from handleSubmit (~232-281) with no permanence copy anywhere in card-respond; the 'already responded' card (~557-565) is the first place finality appears.",
+  "fix": "Add one sentence of permanence to the copy the form already renders \u2014 either append to each RESPONSE_DESCRIPTIONS entry ('This response is recorded permanently and cannot be changed here.') or add a single muted line above the submit button when a response is selected. Copy-only change in the tested lib/respond.ts module.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 80
+ },
+ {
+  "title": "Buyer notifications are dead-end rows with no link to the invoice",
+  "area": "buyer-portal",
+  "files": [
+   "artifacts/buyer-portal/src/pages/notifications.tsx",
+   "lib/web-ui/src/notification-feed.tsx",
+   "artifacts/sme-compliance/src/pages/notifications.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "efficiency"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "The shared NotificationFeed supports per-row href + renderLink, and the SME app wires it (entityType 'invoice' \u2192 /invoices/:id). The buyer page passes neither, so a 'confirmation requested' alert cannot be opened \u2014 the buyer must leave, go to Confirmations, and search for the invoice by memory of the title. The page also surfaces the operator-facing 'Delivered / Provider accepted' metric, jargon that means nothing to a buyer reading their own inbox.",
+  "evidence": "buyer-portal/src/pages/notifications.tsx ~112-126: rows mapping sets id/title/\u2026/status but no href, and no renderLink prop is passed \u2014 NotificationFeed then renders plain <div> rows (notification-feed.tsx ~73-79). Contrast sme-compliance/src/pages/notifications.tsx ~35-42 (entityHref) and ~173-184 (href + renderLink with wouter Link). Buyer App.tsx has the matching /invoices/:id route. Metric 'Delivered' with detail 'Provider accepted' at ~103-109.",
+  "fix": "Mirror the SME pattern: add a local entityHref (item.entityType === 'invoice' && item.entityId \u2192 `/invoices/${item.entityId}`), pass href in the row mapping and a renderLink using wouter's Link with the same hover classes. Replace the 'Provider accepted' detail with buyer-facing copy ('Sent to you') or drop that Metric.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 81
+ },
+ {
+  "title": "TOTP challenge gives no hint that the sign-in attempt expires in 5 minutes",
+  "area": "TOTP challenge UX",
+  "files": [
+   "artifacts/landing/src/App.tsx",
+   "artifacts/landing/src/lib/mfa.ts"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability",
+   "error-recovery"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal",
+   "buyer"
+  ],
+  "launchActive": true,
+  "problem": "The code step looks time-unlimited: a user who goes hunting for their phone or their saved recovery codes learns about the 5-minute window only after submitting, via an error that has also cleared their typed password and sends them back to step one.",
+  "evidence": "MFA_TOKEN_TTL_MS = 5 minutes is client-known (lib/mfa.ts line 8) and the mint time is already held in state (App.tsx line 360 setMfa({token, issuedAt})), but the challenge screen's only help text is \"Codes rotate every 30 seconds. A recovery code works here too.\" (App.tsx line 483-485). Expiry surfaces purely reactively: the restart branch (lines 400-409) fires setPassword(\"\") and the message \"That sign-in attempt expired. Enter your password again\u2026\".",
+  "fix": "Add one static sentence to the existing #totp-help paragraph: \"For security, this step expires about five minutes after you entered your password \u2014 start over if you need more time.\" Optionally derive \"about N minutes left\" from the already-stored mfa.issuedAt with a coarse 30s interval; no new state shape or API needed.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 82
+ },
+ {
+  "title": "Invite activation never tells the user which email to sign in with",
+  "area": "invite acceptance",
+  "files": [
+   "artifacts/landing/src/AcceptInvite.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability",
+   "memorability"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "buyer"
+  ],
+  "launchActive": true,
+  "problem": "The activation form and the success card show no account identity \u2014 no email, firm, or role \u2014 so the first thing a brand-new user does after \"Continue to sign in\" is face an empty email field and guess which address the invite was addressed to (a real hazard for people with work + personal inboxes forwarding to one place).",
+  "evidence": "The form copy is only \"Set a password to finish setting up your MeridianIQ account\" (AcceptInvite.tsx lines 166-169) and the success card only \"Your password is set. Sign in to open your workspace.\" (lines 142-152). The accept endpoint returns 204 No Content (lib/api-spec/openapi.yaml lines 266-268), so the page cannot echo the server's copy of the email \u2014 but it also never tells the user the answer is in their inbox.",
+  "fix": "Content-only: on the success card change the line to \"Sign in with the email address this invitation was sent to, and the password you just chose.\" and add the same hint under the form heading. (If richer context is ever wanted, that needs an invite-preview endpoint \u2014 out of scope here.)",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 83
+ },
+ {
+  "title": "Footer 'Sign in' button on the signed-in portal silently does nothing",
+  "area": "auth-portal polish",
+  "files": [
+   "artifacts/landing/src/App.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "satisfaction",
+   "error-recovery"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal",
+   "buyer"
+  ],
+  "launchActive": true,
+  "problem": "On the signed-in \"Choose your workspace\" view, the footer still renders a \"Sign in\" button; clicking it produces no visible response of any kind, which reads as a broken page to a user trying to switch accounts.",
+  "evidence": "The footer button (App.tsx lines 1718-1725, data-testid=\"button-footer-sign-in\") calls focusEmailField, which does `document.getElementById(\"email\")` and returns early when absent (lines 1394-1399). The #email input exists only inside SignInPanel, which is never mounted in the signed-in branch (the signed-in Portal renders SignedInPanel instead, lines 1680-1682) \u2014 so in the only view where this footer renders, the button is a guaranteed no-op. The AppCard \"Sign in to open\" branch (lines 259-265) is likewise unreachable there since role is always non-null.",
+  "fix": "In the signed-in footer, replace the button with \"Switch account\" that scrolls/focuses the SignedInPanel's sign-out button (give it an id and reuse the scrollIntoView pattern from focusEmailField), or simply drop the footer button when a session exists. Delete the unreachable onRequestSignIn plumbing from the signed-in tile grid while there.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 84
+ },
+ {
+  "title": "The launch landing screen has three names: 'Dashboard', 'Compliance overview', 'Business command centre'",
+  "area": "navigation",
+  "files": [
+   "artifacts/sme-compliance/src/pages/dashboard.tsx",
+   "artifacts/sme-compliance/src/components/layout.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "memorability"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "The sidebar link and sticky top-bar title call the page 'Dashboard' (pageTitle is derived from the active nav link's label), while the in-page WorkspaceHeader titles it 'Compliance overview' under the eyebrow 'Business command centre'. Three labels for the single most-visited launch screen weakens orientation and makes the page harder to refer to ('go to the dashboard' vs what the page itself says). The Analytics page similarly labels itself 'Decision analytics' while nav and top bar say 'Analytics'.",
+  "evidence": "layout.tsx line 64 (nav label 'Dashboard') and line 373 (pageTitle = activeLink?.label rendered in the sticky header at lines 467-469); dashboard.tsx lines 1621-1624: WorkspaceHeader eyebrow=\"Business command centre\" title=\"Compliance overview\". analytics.tsx line 172-173: title=\"Decision analytics\" vs nav label 'Analytics' (layout.tsx line 145).",
+  "fix": "Align the WorkspaceHeader title with the nav label ('Dashboard', eyebrow 'Compliance overview' if the phrase is worth keeping; 'Analytics' likewise) so the sidebar, sticky header and page H1 agree \u2014 a copy-only change in the two page files.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 85
+ },
+ {
+  "title": "Create-invoice failure toast leaks 'HTTP 400 Bad Request:' jargon",
+  "area": "sme-compliance/invoice form",
+  "files": [
+   "artifacts/sme-compliance/src/pages/invoice-new.tsx",
+   "artifacts/sme-compliance/src/lib/errors.ts",
+   "lib/api-client-react/src/custom-fetch.ts"
+  ],
+  "severity": "low",
+  "nng": [
+   "error-recovery",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "invoice-new.tsx's create catch (lines 330-339) shows `e.message` raw, but ApiError messages are built as 'HTTP 400 Bad Request: <detail>' (custom-fetch.ts buildErrorMessage, lines 178-198), so an SME who reuses an invoice number or trips server validation reads transport jargon in the toast. Every other handler in the invoice flow (bulk submit, detail-page submit, escalate, adjust, add customer) uses serverErrorMessage(e), which extracts the server's clean `{error}` body.",
+  "evidence": "invoice-new.tsx lines 333-336: `e instanceof Error ? e.message : 'Please check the fields and try again.'` \u2014 the only invoice-flow call site not routed through serverErrorMessage (lib/errors.ts lines 12-17).",
+  "fix": "Replace the ternary with serverErrorMessage(e) from '@/lib/errors', matching the rest of the flow.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 86
+ },
+ {
+  "title": "Header status chips ship light-mode colors only",
+  "area": "SME month-end and console filing desk headers",
+  "files": [
+   "artifacts/sme-compliance/src/pages/month-end.tsx",
+   "artifacts/console/src/pages/filing-desk.tsx",
+   "lib/format/src/index.ts"
+  ],
+  "severity": "low",
+  "nng": [
+   "satisfaction"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant"
+  ],
+  "launchActive": true,
+  "problem": "The most prominent state signal on both pages \u2014 the WorkspaceHeader status chip ('Review required'/'Ready to close', 'N overdue'/'No overdue returns') \u2014 is hand-rolled with light-only Tailwind classes, breaking the app's dark theme while every other pill on the same pages uses the shared tone recipe that ships dark variants.",
+  "evidence": "month-end.tsx lines 105-111 use bg-amber-100 text-amber-900 / bg-emerald-100 text-emerald-900 with no dark: classes; filing-desk.tsx lines 84-90 use bg-red-100 text-red-900 / bg-emerald-100 with none either. lib/format's pill design language (index.ts lines 127-129) states 'Every tone ships both light and dark classes so flipping .dark never breaks a badge', and both apps define a .dark theme (sme-compliance/src/index.css line 84).",
+  "fix": "Replace the hand-rolled chips with the existing pillClasses tones from @/lib/format \u2014 pillClasses('amber')/pillClasses('emerald') on month-end, pillClasses('red')/pillClasses('emerald') on filing-desk \u2014 keeping the same wording.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 87
+ },
+ {
+  "title": "CardTitle renders h3 directly under the page h1, producing h1-to-h3 heading jumps the project's own e2e rule would flag",
+  "area": "SME app heading structure",
+  "files": [
+   "artifacts/sme-compliance/src/components/ui/card.tsx",
+   "artifacts/sme-compliance/src/components/page-header.tsx",
+   "artifacts/sme-compliance/src/pages/invoice-new.tsx",
+   "scripts/src/e2e/accessibility.mjs",
+   "scripts/src/e2e/journeys/roles.mjs"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability",
+   "efficiency"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant"
+  ],
+  "launchActive": true,
+  "problem": "PageHeader emits the page h1 and CardTitle is hard-coded to h3, so every card-based page skips h2 \u2014 e.g. the launch-lit invoice form reads h1 \"New invoice\" then h3 \"Draft with Clerk\"/\"Details\"/\"Line items\"/\"Compliance check\". Screen-reader users navigating by heading level hit a gap on every page. Notably, the repo's own accessibility smoke flags exactly this (\"heading jumps hX to hY\") but only runs on 6 pages (landing, penalty calculator, login, operator queue, firm portfolio, client consent), so the app's most-used forms never get checked.",
+  "evidence": "ui/card.tsx lines 32-41: CardTitle renders a fixed `<h3>`. page-header.tsx lines 20-25: PageHeader renders `<h1>`. invoice-new.tsx uses CardTitle at lines 397, 446, 682 and 755 with no intervening h2. scripts/src/e2e/accessibility.mjs lines 74-84 implements the heading-jump check; scripts/src/e2e/journeys/roles.mjs lines 22-191 show checkPageAccessibility is invoked on only six labels, none of them an invoice page.",
+  "fix": "Change CardTitle's element to h2 in sme-compliance ui/card.tsx (or accept an `asChild`/`as` prop defaulting to h2) so card sections sit one level under the page h1, then spot-fix any page that nested deeper. Optionally add `await checkPageAccessibility(page, check, \"invoice new\")` to the invoice e2e journey so the existing rule guards the lit form.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 88
+ },
+ {
+  "title": "Console and buyer 404 pages present a navigation miss as a destructive error",
+  "area": "Cross-app not-found",
+  "files": [
+   "artifacts/console/src/pages/not-found.tsx",
+   "artifacts/buyer-portal/src/pages/not-found.tsx",
+   "artifacts/sme-compliance/src/pages/not-found.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "satisfaction",
+   "learnability"
+  ],
+  "userGroups": [
+   "accountant",
+   "internal",
+   "buyer",
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "The three apps' not-found pages diverge in tone: SME uses a neutral muted FileQuestion icon, while console and buyer-portal use a large red `text-destructive` AlertCircle for the same situation. An out-of-date bookmark then reads like a system failure rather than a wrong address, and identical copy ('The link may be out of date, or the page may have moved.') gets two contradictory visual severities across apps a firm user moves between daily.",
+  "evidence": "sme-compliance not-found.tsx line 13: `<FileQuestion className=\"w-10 h-10 text-muted-foreground\" />`; console not-found.tsx lines 14-17 and buyer-portal not-found.tsx lines 14-17: `<AlertCircle className=\"h-8 w-8 text-destructive ...\" />` with the same body copy.",
+  "fix": "Align console and buyer-portal on the SME treatment: muted FileQuestion (or the apps' EmptyState-style centered layout, which console already has in components/empty-state.tsx), keeping the existing 'Back to the console' / 'Back to confirmations' buttons.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 89
+ },
+ {
+  "title": "Feature-gated copy tells SME clients and buyers to 'ask your operator'",
+  "area": "Cross-app feature gating copy",
+  "files": [
+   "artifacts/sme-compliance/src/components/feature-unavailable.tsx",
+   "artifacts/sme-compliance/src/pages/invoice-detail.tsx",
+   "artifacts/buyer-portal/src/components/feature-unavailable.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability"
+  ],
+  "userGroups": [
+   "sme",
+   "buyer"
+  ],
+  "launchActive": true,
+  "problem": "'Operator' is internal Compliance-Desk vocabulary. The SME app's FeatureUnavailable card and the inline gated copy on the launch-active invoice detail page both say 'Ask your operator to enable it' \u2014 but an SME client user's only relationship is with their accounting firm, and a buyer-portal user has no operator either. At launch, every stamped invoice shows this on the Buyer confirmation card (buyer_confirmations ships dark), so the confusing term sits on a lit core page, giving users an action they cannot actually take.",
+  "evidence": "sme-compliance feature-unavailable.tsx lines 12-15 and buyer-portal feature-unavailable.tsx (identical copy): 'This feature has not been switched on for your organization yet. Ask your operator to enable it.' invoice-detail.tsx lines 350-354: 'Buyer confirmations are not yet enabled for this organization. Ask your operator to enable it.'",
+  "fix": "Vary the copy per audience while keeping the shared component shape: SME app \u2014 'Ask your accounting firm about switching it on.'; buyer portal \u2014 'It will appear here once your supplier's platform switches it on.' Console can keep 'operator'. Pure string edits in the two feature-unavailable.tsx files plus the one inline string in invoice-detail.tsx.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 90
+ },
+ {
+  "title": "Control centre section rail forces a 54rem grid \u2014 five of six sections start off-screen on phones",
+  "area": "console / control centre navigation",
+  "files": [
+   "artifacts/console/src/pages/control-centre/index.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability",
+   "efficiency"
+  ],
+  "userGroups": [
+   "internal"
+  ],
+  "launchActive": true,
+  "problem": "The control centre's section switcher is a 6-column grid pinned to `min-w-[54rem]` inside an overflow-x-auto nav. On a 375px phone only about one and a half of the six workspace tiles are visible, with no scroll cue, snap, or wrap \u2014 an operator has no indication that Cases, Reliability, Evidence, and Clerk assurance exist unless they happen to drag the rail. The tiles themselves are generous (min-h-14) so the fix is layout, not sizing.",
+  "evidence": "control-centre/index.tsx lines 110-114: `<nav className=\"overflow-x-auto rounded-lg border ... p-1\"><div className=\"grid min-w-[54rem] grid-cols-6 gap-1\">`. Nothing in the nav marks it scrollable and there is no responsive column variant.",
+  "fix": "Let the rail wrap on small screens instead of scrolling: change the inner div to `grid grid-cols-2 gap-1 sm:grid-cols-3 lg:min-w-[54rem] lg:grid-cols-6` and drop the unconditional min-w. Alternatively keep the scroll but add the snap-x pattern already used by clerk-shell.tsx line 41.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 91
+ },
+ {
+  "title": "The invoice recipient is 'Customer' in form fields but 'buyer' in helper copy on the same form",
+  "area": "SME invoice creation & detail \u2014 terminology",
+  "files": [
+   "artifacts/sme-compliance/src/pages/invoice-new.tsx",
+   "artifacts/sme-compliance/src/pages/invoice-detail.tsx",
+   "artifacts/sme-compliance/src/components/add-customer-dialog.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability",
+   "memorability"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "invoice-new.tsx deliberately uses the SME-friendly word: field label \"Customer\" (line 475), placeholder \"Select a customer\u2026\" (line 523), checklist \"Customer selected\" / \"Customer has a TIN\" (lines 344\u2013345), and an AddCustomerDialog. But helper copy on the same form switches to the contract's word: the WHT hint says \"If your buyer withholds tax on this invoice \u2026 the buyer owes you a credit note for it\" (lines 673\u2013674), and the TIN guidance mixes both in one sentence (\"Add the customer's Tax Identification Number \u2026 without a valid buyer TIN\", line 133). invoice-detail continues the mix: \"your buyer acknowledges this invoice\" (line 359), toast \"Your buyer will be asked to confirm receipt\" (line 1134), while the vault row's fallback is \"Unknown customer\" (invoices.tsx:713).",
+  "evidence": "grep for Customer|customer vs [Bb]uyer in invoice-new.tsx and invoice-detail.tsx shows both terms in user-visible strings within the same components; the buyer-select input is even id'd buyer-select but labeled Customer (line 475).",
+  "fix": "In the SME app, standardize user-visible copy on \"customer\" (the persona's own word): reword invoice-new lines 133 and 673\u2013674 and invoice-detail's confirmation strings (\"so your customer acknowledges this invoice\", \"Your customer will be asked to confirm receipt\"). Reserve \"buyer\" for the buyer-portal product name (\"Buyer confirmation\" card title can stay as the feature name).",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 92
+ },
+ {
+  "title": "Advisory brief 'last refreshed' timestamp uses browser-locale toLocaleString() instead of the shared date format",
+  "area": "Console client detail \u2014 date rendering",
+  "files": [
+   "artifacts/console/src/pages/client-detail.tsx",
+   "lib/format/src/index.ts"
+  ],
+  "severity": "low",
+  "nng": [
+   "memorability",
+   "satisfaction"
+  ],
+  "userGroups": [
+   "accountant"
+  ],
+  "launchActive": true,
+  "problem": "The advisory-brief card on the launch-lit client-detail page renders \"last refreshed {new Date(brief.updatedAt).toLocaleString()}\" (client-detail.tsx:365) with no locale or options \u2014 on a US-locale browser that yields \"8/27/2026, 3:45:12 PM\" (month-first, with seconds), while every date-time elsewhere in the console goes through lib/format's formatDateTime (en-GB, \"27 Aug 2026, 15:45\", index.ts:44\u201350, 113\u2013118). Month-first dates are exactly the ambiguity the shared en-GB formatter exists to avoid for Nigerian users; the neighbouring \"Covers \u2026\" text on line 363 even uses an explicit en-NG locale, so the same sentence mixes two date conventions.",
+  "evidence": "grep toLocaleString across .tsx shows client-detail.tsx:365 as the only bare no-locale date-time on a launch-lit page (the other hits are token counts, USD stats on the dark clerk-health page, or explicit en-NG month/year renders).",
+  "fix": "Replace with the already-imported shared helper: `last refreshed {formatDateTime(brief.updatedAt)}` (client-detail.tsx imports from @/lib/format which re-exports it). One-line change.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 93
+ },
+ {
+  "title": "Console client-import offers no export of validation results for large books",
+  "area": "console/client-import",
+  "files": [
+   "artifacts/console/src/pages/client-import.tsx",
+   "artifacts/sme-compliance/src/pages/import.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "efficiency"
+  ],
+  "userGroups": [
+   "accountant"
+  ],
+  "launchActive": false,
+  "problem": "The firm-side client import (a white_label-staged surface) renders per-row results only as an on-screen list (client-import.tsx lines 406-452) with no download, unlike the SME invoice import which has a Download button on its results card. A firm migrating a several-hundred-client book must scroll the list and hand-transcribe each invalid row's field errors back into their practice-management export; there is no way to hand the error list to a colleague or work through it offline.",
+  "evidence": "client-import.tsx result card (lines 406-452) has a CardHeader with no action button; downloadBlob is already imported on line 17 but used only for the template download (line 242).",
+  "fix": "Add the SME page's ghost \"Download\" button to the results CardHeader, emitting rowNumber,legalName,status,errors CSV via the already-imported downloadBlob helper (rows are joined to source data at line 414 already).",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 94
+ },
+ {
+  "title": "Filing desk preparation queue silently truncates at 8 clients",
+  "area": "Console filing desk (statutory_desks, staged)",
+  "files": [
+   "artifacts/console/src/pages/filing-desk.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "efficiency"
+  ],
+  "userGroups": [
+   "accountant"
+  ],
+  "launchActive": false,
+  "problem": "The 'Preparation queue' lists at most 8 clients with unstarted returns and gives no indication more exist, so a firm with 30 pending clients sees 8 items under a description that claims to list 'Clients with at least one return still in upcoming status' \u2014 the queue looks complete when it is not.",
+  "evidence": "filing-desk.tsx lines 51-55: matrix.rows.filter(...upcoming...).slice(0, 8) feeds WorkQueue with no count of the remainder; the WorkQueue component (lib/web-ui/src/workspace.tsx) renders only the items it is given.",
+  "fix": "Compute the filtered length before slicing and, when it exceeds 8, append the overflow to the WorkQueue description ('Showing 8 of N \u2014 the full grid is in the cockpit below') or add a toolbar link anchoring to the FilingMatrixCard, reusing the existing toolbar slot.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 95
+ },
+ {
+  "title": "Console mobile header omits the notification bell that SME and buyer mobile headers include",
+  "area": "console / mobile header parity",
+  "files": [
+   "artifacts/console/src/components/layout.tsx",
+   "artifacts/sme-compliance/src/components/layout.tsx",
+   "artifacts/buyer-portal/src/components/layout.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "efficiency",
+   "memorability"
+  ],
+  "userGroups": [
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "SME and buyer mobile top bars both render Search + NotificationBell + Menu, and the console desktop header renders the bell \u2014 but the console mobile bar renders only Search + Menu. A firm user or operator on a phone gets no unread indicator and no one-tap inbox anywhere on screen; reaching notifications takes opening the sheet and finding the 'Notifications' link mid-list. The inconsistent placement across the three apps also breaks the learned position of the control.",
+  "evidence": "console layout.tsx lines 502-535: the `md:hidden` bar contains only the Search Button and the Sheet trigger; `<NotificationBell />` appears only in the desktop header (line 578). sme layout.tsx line 425 and buyer layout.tsx line 256 both render `<NotificationBell />` between Search and the Sheet trigger in the equivalent mobile bar.",
+  "fix": "Add `<NotificationBell />` between the Search button and the Sheet in console layout.tsx's mobile bar (line ~513), mirroring the sme/buyer markup. The component is already imported in the file and self-gates (returns null unless the feed endpoint answers), so it is safe under the launch profile.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 96
+ },
+ {
+  "title": "Follow-up threading is invisible when pins carry no display labels",
+  "area": "clerk-ask",
+  "files": [
+   "artifacts/sme-compliance/src/pages/clerk-ask.tsx",
+   "artifacts/console/src/pages/clerk-ask.tsx",
+   "artifacts/sme-compliance/src/lib/clerk.ts"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability",
+   "error-recovery"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "After a data or multi-intent answer that carries no displayable pins (no month label or client name), the next question still threads to the previous case's scope \u2014 but no chip renders and the 'New topic' escape is absent, so the user cannot see that their unrelated next question inherits prior scope, nor break the thread.",
+  "evidence": "holdsFollowupCase returns true for any dataIntent or sections answer, machine-only pins included (sme lib/clerk.ts lines 156-165), which sets previousCaseId; but the chip renders only when followupPinsLine yields display labels \u2014 `const pinsLine = previousCaseId ? followupPinsLine(lastAnswer) : \"\"` (sme clerk-ask.tsx line 548) and `followupPins={previousCaseId ? followupPinsLine(answer) : \"\"}` (console clerk-ask.tsx line 459), both empty when pins.monthLabel/clientName are absent (lib/clerk.ts lines 135-142). The 'New topic' button lives inside that conditional block, so it disappears too.",
+  "fix": "When previousCaseId is set and followupPinsLine is empty, render the same chip with generic copy ('Follow-ups continue this question') so the thread state and the existing New topic button are always visible while threading is active.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 97
+ },
+ {
+  "title": "Shared dock ignores dark mode and never announces answers",
+  "area": "clerk-dock",
+  "files": [
+   "lib/web-ui/src/clerk-dock.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "satisfaction",
+   "efficiency"
+  ],
+  "userGroups": [
+   "sme",
+   "accountant",
+   "internal"
+  ],
+  "launchActive": false,
+  "problem": "The dock body hardcodes a light-only palette (white footer, slate-50 answer card, amber-50 refusal, white chips) with no dark: variants, so in dark theme it renders as stark light blocks inside a dark sheet \u2014 unlike every other Clerk surface. The answer region also lacks an aria-live wrapper, so screen-reader users get no announcement when the asynchronous answer lands; and suggestion chips only fill the textarea without submitting, the opposite of the full page's chips which ask immediately.",
+  "evidence": "Light-only classes with no dark: pairs: refusal 'border-amber-200 bg-amber-50 text-amber-900' (lib/web-ui/src/clerk-dock.tsx line 30), answer 'border-slate-200 bg-slate-50 \u2026 text-slate-900' (lines 38-39), chips 'bg-white \u2026 text-slate-700' (line 145), footer 'bg-white' (line 162) \u2014 while sibling surfaces pair every tone (e.g. sme clerk-capture.tsx line 118 'text-amber-700 dark:text-amber-400'). The scroll area holding the answer (lines 139-160) has no aria-live, though both full Ask pages wrap AnswerCard in aria-live=\"polite\" with a comment explaining why (sme clerk-ask.tsx lines 629-639). Chips call only setQuestion(suggestion) (line 146) versus SuggestedQuestions' onPick which submits (sme clerk-ask.tsx lines 602-609).",
+  "fix": "Add dark: variants (or switch to the apps' token classes bg-muted/bg-background/text-foreground already used elsewhere in the same file), wrap the answer/error region in a div with aria-live=\"polite\", and make chips submit on pick (disabled while pending) to match the full-page pattern.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 98
+ },
+ {
+  "title": "Scoreboard supplier names are not linked to the supplier detail page",
+  "area": "buyer-portal",
+  "files": [
+   "artifacts/buyer-portal/src/pages/scoreboard.tsx",
+   "artifacts/buyer-portal/src/pages/suppliers.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "efficiency",
+   "learnability"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "The Suppliers table links every supplier name to /suppliers/:id, but the Scoreboard \u2014 which ranks the same suppliers and shows 'VAT at risk' and 'Outstanding' counts that beg to be drilled into \u2014 renders supplierName as plain text. A buyer who spots \u20a6X at risk on a low-ranked supplier has no path to the invoices behind the number except retyping the name into another page. Identical data key (supplierPartyId) is already on every row.",
+  "evidence": "scoreboard.tsx ~211-213: <TableCell className=\"font-medium\">{r.supplierName}</TableCell> \u2014 no Link. suppliers.tsx ~233-241 wraps the same value in <Link href={`/suppliers/${s.supplierPartyId}`}> with FOCUS_RING classes; ScoreboardRow includes supplierPartyId (used as the row key at ~205).",
+  "fix": "Wrap the scoreboard name cell in the same wouter Link + FOCUS_RING pattern as suppliers.tsx, pointing at `/suppliers/${r.supplierPartyId}`.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 99
+ },
+ {
+  "title": "Calculator fires validation errors on every keystroke",
+  "area": "penalty-calculator",
+  "files": [
+   "artifacts/penalty-calculator/src/App.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "error-recovery"
+  ],
+  "userGroups": [
+   "public"
+  ],
+  "launchActive": false,
+  "problem": "Field errors are computed directly from the live input value and rendered immediately with role=\"alert\". Typing a decimal turnover the moment you hit '.' ('850000000.' fails the ^\\d+(\\.\\d+)?$ regex) flashes 'Enter a number, like 850,000,000 \u2014 digits only.' mid-entry, and every subsequent keystroke re-announces the alert to screen readers. The turnover field even has an onBlur handler already (grouping format), so the natural validate-on-blur seam exists but is unused. Note: this finding is launch-active as a surface; marked per the calculator's inclusion in the public launch \u2014 the flag below reflects the surface being lit.",
+  "evidence": "App.tsx ~217-225: turnoverError/daysError/invoicesError derived from parseNumberInput(current text) with no touched/blur gating; NumberField renders <p role=\"alert\"> whenever error is set (~124-127); handleTurnoverBlur (~243-245) exists only for formatting.",
+  "fix": "Gate each error behind a touched flag set on blur (validate in handleTurnoverBlur and matching onBlur for days/invoices), clearing it when the parse becomes valid; keep the echo lines live. Alternatively keep live validation but soften role=\"alert\" to aria-live=\"polite\".",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 100
+ },
+ {
+  "title": "Confirmation filter-chip counts ignore the active search",
+  "area": "buyer-portal",
+  "files": [
+   "artifacts/buyer-portal/src/pages/confirmations.tsx"
+  ],
+  "severity": "low",
+  "nng": [
+   "learnability"
+  ],
+  "userGroups": [
+   "buyer"
+  ],
+  "launchActive": false,
+  "problem": "The invoice list is server-filtered by the search box, but the counts on the status chips come from useGetBuyerInvoiceSummary(), which takes no search parameter. Searching 'Acme' can leave the list showing 2 rows while the chips still read 'All \u00b7 240 / Confirmed \u00b7 57'; clicking 'Queried \u00b7 3' can then land on the 'No matches' empty state \u2014 the numbers on screen contradict the list beneath them.",
+  "evidence": "confirmations.tsx ~232-237: search is sent only to useListBuyerInvoices; ~238 useGetBuyerInvoiceSummary() has no arguments; ~322-329 the chip `counts` map is built purely from summary (with unsearched fallbacks like invoices.length).",
+  "fix": "When deferredSearch !== \"\", drop the count suffix from the chip labels (render just the state name), or append a one-line hint under the chip row ('Counts show all invoices, not the current search'). Purely presentational; no API change.",
+  "effort": "S",
+  "source": "",
+  "registerIndex": 101
+ }
+]

@@ -1,0 +1,24 @@
+# UX audit R64 — August 2026
+
+The working records of the R64 platform-wide usability round (NN/g
+five-component framework, scoped to the R62 launch profile: implementation
+effort went to launch-active surfaces; staged surfaces were audited and their
+findings deferred to the activation rounds).
+
+| File | What it is |
+|---|---|
+| `findings-register.json` | All 102 audit findings: area, files, severity, NN/g component, user groups, launch-active flag, evidence, proposed fix. Produced by a 15-agent audit workflow, ranked severity-first. |
+| `backlog-deferred.json` | The 37 findings **not** implemented in R64 (all five remaining highs sit on launch-dark surfaces — Clerk, filing cockpit, Buyer Rails — first in line for their activation rounds). |
+| `inventory-routes.json` | 72-route inventory across the five web apps: purpose, launch-active state, and which empty/loading/error states each page handles. |
+| `inventory-components.md` | Design-system inventory: shared vs per-app components, duplication, gaps, status-color practice. |
+| `inventory-flows.md` | The six primary task flows as mapped from code, with context losses and dead ends called out. |
+| `a11y-baseline.json` / `a11y-after.json` | Per-page accessibility issue lists from `scripts/src/e2e/ux-snapshot.mjs` over 14 key signed-in pages, before (8 issues) and after (0 issues) the round. |
+
+Measurement harness: `scripts/src/e2e/ux-snapshot.mjs` (boots the built stack
+on a scratch DB, signs in as the seeded demo identities, records per-page
+accessibility issues + full-page screenshots). Screenshots are not committed;
+re-run the harness to regenerate them.
+
+65 findings were adversarially verified into implementation specs and applied
+in R64 (three implementation waves plus a heading-level fix); the remaining 37
+are the deferred backlog above.

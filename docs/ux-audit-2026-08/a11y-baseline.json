@@ -1,0 +1,116 @@
+[
+  {
+    "id": "landing",
+    "url": "/",
+    "identity": null,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "id": "login",
+    "url": "/login",
+    "identity": null,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "id": "sme-dashboard",
+    "url": "/app",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "sme-invoices",
+    "url": "/app/invoices",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "id": "sme-invoice-new",
+    "url": "/app/invoices/new",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "sme-import",
+    "url": "/app/import",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "sme-calendar",
+    "url": "/app/calendar",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "id": "sme-month-end",
+    "url": "/app/month-end",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "sme-vat",
+    "url": "/app/vat",
+    "identity": "owner@adaezefoods.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "console-portfolio",
+    "url": "/console",
+    "identity": "demo.admin@meridianiq.example",
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "id": "console-pipeline",
+    "url": "/console/pipeline",
+    "identity": "demo.admin@meridianiq.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "console-invitations",
+    "url": "/console/invitations",
+    "identity": "demo.admin@meridianiq.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "console-advisory",
+    "url": "/console/advisory",
+    "identity": "demo.admin@meridianiq.example",
+    "issueCount": 1,
+    "issues": [
+      "heading jumps h1 to h3"
+    ]
+  },
+  {
+    "id": "console-notifications",
+    "url": "/console/notifications",
+    "identity": "demo.admin@meridianiq.example",
+    "issueCount": 0,
+    "issues": []
+  }
+]
