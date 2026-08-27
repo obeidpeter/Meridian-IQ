@@ -10,6 +10,7 @@ import {
   Check,
   CheckCircle2,
   Clock3,
+  Compass,
   FileCheck2,
   FileStack,
   Gauge,
@@ -112,8 +113,8 @@ const WORKSPACES = [
     body: "Confirm supplier invoices, flag payments, protect input VAT and monitor supplier quality.",
     accent: "text-blue-700",
     line: "bg-blue-600",
-    href: "/login",
-    cta: "Sign in to open",
+    href: "#roadmap",
+    cta: "See the roadmap",
   },
   {
     icon: Calculator,
@@ -129,6 +130,16 @@ const WORKSPACES = [
 
 type ProductViewKey = "clerk" | "sme" | "firm" | "buyer";
 
+// Available workspaces lead (SME, Firm — the launch profile); staged views
+// carry a status badge on their tab so the label, not just the panel copy,
+// says what ships later.
+type ProductViewStatus = "rolling-out" | "coming-soon";
+
+const VIEW_STATUS_LABEL: Record<ProductViewStatus, string> = {
+  "rolling-out": "Rolling out",
+  "coming-soon": "Coming soon",
+};
+
 const PRODUCT_VIEWS: Array<{
   key: ProductViewKey;
   label: string;
@@ -136,25 +147,14 @@ const PRODUCT_VIEWS: Array<{
   title: string;
   body: string;
   bullets: string[];
+  status?: ProductViewStatus;
 }> = [
-  {
-    key: "clerk",
-    label: "Clerk AI",
-    eyebrow: "Governed AI intake — rolling out",
-    title: "Turn unstructured requests into review-ready work.",
-    body: "Clerk captures what arrived, extracts the useful facts and shows the reviewer exactly what needs a decision. Every case keeps its source, status and correction history.",
-    bullets: [
-      "Voice, document and message intake",
-      "Human approval before action",
-      "Corrections feed measurable quality controls",
-    ],
-  },
   {
     key: "sme",
     label: "SME",
     eyebrow: "Compliance workspace",
     title: "Know what is ready, at risk and already evidenced.",
-    body: "SME teams get a focused operating view for invoices, recurring work, submission deadlines and settlement evidence without needing to learn the underlying rail complexity.",
+    body: "SME teams get a focused operating view for invoices, submission deadlines, VAT positions and settlement evidence without needing to learn the underlying rail complexity.",
     bullets: [
       "Local validation and draft recovery",
       "Bulk import with row-level outcomes",
@@ -174,16 +174,30 @@ const PRODUCT_VIEWS: Array<{
     ],
   },
   {
+    key: "clerk",
+    label: "Clerk AI",
+    eyebrow: "Governed AI intake",
+    title: "Turn unstructured requests into review-ready work.",
+    body: "Clerk captures what arrived, extracts the useful facts and shows the reviewer exactly what needs a decision. Every case keeps its source, status and correction history. Rolling out to firms after launch.",
+    bullets: [
+      "Voice, document and message intake",
+      "Human approval before action",
+      "Corrections feed measurable quality controls",
+    ],
+    status: "rolling-out",
+  },
+  {
     key: "buyer",
     label: "Buyer",
-    eyebrow: "Buyer Rails — coming soon",
+    eyebrow: "Buyer Rails",
     title: "Verify supplier invoices before VAT exposure grows.",
-    body: "Buyer finance teams can confirm, query or reject invoices, record payment signals and monitor supplier compliance from a dedicated workspace.",
+    body: "Buyer finance teams will confirm, query or reject invoices, record payment signals and monitor supplier compliance from a dedicated workspace. Arriving in a later release.",
     bullets: [
       "Formal confirmation decisions",
       "Supplier quality scoreboard",
       "Payment flags linked to the invoice history",
     ],
+    status: "coming-soon",
   },
 ];
 
@@ -192,6 +206,56 @@ const PLATFORM_FACTS = [
   ["2", "submission rails with failover"],
   ["3", "client-owned consent layers"],
   ["100%", "append-only audit history"],
+];
+
+// The staged release plan, in public terms (the engineering source of truth
+// is the flag manifest in the api-server; keep the two telling one story).
+const ROADMAP_STAGES = [
+  {
+    icon: CheckCircle2,
+    badge: "Live today",
+    badgeTone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    iconTone: "bg-emerald-100 text-emerald-800",
+    title: "The compliance core",
+    body: "Proven end to end before anything else ships. Every later stage lands on this same invoice record.",
+    items: [
+      "Invoice lifecycle: draft, validate, stamp, vault",
+      "Advisory engagements and client onboarding",
+      "Client-owned consent ledger",
+      "Append-only, exportable audit evidence",
+      "Bulk import, VAT positions and deadlines",
+    ],
+  },
+  {
+    icon: Clock3,
+    badge: "Rolling out",
+    badgeTone: "border-amber-200 bg-amber-50 text-amber-900",
+    iconTone: "bg-amber-100 text-amber-900",
+    title: "The firm's daily desks",
+    body: "Activated in stages as firms onboard, on the record the core already keeps.",
+    items: [
+      "Statutory desks: filings, WHT, authority notices",
+      "Payables and recurring invoicing",
+      "Monthly client compliance packs",
+      "Buyer confirmations and stamp verification",
+      "Clerk AI intake under human review",
+    ],
+  },
+  {
+    icon: Compass,
+    badge: "On the horizon",
+    badgeTone: "border-slate-200 bg-slate-100 text-slate-700",
+    iconTone: "bg-slate-200 text-slate-700",
+    title: "Scale and rails",
+    body: "The connected economy around the invoice: banks, buyers and partners.",
+    items: [
+      "Bank reconciliation and statement feeds",
+      "B2C 24-hour reporting clocks",
+      "Buyer Rails workspace",
+      "White-label, certification and ERP connectors",
+      "Credit readiness and financing rails",
+    ],
+  },
 ];
 
 function BrandLockup({ inverted = false }: { inverted?: boolean }) {
@@ -238,6 +302,7 @@ function LandingNav() {
     ["Platform", "#platform"],
     ["Product tour", "#product-tour"],
     ["How it works", "#workflow"],
+    ["Roadmap", "#roadmap"],
     ["Workspaces", "#workspaces"],
     ["Penalty calculator", "/penalty-calculator/"],
   ];
@@ -538,7 +603,7 @@ function FirmPreview() {
         <aside className="hidden border-r border-slate-200 bg-white p-4 sm:block">
           <p className="text-sm font-extrabold text-teal-800">MeridianIQ</p>
           <nav className="mt-7 space-y-1 text-xs font-semibold text-slate-500">
-            {["Portfolio", "Clients", "Clerk", "Receivables", "Audit"].map(
+            {["Portfolio", "Clients", "Advisory", "Receivables", "Audit"].map(
               (item, index) => (
                 <span
                   key={item}
@@ -743,7 +808,7 @@ function ProductPreview({ active }: { active: ProductViewKey }) {
 }
 
 function ProductTour() {
-  const [activeView, setActiveView] = useState<ProductViewKey>("clerk");
+  const [activeView, setActiveView] = useState<ProductViewKey>("sme");
   const active =
     PRODUCT_VIEWS.find((view) => view.key === activeView) ?? PRODUCT_VIEWS[0];
 
@@ -786,8 +851,10 @@ function ProductTour() {
             One platform, tuned to the decision in front of you.
           </h2>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">
-            Move between intake, compliance, portfolio oversight and buyer
-            verification without rebuilding the invoice history at each handoff.
+            Move between compliance, portfolio oversight, AI intake and buyer
+            verification without rebuilding the invoice history at each
+            handoff. Views marked rolling out or coming soon light up in later
+            releases — on the same record.
           </p>
         </div>
 
@@ -812,13 +879,23 @@ function ProductTour() {
                     onClick={() => setActiveView(view.key)}
                     onKeyDown={(event) => handleTabKeyDown(event, index)}
                     className={
-                      "min-h-11 rounded-sm px-3 text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 " +
+                      "min-h-11 rounded-sm px-3 py-1.5 text-sm font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 " +
                       (selected
                         ? "bg-[#0a2425] text-white"
                         : "text-slate-600 hover:bg-slate-100 hover:text-slate-950")
                     }
                   >
                     {view.label}
+                    {view.status && (
+                      <span
+                        className={
+                          "mt-0.5 block text-[9px] font-bold uppercase tracking-wide " +
+                          (selected ? "text-lime-300" : "text-amber-700")
+                        }
+                      >
+                        {VIEW_STATUS_LABEL[view.status]}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -830,8 +907,14 @@ function ProductTour() {
               aria-labelledby={"product-tab-" + active.key}
               className="mt-9"
             >
-              <p className="text-xs font-extrabold uppercase text-teal-700">
+              <p className="flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase text-teal-700">
                 {active.eyebrow}
+                {active.status && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold normal-case tracking-normal text-amber-900">
+                    <Clock3 className="size-3" aria-hidden="true" />
+                    {VIEW_STATUS_LABEL[active.status]}
+                  </span>
+                )}
               </p>
               <h3 className="landing-display mt-3 text-3xl font-bold leading-tight text-slate-950">
                 {active.title}
@@ -851,10 +934,10 @@ function ProductTour() {
                 ))}
               </ul>
               <a
-                href="/login"
+                href={active.status ? "#roadmap" : "/login"}
                 className="mt-8 inline-flex items-center gap-2 text-sm font-extrabold text-teal-800 transition-colors hover:text-teal-950"
               >
-                Open your workspace
+                {active.status ? "See the release plan" : "Open your workspace"}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </a>
             </div>
@@ -1122,14 +1205,14 @@ export default function LandingPage() {
               <ol className="mt-6 space-y-0">
                 {[
                   {
-                    title: "Captured",
-                    body: "Voice note and original source retained",
-                    Icon: Mic2,
+                    title: "Drafted",
+                    body: "Created for the July delivery, validated locally",
+                    Icon: ReceiptText,
                     time: "09:42",
                   },
                   {
                     title: "Reviewed",
-                    body: "4 extracted fields approved by Tola",
+                    body: "Field and party checks resolved by Tola",
                     Icon: ListChecks,
                     time: "09:47",
                   },
@@ -1140,15 +1223,15 @@ export default function LandingPage() {
                     time: "10:03",
                   },
                   {
-                    title: "Confirmed",
-                    body: "Buyer accepted amount and no set-off",
-                    Icon: Store,
+                    title: "Settled",
+                    body: "Payment evidence attached to the receivable",
+                    Icon: Landmark,
                     time: "14:26",
                   },
                   {
-                    title: "Settled",
-                    body: "Bank statement match accepted",
-                    Icon: Landmark,
+                    title: "Exported",
+                    body: "Hash-chained audit bundle verified outside the app",
+                    Icon: ShieldCheck,
                     time: "Jul 29",
                   },
                 ].map(({ title, body, Icon, time }, index) => (
@@ -1179,6 +1262,74 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ol>
+            </div>
+          </div>
+        </section>
+
+        <section id="roadmap" className="scroll-mt-20 bg-white py-20 sm:py-24">
+          <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+            <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+              <div className="max-w-3xl">
+                <p className="text-sm font-extrabold uppercase text-teal-700">
+                  The release plan
+                </p>
+                <h2 className="landing-display mt-4 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
+                  Live where it counts. Staged where it matters.
+                </h2>
+              </div>
+              <p className="max-w-md text-sm leading-6 text-slate-600">
+                The compliance core is live and proven end to end. Every later
+                capability activates on that same record — nothing gets rebuilt,
+                and nothing ships before its evidence base is ready.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-6 lg:grid-cols-3">
+              {ROADMAP_STAGES.map((stage) => {
+                const Icon = stage.icon;
+                return (
+                  <article
+                    key={stage.badge}
+                    className="flex flex-col rounded-md border border-slate-200 bg-[#f8faf9] p-6"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span
+                        className={
+                          "grid size-11 place-items-center rounded-md " +
+                          stage.iconTone
+                        }
+                      >
+                        <Icon className="size-5" aria-hidden="true" />
+                      </span>
+                      <span
+                        className={
+                          "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-bold " +
+                          stage.badgeTone
+                        }
+                      >
+                        {stage.badge}
+                      </span>
+                    </div>
+                    <h3 className="mt-6 text-xl font-extrabold text-slate-950">
+                      {stage.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {stage.body}
+                    </p>
+                    <ul className="mt-5 space-y-2.5 border-t border-slate-200 pt-5 text-sm font-semibold text-slate-800">
+                      {stage.items.map((item) => (
+                        <li key={item} className="flex items-start gap-2.5">
+                          <Check
+                            className="mt-0.5 size-4 shrink-0 text-teal-700"
+                            aria-hidden="true"
+                          />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -1302,6 +1453,9 @@ export default function LandingPage() {
             </a>
             <a className="hover:text-white" href="#evidence">
               Evidence
+            </a>
+            <a className="hover:text-white" href="#roadmap">
+              Roadmap
             </a>
             <a className="hover:text-white" href="/penalty-calculator/">
               Penalty calculator
