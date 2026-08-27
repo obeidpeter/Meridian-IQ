@@ -15,11 +15,13 @@ import { computeFilingMatrix } from "../modules/filings/filing-matrix";
 
 const router: IRouter = Router();
 
-// Launch-profile gate (PL-02): the whole surface rides the statutory_desks flag —
-// dark means 404 on every route here (per-firm overrides apply).
-router.use(requireFlag("statutory_desks"));
+// Launch-profile gate (PL-02): every route here rides the statutory_desks flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
 
-router.get("/console/filing-matrix", async (req, res): Promise<void> => {
+router.get("/console/filing-matrix", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = firmScope(req.principal);
   const matrix = await computeFilingMatrix(firmId);

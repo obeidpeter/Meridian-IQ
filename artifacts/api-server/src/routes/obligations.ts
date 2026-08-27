@@ -54,11 +54,13 @@ import { gatewayOrNull } from "../modules/clerk/provider";
 
 const router: IRouter = Router();
 
-// Launch-profile gate (PL-02): the whole surface rides the statutory_desks flag —
-// dark means 404 on every route here (per-firm overrides apply).
-router.use(requireFlag("statutory_desks"));
+// Launch-profile gate (PL-02): every route here rides the statutory_desks flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
 
-router.get("/obligations", async (req, res): Promise<void> => {
+router.get("/obligations", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.read");
   const query = parseOrThrow(ListObligationsQueryParams, req.query);
   const firmId = requireFirmScope(req.principal);
@@ -77,7 +79,7 @@ router.get("/obligations", async (req, res): Promise<void> => {
   res.json(ListObligationsResponse.parse({ obligations }));
 });
 
-router.post("/obligations", async (req, res): Promise<void> => {
+router.post("/obligations", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.write");
   const body = parseOrThrow(CreateObligationBody, req.body);
   const firmId = requireFirmScope(req.principal);
@@ -88,7 +90,7 @@ router.post("/obligations", async (req, res): Promise<void> => {
   res.status(201).json(CreateObligationResponse.parse(row));
 });
 
-router.get("/obligations/:id", async (req, res): Promise<void> => {
+router.get("/obligations/:id", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.read");
   const params = parseOrThrow(GetObligationParams, req.params);
   // 404 non-disclosure (the loadBillForScope posture), one-homed with the
@@ -108,7 +110,7 @@ router.get("/obligations/:id", async (req, res): Promise<void> => {
 // the generated client names — the compliance-pack precedent). Deterministic
 // SQL + rendering end to end, zero model calls (the renderer's input has no
 // letter field by construction).
-router.get("/obligation-response-pack", async (req, res): Promise<void> => {
+router.get("/obligation-response-pack", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.write");
   const query = parseOrThrow(GetObligationResponsePackQueryParams, req.query);
   requireFirmScope(req.principal);
@@ -151,6 +153,7 @@ router.get("/obligation-response-pack", async (req, res): Promise<void> => {
 // route rides the MODEL rate class (rate-limit.ts pattern).
 router.post(
   "/obligations/:id/response-draft",
+  requireFlag("statutory_desks"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "obligation.write");
     const params = parseOrThrow(DraftObligationResponseParams, req.params);
@@ -166,7 +169,7 @@ router.post(
   },
 );
 
-router.post("/obligations/:id/status", async (req, res): Promise<void> => {
+router.post("/obligations/:id/status", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.write");
   const params = parseOrThrow(UpdateObligationStatusParams, req.params);
   const body = parseOrThrow(UpdateObligationStatusBody, req.body);

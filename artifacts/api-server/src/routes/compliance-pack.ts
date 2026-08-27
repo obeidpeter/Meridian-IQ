@@ -34,9 +34,11 @@ import { appendAudit } from "../modules/audit/audit";
 
 const router: IRouter = Router();
 
-// Launch-profile gate (PL-02): the whole surface rides the client_reports flag —
-// dark means 404 on every route here (per-firm overrides apply).
-router.use(requireFlag("client_reports"));
+// Launch-profile gate (PL-02): every route here rides the client_reports flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
 
 // The live-month discipline — resolveVatPositionMonth (modules/invoice/
 // vat-position.ts), the VAT position's own resolver, imported rather than
@@ -46,7 +48,7 @@ router.use(requireFlag("client_reports"));
 // construction). The deliberately different CLOSED-month resolver is
 // resolveClosedPeriod (routes/invoices/packs.ts) — keep them separate.
 
-router.get("/compliance-pack", async (req, res): Promise<void> => {
+router.get("/compliance-pack", requireFlag("client_reports"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetCompliancePackQueryParams, req.query);
   // SEC-03: a client_user is pinned to its own party (a sibling id in the
@@ -88,7 +90,7 @@ router.get("/compliance-pack", async (req, res): Promise<void> => {
 // a live layer-1 grant receives nothing, and the route still answers 202 —
 // whether anything was sent is indistinguishable by design, so the endpoint
 // can never be used as a consent oracle.
-router.post("/compliance-pack/notify", async (req, res): Promise<void> => {
+router.post("/compliance-pack/notify", requireFlag("client_reports"), async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = requireFirmScope(req.principal);
   const body = parseOrThrow(NotifyCompliancePackBody, req.body);

@@ -54,9 +54,11 @@ import { DomainError } from "../modules/errors";
 
 const router: IRouter = Router();
 
-// Launch-profile gate (PL-02): the whole surface rides the money_analytics flag —
-// dark means 404 on every route here (per-firm overrides apply).
-router.use(requireFlag("money_analytics"));
+// Launch-profile gate (PL-02): every route here rides the money_analytics flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
 
 // The bills scope wall, one definition: the invoice must exist, sit in the
 // caller's tenant, be reachable by the caller's client scope ON THE BUYER
@@ -91,7 +93,7 @@ async function loadBillForScope(
   return invoice;
 }
 
-router.get("/bills", async (req, res): Promise<void> => {
+router.get("/bills", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListBillsQueryParams, req.query);
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -102,7 +104,7 @@ router.get("/bills", async (req, res): Promise<void> => {
   res.json(ListBillsResponse.parse(bills));
 });
 
-router.get("/dashboard/payables", async (req, res): Promise<void> => {
+router.get("/dashboard/payables", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetPayablesSummaryQueryParams, req.query);
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -117,7 +119,7 @@ router.get("/dashboard/payables", async (req, res): Promise<void> => {
 // evidence, and unpaid near-duplicate pairs that would become a double
 // payment. Advisory only — nothing blocked, nothing stored, no model. Same
 // scope resolution as the bills ledger above.
-router.get("/bills/double-payment-check", async (req, res): Promise<void> => {
+router.get("/bills/double-payment-check", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetDoublePaymentCheckQueryParams, req.query);
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -131,7 +133,7 @@ router.get("/bills/double-payment-check", async (req, res): Promise<void> => {
 // Missing recurring bills (round-18 idea #3): vendors with a monthly
 // capture habit and nothing captured this cycle — the payables mirror of
 // unbilled-income. Advisory only; same scope resolution as the ledger.
-router.get("/bills/missing-recurring", async (req, res): Promise<void> => {
+router.get("/bills/missing-recurring", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListMissingRecurringBillsQueryParams, req.query);
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -146,7 +148,7 @@ router.get("/bills/missing-recurring", async (req, res): Promise<void> => {
 // payment-flags): one append-only settlement event with source=payer_flag —
 // evidence only. NO status transition, ever: a bill is a draft for life, and
 // applyTransition would (correctly) 409 a draft->settled move.
-router.post("/bills/:id/payment-flag", async (req, res): Promise<void> => {
+router.post("/bills/:id/payment-flag", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const params = parseOrThrow(FlagBillPaymentParams, req.params);
   const body = parseOrThrow(FlagBillPaymentBody, req.body);
@@ -188,7 +190,7 @@ router.post("/bills/:id/payment-flag", async (req, res): Promise<void> => {
 // result on the bill so the ledger shows the input-VAT posture. A stamp the
 // platform does not know answers valid:false with a null eligibility — the
 // verification row is still recorded (that IS the posture).
-router.post("/bills/:id/verify-stamp", async (req, res): Promise<void> => {
+router.post("/bills/:id/verify-stamp", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const params = parseOrThrow(VerifyBillStampParams, req.params);
   const body = parseOrThrow(VerifyBillStampBody, req.body);

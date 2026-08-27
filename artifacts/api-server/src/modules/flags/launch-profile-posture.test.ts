@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { src } from "../../test-helpers/source-pins.ts";
 import { RELEASE_FLAGS } from "./releases.ts";
 
@@ -88,10 +90,14 @@ test("the seed maps the manifest through the NODE_ENV branch", () => {
   );
 });
 
-// The grouped ledger gates (R62): whole-router flags for the surfaces the
-// roadmap deferred. A dropped router.use() here reopens the surface on a
-// launch-profile database with no failing test anywhere else.
-test("the deferred ledger routers ride their grouped flags", () => {
+// The grouped ledger gates (R62): per-route flags on the surfaces the
+// roadmap deferred. A dropped requireFlag here reopens a route on a
+// launch-profile database with no failing test anywhere else. Per-route is
+// load-bearing, not style: routers mount prefix-less in routes/index.ts, so
+// a router.use() gate intercepts every request that merely flows PAST the
+// router — 404ing the rest of the API when the flag is dark, and 500ing the
+// principal-less machine rails always (requireFlag reads req.principal).
+test("every route in the deferred ledger files rides its grouped flag", () => {
   const gates: [string, string][] = [
     ["routes/filings.ts", "statutory_desks"],
     ["routes/filing-matrix.ts", "statutory_desks"],
@@ -102,9 +108,26 @@ test("the deferred ledger routers ride their grouped flags", () => {
     ["routes/compliance-pack.ts", "client_reports"],
   ];
   for (const [file, flag] of gates) {
+    const source = src(file);
+    const routes = source.match(/router\.(get|post|patch|put|delete)\(/g) ?? [];
+    const gated = source.split(`requireFlag("${flag}")`).length - 1;
+    assert.ok(routes.length > 0, `${file} registers routes`);
+    assert.equal(
+      gated,
+      routes.length,
+      `${file}: every one of its ${routes.length} routes carries requireFlag("${flag}")`,
+    );
+  }
+});
+
+test("no route file gates a whole router (the prefix-less mounting trap)", () => {
+  const routesDir = join(import.meta.dirname, "../../routes");
+  for (const file of readdirSync(routesDir, { recursive: true })) {
+    const name = String(file);
+    if (!name.endsWith(".ts") || name.endsWith(".test.ts")) continue;
     assert.ok(
-      src(file).includes(`router.use(requireFlag("${flag}"))`),
-      `${file} gates its whole router on ${flag}`,
+      !src(join("routes", name)).includes("router.use(requireFlag"),
+      `routes/${name}: router.use(requireFlag(...)) would gate every request that flows past this router — gate per route instead`,
     );
   }
 });
