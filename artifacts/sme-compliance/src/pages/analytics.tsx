@@ -232,7 +232,7 @@ export function Analytics() {
               colour="bg-emerald-500"
             />
             <StatusBar
-              label="Pending"
+              label="Awaiting stamp"
               value={summary.pendingCount}
               total={summary.totalInvoices}
               colour="bg-sky-500"

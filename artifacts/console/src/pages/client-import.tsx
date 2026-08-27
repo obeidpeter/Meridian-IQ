@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
 import { useFilePicker } from "@workspace/web-ui";
+import { parseCsvTable } from "@workspace/web-ui/csv";
 import {
   Upload,
   Download,
@@ -43,48 +44,6 @@ const TEMPLATE =
   COLUMNS.join(",") +
   "\n" +
   'Adaeze Foods Ltd,12345678-0001,RC123456,ops@adaezefoods.ng,"12, Allen Avenue",Ikeja';
-
-// Minimal RFC-4180 CSV parser: practice-management exports quote fields that
-// contain commas (addresses, legal names), so a naive split(",") corrupts them.
-function parseCsvTable(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cell += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      row.push(cell);
-      cell = "";
-    } else if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && text[i + 1] === "\n") i++;
-      row.push(cell);
-      cell = "";
-      rows.push(row);
-      row = [];
-    } else {
-      cell += ch;
-    }
-  }
-  if (cell !== "" || row.length > 0) {
-    row.push(cell);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((c) => c.trim() !== ""));
-}
 
 function parseClientRows(text: string): ClientImportRow[] {
   const table = parseCsvTable(text);

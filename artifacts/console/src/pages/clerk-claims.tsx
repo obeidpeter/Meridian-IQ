@@ -53,6 +53,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
+import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -938,7 +939,7 @@ export function ClerkClaims() {
               </div>
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Claims register table">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -1135,7 +1136,7 @@ export function ClerkClaims() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardContent>
       </Card>

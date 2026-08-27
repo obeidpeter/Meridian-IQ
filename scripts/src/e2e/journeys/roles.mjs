@@ -25,6 +25,13 @@ async function journeyPortalAuth(page, BASE, check) {
     await page.getByTestId("link-hero-login").isVisible(),
   );
 
+  const heroContact = page.getByTestId("link-hero-contact");
+  check(
+    "landing page offers a mailto contact path for prospects",
+    (await heroContact.isVisible()) &&
+      ((await heroContact.getAttribute("href")) ?? "").startsWith("mailto:"),
+  );
+
   const calculatorLink = page.locator('a[href="/penalty-calculator/"]').first();
   check(
     "landing page links to the penalty calculator",
@@ -38,6 +45,11 @@ async function journeyPortalAuth(page, BASE, check) {
     (await page.getByTestId("text-page-title").innerText()).includes(
       "E-invoicing penalty estimator",
     ),
+  );
+  check(
+    "calculator product CTA routes to the public product story, not the auth wall",
+    (await page.getByTestId("link-product-cta").getAttribute("href")) ===
+      "/#product-tour",
   );
 
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
@@ -107,6 +119,8 @@ async function journeyOperatorDesk(page, BASE, check) {
   await page.getByTestId("switch-reconciliation").click();
   await page.waitForSelector("text=reconciliation enabled", { timeout: 8000 });
   await page.getByTestId("switch-reconciliation").click();
+  // Disabling is platform-wide, so it is confirm-gated.
+  await page.getByTestId("button-confirm-disable-flag").click();
   await page.waitForSelector("text=reconciliation disabled", { timeout: 8000 });
   check("feature flag toggles round-trip", true);
 
@@ -183,8 +197,20 @@ async function journeyAuditorReadOnly(page, BASE, check) {
 
 // ---------- SME owner: consent round trip ----------
 async function journeyOwnerConsent(page, BASE, check) {
-  await signIn(page, BASE, "button-demo-owner", "**/app/**");
-  await page.goto(BASE + "/app/consent", { waitUntil: "networkidle" });
+  // Session-expiry recovery: the guards bounce to /login?returnTo=<page>;
+  // after sign-in the portal must land on that exact page, not the root.
+  await page.goto(BASE + "/login?returnTo=/app/consent&reason=expired", {
+    waitUntil: "networkidle",
+  });
+  await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
+  check(
+    "expired-session sign-in shows the continue-where-you-left-off notice",
+    await page.getByTestId("text-session-expired").isVisible(),
+  );
+  await page.getByTestId("input-email").fill("owner@adaezefoods.example");
+  await page.getByTestId("input-password").fill(DEMO_PASSWORD);
+  await page.getByTestId("button-sign-in").click();
+  await page.waitForURL("**/app/consent", { timeout: 20000 });
   await page.waitForSelector('[data-testid="consent-layer-1"]', {
     timeout: 10000,
   });
@@ -200,6 +226,9 @@ async function journeyOwnerConsent(page, BASE, check) {
     timeout: 10000,
   });
   await page.getByTestId("button-revoke-2").click();
+  // Revocation is confirm-gated: the dialog restates the consequence before
+  // the ledger event is recorded.
+  await page.getByTestId("button-confirm-revoke").click();
   await page.waitForSelector('[data-testid="button-grant-2"]', {
     timeout: 10000,
   });

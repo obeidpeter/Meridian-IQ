@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
   GitMerge,
@@ -272,8 +273,11 @@ export function Parties() {
           toast({ title: `${party.legalName} split back out` });
           invalidate();
         },
-        onError: () =>
-          toast({ title: "Split failed", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Split failed",
+            fallback: "Try again.",
+          }),
         onSettled: () => setSplitCandidate(null),
       },
     );

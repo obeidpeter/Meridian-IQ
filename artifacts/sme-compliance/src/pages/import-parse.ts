@@ -1,4 +1,5 @@
 import type { InvoiceImportRow } from "@workspace/api-client-react";
+import { parseCsvTable } from "@workspace/web-ui/csv";
 
 // Pure, DOM-free parsing/mapping helpers for the bulk-import page. Extracted
 // from import.tsx so they can be unit-tested without mounting the component or
@@ -48,18 +49,18 @@ export function mapRow(
   } as InvoiceImportRow;
 }
 
+// RFC-4180 parse (shared with the console's client import): quoted fields
+// keep their commas/newlines, doubled quotes unescape, and rows that are
+// entirely blank (including separator-only lines like ",,") are dropped
+// before numbering, so rowNumber stays contiguous over real rows.
 export function parseCsv(text: string): InvoiceImportRow[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return [];
-  const header = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line, idx) => {
-    const cells = line.split(",");
+  const table = parseCsvTable(text);
+  if (table.length < 2) return [];
+  const header = table[0].map((h) => h.trim());
+  return table.slice(1).map((cells, idx) => {
     const row: Record<string, string> = {};
     header.forEach((h, i) => {
-      row[h] = (cells[i] || "").trim();
+      row[h] = (cells[i] ?? "").trim();
     });
     return mapRow(row, idx);
   });
@@ -82,9 +83,17 @@ export function mapGridRows(
   });
 }
 
-// read-excel-file parses only the modern .xlsx (Office Open XML) container, so
-// a legacy binary .xls is NOT treated as Excel here — it falls through to the
-// text/CSV path.
+// read-excel-file parses only the modern .xlsx (Office Open XML) container.
+// A legacy binary .xls must therefore be refused by name up front (see
+// isLegacyExcel) — the text/CSV branch would otherwise decode it into
+// garbage rows that "load" and then drown the user in nonsense validation
+// errors.
 export function isExcel(name: string): boolean {
   return /\.xlsx$/i.test(name);
+}
+
+// Pre-2007 binary Excel. Not in the picker's accept list, but drag-and-drop
+// and "All files" bypass accept, so the page guards by name too.
+export function isLegacyExcel(name: string): boolean {
+  return /\.xls$/i.test(name);
 }

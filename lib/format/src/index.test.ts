@@ -8,12 +8,17 @@ import {
   badgeClasses,
   confirmationBadgeClasses,
   confirmationLabel,
+  CSID_EXPANSION,
+  formatAmount,
   formatCompactNaira,
   formatDate,
   formatDateTime,
+  formatLagosDate,
   formatNaira,
   formatPct,
   humanize,
+  IRN_EXPANSION,
+  lagosDayDiff,
   pillClasses,
   severityBadgeClasses,
   severityLabel,
@@ -21,6 +26,7 @@ import {
   statusTone,
   summaryPillClasses,
   roleLabel,
+  roleHomeHref,
 } from "./index";
 
 describe("formatNaira", () => {
@@ -36,6 +42,28 @@ describe("formatNaira", () => {
     expect(formatNaira(150000)).toContain("150,000.00");
     expect(formatNaira("1234.5")).toContain("1,234.50");
     expect(formatNaira(0)).not.toBe("—");
+  });
+});
+
+describe("formatAmount", () => {
+  test("NGN routes through the naira formatter exactly", () => {
+    expect(formatAmount(1500, "NGN")).toBe(formatNaira(1500));
+  });
+
+  test("foreign currencies render as a grouped number plus the code", () => {
+    expect(formatAmount("1200.5", "USD")).toBe("1,200.50 USD");
+  });
+
+  test("returns the em-dash sentinel for null and non-numeric input", () => {
+    expect(formatAmount(null, "USD")).toBe("—");
+    expect(formatAmount("abc", "EUR")).toBe("—");
+  });
+});
+
+describe("stamp identifier vocabulary", () => {
+  test("the shared first-use expansions cannot drift between surfaces", () => {
+    expect(IRN_EXPANSION).toBe("Invoice Reference Number");
+    expect(CSID_EXPANSION).toBe("Cryptographic Stamp ID");
   });
 });
 
@@ -103,6 +131,47 @@ describe("formatDateTime", () => {
     expect(out).toContain("2026");
     // A HH:MM clock component is present regardless of ICU locale details.
     expect(out).toMatch(/\d{2}:\d{2}/);
+  });
+});
+
+describe("formatLagosDate", () => {
+  test("returns the em-dash sentinel for falsy and unparseable input", () => {
+    expect(formatLagosDate(null)).toBe("—");
+    expect(formatLagosDate(undefined)).toBe("—");
+    expect(formatLagosDate("")).toBe("—");
+    expect(formatLagosDate("not-a-date")).toBe("—");
+  });
+
+  test("renders the Lagos statutory day for a Lagos-midnight instant", () => {
+    // Lagos midnight of 21 September 2026 is 20 Sep 23:00 UTC — an
+    // un-pinned formatter shows the 20th from any UTC-or-west runner.
+    const out = formatLagosDate("2026-09-20T23:00:00.000Z");
+    expect(out).toContain("21");
+    expect(out).toContain("Sep");
+    expect(out).toContain("2026");
+  });
+});
+
+describe("lagosDayDiff", () => {
+  test("returns null for falsy and unparseable input", () => {
+    expect(lagosDayDiff(null)).toBeNull();
+    expect(lagosDayDiff(undefined)).toBeNull();
+    expect(lagosDayDiff("not-a-date")).toBeNull();
+  });
+
+  test("wall-clock hours never shrink the countdown (the eve-of-deadline bug)", () => {
+    // 13:00 Lagos on the 20th to Lagos midnight of the 21st is 11 wall-clock
+    // hours but one full Lagos calendar day — the old ms-rounding said 0.
+    const eveAfternoon = new Date("2026-09-20T12:00:00.000Z"); // 13:00 WAT
+    const lagosMidnight21st = new Date("2026-09-20T23:00:00.000Z");
+    expect(lagosDayDiff(lagosMidnight21st, eveAfternoon)).toBe(1);
+  });
+
+  test("counts whole Lagos calendar days, sign included", () => {
+    const base = new Date("2026-09-10T09:00:00.000Z");
+    expect(lagosDayDiff("2026-09-10T15:00:00.000Z", base)).toBe(0);
+    expect(lagosDayDiff("2026-09-13T09:00:00.000Z", base)).toBe(3);
+    expect(lagosDayDiff("2026-09-08T09:00:00.000Z", base)).toBe(-2);
   });
 });
 
@@ -177,7 +246,7 @@ describe("statusLabel", () => {
   });
 
   test("labels the remaining tones", () => {
-    expect(statusLabel("submitted")).toBe("Pending stamp");
+    expect(statusLabel("submitted")).toBe("Awaiting stamp");
     expect(statusLabel("settled")).toBe("Settled");
     expect(statusLabel("credited")).toBe("Credited");
     expect(statusLabel("failed")).toBe("Failed");
@@ -283,5 +352,16 @@ describe("roleLabel", () => {
     expect(roleLabel("buyer_user")).toBe("Buyer");
     expect(roleLabel("mystery_role")).toBe("mystery_role");
     expect(roleLabel(undefined)).toBe("Unknown role");
+  });
+});
+
+describe("roleHomeHref", () => {
+  test("maps every principal role to its workspace and unknowns to null", () => {
+    expect(roleHomeHref("client_user")).toEqual({ href: "/app/", label: "the Compliance App" });
+    expect(roleHomeHref("buyer_user")).toEqual({ href: "/buyer/", label: "Buyer Rails" });
+    expect(roleHomeHref("operator")?.href).toBe("/console/operator-queue");
+    expect(roleHomeHref("auditor")?.href).toBe("/console/audit");
+    expect(roleHomeHref("mystery_role")).toBeNull();
+    expect(roleHomeHref(undefined)).toBeNull();
   });
 });

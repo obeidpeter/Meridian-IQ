@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   VAT_STANDARD,
+  type LineDraft,
+  draftHasWork,
   emptyLine,
   lineTotal,
   lineTotals,
@@ -62,6 +64,34 @@ describe("lineTotal / lineTotals", () => {
     ]);
     expect(totals.net).toBe(4000);
     expect(totals.vat).toBeCloseTo(225);
+  });
+});
+
+describe("draftHasWork", () => {
+  test("an empty draft is not work", () => {
+    expect(draftHasWork({})).toBe(false);
+    expect(draftHasWork({ lines: [emptyLine()] })).toBe(false);
+    expect(draftHasWork({ lines: undefined })).toBe(false);
+  });
+
+  test("an invoice number or a picked customer is work", () => {
+    expect(draftHasWork({ invoiceNumber: "INV-1" })).toBe(true);
+    expect(draftHasWork({ buyerPartyId: "x" })).toBe(true);
+    // Whitespace alone is not an invoice number.
+    expect(draftHasWork({ invoiceNumber: "   " })).toBe(false);
+  });
+
+  test("a line with a description or a price is work", () => {
+    expect(
+      draftHasWork({ lines: [{ ...emptyLine(), description: "goods" }] }),
+    ).toBe(true);
+    expect(
+      draftHasWork({ lines: [{ ...emptyLine(), unitPrice: "1500" }] }),
+    ).toBe(true);
+  });
+
+  test("a malformed line object reads as empty without throwing", () => {
+    expect(draftHasWork({ lines: [{} as LineDraft] })).toBe(false);
   });
 });
 

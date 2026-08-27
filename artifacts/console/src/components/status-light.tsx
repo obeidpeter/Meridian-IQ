@@ -24,7 +24,19 @@ const LABEL: Record<string, string> = {
   red: "Action required",
 };
 
-export function InvoiceStatusLight({ invoiceId }: { invoiceId: string }) {
+export function InvoiceStatusLight({
+  invoiceId,
+  showWhy = false,
+}: {
+  invoiceId: string;
+  /**
+   * Failing rows say the popover exists in words: the trigger gains a
+   * visible "Why?" beside the dot, so the server's reasons and recommended
+   * action are one obvious click away instead of hiding behind an
+   * unlabeled 10px dot.
+   */
+  showWhy?: boolean;
+}) {
   const { data, isLoading } = useGetInvoiceStatusLight(invoiceId, {
     query: {
       queryKey: getGetInvoiceStatusLightQueryKey(invoiceId),
@@ -47,13 +59,25 @@ export function InvoiceStatusLight({ invoiceId }: { invoiceId: string }) {
         <button
           type="button"
           className="flex items-center gap-1.5 shrink-0"
-          aria-label={`Status: ${LABEL[data.light] ?? data.light}`}
+          aria-label={
+            showWhy
+              ? `Why? — status: ${LABEL[data.light] ?? data.light}`
+              : `Status: ${LABEL[data.light] ?? data.light}`
+          }
           data-testid={`status-light-${invoiceId}`}
         >
           <span
             className={`w-2.5 h-2.5 rounded-full ${DOT[data.light] ?? "bg-muted"}`}
             aria-hidden="true"
           />
+          {showWhy && (
+            <span
+              className="text-xs font-semibold text-primary underline underline-offset-2"
+              aria-hidden="true"
+            >
+              Why?
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 text-sm" align="end">

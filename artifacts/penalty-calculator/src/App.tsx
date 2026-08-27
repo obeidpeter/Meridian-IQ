@@ -490,13 +490,23 @@ export default function App() {
               </p>
 
               <a
-                href="/app/"
+                href="/#product-tour"
                 data-testid="link-product-cta"
                 className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 ${FOCUS_RING}`}
               >
                 See how MeridianIQ keeps you compliant
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                Already a customer?{" "}
+                <a
+                  href="/login"
+                  data-testid="link-product-signin"
+                  className={`font-medium text-foreground underline underline-offset-2 rounded ${FOCUS_RING}`}
+                >
+                  Sign in
+                </a>
+              </p>
             </div>
           </section>
 

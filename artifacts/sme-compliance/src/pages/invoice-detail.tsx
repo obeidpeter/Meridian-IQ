@@ -40,6 +40,7 @@ import {
 import type {
   Confirmation,
   Escalation,
+  FieldError as ApiFieldError,
   Invoice,
   InvoiceApproval,
   SettlementEvent,
@@ -119,6 +120,7 @@ import {
 import { whtCategoryLabel } from "@workspace/format/wht-copy";
 import {
   formatNaira,
+  formatAmount,
   formatDate,
   formatDateTime,
   formatPct,
@@ -129,6 +131,8 @@ import {
   pillClasses,
   confirmationLabel,
   confirmationBadgeClasses,
+  IRN_EXPANSION,
+  CSID_EXPANSION,
 } from "@/lib/format";
 
 // AI Feature Brief §3.3: deterministic green/amber/red light with plain-language
@@ -712,6 +716,86 @@ export function submitErrorTitle(status: number | undefined): string {
   return status === 409 ? "Submission blocked" : "Submission error";
 }
 
+/**
+ * Post-submit toast copy, honest about delivery: only firms with the
+ * messaging rail lit are ever notified — for everyone else this page is
+ * where the answer lands (it polls while the invoice is pending).
+ */
+export function submittedToastDescription(
+  features: string[] | undefined,
+): string {
+  return (features ?? []).includes("messaging_notifications")
+    ? "We'll notify you once it clears the rail."
+    : "Check back here — this page updates automatically once FIRS answers.";
+}
+
+// SME-01 error recovery: a failed draft validation must outlive the toast.
+// The full FieldError list renders as a persistent card (same row recipe as
+// the vault's bulk-submit "Needs attention" list) with the fix path attached.
+// Exported for the component tests, like ApprovalsCard.
+export function ValidationErrorsCard({
+  errors,
+  onFix,
+  showFixButton,
+}: {
+  errors: ApiFieldError[];
+  onFix: () => void;
+  showFixButton: boolean;
+}) {
+  if (errors.length === 0) return null;
+  // buyer.*/supplier.* fields live on the party records, not on this invoice
+  // — the fix form cannot correct them, so say where they are fixed.
+  const partyFieldFlagged = errors.some(
+    (e) => e.field.startsWith("buyer.") || e.field.startsWith("supplier."),
+  );
+  return (
+    <Card
+      className="border-destructive/30 bg-destructive/5"
+      data-testid="card-validation-errors"
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base text-destructive">
+          <AlertTriangle className="w-4 h-4" aria-hidden="true" /> Validation
+          failed — {errors.length} {errors.length === 1 ? "issue" : "issues"} to
+          fix
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-muted-foreground">
+          Nothing was submitted — the invoice stays a draft until every issue
+          below is fixed.
+        </p>
+        <ul className="space-y-2">
+          {errors.map((err, i) => (
+            <li
+              key={`${err.field}-${i}`}
+              className="text-sm border border-destructive/40 bg-destructive/5 rounded-md px-3 py-2"
+              data-testid={`row-validation-error-${i}`}
+            >
+              <p className="text-xs text-destructive">
+                {err.field}: {err.message}
+              </p>
+            </li>
+          ))}
+        </ul>
+        {partyFieldFlagged && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
+            Issues on buyer or supplier fields live on the customer or business
+            record, not on this invoice — ask your firm to correct the record,
+            then submit again.
+          </p>
+        )}
+        {showFixButton && (
+          <Button size="sm" onClick={onFix} data-testid="button-fix-draft">
+            <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Fix invoice
+            details
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ApprovalsCard({
   invoiceId,
   role,
@@ -829,7 +913,15 @@ export function InvoiceDetail() {
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error, refetch } = useGetInvoice(id, {
-    query: { enabled: !!id, queryKey: getGetInvoiceQueryKey(id) },
+    query: {
+      enabled: !!id,
+      queryKey: getGetInvoiceQueryKey(id),
+      // A submitted invoice resolves rail-side (stamped or failed) with no
+      // user action — poll while pending so the page advances on its own
+      // instead of freezing on "Pending stamp" until a manual reload.
+      refetchInterval: (query) =>
+        query.state.data?.invoice.status === "submitted" ? 15_000 : false,
+    },
   });
   const invoice = data?.invoice;
   usePageTitle(invoice ? invoice.invoiceNumber : "Invoice");
@@ -839,7 +931,13 @@ export function InvoiceDetail() {
     tone === "stamped" || tone === "settled" || tone === "credited";
 
   const { data: attempts } = useListSubmissionAttempts(id, {
-    query: { enabled: !!id, queryKey: getListSubmissionAttemptsQueryKey(id) },
+    query: {
+      enabled: !!id,
+      queryKey: getListSubmissionAttemptsQueryKey(id),
+      // Same rhythm as the invoice itself: the timeline row for the pending
+      // attempt resolves with it.
+      refetchInterval: invoice?.status === "submitted" ? 15_000 : false,
+    },
   });
   const { data: stamp } = useGetInvoiceStamp(id, {
     query: {
@@ -925,6 +1023,10 @@ export function InvoiceDetail() {
     lines: LineDraft[];
   } | null>(null);
   const [showFixErrors, setShowFixErrors] = useState(false);
+  // Held validation failures from the last submit attempt: the full list
+  // survives the toast. Cleared on the next submit and on a successful
+  // fix-and-submit.
+  const [validationErrors, setValidationErrors] = useState<ApiFieldError[]>([]);
   // CORE-09 adjustment dialog: cancel or credit-note, both reason-first.
   const [adjustKind, setAdjustKind] = useState<"cancel" | "credit" | null>(
     null,
@@ -956,15 +1058,16 @@ export function InvoiceDetail() {
     // fails again the error may be different, and yesterday's explanation
     // must not sit next to today's catalogue entry.
     explainFailure.reset();
+    setValidationErrors([]);
     try {
       if (invoice.status === "draft") {
         const res = await validate.mutateAsync({ id });
         if (!res.ok) {
+          setValidationErrors(res.errors);
           refreshInvoiceState();
           toast({
             title: "Validation failed",
-            description:
-              res.errors[0]?.message || "Fix the issues and try again.",
+            description: `${res.errors.length} issue${res.errors.length === 1 ? "" : "s"} to fix — the full list is on this page.`,
             variant: "destructive",
           });
           return;
@@ -974,7 +1077,7 @@ export function InvoiceDetail() {
       refreshInvoiceState();
       toast({
         title: "Submitted for stamping",
-        description: "We'll notify you once it clears the rail.",
+        description: submittedToastDescription(me?.features),
       });
     } catch (e) {
       toast({
@@ -1027,7 +1130,7 @@ export function InvoiceDetail() {
     // failure being fixed, not to whatever this resubmission produces.
     explainFailure.reset();
     try {
-      await updateInvoice.mutateAsync({
+      const updated = await updateInvoice.mutateAsync({
         id,
         data: {
           invoiceNumber: fix.invoiceNumber.trim(),
@@ -1036,19 +1139,38 @@ export function InvoiceDetail() {
           lines: toInvoiceLineInputs(fix.lines),
         },
       });
+      // A failed invoice retries the transmission directly (failed → submitted
+      // is the legal transition); an edited draft — a validated invoice reverts
+      // to draft on edit — must re-validate first, because draft → submitted is
+      // not a legal transition.
+      if (updated.invoice.status !== "failed") {
+        const res = await validate.mutateAsync({ id });
+        if (!res.ok) {
+          setValidationErrors(res.errors);
+          refreshInvoiceState();
+          toast({
+            title: "Validation failed",
+            description: `${res.errors.length} issue${res.errors.length === 1 ? "" : "s"} to fix — the full list is on this page.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
       await submit.mutateAsync({ id });
       setFix(null);
+      setValidationErrors([]);
       refreshInvoiceState();
       toast({
-        title: "Corrected and resubmitted",
-        description: "We'll notify you once it clears the rail.",
+        title:
+          tone === "failed" ? "Corrected and resubmitted" : "Submitted for stamping",
+        description: submittedToastDescription(me?.features),
       });
     } catch (e) {
       // The PATCH may have landed even when the resubmit failed — refresh so
       // the page shows whatever state the server actually reached.
       refreshInvoiceState();
       toast({
-        title: "Could not resubmit",
+        title: tone === "failed" ? "Could not resubmit" : "Could not submit",
         description: serverErrorMessage(e),
         variant: "destructive",
       });
@@ -1316,6 +1438,169 @@ export function InvoiceDetail() {
       (latestConfirmation.state !== "requested" &&
         latestConfirmation.state !== "confirmed"));
 
+  const fixForm = fix ? (
+    <div
+      className="rounded-lg border bg-background p-3 space-y-3"
+      data-testid="fix-form"
+    >
+      <p className="font-medium">
+        {tone === "failed"
+          ? "Correct the flagged details, then resubmit"
+          : "Correct the details, then submit"}
+      </p>
+      {focus.includes("parties") && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
+          The rail rejected a TIN. TINs live on the business and customer
+          records, not on this invoice — ask your firm to correct the record (or
+          escalate below), then retry the transmission.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <Label htmlFor="fix-invoice-number" className="flex items-center gap-2">
+            Invoice number
+            {focus.includes("invoiceNumber") && (
+              <span className={pillClasses("amber")}>flagged</span>
+            )}
+          </Label>
+          <Input
+            id="fix-invoice-number"
+            value={fix.invoiceNumber}
+            onChange={(e) =>
+              setFix((f) => f && { ...f, invoiceNumber: e.target.value })
+            }
+            className="mt-1"
+          />
+          {showFixErrors && fixErrors.invoiceNumber && (
+            <FieldError id="fix-invoice-number-error">
+              {fixErrors.invoiceNumber}
+            </FieldError>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="fix-issue-date" className="flex items-center gap-2">
+            Issue date
+            {focus.includes("invoice") && (
+              <span className={pillClasses("amber")}>flagged</span>
+            )}
+          </Label>
+          <Input
+            id="fix-issue-date"
+            type="date"
+            value={fix.issueDate}
+            onChange={(e) =>
+              setFix((f) => f && { ...f, issueDate: e.target.value })
+            }
+            className="mt-1"
+          />
+          {showFixErrors && fixErrors.issueDate && (
+            <FieldError id="fix-issue-date-error">
+              {fixErrors.issueDate}
+            </FieldError>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="fix-due-date">Due date (optional)</Label>
+          <Input
+            id="fix-due-date"
+            type="date"
+            value={fix.dueDate}
+            onChange={(e) =>
+              setFix((f) => f && { ...f, dueDate: e.target.value })
+            }
+            className="mt-1"
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          Line items
+          {focus.includes("lines") && (
+            <span className={pillClasses("amber")}>flagged</span>
+          )}
+        </p>
+        {fix.lines.map((line, i) => (
+          <LineItemRow
+            key={i}
+            index={i}
+            line={line}
+            onPatch={(patch) =>
+              setFix(
+                (f) =>
+                  f && {
+                    ...f,
+                    lines: updateLineAt(f.lines, i, patch),
+                  },
+              )
+            }
+            removable={fix.lines.length > 1}
+            onRemove={() =>
+              setFix(
+                (f) =>
+                  f && {
+                    ...f,
+                    lines: f.lines.filter((_, j) => j !== i),
+                  },
+              )
+            }
+            errors={
+              showFixErrors
+                ? {
+                    description: fixErrors[`line-${i}-desc`],
+                    quantity: fixErrors[`line-${i}-qty`],
+                    unitPrice: fixErrors[`line-${i}-price`],
+                  }
+                : undefined
+            }
+            showTotal
+          />
+        ))}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            setFix((f) => f && { ...f, lines: [...f.lines, emptyLine()] })
+          }
+        >
+          <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add line
+        </Button>
+        <p className="text-right text-muted-foreground tabular-nums">
+          Total{" "}
+          {formatAmount(
+            lineTotals(fix.lines).net + lineTotals(fix.lines).vat,
+            invoice.currency,
+          )}
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={handleFixResubmit}
+          disabled={updateInvoice.isPending || validate.isPending || submit.isPending}
+          data-testid="button-fix-resubmit"
+        >
+          {updateInvoice.isPending || validate.isPending || submit.isPending
+            ? tone === "failed"
+              ? "Resubmitting…"
+              : "Submitting…"
+            : tone === "failed"
+              ? "Save & resubmit"
+              : "Save & submit"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setFix(null)}
+          disabled={
+            updateInvoice.isPending || validate.isPending || submit.isPending
+          }
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-6">
       <Link
@@ -1367,6 +1652,17 @@ export function InvoiceDetail() {
                   : "Submit for stamping"}
             </Button>
           )}
+          {(invoice.status === "draft" || invoice.status === "validated") &&
+            !fix && (
+              <Button
+                variant="outline"
+                onClick={openFix}
+                data-testid="button-edit-invoice"
+              >
+                <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Edit
+                invoice
+              </Button>
+            )}
           {/* Every invoice has a PDF — the server watermarks unstamped ones —
               so the button is always offered. Same idiom as the vault's CSV
               export: a plain same-origin navigation, auth on the session
@@ -1475,13 +1771,15 @@ export function InvoiceDetail() {
           </CardHeader>
           <CardContent className="text-sm space-y-1">
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">IRN</span>
+              <span className="text-muted-foreground">IRN ({IRN_EXPANSION})</span>
               <span className="font-mono text-xs break-all text-right">
                 {stamp.irn}
               </span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">CSID</span>
+              <span className="text-muted-foreground">
+                CSID ({CSID_EXPANSION})
+              </span>
               <span className="font-mono text-xs break-all text-right">
                 {stamp.csid}
               </span>
@@ -1590,171 +1888,7 @@ export function InvoiceDetail() {
 
             {/* Fix & resubmit: edit the failed invoice's content in place
                 (PATCH keeps it failed), then resubmit (failed → submitted). */}
-            {fix ? (
-              <div
-                className="rounded-lg border bg-background p-3 space-y-3"
-                data-testid="fix-form"
-              >
-                <p className="font-medium">
-                  Correct the flagged details, then resubmit
-                </p>
-                {focus.includes("parties") && (
-                  <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
-                    The rail rejected a TIN. TINs live on the business and
-                    customer records, not on this invoice — ask your firm to
-                    correct the record (or escalate below), then retry the
-                    transmission.
-                  </p>
-                )}
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <Label
-                      htmlFor="fix-invoice-number"
-                      className="flex items-center gap-2"
-                    >
-                      Invoice number
-                      {focus.includes("invoiceNumber") && (
-                        <span className={pillClasses("amber")}>flagged</span>
-                      )}
-                    </Label>
-                    <Input
-                      id="fix-invoice-number"
-                      value={fix.invoiceNumber}
-                      onChange={(e) =>
-                        setFix(
-                          (f) => f && { ...f, invoiceNumber: e.target.value },
-                        )
-                      }
-                      className="mt-1"
-                    />
-                    {showFixErrors && fixErrors.invoiceNumber && (
-                      <FieldError id="fix-invoice-number-error">
-                        {fixErrors.invoiceNumber}
-                      </FieldError>
-                    )}
-                  </div>
-                  <div>
-                    <Label
-                      htmlFor="fix-issue-date"
-                      className="flex items-center gap-2"
-                    >
-                      Issue date
-                      {focus.includes("invoice") && (
-                        <span className={pillClasses("amber")}>flagged</span>
-                      )}
-                    </Label>
-                    <Input
-                      id="fix-issue-date"
-                      type="date"
-                      value={fix.issueDate}
-                      onChange={(e) =>
-                        setFix((f) => f && { ...f, issueDate: e.target.value })
-                      }
-                      className="mt-1"
-                    />
-                    {showFixErrors && fixErrors.issueDate && (
-                      <FieldError id="fix-issue-date-error">
-                        {fixErrors.issueDate}
-                      </FieldError>
-                    )}
-                  </div>
-                  <div>
-                    <Label htmlFor="fix-due-date">Due date (optional)</Label>
-                    <Input
-                      id="fix-due-date"
-                      type="date"
-                      value={fix.dueDate}
-                      onChange={(e) =>
-                        setFix((f) => f && { ...f, dueDate: e.target.value })
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    Line items
-                    {focus.includes("lines") && (
-                      <span className={pillClasses("amber")}>flagged</span>
-                    )}
-                  </p>
-                  {fix.lines.map((line, i) => (
-                    <LineItemRow
-                      key={i}
-                      index={i}
-                      line={line}
-                      onPatch={(patch) =>
-                        setFix(
-                          (f) =>
-                            f && {
-                              ...f,
-                              lines: updateLineAt(f.lines, i, patch),
-                            },
-                        )
-                      }
-                      removable={fix.lines.length > 1}
-                      onRemove={() =>
-                        setFix(
-                          (f) =>
-                            f && {
-                              ...f,
-                              lines: f.lines.filter((_, j) => j !== i),
-                            },
-                        )
-                      }
-                      errors={
-                        showFixErrors
-                          ? {
-                              description: fixErrors[`line-${i}-desc`],
-                              quantity: fixErrors[`line-${i}-qty`],
-                              unitPrice: fixErrors[`line-${i}-price`],
-                            }
-                          : undefined
-                      }
-                      showTotal
-                    />
-                  ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setFix(
-                        (f) => f && { ...f, lines: [...f.lines, emptyLine()] },
-                      )
-                    }
-                  >
-                    <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add
-                    line
-                  </Button>
-                  <p className="text-right text-muted-foreground tabular-nums">
-                    Total{" "}
-                    {formatNaira(
-                      lineTotals(fix.lines).net + lineTotals(fix.lines).vat,
-                    )}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleFixResubmit}
-                    disabled={updateInvoice.isPending || submit.isPending}
-                    data-testid="button-fix-resubmit"
-                  >
-                    {updateInvoice.isPending || submit.isPending
-                      ? "Resubmitting…"
-                      : "Save & resubmit"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setFix(null)}
-                    disabled={updateInvoice.isPending || submit.isPending}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            {fixForm}
 
             {!showEscalate ? (
               <div className="flex flex-wrap gap-2">
@@ -1810,6 +1944,23 @@ export function InvoiceDetail() {
         </Card>
       )}
 
+      <ValidationErrorsCard
+        errors={validationErrors}
+        onFix={openFix}
+        showFixButton={!fix}
+      />
+
+      {tone !== "failed" && fixForm && (
+        <Card data-testid="card-edit-invoice">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wrench className="w-4 h-4" aria-hidden="true" /> Edit invoice
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">{fixForm}</CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Line items</CardTitle>
@@ -1823,19 +1974,23 @@ export function InvoiceDetail() {
               <div>
                 <p className="font-medium">{l.description}</p>
                 <p className="text-muted-foreground text-xs">
-                  {l.quantity} × {formatNaira(l.unitPrice)} · VAT{" "}
+                  {l.quantity} × {formatAmount(l.unitPrice, invoice.currency)}{" "}
+                  · VAT{" "}
                   {formatPct(l.vatRate)}
                 </p>
               </div>
               <span className="font-medium tabular-nums">
-                {formatNaira(Number(l.lineExtension) + Number(l.vatAmount))}
+                {formatAmount(
+                  Number(l.lineExtension) + Number(l.vatAmount),
+                  invoice.currency,
+                )}
               </span>
             </div>
           ))}
           <div className="flex justify-between pt-2 font-semibold">
             <span>Total</span>
             <span className="tabular-nums">
-              {formatNaira(invoice.grandTotal)}
+              {formatAmount(invoice.grandTotal, invoice.currency)}
             </span>
           </div>
         </CardContent>

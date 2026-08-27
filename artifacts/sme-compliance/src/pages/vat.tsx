@@ -1,9 +1,12 @@
+import { Link } from "wouter";
 import { useState } from "react";
 import {
   useGetMe,
   useGetClientVatPosition,
   getGetClientVatPositionQueryKey,
   getExportVatPositionCsvUrl,
+  useGetComplianceCalendar,
+  getGetComplianceCalendarQueryKey,
 } from "@workspace/api-client-react";
 import type {
   GetClientVatPositionParams,
@@ -17,7 +20,7 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { Download, Percent } from "lucide-react";
-import { formatNaira } from "@/lib/format";
+import { formatLagosDate, formatNaira, severityBadgeClasses } from "@/lib/format";
 
 // Monthly VAT position (contract 0.45.0): output VAT from the client's own
 // issued documents against input VAT from their captured supplier bills, one
@@ -152,6 +155,21 @@ export function Vat() {
     },
   });
 
+  // The statutory due date lives on the compliance calendar, not in the VAT
+  // position payload — the server owns the day (Filing Desk), this page only
+  // names it. Progressive: if the calendar fetch fails the line is absent.
+  const { data: calendarDeadlines } = useGetComplianceCalendar(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetComplianceCalendarQueryKey({ clientPartyId }),
+      },
+    },
+  );
+  const vatDeadline =
+    calendarDeadlines?.find((d) => d.kind === "vat_return") ?? null;
+
   const fxLine = position ? fxExcludedLine(position.excludedForFx) : null;
 
   return (
@@ -204,6 +222,22 @@ export function Vat() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {vatDeadline && (
+                <p
+                  className="flex flex-wrap items-center gap-2"
+                  data-testid="text-vat-due"
+                >
+                  <span className={severityBadgeClasses(vatDeadline.severity)}>
+                    Next return due {formatLagosDate(vatDeadline.dueDate)}
+                  </span>
+                  <Link
+                    href="/calendar"
+                    className="text-primary text-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                  >
+                    View calendar
+                  </Link>
+                </p>
+              )}
               {position.outputInvoiceCount === 0 && position.billCount === 0 ? (
                 <p
                   className="text-sm text-muted-foreground text-center py-4"

@@ -12,7 +12,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
-import { takeQuerySecret } from "@/lib/query-secret";
+import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
+
+// The platform's one public contact address (the penalty calculator's
+// advisory desk) — reused here so a locked-out firm admin, who has no
+// administrator above them in-product, still has a human path.
+const SUPPORT_EMAIL = "advisory@meridianiq.com";
 
 // Password recovery (IDN-02), mirroring the accept-invite page: the link an
 // operator issues carries a single-use token; redeeming it sets a new password
@@ -63,6 +68,7 @@ export function ResetPassword() {
     setError(null);
     try {
       await reset.mutateAsync({ data: { token, password } });
+      clearQuerySecret("token");
     } catch {
       // Uniform server response: never a reason a specific token is unusable.
       setError(
@@ -85,16 +91,32 @@ export function ResetPassword() {
             className="mt-2 text-sm text-muted-foreground"
             data-testid="text-reset-guidance"
           >
-            Password resets are issued as one-time links. Ask your firm
-            administrator — or MeridianIQ support — to send you a reset link,
+            Password resets are issued as one-time links. Client and staff
+            accounts: ask your firm administrator to send you a reset link,
             then open it here to choose a new password.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            For security, the link works once and expires after 24 hours.
+            Firm administrators and buyers: email MeridianIQ support to have a
+            reset link issued.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            For security, the link works once and expires after 24 hours. If
+            you refreshed a reset link and landed here, open the link from
+            your email again — it works until it is redeemed.
           </p>
           <Button asChild variant="outline" className="mt-4 w-full">
             <a href="/login" data-testid="link-guidance-sign-in">
               Back to sign in
+            </a>
+          </Button>
+          <Button asChild variant="outline" className="mt-2 w-full">
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+                "MeridianIQ password reset request",
+              )}`}
+              data-testid="link-guidance-support"
+            >
+              Email MeridianIQ support
             </a>
           </Button>
         </Card>

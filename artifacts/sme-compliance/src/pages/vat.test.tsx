@@ -13,12 +13,14 @@ const harness = vi.hoisted(() => ({
   position: null as unknown,
   isLoading: false,
   isError: false,
+  deadlines: null as unknown,
   // Every params object useGetClientVatPosition was called with, in order.
   calls: [] as unknown[],
   reset() {
     this.position = null;
     this.isLoading = false;
     this.isError = false;
+    this.deadlines = null;
     this.calls = [];
   },
 }));
@@ -38,6 +40,11 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
         refetch: vi.fn(),
       };
     },
+    useGetComplianceCalendar: () => ({
+      data: harness.deadlines,
+      isLoading: false,
+      isError: false,
+    }),
   };
 });
 
@@ -151,6 +158,38 @@ describe("FX exclusion warning", () => {
   });
 });
 
+describe("return due line", () => {
+  test("names the next return's statutory day from the compliance calendar", () => {
+    harness.position = position();
+    harness.deadlines = [
+      {
+        id: "vat-2026-08-21",
+        clientPartyId: "cp-1",
+        kind: "vat_return",
+        title: "VAT return filing",
+        description: null,
+        // Lagos midnight of the 21st — the pinned formatter must say 21.
+        dueDate: "2026-08-20T23:00:00.000Z",
+        status: "due_soon",
+        severity: "warning",
+        invoiceId: null,
+      },
+    ];
+    renderPage();
+    const line = screen.getByTestId("text-vat-due");
+    expect(line.textContent).toContain("Next return due");
+    expect(line.textContent).toContain("21");
+    expect(line.textContent).toContain("View calendar");
+  });
+
+  test("absent when the calendar carries no vat_return entry", () => {
+    harness.position = position();
+    harness.deadlines = [];
+    renderPage();
+    expect(screen.queryByTestId("text-vat-due")).toBeNull();
+  });
+});
+
 describe("CSV export", () => {
   test("the button renders and the href pins the loaded month", () => {
     harness.position = position();
@@ -166,6 +205,8 @@ describe("pure helpers", () => {
   test("vatMonthLabel names the month", () => {
     expect(vatMonthLabel("2026-06-01")).toBe("June 2026");
     expect(vatMonthLabel("2026-12-01")).toBe("December 2026");
+    // The day-bearing asOf shape the month-end explainer feeds it.
+    expect(vatMonthLabel("2026-08-27")).toBe("August 2026");
   });
 
   test("fxExcludedLine pluralizes and stays quiet at zero", () => {

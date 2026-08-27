@@ -10,6 +10,16 @@ import type { ConsentRecord } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
@@ -28,6 +38,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { triggerDownload } from "@/lib/download";
+import { serverErrorMessage } from "@/lib/errors";
 import { formatDate, humanize, pillClasses } from "@/lib/format";
 
 // Consent flows v1 (R1, CORE-03/C6): the three-layer architecture surfaced.
@@ -72,6 +83,14 @@ function scopeTitle(scope: string): string {
   return SCOPE_TITLES[scope] ?? humanize(scope);
 }
 
+// The consequence a client accepts when revoking each layer — shown in the
+// confirm dialog before the ledger event is recorded. Layer 3 is dormant and
+// never shows a revoke button.
+const REVOKE_CONSEQUENCES: Record<number, string> = {
+  1: "MeridianIQ stops validating, submitting and vaulting your invoices, and deadline alerts stop.",
+  2: "Your data stops feeding anonymized industry benchmarks.",
+};
+
 // Save in-memory bytes as a named download — the console's downloadBlob idiom
 // (console/src/lib/download.ts): wrap them in a Blob, click a temporary
 // object-URL anchor via triggerDownload, then revoke the URL. Local to this
@@ -112,6 +131,11 @@ export function Consent() {
   const record = useRecordConsent();
   // Only the control that fired shows pending state.
   const [actingLayer, setActingLayer] = useState<number | null>(null);
+  // Revoking is a permanent ledger event that darkens dependent features, so
+  // it must survive a misclick: the Revoke button only arms this dialog.
+  const [revokeTarget, setRevokeTarget] = useState<
+    (typeof LAYERS)[number] | null
+  >(null);
 
   // Data-subject export (CORE-03 companion): fetched on demand — not a
   // mounted query — so nothing is pulled until the client asks for it.
@@ -146,7 +170,7 @@ export function Consent() {
       {
         onSuccess: () => {
           toast({
-            title: `Layer ${layer} ${action === "grant" ? "granted" : "revoked"}`,
+            title: `Consent ${action === "grant" ? "granted" : "revoked"} — ${scopeTitle(scope)}`,
             description:
               action === "revoke"
                 ? "Revocation takes effect immediately — dependent features stop within a minute."
@@ -156,8 +180,12 @@ export function Consent() {
             queryKey: getListConsentQueryKey(clientPartyId),
           });
         },
-        onError: () =>
-          toast({ title: "Could not record consent", variant: "destructive" }),
+        onError: (e) =>
+          toast({
+            title: "Could not record consent",
+            description: serverErrorMessage(e),
+            variant: "destructive",
+          }),
         onSettled: () => setActingLayer(null),
       },
     );
@@ -167,7 +195,7 @@ export function Consent() {
     <div className="space-y-6">
       <PageHeader
         title="Consent"
-        description="Every permission on your data, recorded with lineage — grants and revocations are ledger events, never edits."
+        description="Every permission you've given us, with a full history — changes are always recorded, never overwritten."
       />
 
       <RequireClientScope thing="consent ledger">
@@ -201,7 +229,10 @@ export function Consent() {
                         <h2 className="flex items-center justify-between gap-2 text-base font-semibold leading-snug">
                           <span className="flex items-center gap-2">
                             <Icon className="w-4 h-4 text-primary" aria-hidden="true" />
-                            Layer {l.layer} · {l.title}
+                            {l.title}
+                            <span className="text-xs font-normal text-muted-foreground">
+                              Layer {l.layer}
+                            </span>
                           </span>
                           {l.dormant ? (
                             <span className={pillClasses("slate")}>
@@ -234,7 +265,7 @@ export function Consent() {
                                 variant="outline"
                                 className="text-destructive hover:text-destructive"
                                 disabled={acting}
-                                onClick={() => act(l.layer, l.scope, "revoke")}
+                                onClick={() => setRevokeTarget(l)}
                                 data-testid={`button-revoke-${l.layer}`}
                               >
                                 <ShieldOff className="w-4 h-4 mr-1" aria-hidden="true" />
@@ -270,7 +301,7 @@ export function Consent() {
                     <EmptyState
                       icon={ShieldCheck}
                       title="No consent events yet"
-                      description="Grants and revocations you make appear here as ledger events, each with its own timestamp and lineage."
+                      description="Every permission you grant or revoke appears here, with the date and how the change was made."
                       className="px-0 py-8 justify-center"
                     />
                   ) : (
@@ -292,7 +323,7 @@ export function Consent() {
                               >
                                 {r.action === "grant" ? "Granted" : "Revoked"}
                               </span>{" "}
-                              · Layer {r.layer} · {scopeTitle(r.scope)}
+                              · {scopeTitle(r.scope)} · Layer {r.layer}
                             </span>
                             <span className="text-xs text-muted-foreground shrink-0">
                               {formatDate(r.createdAt)} · {humanize(r.channel)}
@@ -303,6 +334,39 @@ export function Consent() {
                   )}
                 </CardContent>
               </Card>
+              <AlertDialog
+                open={revokeTarget !== null}
+                onOpenChange={(open) => {
+                  if (!open) setRevokeTarget(null);
+                }}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Revoke {revokeTarget?.title ?? "this consent"}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {REVOKE_CONSEQUENCES[revokeTarget?.layer ?? 0] ?? ""} This
+                      takes effect within a minute, and the revocation is
+                      recorded permanently in your consent history.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep consent</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        if (revokeTarget) {
+                          act(revokeTarget.layer, revokeTarget.scope, "revoke");
+                        }
+                        setRevokeTarget(null);
+                      }}
+                      data-testid="button-confirm-revoke"
+                    >
+                      Revoke consent
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </>
           )}
 

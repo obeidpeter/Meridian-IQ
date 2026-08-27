@@ -2,6 +2,7 @@ import { test, expect, describe } from "vitest";
 import {
   PORTFOLIO_GROUPS,
   calendarHasContent,
+  canImportClients,
   rejectionsHaveContent,
   visiblePortfolioGroups,
   GETTING_STARTED_DISMISS_KEY,
@@ -69,6 +70,38 @@ describe("visiblePortfolioGroups", () => {
         (g) => g.id,
       ),
     ).toEqual(["clients", "money", "compliance"]);
+  });
+});
+
+// The /clients/import page needs BOTH the RBAC capability and the
+// white_label feature flag its API rides — the same pair the nav's link
+// gate checks, so no Import button can navigate into a page whose API
+// answers 404.
+describe("canImportClients", () => {
+  test("capability AND feature together light the import buttons", () => {
+    expect(
+      canImportClients({
+        capabilities: ["clients.import"],
+        features: ["white_label"],
+      }),
+    ).toBe(true);
+  });
+
+  test("capability without the flag (the launch profile) stays dark", () => {
+    expect(
+      canImportClients({ capabilities: ["clients.import"], features: [] }),
+    ).toBe(false);
+  });
+
+  test("the flag without the capability stays dark", () => {
+    expect(
+      canImportClients({ capabilities: [], features: ["white_label"] }),
+    ).toBe(false);
+  });
+
+  test("no session / empty payloads stay dark", () => {
+    expect(canImportClients(undefined)).toBe(false);
+    expect(canImportClients({})).toBe(false);
   });
 });
 

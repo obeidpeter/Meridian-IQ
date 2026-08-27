@@ -33,6 +33,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 
@@ -99,8 +100,11 @@ export function Pipeline() {
           setOpen(false);
           invalidate();
         },
-        onError: () =>
-          toast({ title: "Could not add prospect", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not add prospect",
+            fallback: "Try again.",
+          }),
       },
     );
   };
@@ -116,8 +120,11 @@ export function Pipeline() {
           });
           invalidate();
         },
-        onError: () =>
-          toast({ title: "Could not update stage", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not update stage",
+            fallback: "Try again.",
+          }),
         onSettled: () => setPendingMove(null),
       },
     );

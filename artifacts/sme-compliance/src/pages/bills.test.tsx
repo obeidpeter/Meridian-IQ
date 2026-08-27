@@ -150,6 +150,14 @@ describe("bills list", () => {
     expect(screen.getByTestId("row-bill-b-3")).toBeTruthy();
   });
 
+  test("a foreign-currency bill renders the grouped amount with its code, never as naira", () => {
+    harness.bills = [bill({ currency: "USD" })];
+    renderPage();
+    expect(screen.getByTestId("row-bill-b-1").textContent).toContain(
+      "250,000.00 USD",
+    );
+  });
+
   test("empty book shows the Clerk-capture explanation", () => {
     renderPage();
     expect(screen.getByTestId("text-empty").textContent).toBe(
@@ -238,6 +246,11 @@ describe("stamp verification", () => {
     renderPage();
 
     fireEvent.click(screen.getByTestId("button-expand-bill-b-1"));
+
+    // The acronym is expanded at its first use on the form.
+    expect(
+      screen.getByLabelText(/IRN \(Invoice Reference Number\)/),
+    ).toBeTruthy();
 
     // Both fields are required before the check can run.
     expect(

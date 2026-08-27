@@ -1,0 +1,581 @@
+{
+ "summary": "Complete route/page inventory across the 5 web apps (mobile excluded per task scope). Routers read: artifacts/sme-compliance/src/App.tsx (wouter, base /app, 23 routes), artifacts/console/src/App.tsx (base /console, ClerkShell routes outside standard Layout + capability/role-gated ConsoleRoutes, 3 redirects), artifacts/buyer-portal/src/App.tsx (base /buyer, 6 routes, whole app rides launch-dark buyer_rails/buyer_confirmations), artifacts/landing/src/App.tsx (pathname switch: /, /login, /accept-invite, /reset-password), artifacts/penalty-calculator/src/App.tsx (single public page). launchActive derived from the R62 launch profile plus the nav feature gates in artifacts/sme-compliance/src/components/layout.tsx and artifacts/console/src/components/layout.tsx (links carry feature: money_analytics, collection_accounts, reconciliation, b2c_reporting, statutory_desks, clerk_ai, white_label, erp_connectors). Notable: SME /collections, /bills, /vat pages have no FeatureUnavailable self-gate (only reconciliation and b2c do) even though bills/collections are launch-dark; SME /analytics, /notifications and console /analytics carry no feature gate in nav so they are lit at launch. console/src/pages/gate-metrics.tsx still exists but its route now redirects to /control-centre/activation.",
+ "entries": [
+  {
+   "app": "sme-compliance",
+   "route": "/app/",
+   "page": "artifacts/sme-compliance/src/pages/dashboard.tsx",
+   "purpose": "Home dashboard: prioritized work, money movement, filing readiness, Clerk-suggests card and month-end strip for this business.",
+   "launchActive": true,
+   "states": "Skeleton loaders + QueryError; sub-cards (payables, Clerk suggests) render-on-success so empty/failed cards disappear; isPending on actions."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/month-end",
+   "page": "artifacts/sme-compliance/src/pages/month-end.tsx",
+   "purpose": "Month-end close checklist: review records needing attention before the books move forward.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError (isLoading/isError); no explicit EmptyState component."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/collections",
+   "page": "artifacts/sme-compliance/src/pages/collections.tsx",
+   "purpose": "Collections: prioritise overdue balances and reconcile incoming payments.",
+   "launchActive": false,
+   "states": "Skeleton + QueryError; no EmptyState, no FeatureUnavailable self-gate despite riding dark collection_accounts."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/analytics",
+   "page": "artifacts/sme-compliance/src/pages/analytics.tsx",
+   "purpose": "Business analytics: operating outcomes computed from records already in MeridianIQ.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError; no EmptyState component."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/notifications",
+   "page": "artifacts/sme-compliance/src/pages/notifications.tsx",
+   "purpose": "Notification inbox: every alert sent, with delivery channel, read state and related record; mark-read action.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError + isPending on mark-read; no EmptyState component."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/invoices",
+   "page": "artifacts/sme-compliance/src/pages/invoices.tsx",
+   "purpose": "Invoice vault: every invoice, write-once and searchable, with status filters.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError and EmptyState all handled; isPending on row actions."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/invoices/new",
+   "page": "artifacts/sme-compliance/src/pages/invoice-new.tsx",
+   "purpose": "New-invoice form checked against FIRS rules as you type, with local draft autosave.",
+   "launchActive": true,
+   "states": "Form page: isPending submit + inline validation only; no query skeleton/EmptyState/QueryError."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/invoices/:id",
+   "page": "artifacts/sme-compliance/src/pages/invoice-detail.tsx",
+   "purpose": "Invoice detail: lifecycle/stamp status, maker-checker approvals card, payment-reminder chase ladder.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState and isPending all present."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/bills",
+   "page": "artifacts/sme-compliance/src/pages/bills.tsx",
+   "purpose": "Supplier bills (client is the buyer): evidence-only payment flags and stamp verification per bill.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState, isPending; no FeatureUnavailable self-gate despite dark money_analytics."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/vat",
+   "page": "artifacts/sme-compliance/src/pages/vat.tsx",
+   "purpose": "Monthly VAT position: output VAT from issued documents vs input VAT from supplier bills, verified/unverified split, CSV export.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError; no EmptyState component."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/recurring",
+   "page": "artifacts/sme-compliance/src/pages/recurring.tsx",
+   "purpose": "Recurring invoices: standing templates that mint draft invoices on schedule.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState, isPending all handled."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/import",
+   "page": "artifacts/sme-compliance/src/pages/import.tsx",
+   "purpose": "Bulk import: upload a spreadsheet of invoices, every row validated before anything is created.",
+   "launchActive": true,
+   "states": "Wizard: isPending + inline per-row validation errors only; no skeleton/EmptyState/QueryError."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/clerk",
+   "page": "artifacts/sme-compliance/src/pages/clerk-capture.tsx",
+   "purpose": "Send to Clerk: snap/upload an invoice or tax-authority notice for AI extraction, accountant reviews before creation; self-gates on clerk.capture capability.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState, isPending; capability self-gate explains instead of 403."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/clerk/ask",
+   "page": "artifacts/sme-compliance/src/pages/clerk-ask.tsx",
+   "purpose": "Ask Clerk chat: grounded answers from the approved compliance register or live lookups; self-gates on clerk.ask capability.",
+   "launchActive": false,
+   "states": "isPending only (chat surface); answer held in page state; no skeleton/QueryError/EmptyState."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/reconciliation",
+   "page": "artifacts/sme-compliance/src/pages/reconciliation.tsx",
+   "purpose": "Bank reconciliation: match statement lines (incl. scanned-PDF preview-then-commit) to stamped invoices.",
+   "launchActive": false,
+   "states": "Full set: FeatureUnavailable gate, Skeleton, QueryError, EmptyState, isPending."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/b2c",
+   "page": "artifacts/sme-compliance/src/pages/b2c.tsx",
+   "purpose": "B2C reports: consumer sales batched into 24-hour windows, each batch reported before its deadline.",
+   "launchActive": false,
+   "states": "Full set: FeatureUnavailable gate, Skeleton, QueryError, EmptyState."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/obligations",
+   "page": "artifacts/sme-compliance/src/pages/obligations.tsx",
+   "purpose": "Obligations (Notice Desk, read-only for SME): firm-recorded tax-authority notices with response deadlines and overdue/due-soon flags.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState handled."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/filings",
+   "page": "artifacts/sme-compliance/src/pages/filings.tsx",
+   "purpose": "Filings register (read-only for SME): each period's VAT/PAYE/WHT returns from upcoming through filed, walked by the firm.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState handled."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/wht",
+   "page": "artifacts/sme-compliance/src/pages/wht.tsx",
+   "purpose": "WHT credits ledger (read-only for SME): buyer deductions and credit-note evidence recorded by the firm.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState handled."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/calendar",
+   "page": "artifacts/sme-compliance/src/pages/calendar.tsx",
+   "purpose": "Compliance calendar: filing deadlines and penalty watch computed from the invoice book.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState handled."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/alerts",
+   "page": "artifacts/sme-compliance/src/pages/alerts.tsx",
+   "purpose": "Alert settings: choose how and where to be reminded (channels/thresholds).",
+   "launchActive": true,
+   "states": "Skeleton + QueryError + isPending on saves; no EmptyState."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/consent",
+   "page": "artifacts/sme-compliance/src/pages/consent.tsx",
+   "purpose": "Consent ledger: every permission on the client's data with lineage \u2014 grants/revocations are ledger events, never edits.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState, isPending all handled."
+  },
+  {
+   "app": "sme-compliance",
+   "route": "/app/* (fallback)",
+   "page": "artifacts/sme-compliance/src/pages/not-found.tsx",
+   "purpose": "404 page for unknown in-app paths.",
+   "launchActive": true,
+   "states": "Static; no data states."
+  },
+  {
+   "app": "console",
+   "route": "/console/",
+   "page": "artifacts/console/src/pages/portfolio.tsx",
+   "purpose": "Role-aware front door (Home in App.tsx): firm principals get the client portfolio (risk-ranked client book); operators redirect to /control-centre/activation, auditors to /audit.",
+   "launchActive": true,
+   "states": "PortfolioSkeleton mirrored while /me resolves; Skeleton, QueryError, EmptyState, isPending in Portfolio."
+  },
+  {
+   "app": "console",
+   "route": "/console/notifications",
+   "page": "artifacts/console/src/pages/notifications.tsx",
+   "purpose": "Firm notification inbox: delivery history, read state, links back to operational records.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, isPending; no EmptyState component."
+  },
+  {
+   "app": "console",
+   "route": "/console/filing-desk",
+   "page": "artifacts/console/src/pages/filing-desk.tsx",
+   "purpose": "Filing desk: period return-status matrix across the client book, ordered for partner action.",
+   "launchActive": false,
+   "states": "Skeleton + QueryError; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/collections",
+   "page": "artifacts/console/src/pages/collections-desk.tsx",
+   "purpose": "Collections desk: firm-wide receivables, oldest balances, client accounts needing follow-up.",
+   "launchActive": false,
+   "states": "Skeleton + QueryError; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/analytics",
+   "page": "artifacts/console/src/pages/analytics.tsx",
+   "purpose": "Practice analytics: client risk, submission outcomes and operational value across the firm.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/clients/import",
+   "page": "artifacts/console/src/pages/client-import.tsx",
+   "purpose": "Client import: RFC-4180 CSV wizard for bulk-onboarding a practice's client list.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate + Skeleton + isPending; client-side parse errors inline; no QueryError."
+  },
+  {
+   "app": "console",
+   "route": "/console/clients/:id",
+   "page": "artifacts/console/src/pages/client-detail.tsx",
+   "purpose": "Client drill-down: invoices, penalty risk, engagement and compliance detail for one client business.",
+   "launchActive": true,
+   "states": "Skeleton/animate-pulse + QueryError + isPending; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/pipeline",
+   "page": "artifacts/console/src/pages/pipeline.tsx",
+   "purpose": "Onboarding pipeline: client activation stages across the firm.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError + isPending; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/unearned-income",
+   "page": "artifacts/console/src/pages/unearned-income.tsx",
+   "purpose": "Unearned income: revenue-opportunity view for the practice (growth surface).",
+   "launchActive": true,
+   "states": "Skeleton + QueryError; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/billing",
+   "page": "artifacts/console/src/pages/billing.tsx",
+   "purpose": "Plans & billing: firm plan, price-review dialog with field-level validation.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, isPending; inline field validation; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/statements",
+   "page": "artifacts/console/src/pages/statements.tsx",
+   "purpose": "Revenue-share statements: generate/reconcile per closed month against billing.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState (guides first generation), isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/whitelabel",
+   "page": "artifacts/console/src/pages/whitelabel.tsx",
+   "purpose": "White-label branding: shape client-facing identity, verify legibility, preview before publishing.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/certification",
+   "page": "artifacts/console/src/pages/certification.tsx",
+   "purpose": "Certification: firm training/accreditation surface (white_label track).",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/advisory",
+   "page": "artifacts/console/src/pages/advisory.tsx",
+   "purpose": "Advisory field kit: ADV-01 readiness assessment and ADV-02 VAT-risk check, both written to the spine as Engagements.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, isPending; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/invitations",
+   "page": "artifacts/console/src/pages/invitations.tsx",
+   "purpose": "Team invitations: invite teammates/clients and track pending invitations.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState, isPending all handled."
+  },
+  {
+   "app": "console",
+   "route": "/console/integrations",
+   "page": "artifacts/console/src/pages/integrations.tsx",
+   "purpose": "ERP connectors (PL-03/INT-06): bind a client business to a connector, sync AR invoices through the outbox.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/api-access",
+   "page": "artifacts/console/src/pages/api-access.tsx",
+   "purpose": "API keys & outbound webhooks for machine callers \u2014 firm_admin-only (RoleGate mirrors server role check).",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, isPending; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/operator-queue",
+   "page": "artifacts/console/src/pages/operator-queue.tsx",
+   "purpose": "Compliance Desk operator queue: cases from failed submissions and client escalations, tabbed by state.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState (per-tab), isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/parties",
+   "page": "artifacts/console/src/pages/parties.tsx",
+   "purpose": "Party integrity (CORE-08): operator dedupe workbench \u2014 history-preserving counterparty merges.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, isPending; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/catalogue",
+   "page": "artifacts/console/src/pages/catalogue.tsx",
+   "purpose": "Error catalogue: operator-maintained rail-error explanations shown to end users.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/platform-ops",
+   "page": "artifacts/console/src/pages/platform-ops.tsx",
+   "purpose": "Platform ops: durable sweep/health alerts from the audit ledger, humanized for operators.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, isPending; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre/activation",
+   "page": "artifacts/console/src/pages/control-centre/activation.tsx (shell: control-centre/index.tsx)",
+   "purpose": "Control centre \u2014 Evidence and activation: release gates, commercial activation, live proof from the operational spine.",
+   "launchActive": true,
+   "states": "isLoading + QueryError per workspace; skeletons via control-centre/shared.tsx."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre/buyers",
+   "page": "artifacts/console/src/pages/control-centre/buyers.tsx",
+   "purpose": "Control centre \u2014 Buyer Rails pilots: anchor-buyer participation, response behavior, scale-readiness evidence.",
+   "launchActive": true,
+   "states": "isLoading + QueryError; shared skeletons."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre/cases",
+   "page": "artifacts/console/src/pages/control-centre/cases.tsx",
+   "purpose": "Control centre \u2014 Compliance case orchestration: SLA-ranked managed cases, statutory deadlines, buyer exceptions.",
+   "launchActive": true,
+   "states": "isLoading + QueryError; shared skeletons."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre/reliability",
+   "page": "artifacts/console/src/pages/control-centre/reliability.tsx",
+   "purpose": "Control centre \u2014 Integration reliability: connector freshness, run outcomes, row quality, delivery health.",
+   "launchActive": true,
+   "states": "isLoading + QueryError; shared skeletons."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre/evidence",
+   "page": "artifacts/console/src/pages/control-centre/evidence.tsx",
+   "purpose": "Control centre \u2014 Evidence vault and trust: durable compliance artifacts, chain verification, control posture.",
+   "launchActive": true,
+   "states": "isLoading + QueryError; shared skeletons."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre/clerk",
+   "page": "artifacts/console/src/pages/control-centre/clerk.tsx",
+   "purpose": "Control centre \u2014 Clerk operational assurance: human-review boundaries, eval quality, grounding, deployment guardrails.",
+   "launchActive": true,
+   "states": "isLoading + QueryError; shared skeletons."
+  },
+  {
+   "app": "console",
+   "route": "/console/control-centre",
+   "page": "artifacts/console/src/App.tsx (Redirect)",
+   "purpose": "Redirect to /control-centre/activation.",
+   "launchActive": true,
+   "states": "Redirect only."
+  },
+  {
+   "app": "console",
+   "route": "/console/gate-metrics",
+   "page": "artifacts/console/src/App.tsx (Redirect; orphaned page artifacts/console/src/pages/gate-metrics.tsx)",
+   "purpose": "Legacy route redirect to /control-centre/activation; the old Gate metrics page file (roadmap Appendix A gate analytics) still exists but is unrouted.",
+   "launchActive": true,
+   "states": "Redirect only."
+  },
+  {
+   "app": "console",
+   "route": "/console/audit",
+   "page": "artifacts/console/src/pages/audit-evidence.tsx",
+   "purpose": "Audit & evidence (CORE-05): live hash-chain verification of the audit log and verifiable-bundle handover; auditor landing page.",
+   "launchActive": true,
+   "states": "Skeleton + QueryError; no EmptyState."
+  },
+  {
+   "app": "console",
+   "route": "/console/feature-flags",
+   "page": "artifacts/console/src/pages/feature-flags.tsx",
+   "purpose": "Feature flags (PL-02): release flags seeded by the platform, flipped per release gate.",
+   "launchActive": true,
+   "states": "Skeleton, QueryError, EmptyState handled."
+  },
+  {
+   "app": "console",
+   "route": "/console/clerk",
+   "page": "artifacts/console/src/pages/clerk.tsx (full-bleed in ClerkShell)",
+   "purpose": "Clerk review workspace: AI-extracted document/voice cases awaiting human review before any record changes.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/clerk/claims",
+   "page": "artifacts/console/src/pages/clerk-claims.tsx (ClerkShell)",
+   "purpose": "Claims register: versioned binding facts Clerk may state, with maker-checker approval (author never approves own version).",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, EmptyState, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/clerk/ask",
+   "page": "artifacts/console/src/pages/clerk-ask.tsx (ClerkShell)",
+   "purpose": "Ask Clerk for firm users: grounded Q&A over the claims register and firm records, follow-ups carry scope.",
+   "launchActive": false,
+   "states": "isPending only (chat surface)."
+  },
+  {
+   "app": "console",
+   "route": "/console/clerk/health",
+   "page": "artifacts/console/src/pages/clerk-health.tsx (ClerkShell)",
+   "purpose": "Clerk health: volume, accuracy, latency, cost per Clerk surface, and the kill-switch watchdog.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, isPending."
+  },
+  {
+   "app": "console",
+   "route": "/console/claims",
+   "page": "artifacts/console/src/App.tsx (Redirect)",
+   "purpose": "Legacy redirect to /clerk/claims.",
+   "launchActive": false,
+   "states": "Redirect only."
+  },
+  {
+   "app": "console",
+   "route": "/console/* (fallback)",
+   "page": "artifacts/console/src/pages/not-found.tsx",
+   "purpose": "404 page for unknown console paths.",
+   "launchActive": true,
+   "states": "Static; no data states."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/",
+   "page": "artifacts/buyer-portal/src/pages/confirmations.tsx",
+   "purpose": "Confirmation queue: review supplier invoices, protect input-VAT evidence, single and bulk confirm with per-invoice results, CSV export.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError, isPending; bulk-result panel reports skips."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/invoices/:id",
+   "page": "artifacts/buyer-portal/src/pages/invoice-respond.tsx",
+   "purpose": "Respond to one supplier invoice: confirm/dispute with method and no-set-off semantics.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError, isPending."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/suppliers",
+   "page": "artifacts/buyer-portal/src/pages/suppliers.tsx",
+   "purpose": "Supplier verification: the buyer's supplier list with TIN/validation status.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/suppliers/:id",
+   "page": "artifacts/buyer-portal/src/pages/supplier-detail.tsx",
+   "purpose": "Supplier drill-down: name + TIN pill, aggregate exposure tiles, invoice list linking to respond pages; 404 lands on unknown-entity card.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError; 404 handled as unknown-entity card, not retry loop."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/scoreboard",
+   "page": "artifacts/buyer-portal/src/pages/scoreboard.tsx",
+   "purpose": "Supplier scoreboard: ranked supplier compliance/response scores for the buyer.",
+   "launchActive": false,
+   "states": "FeatureUnavailable gate, Skeleton, QueryError."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/notifications",
+   "page": "artifacts/buyer-portal/src/pages/notifications.tsx",
+   "purpose": "Buyer notification inbox: confirmation alerts and supplier updates.",
+   "launchActive": false,
+   "states": "Skeleton, QueryError, isPending; no EmptyState component."
+  },
+  {
+   "app": "buyer-portal",
+   "route": "/buyer/* (fallback)",
+   "page": "artifacts/buyer-portal/src/pages/not-found.tsx",
+   "purpose": "404 page for unknown buyer-portal paths.",
+   "launchActive": false,
+   "states": "Static; no data states."
+  },
+  {
+   "app": "landing",
+   "route": "/",
+   "page": "artifacts/landing/src/LandingPage.tsx (routed in artifacts/landing/src/App.tsx pathname switch)",
+   "purpose": "Public marketing site for MeridianIQ.",
+   "launchActive": true,
+   "states": "Static marketing page; no data states."
+  },
+  {
+   "app": "landing",
+   "route": "/login",
+   "page": "artifacts/landing/src/App.tsx (Portal/SignInPanel/SignedInPanel components)",
+   "purpose": "Login portal: sign-in with TOTP second step, workspace chooser tiles per role, change-password and two-factor lifecycle cards, role-based redirect.",
+   "launchActive": true,
+   "states": "SessionSkeleton while /me loads; outage banner on non-401 error; inline role=alert form errors; per-button pending spinners; slow-redirect fallback link."
+  },
+  {
+   "app": "landing",
+   "route": "/accept-invite",
+   "page": "artifacts/landing/src/AcceptInvite.tsx",
+   "purpose": "Invite redemption: single-use token sets credentials and activates the invited membership.",
+   "launchActive": true,
+   "states": "isPending submit + role=alert friendly failure mapping (incl. go-to-sign-in path); no skeleton."
+  },
+  {
+   "app": "landing",
+   "route": "/reset-password",
+   "page": "artifacts/landing/src/ResetPassword.tsx",
+   "purpose": "Password recovery (IDN-02): redeem an operator/admin-issued single-use token to set a new password (signs out all sessions); tokenless visits get instructions.",
+   "launchActive": true,
+   "states": "isPending submit + role=alert errors; explanatory no-token state."
+  },
+  {
+   "app": "penalty-calculator",
+   "route": "/penalty-calculator/",
+   "page": "artifacts/penalty-calculator/src/App.tsx",
+   "purpose": "Public s.103/s.104 penalty estimator: turnover-band calculation, enforcement-wave timeline, copy-summary and mailto advisor CTA \u2014 all client-side, no account.",
+   "launchActive": true,
+   "states": "No network, so no loading/empty; inline per-field validation errors, aria-live result, toast on copy failure."
+  }
+ ]
+}

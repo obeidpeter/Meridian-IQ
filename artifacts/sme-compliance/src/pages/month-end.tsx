@@ -21,15 +21,58 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { MonthEndCloseCard } from "@/pages/dashboard";
+import { vatMonthLabel } from "@/pages/vat";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { formatDate } from "@/lib/format";
+import { formatLagosDate } from "@/lib/format";
 
-function destinationFor(key: string) {
-  if (/receiv|chase|credit|cash/i.test(key)) return "/collections";
-  if (/bill|payable/i.test(key)) return "/bills";
-  if (/reconcil|statement/i.test(key)) return "/reconciliation";
-  if (/vat|filing|tax/i.test(key)) return "/filings";
-  return "/invoices";
+// Exact key -> destination over the month-end contract's item keys
+// (api-server modules/invoice/month-end-close.ts). Keys this build doesn't
+// know (a newer server) fall back to the invoice vault. A destination that
+// rides a launch-dark feature or a missing capability yields NO Review
+// button at all — the sidebar hides those pages (PL-02), so the checklist
+// must not deep-link into them; the item's detail sentence still says what
+// needs doing. Gates mirror components/layout.tsx's NavLink capability/
+// feature pair exactly.
+const ITEM_DESTINATIONS: Record<
+  string,
+  { href: string; capability?: string; feature?: string }
+> = {
+  overdue_submissions: { href: "/invoices" },
+  unbilled_income: { href: "/invoices/new" },
+  unmatched_credits: { href: "/reconciliation", feature: "reconciliation" },
+  missing_bills: { href: "/bills", feature: "money_analytics" },
+  double_payments: { href: "/bills", feature: "money_analytics" },
+  unmatched_collections: {
+    href: "/collections",
+    feature: "collection_accounts",
+  },
+  open_obligations: {
+    href: "/obligations",
+    capability: "obligation.read",
+    feature: "statutory_desks",
+  },
+  open_filings: {
+    href: "/filings",
+    capability: "filing.read",
+    feature: "statutory_desks",
+  },
+  wht_credits: {
+    href: "/wht",
+    capability: "invoice.read",
+    feature: "statutory_desks",
+  },
+  pending_approvals: { href: "/invoices" },
+};
+
+export function destinationFor(
+  key: string,
+  features: ReadonlySet<string>,
+  capabilities: ReadonlySet<string>,
+): string | null {
+  const dest = ITEM_DESTINATIONS[key] ?? { href: "/invoices" };
+  if (dest.capability && !capabilities.has(dest.capability)) return null;
+  if (dest.feature && !features.has(dest.feature)) return null;
+  return dest.href;
 }
 
 export function MonthEnd() {
@@ -75,24 +118,29 @@ export function MonthEnd() {
   }
 
   const close = query.data;
+  const features = new Set(me.features);
+  const capabilities = new Set(me.capabilities);
   const workItems: WorkQueueItem[] = close.items
     .filter((item) => item.status === "attention")
-    .map((item) => ({
-      id: item.key,
-      title: item.label,
-      description: item.detail,
-      meta:
-        item.count > 0
-          ? `${item.count} item${item.count === 1 ? "" : "s"}`
-          : undefined,
-      tone: "warning",
-      icon: <AlertTriangle className="size-4" aria-hidden="true" />,
-      action: (
-        <Button asChild size="sm" variant="outline">
-          <Link href={destinationFor(item.key)}>Review</Link>
-        </Button>
-      ),
-    }));
+    .map((item) => {
+      const href = destinationFor(item.key, features, capabilities);
+      return {
+        id: item.key,
+        title: item.label,
+        description: item.detail,
+        meta:
+          item.count > 0
+            ? `${item.count} item${item.count === 1 ? "" : "s"}`
+            : undefined,
+        tone: "warning" as const,
+        icon: <AlertTriangle className="size-4" aria-hidden="true" />,
+        action: href ? (
+          <Button asChild size="sm" variant="outline">
+            <Link href={href}>Review</Link>
+          </Button>
+        ) : undefined,
+      };
+    });
 
   return (
     <div className="space-y-6">
@@ -107,11 +155,20 @@ export function MonthEnd() {
             </span>
           ) : (
             <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
-              Ready to close
+              All checks clear
             </span>
           )
         }
       />
+
+      <p
+        className="text-sm text-muted-foreground"
+        data-testid="text-close-explainer"
+      >
+        {vatMonthLabel(close.asOf)} checks — when every check below is clear,
+        you can treat the month&apos;s books as complete. MeridianIQ records
+        the checks; a human closes the month.
+      </p>
 
       <MetricStrip label="Month-end status">
         <Metric
@@ -130,7 +187,7 @@ export function MonthEnd() {
         />
         <Metric
           label="As of"
-          value={formatDate(close.asOf)}
+          value={formatLagosDate(close.asOf)}
           detail="Latest close snapshot"
           icon={<Clock3 className="size-4" aria-hidden="true" />}
         />

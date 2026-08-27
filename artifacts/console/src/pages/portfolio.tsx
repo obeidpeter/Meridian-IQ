@@ -63,6 +63,8 @@ import { AddClientDialog } from "@/components/add-client-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
+import { ScrollRegion } from "@/components/scroll-region";
+import { PenaltyRiskInfo } from "@/components/penalty-risk-info";
 import {
   AlertTriangle,
   Users,
@@ -86,6 +88,7 @@ import {
   Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import {
   formatNaira,
   formatDate,
@@ -304,6 +307,22 @@ function browserStorage(): Storage | null {
   }
 }
 
+/**
+ * The /clients/import page needs BOTH the RBAC capability and the
+ * white_label feature flag its API rides (routes/whitelabel.ts requireFlag)
+ * — the same pair the nav's link gate checks (layout.tsx NavLink.feature),
+ * so the header and empty-state Import buttons can never navigate into the
+ * dead page the nav is hiding.
+ */
+export function canImportClients(
+  me: { capabilities?: string[]; features?: string[] } | undefined,
+): boolean {
+  return (
+    (me?.capabilities ?? []).includes("clients.import") &&
+    (me?.features ?? []).includes("white_label")
+  );
+}
+
 function GettingStartedCard({
   steps,
   onAddClient,
@@ -398,9 +417,9 @@ function GettingStartedCard({
                 {step.id === "consent" && (
                   <span className="text-xs text-muted-foreground">
                     {" "}
-                    — the client signs in and grants Layer 1 sharing consent
-                    from their own workspace (manual anchor: #consent). Not
-                    tracked here.
+                    — the client signs in to their own workspace and grants
+                    data-sharing consent themselves; this checklist can't see
+                    or do it for them.
                   </span>
                 )}
                 {step.id === "first-invoice" && !step.done && (
@@ -483,8 +502,11 @@ function coverNoteHandlers<T extends { note: string }>(
       setNote(res);
       setNoteText(res.note);
     },
-    onError: () =>
-      toast({ title: "Could not draft the note", variant: "destructive" }),
+    onError: (e: unknown) =>
+      serverErrorToast(toast, e, {
+        title: "Could not draft the note",
+        fallback: "Try again.",
+      }),
   };
 }
 
@@ -646,7 +668,7 @@ function VatPackCard() {
             No invoices were accepted by the rails in {pack.monthLabel}.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <ScrollRegion label="VAT filing pack table">
             <table className="w-full text-sm" data-testid="table-vat-pack">
               <thead>
                 <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -706,7 +728,7 @@ function VatPackCard() {
                 </tr>
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
         <p className="text-xs text-muted-foreground">{pack.note}</p>
         {note && (
@@ -799,7 +821,7 @@ function VatPositionCard() {
           />
         </div>
         {position.unverified.length > 0 && (
-          <div className="overflow-x-auto">
+          <ScrollRegion label="Unverified input-VAT bills table">
             <table
               className="w-full text-sm"
               data-testid="table-vat-unverified-bills"
@@ -830,7 +852,7 @@ function VatPositionCard() {
                 Showing the largest {position.unverified.length} — more exist.
               </p>
             )}
-          </div>
+          </ScrollRegion>
         )}
         <p className="text-xs text-muted-foreground">{position.note}</p>
       </CardContent>
@@ -911,7 +933,7 @@ function VatSettlementCard() {
               />
             </div>
             {check.unsettled.length > 0 && (
-              <div className="overflow-x-auto">
+              <ScrollRegion label="Unsettled invoices table">
                 <table
                   className="w-full text-sm"
                   data-testid="table-vat-unsettled"
@@ -947,7 +969,7 @@ function VatSettlementCard() {
                     Showing the largest {check.unsettled.length} — more exist.
                   </p>
                 )}
-              </div>
+              </ScrollRegion>
             )}
           </>
         )}
@@ -1031,7 +1053,7 @@ function QuarterlyReviewCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Quarterly VAT months table">
           <table
             className="w-full text-sm"
             data-testid="table-quarterly-months"
@@ -1084,7 +1106,7 @@ function QuarterlyReviewCard() {
               </tr>
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile
             label="Submissions accepted"
@@ -1268,7 +1290,7 @@ function ComplianceScorecardCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Compliance scorecard table">
           <table
             className="w-full text-sm"
             data-testid="table-compliance-scorecard"
@@ -1336,7 +1358,7 @@ function ComplianceScorecardCard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <p className="text-xs text-muted-foreground">{scorecard.note}</p>
       </CardContent>
     </Card>
@@ -1370,7 +1392,7 @@ function ClerkAdoptionCard() {
           {formatPct(report.totals.keptRate)} of extracted fields kept
           unchanged. Computed from your own cases — no AI involved.
         </p>
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Clerk adoption table">
           <table className="w-full text-sm" data-testid="table-clerk-adoption">
             <thead>
               <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -1410,7 +1432,7 @@ function ClerkAdoptionCard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </CardContent>
     </Card>
   );
@@ -1453,7 +1475,7 @@ function RejectionPatternsCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Recurring rejection causes table">
           <table
             className="w-full text-sm"
             data-testid="table-rejection-patterns"
@@ -1500,7 +1522,7 @@ function RejectionPatternsCard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <p className="text-xs text-muted-foreground">
           Rejected submission attempts in the last {report.windowDays} days (
           {report.totalRejections}) against the {report.windowDays} before (
@@ -1546,7 +1568,7 @@ export function ReceivablesCard() {
           </p>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Receivables by client table">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
@@ -1604,7 +1626,7 @@ export function ReceivablesCard() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             {data.topDebtors.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-sm font-medium text-muted-foreground mb-2">
@@ -1760,12 +1782,17 @@ function ClientWorkbenchTable({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Client book table">
           <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
             <thead className="bg-slate-50 text-[11px] font-bold text-slate-500">
               <tr>
                 <th className="px-4 py-2.5">Client</th>
-                <th className="px-3 py-2.5">Risk</th>
+                <th className="px-3 py-2.5">
+                  <span className="inline-flex items-center gap-1">
+                    Risk
+                    <PenaltyRiskInfo />
+                  </span>
+                </th>
                 <th className="px-3 py-2.5 text-right">Unsubmitted</th>
                 <th className="px-3 py-2.5 text-right">Failed</th>
                 <th className="px-3 py-2.5 text-right">Pending</th>
@@ -1782,7 +1809,13 @@ function ClientWorkbenchTable({
                 >
                   <td className="px-4 py-3">
                     <p className="max-w-64 truncate font-bold text-slate-950">
-                      {client.legalName}
+                      <Link
+                        href={`/clients/${client.clientPartyId}`}
+                        className="hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        data-testid={`link-client-${client.clientPartyId}`}
+                      >
+                        {client.legalName}
+                      </Link>
                     </p>
                     <p className="mt-0.5 text-xs text-slate-500">
                       {client.totalInvoices} invoice
@@ -1837,7 +1870,7 @@ function ClientWorkbenchTable({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
     </section>
   );
@@ -1899,7 +1932,7 @@ export function Portfolio() {
   const [clientSort, setClientSort] = useState<ClientSort>("risk");
   const { data: me } = useGetMe();
   const { data, isLoading, error, refetch } = useGetPortfolio();
-  const canImport = (me?.capabilities ?? []).includes("clients.import");
+  const canImport = canImportClients(me);
 
   // Getting-started checklist state: single-client intake dialog + the
   // localStorage-backed dismissal.
@@ -2176,18 +2209,29 @@ export function Portfolio() {
         <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
           <EmptyState
             icon={Users}
-            title="Import your client book"
+            title="Start your client book"
             description={
               <span className="block max-w-md">
-                Clients appear here once they're on the platform. Bring your
-                book across from a practice-management export, or track
-                prospects through onboarding.
+                Clients appear here once they're on the platform. Add your
+                first client to start tracking risk, deadlines and
+                receivables, or track prospects through onboarding.
               </span>
             }
           >
             <div className="flex flex-wrap justify-center gap-2 mt-2">
+              <Button
+                onClick={openAddClient}
+                data-testid="button-empty-add-client"
+              >
+                <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+                Add your first client
+              </Button>
               {canImport && (
-                <Button asChild data-testid="button-empty-import">
+                <Button
+                  variant="outline"
+                  asChild
+                  data-testid="button-empty-import"
+                >
                   <Link href="/clients/import">
                     <Upload className="w-4 h-4 mr-2" aria-hidden="true" />
                     Bulk import clients

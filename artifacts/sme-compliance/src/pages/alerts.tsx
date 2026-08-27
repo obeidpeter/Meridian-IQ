@@ -15,13 +15,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import { MessageSquare, Phone, Mail, Send } from "lucide-react";
+import { MessageSquare, Phone, Mail, Send, Lock } from "lucide-react";
 import { humanize } from "@/lib/format";
 
 function AlertsSkeleton() {
@@ -43,10 +44,27 @@ function AlertsSkeleton() {
   );
 }
 
+// The server keeps failed-send detail deliberately generic ("Send failed" —
+// raw provider errors are a log concern, alert-prefs.ts). Translate the
+// generic case into something a client can act on; keep any specific detail
+// (failover notes, push outcomes) verbatim.
+export function deliveryDetail(r: AlertDeliveryResult): string {
+  if (r.status === "failed" && (!r.detail || r.detail === "Send failed")) {
+    return "Could not deliver — check the number or address, save, and try again.";
+  }
+  return r.detail || humanize(r.status);
+}
+
 export function Alerts() {
   usePageTitle("Alert settings");
   const { data: me } = useGetMe();
   const clientPartyId = me?.clientPartyId || "";
+  // Outbound messaging ships dark (messaging_notifications, PL-02). The
+  // preferences API is not flag-gated — channels can be set ahead of launch —
+  // but no send can succeed until the flag lights, so say so up front
+  // instead of letting test sends fail opaquely.
+  const messagingDark =
+    !!me && !(me.features ?? []).includes("messaging_notifications");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const {
@@ -109,10 +127,24 @@ export function Alerts() {
     try {
       const res = await test.mutateAsync({ id: clientPartyId });
       setResults(res);
-      toast({
-        title: "Test alert sent",
-        description: `Delivered across ${res.length} channel(s).`,
-      });
+      const failed = res.filter((r) => r.status === "failed").length;
+      if (failed === 0) {
+        toast({
+          title: "Test alert sent",
+          description: `Delivered across ${res.length} channel(s).`,
+        });
+      } else if (failed === res.length) {
+        toast({
+          title: "Test alert could not be delivered",
+          description: "Check the delivery results below.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: `Test alert reached ${res.length - failed} of ${res.length} channel(s)`,
+          description: "Check the delivery results below.",
+        });
+      }
     } catch (e) {
       toast({
         title: "Couldn't send test alert",
@@ -155,6 +187,17 @@ export function Alerts() {
           <QueryError thing="your alert preferences" onRetry={() => refetch()} />
         ) : (
           <div className="space-y-6">
+            {messagingDark && (
+              <Alert data-testid="banner-messaging-dark">
+                <Lock className="h-4 w-4" aria-hidden="true" />
+                <AlertTitle>Alert delivery is not switched on yet</AlertTitle>
+                <AlertDescription>
+                  WhatsApp, SMS and email alerts have not been enabled for your
+                  workspace. You can set your channels and save them now — they
+                  take effect as soon as delivery is switched on.
+                </AlertDescription>
+              </Alert>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>Channels</CardTitle>
@@ -226,12 +269,18 @@ export function Alerts() {
               <Button
                 variant="outline"
                 onClick={sendTest}
-                disabled={test.isPending}
+                disabled={test.isPending || messagingDark}
+                data-testid="button-send-test-alert"
               >
                 <Send className="w-4 h-4 mr-2" aria-hidden="true" />
                 {test.isPending ? "Sending…" : "Send test alert"}
               </Button>
             </div>
+            {messagingDark && (
+              <p className="text-sm text-muted-foreground">
+                Test alerts are unavailable until delivery is switched on.
+              </p>
+            )}
 
             {results && (
               <Card>
@@ -257,7 +306,7 @@ export function Alerts() {
                               : "text-emerald-700 dark:text-emerald-400"
                           }
                         >
-                          {r.detail || humanize(r.status)}
+                          {deliveryDetail(r)}
                         </span>
                       </div>
                     ))

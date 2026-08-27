@@ -41,6 +41,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import type { Me } from "@workspace/api-client-react";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { roleLabel } from "@/components/capability-gate";
@@ -75,7 +76,9 @@ type NavLink = {
   feature?: string;
 };
 
-const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
+type NavGroup = { title: string; links: NavLink[] };
+
+const NAV_GROUPS: NavGroup[] = [
   {
     title: "Practice",
     links: [
@@ -310,88 +313,41 @@ function BrandMark() {
   );
 }
 
-export function Layout({ children }: { children: ReactNode }) {
-  const [location, navigate] = useLocation();
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [commandOpen, setCommandOpen] = useState(false);
-  const { data: me } = useGetMe();
-  const logout = useLogout();
-  const mainRef = useRef<HTMLElement>(null);
+function isLinkActive(location: string, href: string) {
+  if (location === href) return true;
+  // The Claims register (/clerk/claims) is its own entry — don't also light
+  // up the Clerk entry when we're on it.
+  if (href === "/clerk" && location.startsWith("/clerk/claims")) return false;
+  // Prefix matches stop at a path boundary ("/clerkX" never matches "/clerk").
+  if (href !== "/" && location.startsWith(`${href}/`)) return true;
+  // Client detail pages live under the Portfolio entry (import is its own).
+  if (
+    href === "/" &&
+    location.startsWith("/clients/") &&
+    !location.startsWith("/clients/import")
+  )
+    return true;
+  return false;
+}
 
-  // Move keyboard/SR focus to the main region on every route change so a
-  // single-page navigation announces the new page instead of stranding focus
-  // on the link that was just activated.
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    mainRef.current?.focus({ preventScroll: true });
-  }, [location]);
-
-  const signOut = async () => {
-    try {
-      await logout.mutateAsync();
-    } catch {
-      /* clearing the cookie is best-effort; leave regardless */
-    }
-    // Full navigation to the portal so every app re-resolves the (now absent)
-    // session instead of trusting cached queries.
-    window.location.href = PORTAL_URL;
-  };
-
-  const capabilities = new Set(me?.capabilities ?? []);
-  const features = new Set(me?.features ?? []);
-  const groups = NAV_GROUPS.map((g) => ({
-    ...g,
-    links: g.links.filter(
-      (l) =>
-        (l.capability === undefined || capabilities.has(l.capability)) &&
-        (l.role === undefined || me?.role === l.role) &&
-        (l.feature === undefined || features.has(l.feature)),
-    ),
-  })).filter((g) => g.links.length > 0);
-  const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
-    title: "Accountant Console",
-    description: "Role-scoped workspace",
-    badge: me ? roleLabel(me.role) : "Loading",
-  };
-
-  const isLinkActive = (href: string) => {
-    if (location === href) return true;
-    // The Claims register (/clerk/claims) is its own entry — don't also light
-    // up the Clerk entry when we're on it.
-    if (href === "/clerk" && location.startsWith("/clerk/claims")) return false;
-    // Prefix matches stop at a path boundary ("/clerkX" never matches "/clerk").
-    if (href !== "/" && location.startsWith(`${href}/`)) return true;
-    // Client detail pages live under the Portfolio entry (import is its own).
-    if (
-      href === "/" &&
-      location.startsWith("/clients/") &&
-      !location.startsWith("/clients/import")
-    )
-      return true;
-    return false;
-  };
-
-  const activeLink = groups
-    .flatMap((group) => group.links)
-    .sort((a, b) => b.href.length - a.href.length)
-    .find((link) => isLinkActive(link.href));
-  const pageTitle = activeLink?.label ?? roleContext.title;
-  const commandItems: CommandItem[] = groups.flatMap((group) =>
-    group.links.map((link) => {
-      const Icon = link.icon;
-      return {
-        id: `console-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
-        label: link.label,
-        description: `Open ${link.label.toLowerCase()} in the ${roleContext.title.toLowerCase()}.`,
-        group: group.title,
-        icon: <Icon className="size-4" aria-hidden="true" />,
-        keywords: [group.title, roleContext.badge],
-        onSelect: () => navigate(link.href),
-      };
-    }),
-  );
-
-  const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
+function NavLinks({
+  groups,
+  location,
+  me,
+  roleContext,
+  onNavigate,
+  onSignOut,
+  signingOut,
+}: {
+  groups: NavGroup[];
+  location: string;
+  me: Me | undefined;
+  roleContext: { title: string; description: string; badge: string };
+  onNavigate?: () => void;
+  onSignOut: () => void;
+  signingOut: boolean;
+}) {
+  return (
     <nav className="flex h-full min-h-0 flex-col bg-[#071a1c] px-3 py-5 text-white">
       <div className="mb-6 px-2">
         <BrandMark />
@@ -412,7 +368,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </p>
             {group.links.map((link) => {
               const Icon = link.icon;
-              const isActive = isLinkActive(link.href);
+              const isActive = isLinkActive(location, link.href);
               return (
                 <Link
                   key={link.href}
@@ -470,20 +426,94 @@ export function Layout({ children }: { children: ReactNode }) {
           All apps
         </a>
         <button
-          onClick={signOut}
-          disabled={logout.isPending}
+          onClick={onSignOut}
+          disabled={signingOut}
           className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] disabled:opacity-50"
           data-testid="button-sign-out"
         >
           <LogOut className="size-[1.1rem]" aria-hidden="true" />
-          {logout.isPending ? "Signing out..." : "Sign out"}
+          {signingOut ? "Signing out..." : "Sign out"}
         </button>
       </div>
     </nav>
   );
+}
+
+export function Layout({ children }: { children: ReactNode }) {
+  const [location, navigate] = useLocation();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const { data: me } = useGetMe();
+  const logout = useLogout();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Move keyboard/SR focus to the main region on every route change so a
+  // single-page navigation announces the new page instead of stranding focus
+  // on the link that was just activated.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainRef.current?.focus({ preventScroll: true });
+  }, [location]);
+
+  const signOut = async () => {
+    try {
+      await logout.mutateAsync();
+    } catch {
+      /* clearing the cookie is best-effort; leave regardless */
+    }
+    // Full navigation to the portal so every app re-resolves the (now absent)
+    // session instead of trusting cached queries.
+    window.location.href = PORTAL_URL;
+  };
+
+  const capabilities = new Set(me?.capabilities ?? []);
+  const features = new Set(me?.features ?? []);
+  const groups = NAV_GROUPS.map((g) => ({
+    ...g,
+    links: g.links.filter(
+      (l) =>
+        (l.capability === undefined || capabilities.has(l.capability)) &&
+        (l.role === undefined || me?.role === l.role) &&
+        (l.feature === undefined || features.has(l.feature)),
+    ),
+  })).filter((g) => g.links.length > 0);
+  const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
+    title: "Accountant Console",
+    description: "Role-scoped workspace",
+    badge: me ? roleLabel(me.role) : "Loading",
+  };
+
+  const activeLink = groups
+    .flatMap((group) => group.links)
+    .sort((a, b) => b.href.length - a.href.length)
+    .find((link) => isLinkActive(location, link.href));
+  const pageTitle = activeLink?.label ?? roleContext.title;
+  const commandItems: CommandItem[] = groups.flatMap((group) =>
+    group.links.map((link) => {
+      const Icon = link.icon;
+      return {
+        id: `console-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
+        label: link.label,
+        description: `Open ${link.label.toLowerCase()} in the ${roleContext.title.toLowerCase()}.`,
+        group: group.title,
+        icon: <Icon className="size-4" aria-hidden="true" />,
+        keywords: [group.title, roleContext.badge],
+        onSelect: () => navigate(link.href),
+      };
+    }),
+  );
+
+  const navProps = {
+    groups,
+    location,
+    me,
+    roleContext,
+    onSignOut: signOut,
+    signingOut: logout.isPending,
+  };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen overflow-x-clip bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -499,7 +529,7 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <div className="flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
+      <div className="sticky top-0 z-30 flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
         <BrandMark />
         <div className="flex items-center gap-1">
           <Button
@@ -528,7 +558,7 @@ export function Layout({ children }: { children: ReactNode }) {
               className="w-[17rem] border-r-0 bg-[#071a1c] p-0 text-white [&>button]:text-white"
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <NavLinks onNavigate={() => setSheetOpen(false)} />
+              <NavLinks {...navProps} onNavigate={() => setSheetOpen(false)} />
             </SheetContent>
           </Sheet>
         </div>
@@ -543,7 +573,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
 
       <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
-        <NavLinks />
+        <NavLinks {...navProps} />
       </aside>
 
       <div className="min-w-0">

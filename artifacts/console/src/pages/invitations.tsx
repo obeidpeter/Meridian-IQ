@@ -23,6 +23,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -34,15 +44,17 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { roleLabel } from "@/components/capability-gate";
+import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { errorStatus } from "@/lib/errors";
+import { errorStatus, serverErrorToast } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import {
   acceptInviteLink,
   resetPasswordLink,
   invitationStatusTone,
   invitationStatusLabel,
+  effectiveInvitationStatus,
 } from "@/lib/invitations";
 import {
   UserPlus,
@@ -119,12 +131,27 @@ export function Invitations() {
   const [created, setCreated] = useState<InvitationWithToken | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // True once the admin has used the Copy button for THIS link — dismissing
+  // an uncopied one-time link needs an explicit acknowledgement instead.
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [confirmDismiss, setConfirmDismiss] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  // Confirm-before-revoke (and the revoke-then-prefill "New link" path).
+  const [revokeTarget, setRevokeTarget] = useState<{
+    invitation: Invitation;
+    replace: boolean;
+  } | null>(null);
 
   const clients = portfolio?.clients ?? [];
   // Operators see invitations across every firm, so the list needs a firm
   // column to be readable; firm admins only ever see their own and don't.
   const firmNameById = new Map((firms ?? []).map((f) => [f.id, f.name]));
+  // Client invites are scoped to a party — resolve its display name from the
+  // portfolio already fetched for the picker (operators, who cannot read a
+  // firm's portfolio, fall back to the short UUID like the Firm column).
+  const clientNameById = new Map(
+    clients.map((c) => [c.clientPartyId, c.legalName]),
+  );
   const hasClientList = clients.length > 0;
   const isClientRole = role === "client_user";
   // Operators bootstrap firm logins (first admin, then staff); client
@@ -173,6 +200,7 @@ export function Invitations() {
       const result = await create.mutateAsync({ data });
       setCreated(result);
       setCopied(false);
+      setLinkCopied(false);
       setEmail("");
       setClientPartyId("");
       invalidate();
@@ -191,23 +219,39 @@ export function Invitations() {
     }
   };
 
-  const runRevoke = (invitation: Invitation) => {
+  const runRevoke = (invitation: Invitation, replace: boolean) => {
     setRevokingId(invitation.id);
     revoke.mutate(
       { id: invitation.id },
       {
         onSuccess: () => {
-          toast({ title: `Invitation to ${invitation.email} revoked` });
           // Clear the one-time token card if it was for this invite.
           setCreated((c) =>
             c?.invitation.id === invitation.id ? null : c,
           );
           invalidate();
+          if (replace) {
+            // Prefill the form so the admin only has to press "Create
+            // invite link" — the fresh token replaces the dead one.
+            setEmail(invitation.email);
+            setRole(invitation.role);
+            setClientPartyId(invitation.clientPartyId ?? "");
+            if (isOperator) setFirmId(invitation.firmId);
+            setFormError(null);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            toast({
+              title: `Invitation to ${invitation.email} revoked`,
+              description:
+                "The form above is prefilled — create the new link when ready.",
+            });
+          } else {
+            toast({ title: `Invitation to ${invitation.email} revoked` });
+          }
         },
-        onError: () =>
-          toast({
+        onError: (e) =>
+          serverErrorToast(toast, e, {
             title: "Could not revoke invitation",
-            variant: "destructive",
+            fallback: "Try again.",
           }),
         onSettled: () => setRevokingId(null),
       },
@@ -306,6 +350,7 @@ export function Invitations() {
     try {
       await navigator.clipboard.writeText(acceptLink);
       setCopied(true);
+      setLinkCopied(true);
       toast({ title: "Accept link copied" });
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -328,8 +373,8 @@ export function Invitations() {
         </h1>
         <p className="text-muted-foreground mt-1">
           {isOperator
-            ? "Onboard a firm: provision it, then invite its first firm admin — every invite issues a one-time link to set a password and join. The admin self-serves teammates and clients from there."
-            : "Invite a teammate or client into your firm. Each invite issues a one-time link to set a password and join — pending invites can be revoked before they are accepted."}
+            ? "Onboard a firm: provision it, then invite its first firm admin — every invite issues a one-time link you share yourself (nothing is emailed). The admin self-serves teammates and clients from there."
+            : "Invite a teammate or client into your firm. Each invite issues a one-time link to set a password and join — you share the link yourself; pending invites can be revoked before they are accepted."}
         </p>
       </div>
 
@@ -517,13 +562,14 @@ export function Invitations() {
               <Button
                 type="submit"
                 disabled={create.isPending}
-                data-testid="button-send-invite"
+                data-testid="button-create-invite"
               >
                 <UserPlus className="w-4 h-4 mr-1" aria-hidden="true" />
-                {create.isPending ? "Sending…" : "Send invitation"}
+                {create.isPending ? "Creating…" : "Create invite link"}
               </Button>
               <p className="text-xs text-muted-foreground">
-                They get a one-time link to set a password and join your firm.
+                MeridianIQ does not email the invite — you copy the one-time
+                link and share it yourself.
               </p>
             </div>
           </form>
@@ -634,7 +680,9 @@ export function Invitations() {
             </CardTitle>
             <button
               type="button"
-              onClick={() => setCreated(null)}
+              onClick={() =>
+                linkCopied ? setCreated(null) : setConfirmDismiss(true)
+              }
               aria-label="Dismiss invitation link"
               className="rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="button-dismiss-token"
@@ -726,7 +774,7 @@ export function Invitations() {
               className="py-10 px-0"
             />
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Invitations table">
               <table
                 className="w-full text-sm"
                 data-testid="table-invitations"
@@ -738,6 +786,9 @@ export function Invitations() {
                     </th>
                     <th scope="col" className="py-2 pr-3 font-medium">
                       Role
+                    </th>
+                    <th scope="col" className="py-2 pr-3 font-medium">
+                      Client
                     </th>
                     {isOperator && (
                       <th scope="col" className="py-2 pr-3 font-medium">
@@ -763,6 +814,20 @@ export function Invitations() {
                     <tr key={inv.id} data-testid={`row-invitation-${inv.id}`}>
                       <td className="py-2.5 pr-3 font-medium">{inv.email}</td>
                       <td className="py-2.5 pr-3">{roleLabel(inv.role)}</td>
+                      <td
+                        className="py-2.5 pr-3 text-muted-foreground whitespace-nowrap"
+                        data-testid={`client-${inv.id}`}
+                      >
+                        {inv.clientPartyId ? (
+                          clientNameById.get(inv.clientPartyId) ?? (
+                            <span className="font-mono text-xs">
+                              {inv.clientPartyId.slice(0, 8)}
+                            </span>
+                          )
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       {isOperator && (
                         <td
                           className="py-2.5 pr-3 text-muted-foreground whitespace-nowrap"
@@ -778,11 +843,15 @@ export function Invitations() {
                       <td className="py-2.5 pr-3">
                         <span
                           className={pillClasses(
-                            invitationStatusTone(inv.status),
+                            invitationStatusTone(
+                              effectiveInvitationStatus(inv),
+                            ),
                           )}
                           data-testid={`status-${inv.id}`}
                         >
-                          {invitationStatusLabel(inv.status)}
+                          {invitationStatusLabel(
+                            effectiveInvitationStatus(inv),
+                          )}
                         </span>
                       </td>
                       <td className="py-2.5 pr-3 text-muted-foreground whitespace-nowrap">
@@ -793,27 +862,120 @@ export function Invitations() {
                       </td>
                       <td className="py-2.5 text-right">
                         {inv.status === "pending" && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={revoke.isPending && revokingId === inv.id}
-                            onClick={() => runRevoke(inv)}
-                            data-testid={`button-revoke-${inv.id}`}
-                          >
-                            {revoke.isPending && revokingId === inv.id
-                              ? "Revoking…"
-                              : "Revoke"}
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            {/* Operators don't issue client invites (the
+                                role picker excludes client_user), so no
+                                replace shortcut on those rows for them. */}
+                            {(!isOperator || inv.role !== "client_user") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={
+                                  revoke.isPending && revokingId === inv.id
+                                }
+                                onClick={() =>
+                                  setRevokeTarget({
+                                    invitation: inv,
+                                    replace: true,
+                                  })
+                                }
+                                data-testid={`button-new-link-${inv.id}`}
+                              >
+                                New link
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={
+                                revoke.isPending && revokingId === inv.id
+                              }
+                              onClick={() =>
+                                setRevokeTarget({
+                                  invitation: inv,
+                                  replace: false,
+                                })
+                              }
+                              data-testid={`button-revoke-${inv.id}`}
+                            >
+                              {revoke.isPending && revokingId === inv.id
+                                ? "Revoking…"
+                                : "Revoke"}
+                            </Button>
+                          </div>
                         )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={confirmDismiss} onOpenChange={setConfirmDismiss}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Dismiss the invite link for {created?.invitation.email}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This link is shown once and cannot be retrieved again. If it was
+              never shared, the invitation sits as Pending until it expires —
+              you would have to revoke it and create a new link.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => setCreated(null)}
+              data-testid="button-confirm-dismiss-token"
+            >
+              Dismiss link
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={revokeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevokeTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {revokeTarget?.replace
+                ? `Create a new link for ${revokeTarget?.invitation.email}?`
+                : `Revoke the invitation to ${revokeTarget?.invitation.email}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {revokeTarget?.replace
+                ? "This revokes the current invitation first — its accept link stops working immediately. The invite form is then prefilled so you can create the fresh link."
+                : "The accept link stops working immediately; to invite them again you'll need to create a new invitation."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={revoke.isPending}
+              onClick={() =>
+                revokeTarget &&
+                runRevoke(revokeTarget.invitation, revokeTarget.replace)
+              }
+              data-testid="button-confirm-revoke"
+            >
+              {revoke.isPending
+                ? "Revoking…"
+                : revokeTarget?.replace
+                  ? "Revoke old link"
+                  : "Revoke invitation"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

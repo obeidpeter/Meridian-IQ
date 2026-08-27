@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useAcceptInvite } from "@workspace/api-client-react";
 import { Loader2, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
-import { takeQuerySecret } from "@/lib/query-secret";
+import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
 
 // Map the accept-invite failure to a friendly line. `showSignIn` decides
 // whether we surface a "go to sign in" link (the account already exists).
@@ -15,7 +15,8 @@ function acceptError(err: unknown): { message: string; showSignIn: boolean } {
   const status = (err as { status?: number })?.status;
   if (status === 400) {
     return {
-      message: "This invitation link is invalid or has expired.",
+      message:
+        "This invitation link is invalid or has expired. Ask your administrator to send a fresh invitation.",
       showSignIn: false,
     };
   }
@@ -77,6 +78,16 @@ export function AcceptInvite() {
     showSignIn: boolean;
   } | null>(null);
 
+  // Success replaces the form — and the button the user just pressed — with
+  // the confirmation card, dropping focus to <body>. Move focus onto the
+  // page's main region so keyboard and screen-reader users hear the outcome
+  // (the error path already refocuses the password field on failure).
+  useEffect(() => {
+    if (accept.isSuccess) {
+      document.getElementById("main-content")?.focus();
+    }
+  }, [accept.isSuccess]);
+
   const passwordsMatch = password === confirm;
   const showMismatch = confirm.length > 0 && !passwordsMatch;
 
@@ -92,6 +103,7 @@ export function AcceptInvite() {
           ...(fullName.trim() ? { fullName: fullName.trim() } : {}),
         },
       });
+      clearQuerySecret("token");
     } catch (err) {
       setError(acceptError(err));
       document.getElementById("invite-password")?.focus();
@@ -116,8 +128,10 @@ export function AcceptInvite() {
             className="mt-2 text-sm text-muted-foreground"
             data-testid="text-missing-token"
           >
-            This invitation link is missing its token. Ask your administrator to
-            resend it.
+            This invitation link is missing its token. If you refreshed this
+            page, open the link from your invitation email again — it works
+            until it is redeemed. Otherwise, ask your administrator to resend
+            it.
           </p>
           <Button asChild variant="outline" className="mt-4 w-full">
             <a href="/login" data-testid="link-missing-token-sign-in">
@@ -141,7 +155,7 @@ export function AcceptInvite() {
             />
             <h1 className="text-lg font-semibold">Your account is ready</h1>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p role="status" className="mt-2 text-sm text-muted-foreground">
             Your password is set. Sign in to open your workspace.
           </p>
           <Button asChild className="mt-4 w-full">

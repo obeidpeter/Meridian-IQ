@@ -117,6 +117,56 @@ export function formatDateTime(value: string | Date | null | undefined): string 
   return DATE_TIME_FORMAT.format(d);
 }
 
+// Statutory deadlines are Lagos-midnight instants (the server's
+// lib/lagos-time); rendering them in the viewer's zone shows the eve of the
+// statutory day from anywhere west of WAT, and a wall-clock-ms countdown
+// contradicts the printed date on the eve of every deadline. These twins pin
+// display and day-arithmetic to Africa/Lagos (fixed UTC+1, no DST).
+const LAGOS_DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  timeZone: "Africa/Lagos",
+});
+
+// en-CA renders YYYY-MM-DD — the day key behind the calendar-day difference.
+const LAGOS_DAY_KEY_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "Africa/Lagos",
+});
+
+/** formatDate pinned to the Lagos (WAT) statutory calendar. */
+export function formatLagosDate(
+  value: string | Date | null | undefined,
+): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return LAGOS_DATE_FORMAT.format(d);
+}
+
+/**
+ * Whole Lagos calendar days from `from` (default: now) to `target`:
+ * 0 = same Lagos day, negative = past. The difference is between Lagos
+ * DATES, never wall-clock hours, so a countdown built on it can never
+ * contradict the printed statutory day.
+ */
+export function lagosDayDiff(
+  target: string | Date | null | undefined,
+  from: Date = new Date(),
+): number | null {
+  if (!target) return null;
+  const d = new Date(target);
+  if (Number.isNaN(d.getTime())) return null;
+  const toUtcDay = (x: Date) => {
+    const [y, m, day] = LAGOS_DAY_KEY_FORMAT.format(x).split("-").map(Number);
+    return Date.UTC(y, m - 1, day);
+  };
+  return Math.round((toUtcDay(d) - toUtcDay(from)) / 86_400_000);
+}
+
 /** Humanize a raw enum value: "buyer_flag" → "Buyer flag". */
 export function humanize(raw: string | null | undefined): string {
   const s = (raw ?? "").replace(/[_-]+/g, " ").trim();
@@ -207,7 +257,7 @@ export function statusTone(status: string): StatusTone {
 export function statusLabel(status: string): string {
   const tone = statusTone(status);
   if (tone === "draft") return status === "validated" ? "Validated" : "Draft";
-  if (tone === "pending") return "Pending stamp";
+  if (tone === "pending") return "Awaiting stamp";
   if (tone === "stamped") return status === "confirmed" ? "Confirmed" : "Stamped";
   if (tone === "settled") return "Settled";
   if (tone === "credited") return "Credited";
@@ -235,6 +285,14 @@ export function badgeClasses(status: string): string {
       return pillClasses("blue");
   }
 }
+
+// ---- Stamp identifier vocabulary -------------------------------------------
+// First-use expansions of the two FIRS stamp identifiers, shared so the
+// wording cannot drift between the SME stamp card, the bills verify form and
+// the marketing site. Every surface expands the acronym at its first use
+// (the TIN precedent), then may use the short form.
+export const IRN_EXPANSION = "Invoice Reference Number";
+export const CSID_EXPANSION = "Cryptographic Stamp ID";
 
 // ---- Deadline severity -----------------------------------------------------
 
@@ -381,5 +439,25 @@ export function roleLabel(role: string | undefined): string {
       buyer_user: "Buyer",
       auditor: "Auditor",
     }[role ?? ""] ?? (role || "Unknown role")
+  );
+}
+
+/**
+ * The workspace a role calls home — mirrors the portal's DEFAULT_WORKSPACE
+ * so the wrong-workspace cards can deep-link a lost visitor to a place they
+ * can actually use instead of only bouncing them through the portal.
+ */
+export function roleHomeHref(
+  role: string | undefined,
+): { href: string; label: string } | null {
+  return (
+    {
+      firm_admin: { href: "/console/", label: "the Accountant Console" },
+      firm_staff: { href: "/app/", label: "the Compliance App" },
+      client_user: { href: "/app/", label: "the Compliance App" },
+      operator: { href: "/console/operator-queue", label: "the Operator queue" },
+      buyer_user: { href: "/buyer/", label: "Buyer Rails" },
+      auditor: { href: "/console/audit", label: "Audit & evidence" },
+    }[role ?? ""] ?? null
   );
 }

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
+import { ScrollRegion } from "@/components/scroll-region";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { formatNaira, formatPct, humanize } from "@/lib/format";
 
@@ -107,7 +108,7 @@ export function UnearnedIncomePage() {
               No prospects in the pipeline yet.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Eligible prospects table">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
@@ -146,7 +147,7 @@ export function UnearnedIncomePage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardContent>
       </Card>

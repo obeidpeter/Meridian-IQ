@@ -23,6 +23,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
 import { pillClasses, type BadgeTone } from "@/lib/format";
@@ -194,6 +204,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
 
   const [skipPanelKey, setSkipPanelKey] = useState<string | null>(null);
   const [skipReason, setSkipReason] = useState("");
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
 
   const onError =
     (title: string) => (e: unknown) =>
@@ -471,13 +482,59 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => abandon.mutate({ id: run.id })}
+                onClick={() => setConfirmAbandon(true)}
                 disabled={abandon.isPending}
                 data-testid="button-onboarding-abandon"
               >
                 Close without completing
               </Button>
             )}
+            {canWrite && run.status === "abandoned" && (
+              <div className="space-y-2">
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-onboarding-closed"
+                >
+                  This run was closed without completing — its checklist is
+                  frozen above. Start a fresh run to reopen onboarding.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => create.mutate({ data: { clientPartyId } })}
+                  disabled={create.isPending}
+                  data-testid="button-onboarding-restart"
+                >
+                  {create.isPending ? "Starting…" : "Start onboarding"}
+                </Button>
+              </div>
+            )}
+            <AlertDialog
+              open={confirmAbandon}
+              onOpenChange={setConfirmAbandon}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Close onboarding without completing it?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The run closes and its checklist freezes where it stands —
+                    steps stop re-checking themselves. You can start a fresh
+                    onboarding run for {run.clientName} afterwards.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={abandon.isPending}
+                    onClick={() => abandon.mutate({ id: run.id })}
+                    data-testid="button-onboarding-abandon-confirm"
+                  >
+                    Close without completing
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <p className="text-xs text-muted-foreground">
               Steps settle themselves from the record — the checklist only
               ever claims what the data shows; a skip records the gap it

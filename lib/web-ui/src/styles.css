@@ -213,7 +213,7 @@
   cursor: pointer;
 }
 
-.mi-segmented__item[aria-selected="true"] {
+.mi-segmented__item[aria-pressed="true"] {
   background: var(--mi-ink);
   color: white;
 }
@@ -234,7 +234,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.mi-segmented__item:not([aria-selected="true"]) .mi-segmented__count {
+.mi-segmented__item:not([aria-pressed="true"]) .mi-segmented__count {
   background: var(--mi-teal-soft);
   color: var(--mi-teal);
 }

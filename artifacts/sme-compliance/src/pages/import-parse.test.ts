@@ -5,6 +5,7 @@ import {
   mapRow,
   mapGridRows,
   isExcel,
+  isLegacyExcel,
 } from "./import-parse";
 
 describe("COLUMNS", () => {
@@ -131,6 +132,25 @@ describe("parseCsv", () => {
     expect(rows).toHaveLength(2);
     expect(rows[1].invoiceNumber).toBe("INV-2");
   });
+
+  test("parses RFC-4180 quoted fields (commas, escaped quotes, embedded newlines)", () => {
+    const csv =
+      "invoiceNumber,buyerName,description\n" +
+      'INV-1,"Adaeze Foods, Ltd","Consulting, advisory"\n' +
+      'INV-2,"Say ""go""","Line one\nline two"';
+    const rows = parseCsv(csv);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].buyerName).toBe("Adaeze Foods, Ltd");
+    expect(rows[0].description).toBe("Consulting, advisory");
+    expect(rows[1].buyerName).toBe('Say "go"');
+    expect(rows[1].description).toBe("Line one\nline two");
+  });
+
+  test("drops separator-only lines instead of producing empty rows", () => {
+    const rows = parseCsv("invoiceNumber,quantity\n,\nINV-1,1");
+    expect(rows.map((r) => r.invoiceNumber)).toEqual(["INV-1"]);
+    expect(rows.map((r) => r.rowNumber)).toEqual([1]);
+  });
 });
 
 describe("mapGridRows (workbook mapping core)", () => {
@@ -184,5 +204,18 @@ describe("isExcel", () => {
     expect(isExcel("report.xlsxx")).toBe(false);
     expect(isExcel("xlsx")).toBe(false);
     expect(isExcel("a.xlsx.xlsx")).toBe(true);
+  });
+});
+
+describe("isLegacyExcel", () => {
+  test("matches only a legacy .xls extension (case-insensitive)", () => {
+    expect(isLegacyExcel("book.xls")).toBe(true);
+    expect(isLegacyExcel("BOOK.XLS")).toBe(true);
+  });
+  test("does not match .xlsx, .csv, or names merely containing xls", () => {
+    expect(isLegacyExcel("book.xlsx")).toBe(false);
+    expect(isLegacyExcel("book.csv")).toBe(false);
+    expect(isLegacyExcel("xls")).toBe(false);
+    expect(isLegacyExcel("book.xls.csv")).toBe(false);
   });
 });

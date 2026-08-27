@@ -79,7 +79,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 });
 
 // Import AFTER the mock so the component module binds the stand-ins.
-import { WhtCard, whtCreditPill } from "./wht-card";
+import { WhtCard, whtCardHasContent, whtCreditPill } from "./wht-card";
 import { getListWhtCreditsQueryKey } from "@workspace/api-client-react";
 import { localDayIso } from "@workspace/format/notice-copy";
 
@@ -188,6 +188,19 @@ describe("whtCreditPill", () => {
       tone: "slate",
       label: "In dispute",
     });
+  });
+});
+
+describe("whtCardHasContent", () => {
+  test("the occupancy gate client-detail's Money view shares with the card", () => {
+    // No credits list yet (loading / 403 / 404): no content.
+    expect(whtCardHasContent(undefined, undefined)).toBe(false);
+    // Empty ledger and no remittance schedule: an empty book.
+    expect(whtCardHasContent({ credits: [] }, undefined)).toBe(false);
+    // Any recorded credit earns the card.
+    expect(whtCardHasContent({ credits: [{}] }, undefined)).toBe(true);
+    // Rows on the period's remittance schedule alone earn it too.
+    expect(whtCardHasContent({ credits: [] }, { rows: [{}] })).toBe(true);
   });
 });
 

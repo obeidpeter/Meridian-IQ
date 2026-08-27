@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FieldError, invalidClass } from "@/components/field-error";
-import { formatNaira } from "@/lib/format";
+import { formatAmount } from "@/lib/format";
 import { lineTotal, type LineDraft } from "@/lib/invoice-lines";
 import { Trash2 } from "lucide-react";
 
@@ -39,6 +39,7 @@ export function LineItemRow({
   onRemove,
   errors,
   showTotal = false,
+  currency = "NGN",
   buttonType,
 }: {
   index: number;
@@ -48,6 +49,8 @@ export function LineItemRow({
   onRemove: () => void;
   errors?: LineRowErrors;
   showTotal?: boolean;
+  /** ISO currency for the line-total render; NGN when omitted (the recurring dialog is naira-only). */
+  currency?: string;
   /** The recurring dialog pins type="button"; the invoice form leaves it unset. */
   buttonType?: "button";
 }) {
@@ -169,7 +172,7 @@ export function LineItemRow({
       </div>
       {showTotal && (
         <div className="text-right text-sm text-muted-foreground tabular-nums">
-          Line total {formatNaira(lineTotal(line).total)}
+          Line total {formatAmount(lineTotal(line).total, currency)}
         </div>
       )}
     </div>

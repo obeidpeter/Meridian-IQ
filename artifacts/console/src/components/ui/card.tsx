@@ -33,7 +33,9 @@ const CardTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
-  <h3
+  // h2, not shadcn's h3: cards sit directly under the page h1 across the
+  // apps, so h3 made every card-led page skip a heading level (WCAG 1.3.1).
+  <h2
     ref={ref}
     className={cn("font-semibold leading-snug", className)}
     {...props}

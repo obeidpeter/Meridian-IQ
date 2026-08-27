@@ -58,6 +58,11 @@ import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
 import { mfaChallengeDisposition } from "@/lib/mfa";
 import { TOTP_CARD_INITIAL, totpCardTransition } from "@/lib/totp-card";
+import {
+  defaultWorkspaceFor,
+  resolveReturnTo,
+  sanitizeReturnTo,
+} from "@/lib/return-to";
 import LandingPage from "@/LandingPage";
 import { AcceptInvite } from "@/AcceptInvite";
 import { ResetPassword } from "@/ResetPassword";
@@ -135,19 +140,6 @@ const APPS: AppTile[] = [
     accent: "text-amber-600 dark:text-amber-400",
   },
 ];
-
-// Where each role starts after sign-in. The operator goes straight to the
-// Compliance Desk work queue — that is the account's job, not the portfolio.
-const DEFAULT_WORKSPACE: Partial<
-  Record<Role, { href: string; label: string }>
-> = {
-  operator: { href: "/console/operator-queue", label: "Operator queue" },
-  firm_admin: { href: "/console/", label: "Accountant Console" },
-  firm_staff: { href: "/app/", label: "Compliance App" },
-  client_user: { href: "/app/", label: "Compliance App" },
-  buyer_user: { href: "/buyer/", label: "Buyer Rails" },
-  auditor: { href: "/console/audit", label: "Audit & evidence" },
-};
 
 function roleLabel(role: string): string {
   return (
@@ -332,13 +324,27 @@ function SignInPanel() {
     href: string;
   } | null>(null);
 
+  // Captured once on mount: the app session guards send ?returnTo=<the page
+  // the session expired on>&reason=expired, and the marketing page's
+  // workspace cards send ?returnTo=<the workspace the visitor picked>.
+  const [arrival] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      returnTo: sanitizeReturnTo(params.get("returnTo")),
+      expired: params.get("reason") === "expired",
+    };
+  });
+
   // Shared success tail for both steps: the session cookie is set, so land
-  // the account in the workspace it signed in for (the operator's queue, the
-  // buyer's rails…). A full navigation, so the app boots against the fresh
-  // session cookie.
+  // the account where it was headed — the page a guard bounced it from or
+  // the workspace card it clicked (a validated, role-allowed returnTo), else
+  // the default workspace for the membership. A full navigation, so the app
+  // boots against the fresh session cookie.
   const completeSignIn = async (me: Me): Promise<boolean> => {
     await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
-    const target = DEFAULT_WORKSPACE[me.role as Role];
+    const target =
+      resolveReturnTo(arrival.returnTo, me.role, APPS) ??
+      defaultWorkspaceFor(me);
     if (target) {
       setRedirecting(target);
       window.location.assign(target.href);
@@ -540,9 +546,21 @@ function SignInPanel() {
         Welcome back
       </h1>
       <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
-        Sign in once. MeridianIQ will take you directly to the workspace for
-        your role.
+        Sign in once. MeridianIQ will take you straight to your workspace.
       </p>
+
+      {arrival.expired && arrival.returnTo && (
+        <div
+          role="status"
+          className="mt-6 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900"
+          data-testid="text-session-expired"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>
+            Your session expired — sign in to continue where you left off.
+          </span>
+        </div>
+      )}
 
       <form onSubmit={onSubmit} className="mt-8 space-y-5">
         <div className="space-y-2">
@@ -1288,8 +1306,7 @@ function SignedInPanel({ me }: { me: Me }) {
   const qc = useQueryClient();
   const logout = useLogout();
   const [signingOut, setSigningOut] = useState(false);
-  const role = me.role as Role;
-  const target = DEFAULT_WORKSPACE[role];
+  const target = defaultWorkspaceFor(me);
 
   const signOut = async () => {
     setSigningOut(true);

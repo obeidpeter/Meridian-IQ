@@ -31,7 +31,7 @@ import { PORTAL_URL } from "@/components/require-session";
 import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { isForbidden } from "@/lib/errors";
+import { isForbidden, serverErrorToast } from "@/lib/errors";
 import { humanize, priorityBadgeClasses } from "@/lib/format";
 import {
   Clock,
@@ -88,8 +88,11 @@ function EscalationItem({
           setDraftSource(res.source);
           setViaExample(res.viaExample);
         },
-        onError: () =>
-          toast({ title: "Could not draft a reply", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not draft a reply",
+            fallback: "Try again.",
+          }),
       },
     );
   };
@@ -106,8 +109,11 @@ function EscalationItem({
           setViaExample(false);
           onReplied();
         },
-        onError: () =>
-          toast({ title: "Could not send the reply", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not send the reply",
+            fallback: "Try again.",
+          }),
       },
     );
   };
@@ -404,8 +410,11 @@ export function OperatorQueue() {
           toast({ title: "Case claimed" });
           invalidate();
         },
-        onError: () =>
-          toast({ title: "Could not claim case", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not claim case",
+            fallback: "Try again.",
+          }),
         onSettled: () => setPendingCaseId(null),
       },
     );
@@ -420,8 +429,11 @@ export function OperatorQueue() {
           toast({ title: "Case resolved" });
           invalidate();
         },
-        onError: () =>
-          toast({ title: "Could not resolve case", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not resolve case",
+            fallback: "Try again.",
+          }),
         onSettled: () => setPendingCaseId(null),
       },
     );

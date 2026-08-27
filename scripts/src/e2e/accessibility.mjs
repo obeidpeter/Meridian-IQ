@@ -1,6 +1,9 @@
 /* global CSS, document, getComputedStyle */
 
-export async function checkPageAccessibility(page, check, label) {
+// Collect the full issue list for the current page (also used standalone by
+// ux-snapshot.mjs for before/after measurement, where the complete list —
+// not the check()'s 8-issue summary — is the datum).
+export async function collectAccessibilityIssues(page) {
   const issues = await page.evaluate(() => {
     const findings = [];
     const visible = (element) => {
@@ -113,7 +116,11 @@ export async function checkPageAccessibility(page, check, label) {
       : "first keyboard target has no visible focus indicator";
   });
   if (focusIssue) issues.push(focusIssue);
+  return issues;
+}
 
+export async function checkPageAccessibility(page, check, label) {
+  const issues = await collectAccessibilityIssues(page);
   check(
     `${label}: accessibility smoke`,
     issues.length === 0,

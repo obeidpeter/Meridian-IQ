@@ -4,7 +4,7 @@ import { FileCheck2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
-import { roleLabel } from "@workspace/format";
+import { roleLabel, roleHomeHref } from "@workspace/format";
 
 // Authentication uses the origin-wide session cookie set by the portal login.
 // This app serves SME client and firm users.
@@ -105,11 +105,17 @@ export function RequireSession({ children }: { children: ReactNode }) {
   }
 
   if (isError || !me) {
-    window.location.href = PORTAL;
+    // Send the portal the page this session died on so sign-in can land
+    // back here instead of the workspace root.
+    const returnTo = encodeURIComponent(
+      window.location.pathname + window.location.search,
+    );
+    window.location.href = `${PORTAL}?returnTo=${returnTo}&reason=expired`;
     return null;
   }
 
   if (!ALLOWED.includes(me.role)) {
+    const home = roleHomeHref(me.role);
     return (
       <BrandSplash
         title="Wrong workspace"
@@ -125,9 +131,20 @@ export function RequireSession({ children }: { children: ReactNode }) {
         icon={<ShieldAlert className="size-6" aria-hidden="true" />}
         testId="card-wrong-role"
       >
-        <Button onClick={() => (window.location.href = PORTAL)}>
-          Back to the MeridianIQ portal
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          {home && (
+            <Button asChild data-testid="button-open-role-home">
+              <a href={home.href}>Open {home.label}</a>
+            </Button>
+          )}
+          <Button
+            variant={home ? "outline" : "default"}
+            onClick={() => (window.location.href = PORTAL)}
+            data-testid="button-back-to-portal"
+          >
+            Back to the MeridianIQ portal
+          </Button>
+        </div>
       </BrandSplash>
     );
   }

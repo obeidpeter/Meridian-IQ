@@ -46,7 +46,7 @@ import {
   Download,
 } from "lucide-react";
 import {
-  formatNaira,
+  formatAmount,
   formatDate,
   statusLabel,
   badgeClasses,
@@ -54,17 +54,44 @@ import {
   pillClasses,
 } from "@/lib/format";
 
-const FILTERS = [
-  { key: "all", label: "All" },
-  { key: "draft", label: "Unsubmitted" },
-  { key: "pending", label: "Pending" },
-  { key: "stamped", label: "Stamped" },
-  { key: "failed", label: "Failed" },
+// Tabs group raw statuses by TONE (statusTone) so the tab words can mirror
+// the row badges exactly: Drafts covers draft+validated, Pending stamp covers
+// submitted, Stamped covers stamped+confirmed, and Closed collects the
+// terminal credited/cancelled records that used to be reachable only via All.
+export const FILTERS = [
+  { key: "all", label: "All", tones: [] },
+  { key: "draft", label: "Drafts", tones: ["draft"] },
+  { key: "pending", label: "Pending stamp", tones: ["pending"] },
+  { key: "stamped", label: "Stamped", tones: ["stamped"] },
+  { key: "settled", label: "Settled", tones: ["settled"] },
+  { key: "failed", label: "Failed", tones: ["failed"] },
+  { key: "closed", label: "Closed", tones: ["credited", "cancelled"] },
 ] as const;
+
+type FilterKey = (typeof FILTERS)[number]["key"];
+
+// Which tab a row belongs to. Off-contract "unknown" tones match only All.
+// Exported for the unit tests.
+export function matchesFilter(inv: Invoice, key: FilterKey): boolean {
+  if (key === "all") return true;
+  const f = FILTERS.find((f) => f.key === key);
+  return !!f && (f.tones as readonly string[]).includes(statusTone(inv.status));
+}
 
 // Server page size. Passing limit/offset switches GET /invoices into its
 // newest-first bounded mode, so we never pull the unbounded legacy list.
 const PAGE_SIZE = 50;
+
+// The vault's Min/Max filters are ₦-labeled, so they compare naira VALUE:
+// foreign invoices convert through their captured FX rate; one without a
+// rate cannot be compared, so it only shows while no amount filter is set.
+function nairaEquivalent(inv: Invoice): number | null {
+  if (inv.currency === "NGN") return Number(inv.grandTotal);
+  const rate = Number(inv.fxRateToNgn);
+  return Number.isFinite(rate) && rate > 0
+    ? Number(inv.grandTotal) * rate
+    : null;
+}
 
 // Offset-paged accumulation of GET /invoices for the vault list: debounces
 // the search box into the server-side `q`, keeps every fetched page for the
@@ -264,12 +291,21 @@ function BulkSubmitDialog({
                           {r.outcome === "invalid" ? "Invalid" : "Failed"}
                         </span>
                       </div>
-                      <p className="text-xs text-destructive mt-1">
-                        {r.errors[0]
-                          ? `${r.errors[0].field}: ${r.errors[0].message}`
-                          : r.error ||
+                      {r.errors.length > 0 ? (
+                        r.errors.map((err, i) => (
+                          <p
+                            key={`${err.field}-${i}`}
+                            className="text-xs text-destructive mt-1"
+                          >
+                            {err.field}: {err.message}
+                          </p>
+                        ))
+                      ) : (
+                        <p className="text-xs text-destructive mt-1">
+                          {r.error ||
                             "Submission failed — open the invoice for details."}
-                      </p>
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -409,7 +445,7 @@ export function Invoices() {
     rows: BulkSubmitRowResult[];
     remaining: number;
   } | null>(null);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  const [filter, setFilter] = useState<FilterKey>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -521,10 +557,8 @@ export function Invoices() {
     [loaded, me?.clientPartyId],
   );
 
-  const countFor = (key: (typeof FILTERS)[number]["key"]) =>
-    key === "all"
-      ? scoped.length
-      : scoped.filter((inv) => statusTone(inv.status) === key).length;
+  const countFor = (key: FilterKey) =>
+    scoped.filter((inv) => matchesFilter(inv, key)).length;
 
   const rows = useMemo(() => {
     const minParsed = Number(minAmount);
@@ -532,13 +566,15 @@ export function Invoices() {
     const min = minAmount && Number.isFinite(minParsed) ? minParsed : null;
     const max = maxAmount && Number.isFinite(maxParsed) ? maxParsed : null;
     return scoped
-      .filter((inv) =>
-        filter === "all" ? true : statusTone(inv.status) === filter,
-      )
+      .filter((inv) => matchesFilter(inv, filter))
       .filter((inv) => (fromDate ? inv.issueDate >= fromDate : true))
       .filter((inv) => (toDate ? inv.issueDate <= toDate : true))
-      .filter((inv) => (min !== null ? Number(inv.grandTotal) >= min : true))
-      .filter((inv) => (max !== null ? Number(inv.grandTotal) <= max : true));
+      .filter((inv) => {
+        if (min === null && max === null) return true;
+        const ngn = nairaEquivalent(inv);
+        if (ngn === null) return false;
+        return (min === null || ngn >= min) && (max === null || ngn <= max);
+      });
   }, [scoped, filter, fromDate, toDate, minAmount, maxAmount]);
 
   return (
@@ -617,9 +653,12 @@ export function Invoices() {
             key={f.key}
             active={filter === f.key}
             onClick={() => setFilter(f.key)}
+            data-testid={`filter-invoices-${f.key}`}
           >
             {f.label}
-            {hasLoaded ? ` · ${countFor(f.key)}` : ""}
+            {/* While older pages exist the count is a lower bound over what's loaded,
+                so it must say so — "Failed · 0" with a failure on page 2 is a lie. */}
+            {hasLoaded ? ` · ${countFor(f.key)}${hasMore ? "+" : ""}` : ""}
           </PillToggle>
         ))}
         <Button
@@ -633,6 +672,15 @@ export function Invoices() {
           Filters{hasAdvanced ? " (on)" : ""}
         </Button>
       </div>
+
+      <p
+        className="text-xs text-muted-foreground"
+        data-testid="text-lifecycle-legend"
+      >
+        Lifecycle: Draft → Validated → Pending stamp → Stamped → Settled.
+        Rejected submissions show under Failed; credited and cancelled invoices
+        under Closed.
+      </p>
 
       {showFilters && (
         <AdvancedFiltersCard
@@ -678,15 +726,26 @@ export function Invoices() {
             <EmptyState
               icon={FileText}
               title="No matches"
-              description="No invoices match the current search and filters."
+              description={
+                hasMore
+                  ? "Nothing loaded so far matches the current search and filters — older invoices haven't been loaded yet."
+                  : "No invoices match the current search and filters."
+              }
             >
-              <Button
-                variant="outline"
-                className="mt-2"
-                onClick={clearAllFilters}
-              >
-                Clear filters
-              </Button>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                {hasMore && (
+                  <Button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    data-testid="button-load-more-empty"
+                  >
+                    {loadingMore ? "Loading…" : "Load older invoices"}
+                  </Button>
+                )}
+                <Button variant="outline" onClick={clearAllFilters}>
+                  Clear filters
+                </Button>
+              </div>
             </EmptyState>
           </Card>
         )
@@ -716,7 +775,7 @@ export function Invoices() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="font-semibold tabular-nums">
-                      {formatNaira(inv.grandTotal)}
+                      {formatAmount(inv.grandTotal, inv.currency)}
                     </span>
                     <ChevronRight
                       className="w-4 h-4 text-muted-foreground"
@@ -744,7 +803,7 @@ export function Invoices() {
                 Try again
               </Button>
             </>
-          ) : hasMore || loadingMore ? (
+          ) : (hasMore || loadingMore) && rows.length > 0 ? (
             <Button
               variant="outline"
               size="sm"

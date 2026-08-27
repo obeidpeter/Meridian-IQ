@@ -39,6 +39,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { AlertTriangle, BookOpen, Pencil, Plus, Search, Sparkles } from "lucide-react";
 import { formatDateTime, formatPct, pillClasses } from "@/lib/format";
@@ -508,8 +509,11 @@ export function Catalogue() {
             queryKey: getListUnmappedErrorCodesQueryKey(),
           });
         },
-        onError: () =>
-          toast({ title: "Could not save entry", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not save entry",
+            fallback: "Try again.",
+          }),
       },
     );
   };

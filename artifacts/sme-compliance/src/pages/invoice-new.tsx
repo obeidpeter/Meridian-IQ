@@ -34,12 +34,13 @@ import { AddCustomerDialog } from "@/components/add-customer-dialog";
 import { BuyerSelectOptions } from "@/components/buyer-select-options";
 import { FieldError, invalidClass } from "@/components/field-error";
 import { LineItemRow } from "@/components/line-item-row";
-import { formatNaira } from "@/lib/format";
+import { formatAmount, formatNaira } from "@/lib/format";
 import { handleClerkGatewayError } from "@/lib/clerk";
 import {
   type LineDraft,
   VAT_STANDARD,
   emptyLine,
+  draftHasWork,
   lineTotals,
   todayIsoDate,
   toInvoiceLineInputs,
@@ -49,7 +50,6 @@ import {
   Plus,
   CheckCircle2,
   Circle,
-  Cloud,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -103,17 +103,24 @@ const emptyDraft = (): DraftState => ({
 // option rides a sentinel that maps back to "" in the draft.
 const NO_WHT = "none";
 
-function loadDraft(key: string): DraftState {
+function loadDraft(key: string): { draft: DraftState; restored: boolean } {
   try {
-    const raw = sessionStorage.getItem(key);
+    // Durable copy first; fall back to a pre-move sessionStorage draft so
+    // an in-flight draft survives the storage migration.
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
     // Merge over the empty draft so an offline draft saved before the
     // currency fields existed still loads with NGN defaults.
-    if (raw)
-      return { ...emptyDraft(), ...(JSON.parse(raw) as Partial<DraftState>) };
+    if (raw) {
+      const draft = {
+        ...emptyDraft(),
+        ...(JSON.parse(raw) as Partial<DraftState>),
+      };
+      return { draft, restored: draftHasWork(draft) };
+    }
   } catch {
     /* ignore corrupt draft */
   }
-  return emptyDraft();
+  return { draft: emptyDraft(), restored: false };
 }
 
 export function InvoiceNew() {
@@ -130,7 +137,7 @@ export function InvoiceNew() {
     const entry = (catalogue || []).find((c) => c.code === "MBS_INVALID_TIN");
     return (
       entry?.fix ??
-      "Add the customer's Tax Identification Number before submitting — the NRS rejects B2B invoices without a valid buyer TIN."
+      "Add the customer's Tax Identification Number before submitting — FIRS rejects B2B invoices without a valid buyer TIN."
     );
   }, [catalogue]);
 
@@ -143,8 +150,10 @@ export function InvoiceNew() {
 
   useEffect(() => {
     if (!draftKey || draftOwner === draftKey) return;
-    setDraft(loadDraft(draftKey));
+    const { draft: stored, restored } = loadDraft(draftKey);
+    setDraft(stored);
     setDraftOwner(draftKey);
+    setSavedAt(restored ? new Date() : null);
     localStorage.removeItem(DRAFT_KEY);
   }, [draftKey, draftOwner]);
 
@@ -183,6 +192,9 @@ export function InvoiceNew() {
   // "Draft with Clerk" (idea #7): one sentence prefills the SAME form below —
   // Clerk proposes, the client reviews and saves through the ordinary create
   // path; nothing exists until they click "Create invoice".
+  // PL-02 gate, mirroring the dashboard's Clerk surfaces: the card is absent
+  // while the clerk_ai feature is dark.
+  const clerkLit = !!me?.features.includes("clerk_ai");
   const clerkDraft = useDraftInvoiceWithClerk();
   const [clerkText, setClerkText] = useState("");
   const [clerkNote, setClerkNote] = useState<string | null>(null);
@@ -235,14 +247,27 @@ export function InvoiceNew() {
   useEffect(() => {
     if (!draftKey || draftOwner !== draftKey) return;
     const t = setTimeout(() => {
-      sessionStorage.setItem(draftKey, JSON.stringify(draft));
-      setSavedAt(new Date());
+      if (draftHasWork(draft)) {
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+        // The pre-move copy must not shadow the durable one on reload.
+        sessionStorage.removeItem(draftKey);
+        setSavedAt(new Date());
+      } else {
+        // An untouched or emptied form leaves no durable residue — the
+        // indicator only ever claims a draft that actually exists.
+        localStorage.removeItem(draftKey);
+        sessionStorage.removeItem(draftKey);
+        setSavedAt(null);
+      }
     }, 400);
     return () => clearTimeout(t);
   }, [draft, draftKey, draftOwner]);
 
   const discardDraft = () => {
-    if (draftKey) sessionStorage.removeItem(draftKey);
+    if (draftKey) {
+      localStorage.removeItem(draftKey);
+      sessionStorage.removeItem(draftKey);
+    }
     setDraft(emptyDraft());
     setSavedAt(null);
     setShowErrors(false);
@@ -256,7 +281,9 @@ export function InvoiceNew() {
   if (!draft.invoiceNumber.trim())
     errors.invoiceNumber = "Invoice number is required.";
   if (!draft.buyerPartyId) errors.buyerPartyId = "Select a customer.";
-  else if (!selectedBuyer?.tin) errors.buyerTin = tinGuidance;
+  // A missing buyer TIN never blocks a DRAFT — the note under the picker
+  // warns, the checklist stays unchecked, and the server refuses submission
+  // for stamping until the TIN exists (canonical validation).
   if (!draft.issueDate) errors.issueDate = "Issue date is required.";
   draft.lines.forEach((l, i) => {
     if (!l.description.trim())
@@ -272,7 +299,7 @@ export function InvoiceNew() {
   const errorFieldIds = (): string[] => {
     const ids: string[] = [];
     if (errors.invoiceNumber) ids.push("invoice-number");
-    if (errors.buyerPartyId || errors.buyerTin) ids.push("buyer-select");
+    if (errors.buyerPartyId) ids.push("buyer-select");
     if (errors.issueDate) ids.push("issue-date");
     draft.lines.forEach((_, i) => {
       if (errors[`line-${i}-desc`]) ids.push(`line-${i}-description`);
@@ -321,7 +348,10 @@ export function InvoiceNew() {
           lines,
         },
       });
-      if (draftKey) sessionStorage.removeItem(draftKey);
+      if (draftKey) {
+        localStorage.removeItem(draftKey);
+        sessionStorage.removeItem(draftKey);
+      }
       // Not awaited: a background refetch rejection must not surface as a false
       // "could not create invoice" error after the save already succeeded.
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
@@ -363,12 +393,11 @@ export function InvoiceNew() {
         title="New invoice"
         description="We check it against FIRS rules as you type."
       >
-        {savedAt && (
-          <span className="text-xs text-muted-foreground flex items-center gap-2 shrink-0">
-            <span className="flex items-center gap-1">
-              <Cloud className="w-3.5 h-3.5" aria-hidden="true" /> Draft saved
-              offline
-            </span>
+        <span className="text-xs text-muted-foreground flex items-center gap-2 shrink-0">
+          <span role="status" data-testid="text-draft-saved">
+            {savedAt ? "Draft saved on this device" : ""}
+          </span>
+          {savedAt && (
             <Button
               variant="ghost"
               size="sm"
@@ -378,8 +407,8 @@ export function InvoiceNew() {
             >
               Discard draft
             </Button>
-          </span>
-        )}
+          )}
+        </span>
       </PageHeader>
 
       <RequireClientScope thing="invoice form">
@@ -392,54 +421,55 @@ export function InvoiceNew() {
         />
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            <Card className="border-violet-200 dark:border-violet-900">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles
-                    className="w-4 h-4 text-violet-600 dark:text-violet-400"
-                    aria-hidden="true"
+            {clerkLit && (
+              <Card className="border-violet-200 dark:border-violet-900">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Sparkles
+                      className="w-4 h-4 text-violet-600 dark:text-violet-400"
+                      aria-hidden="true"
+                    />
+                    Draft with Clerk
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Label htmlFor="clerk-draft-text" className="sr-only">
+                    Describe the invoice
+                  </Label>
+                  <Textarea
+                    id="clerk-draft-text"
+                    value={clerkText}
+                    onChange={(e) => setClerkText(e.target.value)}
+                    rows={2}
+                    placeholder='e.g. "Invoice Adaeze Foods ₦150,000 for June deliveries, 7.5% VAT"'
+                    data-testid="input-clerk-draft"
                   />
-                  Draft with Clerk
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Label htmlFor="clerk-draft-text" className="sr-only">
-                  Describe the invoice
-                </Label>
-                <Textarea
-                  id="clerk-draft-text"
-                  value={clerkText}
-                  onChange={(e) => setClerkText(e.target.value)}
-                  rows={2}
-                  placeholder='e.g. "Invoice Adaeze Foods ₦150,000 for June deliveries, 7.5% VAT"'
-                  data-testid="input-clerk-draft"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    Clerk prefills the form below — you review and save; nothing
-                    is created until you do.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={draftWithClerk}
-                    disabled={
-                      clerkText.trim().length < 5 || clerkDraft.isPending
-                    }
-                    data-testid="button-clerk-draft"
-                  >
-                    {clerkDraft.isPending ? "Drafting…" : "Draft it"}
-                  </Button>
-                </div>
-                {clerkNote && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      Clerk prefills the form below — you review and save;
+                      nothing is created until you do.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={draftWithClerk}
+                      disabled={
+                        clerkText.trim().length < 5 || clerkDraft.isPending
+                      }
+                      data-testid="button-clerk-draft"
+                    >
+                      {clerkDraft.isPending ? "Drafting…" : "Draft it"}
+                    </Button>
+                  </div>
                   <p
+                    role="status"
                     className="text-xs text-violet-800 dark:text-violet-300"
                     data-testid="text-clerk-note"
                   >
                     {clerkNote}
                   </p>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
@@ -504,20 +534,16 @@ export function InvoiceNew() {
                         >
                           <SelectTrigger
                             id="buyer-select"
-                            aria-invalid={
-                              showErrors &&
-                              !!(errors.buyerPartyId || errors.buyerTin)
-                            }
+                            aria-invalid={showErrors && !!errors.buyerPartyId}
                             aria-describedby={
                               showErrors && errors.buyerPartyId
                                 ? "buyer-select-error"
-                                : errors.buyerTin
+                                : selectedBuyer && !selectedBuyer.tin
                                   ? "buyer-tin-note"
                                   : undefined
                             }
                             className={invalidClass(
-                              showErrors &&
-                                !!(errors.buyerPartyId || errors.buyerTin),
+                              showErrors && !!errors.buyerPartyId,
                             )}
                           >
                             <SelectValue placeholder="Select a customer…" />
@@ -547,14 +573,11 @@ export function InvoiceNew() {
                   {selectedBuyer && !selectedBuyer.tin && (
                     <p
                       id="buyer-tin-note"
-                      role={showErrors ? "alert" : undefined}
-                      className={`text-sm mt-1 ${
-                        showErrors
-                          ? "text-destructive"
-                          : "text-amber-700 dark:text-amber-400"
-                      }`}
+                      className="text-sm mt-1 text-amber-700 dark:text-amber-400"
                     >
-                      {errors.buyerTin}
+                      {tinGuidance} You can still save this invoice as a draft
+                      — it cannot be submitted for stamping until the TIN is
+                      added.
                     </p>
                   )}
                 </div>
@@ -743,6 +766,7 @@ export function InvoiceNew() {
                         : undefined,
                     }}
                     showTotal
+                    currency={draft.currency}
                   />
                 ))}
               </CardContent>
@@ -786,19 +810,19 @@ export function InvoiceNew() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Net</span>
                     <span className="tabular-nums">
-                      {formatNaira(totals.net)}
+                      {formatAmount(totals.net, draft.currency)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">VAT</span>
                     <span className="tabular-nums">
-                      {formatNaira(totals.vat)}
+                      {formatAmount(totals.vat, draft.currency)}
                     </span>
                   </div>
                   <div className="flex justify-between font-semibold">
                     <span>Total</span>
                     <span className="tabular-nums">
-                      {formatNaira(totals.net + totals.vat)}
+                      {formatAmount(totals.net + totals.vat, draft.currency)}
                     </span>
                   </div>
                 </div>

@@ -9,11 +9,22 @@ import type { FeatureFlag } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { serverErrorToast } from "@/lib/errors";
 import { Info, ToggleRight } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
@@ -80,6 +91,9 @@ export function FeatureFlags() {
   // Track which key is saving so only that Switch disables while the
   // mutation runs.
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  // Disabling darkens the surface for EVERY firm the moment the mutation
+  // lands, so it is confirm-gated; enabling stays a single flick.
+  const [disableTarget, setDisableTarget] = useState<FeatureFlag | null>(null);
 
   const groups = useMemo(() => {
     const byTag = new Map<string, FeatureFlag[]>();
@@ -123,14 +137,22 @@ export function FeatureFlags() {
             queryKey: getListFeatureFlagsQueryKey(),
           });
         },
-        onError: () =>
-          toast({
+        onError: (e) =>
+          serverErrorToast(toast, e, {
             title: `Could not update ${flag.key}`,
-            variant: "destructive",
+            fallback: "Try again.",
           }),
         onSettled: () => setSavingKey(null),
       },
     );
+  };
+
+  const requestToggle = (flag: FeatureFlag, enabled: boolean) => {
+    if (!enabled) {
+      setDisableTarget(flag);
+      return;
+    }
+    runToggle(flag, enabled);
   };
 
   return (
@@ -196,7 +218,7 @@ export function FeatureFlags() {
                     key={flag.key}
                     flag={flag}
                     canWrite={canWrite}
-                    onToggle={runToggle}
+                    onToggle={requestToggle}
                     saving={savingKey === flag.key}
                   />
                 ))}
@@ -205,6 +227,36 @@ export function FeatureFlags() {
           </Card>
         ))
       )}
+      <AlertDialog
+        open={disableTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDisableTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Turn off {disableTarget?.key ?? "this flag"} for every firm?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The surface goes dark immediately — its routes answer 404 for
+              all tenants until the flag is switched back on.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it live</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (disableTarget) runToggle(disableTarget, false);
+                setDisableTarget(null);
+              }}
+              data-testid="button-confirm-disable-flag"
+            >
+              Turn off
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
