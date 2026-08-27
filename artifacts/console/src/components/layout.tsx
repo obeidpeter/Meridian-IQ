@@ -66,6 +66,13 @@ type NavLink = {
    * carrying `role` renders only for that role.
    */
   role?: string;
+  /**
+   * Launch-profile gate (PL-02, client half): the platform feature flag the
+   * page's API surface rides (requireFlag on the route). Absent from
+   * Me.features means the API answers 404, so the link is hidden rather than
+   * navigating into a dead page.
+   */
+  feature?: string;
 };
 
 const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
@@ -89,6 +96,7 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "Client import",
         icon: Upload,
         capability: "clients.import",
+        feature: "white_label",
       },
       {
         href: "/advisory",
@@ -101,12 +109,14 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "Filing desk",
         icon: CalendarCheck2,
         capability: "filing.read",
+        feature: "statutory_desks",
       },
       {
         href: "/collections",
         label: "Collections",
         icon: WalletCards,
         capability: "console.portfolio.read",
+        feature: "collection_accounts",
       },
       {
         href: "/analytics",
@@ -125,6 +135,7 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "Integrations",
         icon: Plug,
         capability: "connector.read",
+        feature: "erp_connectors",
       },
       {
         href: "/api-access",
@@ -166,12 +177,14 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "White-label",
         icon: Palette,
         capability: "theme.write",
+        feature: "white_label",
       },
       {
         href: "/certification",
         label: "Certification",
         icon: GraduationCap,
         capability: "certification.read",
+        feature: "white_label",
       },
     ],
   },
@@ -225,8 +238,15 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "Claims register",
         icon: BookMarked,
         capability: "claims.read",
+        feature: "clerk_ai",
       },
-      { href: "/clerk", label: "Clerk", icon: Bot, capability: "clerk.use" },
+      {
+        href: "/clerk",
+        label: "Clerk",
+        icon: Bot,
+        capability: "clerk.use",
+        feature: "clerk_ai",
+      },
     ],
   },
 ];
@@ -318,12 +338,14 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   const capabilities = new Set(me?.capabilities ?? []);
+  const features = new Set(me?.features ?? []);
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
     links: g.links.filter(
       (l) =>
         (l.capability === undefined || capabilities.has(l.capability)) &&
-        (l.role === undefined || me?.role === l.role),
+        (l.role === undefined || me?.role === l.role) &&
+        (l.feature === undefined || features.has(l.feature)),
     ),
   })).filter((g) => g.links.length > 0);
   const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
@@ -593,7 +615,9 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-      {capabilities.has("clerk.use") && <ClerkDock />}
+      {capabilities.has("clerk.use") && features.has("clerk_ai") && (
+        <ClerkDock />
+      )}
     </div>
   );
 }

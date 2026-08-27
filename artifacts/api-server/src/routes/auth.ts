@@ -49,6 +49,7 @@ import {
   throttleActionAttempt,
   throttleLoginAttempt,
 } from "../modules/auth/throttle";
+import { litFeatureKeys } from "../modules/flags/flags";
 import { acceptInvitation } from "../modules/auth/invitations";
 import { resetPassword } from "../modules/auth/password-reset";
 import { appendAudit } from "../modules/audit/audit";
@@ -123,7 +124,7 @@ type Membership = Awaited<ReturnType<typeof loadMemberships>>[number];
 // The account fields every sign-in response shares (login, its mfa branch, the
 // TOTP challenge). Branches spread their extras on top and still parse through
 // their own contract schema.
-function accountPayload(
+async function accountPayload(
   user: { id: string; email: string; fullName: string | null },
   membership: Membership,
 ) {
@@ -136,6 +137,11 @@ function accountPayload(
     clientPartyId: membership.clientPartyId,
     buyerPartyId: membership.buyerPartyId,
     capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+    // Platform defaults only: the sign-in transaction is pre-auth (no
+    // app.firm_id GUC bound), so RLS would hide this firm's override rows
+    // anyway — passing the firm id here would only pretend to apply them.
+    // The canonical per-firm list is /me's, which every app queries on boot.
+    features: await litFeatureKeys(null),
   };
 }
 
@@ -166,7 +172,7 @@ async function completeSignIn(
     after: audit.after,
   });
   return {
-    ...accountPayload(user, membership),
+    ...(await accountPayload(user, membership)),
     // Same signed session token as the cookie, for native mobile clients
     // that cannot use HttpOnly cookies (sent as Authorization: Bearer).
     ...(isMobileClient ? { token } : {}),
@@ -268,10 +274,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     const mfaToken = await issueMfaToken(result.userId, result.sessionEpoch);
     res.json(
       LoginResponse.parse({
-        ...accountPayload(
+        ...(await accountPayload(
           { id: result.userId, email: result.email, fullName: result.fullName },
           membership,
-        ),
+        )),
         mfaRequired: true,
         mfaToken,
       }),

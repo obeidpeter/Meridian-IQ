@@ -19,6 +19,7 @@ import {
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   listWhtCredits,
@@ -44,6 +45,10 @@ import { computeWhtRemittance } from "../modules/wht/remittance";
 //    on it.
 
 const router: IRouter = Router();
+
+// Launch-profile gate (PL-02): the whole surface rides the statutory_desks flag —
+// dark means 404 on every route here (per-firm overrides apply).
+router.use(requireFlag("statutory_desks"));
 
 router.get("/wht/credits", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");

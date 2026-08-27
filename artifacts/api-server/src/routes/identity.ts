@@ -24,6 +24,7 @@ import {
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
+import { litFeatureKeys } from "../modules/flags/flags";
 import { createPasswordReset } from "../modules/auth/password-reset";
 import { normalizeEmail } from "../modules/auth/session";
 
@@ -51,6 +52,7 @@ router.get("/me", async (req, res): Promise<void> => {
       clientPartyId: p.clientPartyId,
       buyerPartyId: p.buyerPartyId,
       capabilities: ROLE_CAPABILITIES[p.role] ?? [],
+      features: await litFeatureKeys(p.firmId),
     }),
   );
 });

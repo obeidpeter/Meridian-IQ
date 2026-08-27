@@ -27,6 +27,7 @@ import {
   clientPrincipal,
   firmPrincipal,
 } from "../../test-helpers/principals.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // Collection accounts. Pinned invariants:
 //  - provisioning: the simulator mints a CA- reference when no relay is
@@ -131,7 +132,10 @@ async function seedInvoice(
   return id;
 }
 
+const launchFlagGuard = makeFlagGuard("collection_accounts");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmA, name: `Col Firm ${SALT}` });
   await db.insert(partiesTable).values([
@@ -163,6 +167,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   delete process.env.COLLECTION_WEBHOOK_TOKEN;
   await closeAllServers();
 });

@@ -31,6 +31,7 @@ import {
   assertSameTenant,
   type Principal,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import {
   invoiceOrientation,
   listBills,
@@ -52,6 +53,10 @@ import { DomainError } from "../modules/errors";
 // them out of the stamping lifecycle.
 
 const router: IRouter = Router();
+
+// Launch-profile gate (PL-02): the whole surface rides the money_analytics flag —
+// dark means 404 on every route here (per-firm overrides apply).
+router.use(requireFlag("money_analytics"));
 
 // The bills scope wall, one definition: the invoice must exist, sit in the
 // caller's tenant, be reachable by the caller's client scope ON THE BUYER

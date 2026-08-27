@@ -21,6 +21,7 @@ import {
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
 import { sendPdfAttachment } from "../modules/invoice/pdf";
@@ -52,6 +53,10 @@ import { gatewayOrNull } from "../modules/clerk/provider";
 //    indistinguishable from an id that does not exist.
 
 const router: IRouter = Router();
+
+// Launch-profile gate (PL-02): the whole surface rides the statutory_desks flag —
+// dark means 404 on every route here (per-firm overrides apply).
+router.use(requireFlag("statutory_desks"));
 
 router.get("/obligations", async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.read");

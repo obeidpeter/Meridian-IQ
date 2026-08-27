@@ -36,6 +36,7 @@ import {
 } from "../../test-helpers/route-harness.ts";
 import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // Monthly client compliance pack (contract 0.45.0). Pinned here:
 //  - the facts object: month-filtered register (sibling and other-month
@@ -88,7 +89,10 @@ async function packMessages() {
     );
 }
 
+const launchFlagGuard = makeFlagGuard("client_reports");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   await saveAndEnableClerkFlag();
   const db = getDb();
   await db
@@ -232,6 +236,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   await restoreClerkFlag();
   await closeAllServers();
 });

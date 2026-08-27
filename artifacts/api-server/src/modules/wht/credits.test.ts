@@ -33,6 +33,7 @@ import {
 } from "../../test-helpers/route-harness.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // The WHT credit ledger (WHT Desk). Pinned here:
 //  - the closed rates catalogue and the SQL-computed default amount
@@ -64,7 +65,10 @@ let invNoCat: string; // clientA's paper, no category
 let invB1: string; // clientB's paper, goods_2, subtotal 50000
 let invForeign: string; // the other firm's paper
 
+const launchFlagGuard = makeFlagGuard("statutory_desks");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   const db = getDb();
   await db
     .insert(usersTable)
@@ -118,6 +122,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   await closeAllServers();
 });
 

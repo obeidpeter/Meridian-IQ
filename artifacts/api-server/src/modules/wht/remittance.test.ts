@@ -18,6 +18,7 @@ import {
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // The withholding remittance schedule (WHT Desk): the client's BILLS
 // (buyer-side, the BILL_OF_CLIENT orientation) carrying a WHT category and
@@ -35,7 +36,10 @@ const vendorB = randomUUID();
 
 const PERIOD = "2097-07";
 
+const launchFlagGuard = makeFlagGuard("statutory_desks");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `WHT Remit Firm ${SALT}` });
   await db.insert(partiesTable).values([
@@ -98,6 +102,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   await closeAllServers();
 });
 

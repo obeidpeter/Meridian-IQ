@@ -83,3 +83,31 @@ export async function setFirmOverride(
       set: { enabled },
     });
 }
+
+// The lit feature keys for a principal's firm: every platform flag row with
+// any per-firm override applied on top (an override may light a key whose
+// platform row is dark — the pilot-mode mechanism — or darken one). Powers
+// Me.features so the apps can hide dark surfaces instead of navigating into
+// a 404 (the client half of PL-02). Keys only, sorted; never secrets.
+export async function litFeatureKeys(
+  firmId: string | null,
+): Promise<string[]> {
+  const flags = await getDb()
+    .select({ key: featureFlagsTable.key, enabled: featureFlagsTable.enabled })
+    .from(featureFlagsTable);
+  const lit = new Map(flags.map((f) => [f.key, f.enabled]));
+  if (firmId) {
+    const overrides = await getDb()
+      .select({
+        flagKey: featureFlagOverridesTable.flagKey,
+        enabled: featureFlagOverridesTable.enabled,
+      })
+      .from(featureFlagOverridesTable)
+      .where(eq(featureFlagOverridesTable.firmId, firmId));
+    for (const o of overrides) lit.set(o.flagKey, o.enabled);
+  }
+  return [...lit.entries()]
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => key)
+    .sort();
+}

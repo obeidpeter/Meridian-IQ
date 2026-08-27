@@ -13,6 +13,7 @@ import {
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   listFilings,
@@ -34,6 +35,10 @@ import {
 //    obligations status-route shape exactly.
 
 const router: IRouter = Router();
+
+// Launch-profile gate (PL-02): the whole surface rides the statutory_desks flag —
+// dark means 404 on every route here (per-firm overrides apply).
+router.use(requireFlag("statutory_desks"));
 
 router.get("/filings", async (req, res): Promise<void> => {
   assertCan(req.principal, "filing.read");

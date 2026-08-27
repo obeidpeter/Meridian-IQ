@@ -21,6 +21,7 @@ import {
   requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   createTemplate,
@@ -32,6 +33,10 @@ import { listRecurringSuggestions } from "../modules/invoice/recurring-suggest";
 import { listUnbilledIncome } from "../modules/invoice/unbilled-income";
 
 const router: IRouter = Router();
+
+// Launch-profile gate (PL-02): the whole surface rides the money_analytics flag —
+// dark means 404 on every route here (per-firm overrides apply).
+router.use(requireFlag("money_analytics"));
 
 router.get("/recurring-invoices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");

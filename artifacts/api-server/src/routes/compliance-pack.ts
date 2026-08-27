@@ -12,6 +12,7 @@ import {
   assertPartyAccess,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { computeCompliancePack } from "../modules/invoice/compliance-pack";
 import { resolveVatPositionMonth } from "../modules/invoice/vat-position";
 import { renderCompliancePackPdf } from "../modules/invoice/pack-pdf";
@@ -32,6 +33,10 @@ import { appendAudit } from "../modules/audit/audit";
 // routes/index.ts (the orchestrator wires that up).
 
 const router: IRouter = Router();
+
+// Launch-profile gate (PL-02): the whole surface rides the client_reports flag —
+// dark means 404 on every route here (per-firm overrides apply).
+router.use(requireFlag("client_reports"));
 
 // The live-month discipline — resolveVatPositionMonth (modules/invoice/
 // vat-position.ts), the VAT position's own resolver, imported rather than

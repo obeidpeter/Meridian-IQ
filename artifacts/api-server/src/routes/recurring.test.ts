@@ -17,6 +17,7 @@ import {
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
 import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import { makeFlagGuard } from "../test-helpers/flags.ts";
 
 // Access model for recurring templates: firm staff manage the firm's book;
 // a client_user (SEC-03) creates, sees and toggles only templates drafting
@@ -50,10 +51,14 @@ function body(supplierPartyId: string, name: string) {
 }
 
 after(async () => {
+  await launchFlagGuard.restore();
   await closeAllServers();
 });
 
+const launchFlagGuard = makeFlagGuard("money_analytics");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   const db = getDb();
   await db
     .insert(usersTable)

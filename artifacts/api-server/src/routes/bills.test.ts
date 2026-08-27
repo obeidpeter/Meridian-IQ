@@ -27,6 +27,7 @@ import {
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
 import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import { makeFlagGuard } from "../test-helpers/flags.ts";
 
 // Supplier payables (contract 0.44.0). Pinned here:
 //  - the bills routes' own buyer-side scope wall: a sibling client's bill, a
@@ -100,7 +101,10 @@ let recvStampedId: string; // stamped receivable backing the known-stamp check
 const KNOWN_IRN = `IRN-BILLS-${SALT}`;
 const KNOWN_CSID = `CSID-BILLS-${SALT}`;
 
+const launchFlagGuard = makeFlagGuard("money_analytics");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   const db = getDb();
   await db
     .insert(usersTable)
@@ -270,6 +274,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   await closeAllServers();
 });
 
