@@ -18,6 +18,7 @@ import {
 } from "../../test-helpers/route-harness.ts";
 import { firmPrincipal } from "../../test-helpers/principals.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // The filing matrix (Filing Desk Phase 3): one row per actively-served
 // client with the current period's VAT/PAYE statuses side by side. Pinned:
@@ -48,7 +49,10 @@ const EARLY = new Date("2098-08-05T12:00:00Z");
 const LATE = new Date("2098-08-25T12:00:00Z");
 const PERIOD = previousLagosPeriod(EARLY); // 2098-07
 
+const launchFlagGuard = makeFlagGuard("statutory_desks");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   const db = getDb();
   await db.insert(firmsTable).values([
     { id: firmId, name: `Matrix Firm ${SALT}` },
@@ -121,6 +125,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   await closeAllServers();
 });
 

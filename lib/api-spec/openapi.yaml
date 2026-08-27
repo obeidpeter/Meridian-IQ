@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.80.0
+  version: 0.81.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -6522,7 +6522,7 @@ components:
 
     Me:
       type: object
-      required: [userId, role, capabilities]
+      required: [userId, role, capabilities, features]
       properties:
         userId:
           type: string
@@ -6541,6 +6541,13 @@ components:
         buyerPartyId:
           type: ["string", "null"]
         capabilities:
+          type: array
+          items:
+            type: string
+        # The lit feature-flag keys for this principal's firm (platform rows
+        # with per-firm overrides applied). The apps hide dark surfaces by
+        # this list instead of navigating into a flag-gated 404 (PL-02).
+        features:
           type: array
           items:
             type: string

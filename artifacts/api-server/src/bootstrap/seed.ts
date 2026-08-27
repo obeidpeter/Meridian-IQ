@@ -25,191 +25,29 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
+import { RELEASE_FLAGS } from "../modules/flags/releases";
 import { hashPassword, PRODUCTION_DEMO_EMAILS } from "../modules/auth/session";
 
-// Release-tagged feature flags (PL-02). Everything past R0 ships dark; a dark
-// feature is unreachable until an operator flips the flag (or a per-firm
-// override activates it on recorded consent).
+// Release-tagged feature flags (PL-02): the manifest lives in
+// modules/flags/releases.ts (one source of truth, pinned by the
+// launch-profile posture test). A fresh PRODUCTION database boots the launch
+// profile — only the R0 core lit; every other capability dark until its
+// roadmap activation gate. Dev/CI/demo boot the fully-operational profile the
+// e2e journeys and the live demo depend on. onConflictDoNothing below means
+// existing databases keep their operator-set state; defaults only ever apply
+// to a fresh boot.
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const FLAGS: {
   key: string;
   enabled: boolean;
   releaseTag: string;
   description: string;
-}[] = [
-  {
-    key: "invoice_lifecycle",
-    enabled: true,
-    releaseTag: "R0",
-    description: "Core invoice draft/validate/submit lifecycle",
-  },
-  {
-    key: "advisory_engagements",
-    enabled: true,
-    releaseTag: "R0",
-    description: "Advisory engagement spine",
-  },
-  {
-    key: "consent_ledger",
-    enabled: true,
-    releaseTag: "R0",
-    description: "Three-layer consent ledger",
-  },
-  {
-    key: "buyer_confirmations",
-    enabled: true,
-    releaseTag: "R1",
-    description: "Buyer confirmation workflow",
-  },
-  {
-    key: "stamp_verification",
-    enabled: true,
-    releaseTag: "R1",
-    description: "Public stamp verification",
-  },
-  {
-    key: "messaging_notifications",
-    enabled: false,
-    releaseTag: "R1",
-    description: "WhatsApp/SMS/email notifications",
-  },
-  {
-    key: "anonymized_benchmarks",
-    enabled: false,
-    releaseTag: "R2",
-    description: "Layer-2 anonymized aggregate analytics",
-  },
-  // R2 — Channel Scale and Buyer Rails v1. Shipped dark (PL-02): an operator
-  // flips each flag when its gate evidence lands (or per-firm via override).
-  {
-    key: "reconciliation",
-    enabled: false,
-    releaseTag: "R2",
-    description:
-      "Bank-statement ingestion and reconciliation v1 (SME-07, INT-05)",
-  },
-  {
-    key: "b2c_reporting",
-    enabled: false,
-    releaseTag: "R2",
-    description: "B2C 24-hour reporting module with compliance clocks (SME-08)",
-  },
-  {
-    key: "buyer_rails",
-    enabled: false,
-    releaseTag: "R2",
-    description:
-      "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)",
-  },
-  {
-    key: "white_label",
-    enabled: false,
-    releaseTag: "R2",
-    description:
-      "White-label theming, subdomains, bulk client import, certification (CON-05)",
-  },
-  {
-    key: "erp_connectors",
-    enabled: false,
-    releaseTag: "R2",
-    description:
-      "ERP connector contract and first two connectors (PL-03, INT-06)",
-  },
-  {
-    key: "bank_feeds",
-    enabled: false,
-    releaseTag: "R2",
-    description:
-      "Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam)",
-  },
-  {
-    key: "credit_readiness",
-    enabled: false,
-    releaseTag: "R3",
-    description: "Layer-3 credit readiness scoring",
-  },
-  {
-    key: "bank_data_room",
-    enabled: false,
-    releaseTag: "R4",
-    description: "Bank data room and financing origination",
-  },
-  // Clerk v0 kill switch (Task #40): flipping this off instantly disables every
-  // Clerk AI surface (capture extraction, Ask Clerk); manual flows keep working.
-  {
-    key: "clerk_ai",
-    enabled: true,
-    releaseTag: "R3",
-    description:
-      "Clerk AI copilot: capture extraction and register-backed Q&A (operator-only)",
-  },
-  // Proposed actions (round 21): Clerk assembles a batch from the detector
-  // predicates, a human approves it, execution rides the ordinary per-invoice
-  // submission path. Shipped dark (PL-02); enable per firm via override once
-  // a pilot firm opts in.
-  {
-    key: "clerk_actions",
-    enabled: false,
-    releaseTag: "R3",
-    description:
-      "Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue)",
-  },
-  // Standing approvals (round 28): a durable, revocable per-client grant lets
-  // the daily sweep run a submit kind without a fresh per-batch approval,
-  // re-validated on every run. Layered ON clerk_actions — both must be lit.
-  // Shipped dark (PL-02); enable per firm via override alongside a pilot.
-  {
-    key: "clerk_action_policies",
-    enabled: false,
-    releaseTag: "R3",
-    description:
-      "Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions)",
-  },
-  // Round 35 (Close with Clerk Phase 2): auto-accepting reconciliation
-  // matches is the riskiest deterministic step, so it rides its OWN opt-in
-  // beside clerk_actions — dark means the reconcile step simply never
-  // assembles.
-  {
-    key: "clerk_auto_reconcile",
-    enabled: false,
-    releaseTag: "R3",
-    description:
-      "Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies",
-  },
-  // Round 45 (pgvector firm memory): the semantic index over a firm's own
-  // Clerk records. Spends firm tokens on embeddings (the indexer sweep), so
-  // it rides its own opt-in beside clerk_ai — dark means the indexer never
-  // runs and retrieval surfaces fall back to today's exact-key behavior.
-  {
-    key: "clerk_memory",
-    enabled: false,
-    releaseTag: "R3",
-    description:
-      "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings",
-  },
-  // Round 50 (Advise with Clerk Phase 2): the monthly brief sweep can spend
-  // firm tokens on every engaged client's adviser's note, so generation is
-  // opt-in and dark. Delivery is deliberately NOT gated by this flag (the
-  // statement-rail rule); the on-demand console generate button works
-  // regardless — this only governs the background sweep.
-  {
-    key: "clerk_advisory_briefs",
-    enabled: false,
-    releaseTag: "R3",
-    description:
-      "Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag",
-  },
-  // Round 47 (retrieval eval lane): seeded — unlike its phrasing sibling,
-  // which is dark-by-absence and can only be lit by a manual row insert
-  // (setFlag is UPDATE-only) — so operators can enable the nightly run
-  // through the ordinary platform flags surface.
-  {
-    key: "clerk_auto_retrieval_eval",
-    enabled: false,
-    releaseTag: "R3",
-    description:
-      "Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day)",
-  },
-];
+}[] = RELEASE_FLAGS.map((f) => ({
+  key: f.key,
+  releaseTag: f.releaseTag,
+  description: f.description,
+  enabled: IS_PRODUCTION ? f.launchDefault : f.devDefault,
+}));
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
   {

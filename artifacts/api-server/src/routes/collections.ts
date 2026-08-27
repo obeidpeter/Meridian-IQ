@@ -23,6 +23,7 @@ import {
   assertSameTenant,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { isPositiveMoney } from "../lib/money";
 import { listUnmatchedCollections } from "../modules/collections/unmatched";
@@ -65,6 +66,7 @@ function accountView(row: CollectionAccountRow): Record<string, unknown> {
 // the accounts list; nothing here carries amounts (they were never recorded).
 router.get(
   "/collection-accounts/unmatched",
+  requireFlag("collection_accounts"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "statement.write");
     const firmId = requireFirmScope(req.principal);
@@ -73,7 +75,7 @@ router.get(
   },
 );
 
-router.get("/collection-accounts", async (req, res): Promise<void> => {
+router.get("/collection-accounts", requireFlag("collection_accounts"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
   requireFirmScope(req.principal);
   const query = parseOrThrow(ListCollectionAccountsQueryParams, req.query);
@@ -84,7 +86,7 @@ router.get("/collection-accounts", async (req, res): Promise<void> => {
   res.json(ListCollectionAccountsResponse.parse(rows.map(accountView)));
 });
 
-router.post("/collection-accounts", async (req, res): Promise<void> => {
+router.post("/collection-accounts", requireFlag("collection_accounts"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
   requireFirmScope(req.principal);
   const body = parseOrThrow(CreateCollectionAccountBody, req.body);
@@ -105,6 +107,7 @@ router.post("/collection-accounts", async (req, res): Promise<void> => {
 
 router.post(
   "/collection-accounts/:id/deactivate",
+  requireFlag("collection_accounts"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "statement.write");
     const params = parseOrThrow(DeactivateCollectionAccountParams, req.params);
@@ -147,6 +150,10 @@ const InboundCollectionBody = z.object({
   paidAt: z.string().datetime().optional(),
 });
 
+// Deliberately NOT behind the collection_accounts flag: this is the
+// provider machine rail, governed solely by its fail-closed shared token
+// (dark while COLLECTION_WEBHOOK_TOKEN is unset) — a firm-flag 404 here
+// would bounce a pilot firm's live provider mid-stream.
 router.post("/collections/inbound", async (req, res): Promise<void> => {
   const expected = process.env.COLLECTION_WEBHOOK_TOKEN;
   if (!expected) {

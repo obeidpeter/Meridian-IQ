@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { GetFilingMatrixResponse } from "@workspace/api-zod";
 import { assertCan, firmScope } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { computeFilingMatrix } from "../modules/filings/filing-matrix";
 
 // Filing Desk Phase 3 (contract 0.68.0): the firm's current-period filing
@@ -14,7 +15,13 @@ import { computeFilingMatrix } from "../modules/filings/filing-matrix";
 
 const router: IRouter = Router();
 
-router.get("/console/filing-matrix", async (req, res): Promise<void> => {
+// Launch-profile gate (PL-02): every route here rides the statutory_desks flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
+
+router.get("/console/filing-matrix", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = firmScope(req.principal);
   const matrix = await computeFilingMatrix(firmId);

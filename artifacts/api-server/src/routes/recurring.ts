@@ -21,6 +21,7 @@ import {
   requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   createTemplate,
@@ -33,7 +34,13 @@ import { listUnbilledIncome } from "../modules/invoice/unbilled-income";
 
 const router: IRouter = Router();
 
-router.get("/recurring-invoices", async (req, res): Promise<void> => {
+// Launch-profile gate (PL-02): every route here rides the money_analytics flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
+
+router.get("/recurring-invoices", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   // Same visibility model as the invoice list: firm principals see the firm's
   // templates, cross-tenant staff the whole spine, a client_user (SEC-03)
@@ -49,7 +56,7 @@ router.get("/recurring-invoices", async (req, res): Promise<void> => {
 // on demand from the client's own invoice history, nothing stored, no model.
 // Same SEC-03 resolution as client statements: a client_user is pinned to its
 // own party; a firm principal names the client.
-router.get("/recurring-suggestions", async (req, res): Promise<void> => {
+router.get("/recurring-suggestions", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListRecurringSuggestionsQueryParams, req.query);
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -64,7 +71,7 @@ router.get("/recurring-suggestions", async (req, res): Promise<void> => {
 // the recurring suggestions, pointed at the month the invoice DIDN'T go out.
 // Mined on demand, nothing stored, no model. Same SEC-03 resolution: a
 // client_user is pinned to its own party; a firm principal names the client.
-router.get("/unbilled-income", async (req, res): Promise<void> => {
+router.get("/unbilled-income", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListUnbilledIncomeQueryParams, req.query);
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -75,7 +82,7 @@ router.get("/unbilled-income", async (req, res): Promise<void> => {
   res.json(ListUnbilledIncomeResponse.parse(alerts));
 });
 
-router.post("/recurring-invoices", async (req, res): Promise<void> => {
+router.post("/recurring-invoices", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const firmId = requireFirmScope(req.principal);
   const parsed = parseOrThrow(CreateRecurringInvoiceBody, req.body);
@@ -89,7 +96,7 @@ router.post("/recurring-invoices", async (req, res): Promise<void> => {
   res.status(201).json(CreateRecurringInvoiceResponse.parse(template));
 });
 
-router.patch("/recurring-invoices/:id", async (req, res): Promise<void> => {
+router.patch("/recurring-invoices/:id", requireFlag("money_analytics"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const params = parseOrThrow(UpdateRecurringInvoiceParams, req.params);
   const body = parseOrThrow(UpdateRecurringInvoiceBody, req.body);

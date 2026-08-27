@@ -46,6 +46,10 @@ type NavLink = {
   label: string;
   icon: typeof LayoutDashboard;
   capability?: string;
+  // Launch-profile gate (PL-02, client half): the platform feature flag this
+  // surface rides. Absent from Me.features means the API answers 404, so the
+  // link is hidden rather than navigating into a dead page.
+  feature?: string;
 };
 
 type NavGroup = {
@@ -60,9 +64,19 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/month-end", label: "Month-end", icon: CalendarCheck2 },
       { href: "/invoices", label: "Invoices", icon: FileText },
-      { href: "/bills", label: "Bills", icon: Receipt },
-      { href: "/collections", label: "Collections", icon: HandCoins },
-      { href: "/recurring", label: "Recurring", icon: Repeat },
+      { href: "/bills", label: "Bills", icon: Receipt, feature: "money_analytics" },
+      {
+        href: "/collections",
+        label: "Collections",
+        icon: HandCoins,
+        feature: "collection_accounts",
+      },
+      {
+        href: "/recurring",
+        label: "Recurring",
+        icon: Repeat,
+        feature: "money_analytics",
+      },
       { href: "/import", label: "Import", icon: Upload },
     ],
   },
@@ -70,25 +84,38 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Compliance",
     links: [
       { href: "/vat", label: "VAT", icon: Percent },
-      { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
-      { href: "/b2c", label: "B2C reports", icon: Store },
+      {
+        href: "/reconciliation",
+        label: "Reconciliation",
+        icon: Landmark,
+        feature: "reconciliation",
+      },
+      {
+        href: "/b2c",
+        label: "B2C reports",
+        icon: Store,
+        feature: "b2c_reporting",
+      },
       {
         href: "/obligations",
         label: "Obligations",
         icon: Scale,
         capability: "obligation.read",
+        feature: "statutory_desks",
       },
       {
         href: "/filings",
         label: "Filings",
         icon: CalendarCheck2,
         capability: "filing.read",
+        feature: "statutory_desks",
       },
       {
         href: "/wht",
         label: "WHT credits",
         icon: HandCoins,
         capability: "invoice.read",
+        feature: "statutory_desks",
       },
     ],
   },
@@ -100,12 +127,14 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Send to Clerk",
         icon: Sparkles,
         capability: "clerk.capture",
+        feature: "clerk_ai",
       },
       {
         href: "/clerk/ask",
         label: "Ask Clerk",
         icon: Bot,
         capability: "clerk.ask",
+        feature: "clerk_ai",
       },
     ],
   },
@@ -323,10 +352,13 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   const capabilities = new Set(me?.capabilities ?? []);
+  const features = new Set(me?.features ?? []);
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
     links: group.links.filter(
-      (link) => !link.capability || capabilities.has(link.capability),
+      (link) =>
+        (!link.capability || capabilities.has(link.capability)) &&
+        (!link.feature || features.has(link.feature)),
     ),
   })).filter((group) => group.links.length > 0);
   const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
@@ -491,7 +523,9 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
-      {capabilities.has("clerk.ask") && <ClerkDock />}
+      {capabilities.has("clerk.ask") && features.has("clerk_ai") && (
+        <ClerkDock />
+      )}
     </div>
   );
 }

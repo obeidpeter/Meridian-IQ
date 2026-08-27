@@ -19,6 +19,7 @@ import {
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   listWhtCredits,
@@ -45,7 +46,13 @@ import { computeWhtRemittance } from "../modules/wht/remittance";
 
 const router: IRouter = Router();
 
-router.get("/wht/credits", async (req, res): Promise<void> => {
+// Launch-profile gate (PL-02): every route here rides the statutory_desks flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
+
+router.get("/wht/credits", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListWhtCreditsQueryParams, req.query);
   const firmId = requireFirmScope(req.principal);
@@ -64,7 +71,7 @@ router.get("/wht/credits", async (req, res): Promise<void> => {
   res.json(ListWhtCreditsResponse.parse(result));
 });
 
-router.post("/wht/credits", async (req, res): Promise<void> => {
+router.post("/wht/credits", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const body = parseOrThrow(RecordWhtCreditBody, req.body);
   const firmId = requireFirmScope(req.principal);
@@ -97,7 +104,7 @@ router.post("/wht/credits", async (req, res): Promise<void> => {
   res.status(201).json(RecordWhtCreditResponse.parse(row));
 });
 
-router.post("/wht/credits/:id/note", async (req, res): Promise<void> => {
+router.post("/wht/credits/:id/note", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const params = parseOrThrow(MarkWhtNoteReceivedParams, req.params);
   const body = parseOrThrow(MarkWhtNoteReceivedBody, req.body);
@@ -117,7 +124,7 @@ router.post("/wht/credits/:id/note", async (req, res): Promise<void> => {
   res.json(MarkWhtNoteReceivedResponse.parse(row));
 });
 
-router.get("/wht/remittance", async (req, res): Promise<void> => {
+router.get("/wht/remittance", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetWhtRemittanceQueryParams, req.query);
   const firmId = requireFirmScope(req.principal);

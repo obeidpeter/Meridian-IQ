@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.80.0
+ * OpenAPI spec version: 0.81.0
  */
 import * as zod from 'zod';
 
@@ -30,6 +30,7 @@ export const GetMeResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
+  "features": zod.array(zod.string()),
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()
@@ -59,6 +60,7 @@ export const LoginResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
+  "features": zod.array(zod.string()),
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()
@@ -93,6 +95,7 @@ export const TotpChallengeResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
+  "features": zod.array(zod.string()),
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()

@@ -46,6 +46,7 @@ import {
   clientPrincipal,
   firmPrincipal,
 } from "../../test-helpers/principals.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // Response Desk (Task #207). Pinned here:
 //  - resolveResponseMonth: ONE month home for both endpoints — explicit month
@@ -98,7 +99,10 @@ async function pdfText(buf: Buffer): Promise<string> {
   }
 }
 
+const launchFlagGuard = makeFlagGuard("statutory_desks");
+
 before(async () => {
+  await launchFlagGuard.saveAndSet(true);
   await saveAndEnableClerkFlag();
   const db = getDb();
   await db
@@ -218,6 +222,7 @@ before(async () => {
 });
 
 after(async () => {
+  await launchFlagGuard.restore();
   await restoreClerkFlag();
   await closeAllServers();
 });

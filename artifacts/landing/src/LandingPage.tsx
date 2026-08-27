@@ -26,13 +26,11 @@ import {
   X,
 } from "lucide-react";
 
+// Copy discipline (PL-02): claim as available only what the launch profile
+// lights (the R0 core — invoicing lifecycle, engagements, consent, evidence).
+// Launch-dark capabilities (Clerk AI, Buyer Rails, reconciliation, B2C
+// clocks, recurring) are framed as rolling out, never as live today.
 const PLATFORM_FEATURES = [
-  {
-    icon: Bot,
-    title: "Catch the work at source",
-    body: "MeridianIQ Clerk turns voice notes, scans and messages into structured cases that stay under human review.",
-    tone: "bg-lime-100 text-lime-900",
-  },
   {
     icon: FileCheck2,
     title: "Move compliance on reliable rails",
@@ -42,14 +40,20 @@ const PLATFORM_FEATURES = [
   {
     icon: BadgeCheck,
     title: "Build evidence into the transaction",
-    body: "Keep stamps, buyer decisions, consent and settlement evidence attached to the invoice record.",
+    body: "Keep stamps, consent and settlement evidence attached to the invoice record from day one.",
     tone: "bg-blue-100 text-blue-800",
   },
   {
     icon: BarChart3,
     title: "See the risk and the cash",
-    body: "Track deadlines, portfolio exceptions, receivables aging and reconciliation gaps before they compound.",
+    body: "Track deadlines, portfolio exceptions and receivables aging before they compound.",
     tone: "bg-amber-100 text-amber-900",
+  },
+  {
+    icon: Bot,
+    title: "Catch the work at source",
+    body: "MeridianIQ Clerk — rolling out to firms — turns voice notes, scans and messages into structured cases that stay under human review.",
+    tone: "bg-lime-100 text-lime-900",
   },
 ];
 
@@ -58,7 +62,7 @@ const WORKFLOW = [
     number: "01",
     icon: ReceiptText,
     title: "Capture",
-    body: "Create, import or brief Clerk by voice, document or message.",
+    body: "Create invoices directly or import them in bulk with row-level outcomes.",
   },
   {
     number: "02",
@@ -76,7 +80,7 @@ const WORKFLOW = [
     number: "04",
     icon: Landmark,
     title: "Settle",
-    body: "Add buyer confirmation and bank evidence to a trusted receivable.",
+    body: "Attach settlement evidence to a trusted receivable as it arrives.",
   },
 ];
 
@@ -85,7 +89,7 @@ const WORKSPACES = [
     icon: ReceiptText,
     audience: "For owners and finance teams",
     title: "SME Compliance",
-    body: "Guided and recurring invoicing, bulk import, reconciliation, B2C clocks and deadline alerts.",
+    body: "Guided invoicing, bulk import, VAT positions and deadline alerts on one focused workspace.",
     accent: "text-teal-700",
     line: "bg-teal-600",
     href: "/login",
@@ -95,7 +99,7 @@ const WORKSPACES = [
     icon: Building2,
     audience: "For firms and operators",
     title: "Accountant Console",
-    body: "Portfolio risk, receivables aging, firm invitations, Clerk operations and audit evidence.",
+    body: "Portfolio risk, receivables aging, firm invitations and exportable audit evidence.",
     accent: "text-indigo-700",
     line: "bg-indigo-600",
     href: "/login",
@@ -103,7 +107,7 @@ const WORKSPACES = [
   },
   {
     icon: Store,
-    audience: "For buyer finance teams",
+    audience: "Coming soon for buyer finance teams",
     title: "Buyer Rails",
     body: "Confirm supplier invoices, flag payments, protect input VAT and monitor supplier quality.",
     accent: "text-blue-700",
@@ -136,7 +140,7 @@ const PRODUCT_VIEWS: Array<{
   {
     key: "clerk",
     label: "Clerk AI",
-    eyebrow: "Governed AI intake",
+    eyebrow: "Governed AI intake — rolling out",
     title: "Turn unstructured requests into review-ready work.",
     body: "Clerk captures what arrived, extracts the useful facts and shows the reviewer exactly what needs a decision. Every case keeps its source, status and correction history.",
     bullets: [
@@ -154,7 +158,7 @@ const PRODUCT_VIEWS: Array<{
     bullets: [
       "Local validation and draft recovery",
       "Bulk import with row-level outcomes",
-      "Deadline and B2C breach alerts",
+      "Deadline alerts and VAT position visibility",
     ],
   },
   {
@@ -172,7 +176,7 @@ const PRODUCT_VIEWS: Array<{
   {
     key: "buyer",
     label: "Buyer",
-    eyebrow: "Buyer Rails",
+    eyebrow: "Buyer Rails — coming soon",
     title: "Verify supplier invoices before VAT exposure grows.",
     body: "Buyer finance teams can confirm, query or reject invoices, record payment signals and monitor supplier compliance from a dedicated workspace.",
     bullets: [
@@ -187,7 +191,7 @@ const PLATFORM_FACTS = [
   ["5,000", "rows per bulk import"],
   ["2", "submission rails with failover"],
   ["3", "client-owned consent layers"],
-  ["24h", "B2C deadline monitoring"],
+  ["100%", "append-only audit history"],
 ];
 
 function BrandLockup({ inverted = false }: { inverted?: boolean }) {
@@ -888,9 +892,9 @@ export default function LandingPage() {
               Turn every invoice into evidence.
             </p>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/80 sm:text-lg">
-              Capture the work with Clerk, move invoices through Nigerian
-              compliance rails and keep the proof buyers, auditors and finance
-              teams need on one trusted record.
+              Create and validate invoices, move them through Nigerian
+              compliance rails and keep the proof auditors and finance teams
+              need on one trusted record.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -912,7 +916,7 @@ export default function LandingPage() {
 
             <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/75">
               {[
-                "AI-assisted, human-controlled",
+                "Human-controlled, evidence-first",
                 "Role and tenant aware",
                 "Traceable from intake to settlement",
               ].map((item) => (
@@ -956,7 +960,7 @@ export default function LandingPage() {
                   Less chasing. More controlled movement.
                 </h2>
                 <p className="mt-5 max-w-lg text-base leading-7 text-slate-600">
-                  MeridianIQ connects AI intake, compliance operations and
+                  MeridianIQ connects intake, compliance operations and
                   receivables evidence so every team acts from the same invoice
                   history.
                 </p>
@@ -1282,8 +1286,8 @@ export default function LandingPage() {
           <div>
             <BrandLockup inverted />
             <p className="mt-5 max-w-sm text-sm leading-6 text-white/60">
-              Nigerian e-invoicing, governed AI intake and verified receivables
-              on one connected record.
+              Nigerian e-invoicing compliance and its evidence on one connected
+              record.
             </p>
           </div>
           <nav

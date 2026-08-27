@@ -13,6 +13,7 @@ import {
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   listFilings,
@@ -35,7 +36,13 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/filings", async (req, res): Promise<void> => {
+// Launch-profile gate (PL-02): every route here rides the statutory_desks flag —
+// dark means 404 (per-firm overrides apply). Per-route, NEVER router.use():
+// routers mount prefix-less in routes/index.ts, so a router-level gate
+// would intercept every request that merely flows past this router
+// (including the principal-less machine rails).
+
+router.get("/filings", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "filing.read");
   const query = parseOrThrow(ListFilingsQueryParams, req.query);
   const firmId = requireFirmScope(req.principal);
@@ -59,14 +66,14 @@ router.get("/filings", async (req, res): Promise<void> => {
 // (a firm that just onboarded a client need not wait for the loop). The
 // natural unique key makes the overlap free — an already-current register
 // mints zero.
-router.post("/filings/sync", async (req, res): Promise<void> => {
+router.post("/filings/sync", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "filing.write");
   const firmId = requireFirmScope(req.principal);
   const minted = await mintFilingsForFirm(firmId);
   res.json(SyncFilingsResponse.parse({ minted }));
 });
 
-router.post("/filings/:id/status", async (req, res): Promise<void> => {
+router.post("/filings/:id/status", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
   assertCan(req.principal, "filing.write");
   const params = parseOrThrow(UpdateFilingStatusParams, req.params);
   const body = parseOrThrow(UpdateFilingStatusBody, req.body);
