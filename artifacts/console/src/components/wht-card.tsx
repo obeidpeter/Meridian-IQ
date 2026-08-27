@@ -59,6 +59,21 @@ export function whtCreditPill(
   return { tone, label: whtCreditStatusLabel(status) };
 }
 
+/**
+ * The card's occupancy gate, shared with client-detail's Money view: the
+ * credits list loaded and the client has either recorded credits or rows on
+ * the period's remittance schedule. Client-detail observes the SAME queries
+ * (identical keys, so react-query dedupes to one fetch) to decide when the
+ * Money view needs an EmptyState instead of a silently absent card.
+ */
+export function whtCardHasContent(
+  credits: { credits: unknown[] } | undefined,
+  remittance: { rows: unknown[] } | undefined,
+): boolean {
+  if (!credits) return false;
+  return credits.credits.length > 0 || (remittance?.rows ?? []).length > 0;
+}
+
 // ---- The card ---------------------------------------------------------------
 
 export function WhtCard({ clientPartyId }: { clientPartyId: string }) {
@@ -133,7 +148,7 @@ export function WhtCard({ clientPartyId }: { clientPartyId: string }) {
   const remitRows = remit?.rows ?? [];
   // An empty book — no credits recorded AND nothing on the period's
   // remittance schedule — has no card, not an empty ledger.
-  if (rows.length === 0 && remitRows.length === 0) return null;
+  if (!whtCardHasContent(credits.data, remit)) return null;
 
   return (
     <Card data-testid="card-wht">

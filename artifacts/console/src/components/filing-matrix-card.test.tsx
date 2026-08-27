@@ -262,6 +262,13 @@ describe("FilingMatrixCard", () => {
     expect(card.textContent).toContain(
       "the platform never files anything itself",
     );
+
+    // The wide grid mounts the focusable ScrollRegion wrapper — keyboard
+    // users can reach and scroll the named region.
+    const region = screen.getByRole("region", {
+      name: "Filing cockpit table, scrollable",
+    });
+    expect(region.getAttribute("tabindex")).toBe("0");
   });
 
   test("a zero overdue count is not painted red", () => {

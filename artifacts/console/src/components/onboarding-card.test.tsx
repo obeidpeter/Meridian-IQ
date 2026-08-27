@@ -102,6 +102,8 @@ describe("pickOnboardingRun", () => {
     const done = run({ id: "r-done", status: "completed" });
     expect(pickOnboardingRun([done, active])?.id).toBe("r-active");
     expect(pickOnboardingRun([done])?.id).toBe("r-done");
+    const gone = run({ id: "r-gone", status: "abandoned" });
+    expect(pickOnboardingRun([gone])?.id).toBe("r-gone");
     expect(pickOnboardingRun([])).toBeNull();
   });
 });

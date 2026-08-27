@@ -79,6 +79,7 @@ import {
 import { QueryError } from "@/components/query-error";
 import { ClerkPageHeader } from "@/components/clerk-shell";
 import { StatTile } from "@/components/stat-tile";
+import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { errorStatus, serverErrorMessage } from "@/lib/errors";
@@ -1051,7 +1052,7 @@ function ModelCanaryCard() {
               {side("incumbent", report.incumbent)}
               {side("candidate", report.candidate)}
             </div>
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Model canary fixtures table">
               <table
                 className="w-full text-sm"
                 data-testid="table-model-canary-fixtures"
@@ -1100,7 +1101,7 @@ function ModelCanaryCard() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <CanaryFootnote
               fixtureCount={report.fixtureCount}
               truncated={report.truncated}
@@ -1338,7 +1339,7 @@ function EvalCorpusCard() {
             >
               {corpusSummary(corpus)}
             </p>
-            <div className="overflow-x-auto" id="table-eval-corpus-region">
+            <ScrollRegion label="Evaluation corpus table" id="table-eval-corpus-region">
               <table className="w-full text-sm" data-testid="table-eval-corpus">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -1463,7 +1464,7 @@ function EvalCorpusCard() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             {fixtures.length > CORPUS_PREVIEW_ROWS && (
               <Button
                 size="sm"
@@ -1893,7 +1894,7 @@ export function HealthPanel() {
                       No inference calls in this window.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <ScrollRegion label="Inference cohorts table">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -1937,7 +1938,7 @@ export function HealthPanel() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   )}
                 </CardContent>
               </Card>
@@ -1969,7 +1970,7 @@ export function HealthPanel() {
                       the review-flagging threshold is trusting numbers it
                       shouldn't.
                     </p>
-                    <div className="overflow-x-auto">
+                    <ScrollRegion label="Confidence calibration table">
                       <table
                         className="w-full text-sm"
                         data-testid="table-calibration"
@@ -2023,7 +2024,7 @@ export function HealthPanel() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   </CardContent>
                 </Card>
               )}
@@ -2045,7 +2046,7 @@ export function HealthPanel() {
                       No corrections yet — they appear once cases are approved.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <ScrollRegion label="Field corrections table">
                       <table
                         className="w-full text-sm"
                         data-testid="table-corrections"
@@ -2088,7 +2089,7 @@ export function HealthPanel() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   )}
                 </CardContent>
               </Card>
@@ -2107,7 +2108,7 @@ export function HealthPanel() {
                         correction patterns from the same exhaust, with an
                         example of the change operators made.
                       </p>
-                      <div className="overflow-x-auto">
+                      <ScrollRegion label="Correction shapes table">
                         <table
                           className="w-full text-sm"
                           data-testid="table-correction-shapes"
@@ -2147,7 +2148,7 @@ export function HealthPanel() {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </ScrollRegion>
                     </CardContent>
                   </Card>
                 )}
@@ -2171,7 +2172,7 @@ export function HealthPanel() {
                       No corrected approvals in this window yet.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <ScrollRegion label="Supplier accuracy table">
                       <table
                         className="w-full text-sm"
                         data-testid="table-supplier-accuracy"
@@ -2222,7 +2223,7 @@ export function HealthPanel() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   )}
                 </CardContent>
               </Card>
@@ -2240,7 +2241,7 @@ export function HealthPanel() {
                       fields operators KEPT unchanged when approving, by month.
                       Pure SQL, no model involved in the judgment.
                     </p>
-                    <div className="overflow-x-auto">
+                    <ScrollRegion label="Kept-rate by month table">
                       <table
                         className="w-full text-sm"
                         data-testid="table-kept-rate-months"
@@ -2272,7 +2273,7 @@ export function HealthPanel() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   </CardContent>
                 </Card>
               )}
@@ -2297,7 +2298,7 @@ export function HealthPanel() {
                   {askFeedbackTotalsLine(askFeedback.totals)}
                 </p>
                 {askFeedback.byIntent.length > 0 && (
-                  <div className="overflow-x-auto">
+                  <ScrollRegion label="Ask feedback by intent table">
                     <table
                       className="w-full text-sm"
                       data-testid="table-ask-feedback-intents"
@@ -2332,7 +2333,7 @@ export function HealthPanel() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ScrollRegion>
                 )}
                 {askFeedback.recentNotHelpful.length > 0 && (
                   <div data-testid="list-ask-feedback-not-helpful">
@@ -2382,7 +2383,7 @@ export function HealthPanel() {
                       No inference calls in this window.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <ScrollRegion label="Token spend by purpose table">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -2430,7 +2431,7 @@ export function HealthPanel() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollRegion>
                   )}
 
                   <div data-testid="economics-months">
@@ -2442,7 +2443,7 @@ export function HealthPanel() {
                         No inference history yet.
                       </p>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <ScrollRegion label="Failure taxonomy by month table">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -2492,7 +2493,7 @@ export function HealthPanel() {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </ScrollRegion>
                     )}
                   </div>
                 </CardContent>
@@ -2563,7 +2564,7 @@ export function HealthPanel() {
                   CLERK_MODEL_TIERS (takes effect on server restart) and
                   validate with a prompt canary first.
                 </p>
-                <div className="overflow-x-auto">
+                <ScrollRegion label="Model-tier evidence table">
                   <table
                     className="w-full text-sm"
                     data-testid="table-tier-report"
@@ -2628,7 +2629,7 @@ export function HealthPanel() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </ScrollRegion>
               </CardContent>
             </Card>
           )}
@@ -2682,7 +2683,7 @@ export function HealthPanel() {
                 </p>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  <ScrollRegion label="Evaluation runs table">
                     <table
                       className="w-full text-sm"
                       data-testid="table-eval-runs"
@@ -2740,7 +2741,7 @@ export function HealthPanel() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ScrollRegion>
                   {latestRun && (
                     <div className="space-y-2">
                       <Button
@@ -2872,7 +2873,7 @@ export function HealthPanel() {
                   involved in the judgment.
                 </p>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="overflow-x-auto">
+                  <ScrollRegion label="Injection resistance by month table">
                     <table
                       className="w-full text-sm"
                       data-testid="table-injection-months"
@@ -2906,8 +2907,8 @@ export function HealthPanel() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  <div className="overflow-x-auto">
+                  </ScrollRegion>
+                  <ScrollRegion label="Injection prompts table">
                     <table
                       className="w-full text-sm"
                       data-testid="table-injection-prompts"
@@ -2941,7 +2942,7 @@ export function HealthPanel() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ScrollRegion>
                 </div>
               </CardContent>
             </Card>

@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QueryError } from "@/components/query-error";
+import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
 import {
@@ -518,7 +519,7 @@ function ConnectionRuns({ connectionId }: { connectionId: string }) {
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <ScrollRegion label="Sync runs table">
       <table
         className="w-full text-sm"
         data-testid={`table-connection-runs-${connectionId}`}
@@ -556,6 +557,6 @@ function ConnectionRuns({ connectionId }: { connectionId: string }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
 }

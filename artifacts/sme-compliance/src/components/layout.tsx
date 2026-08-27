@@ -342,10 +342,12 @@ export function Layout({ children }: { children: ReactNode }) {
     } catch {
       // Cookie clearing is best effort; leave the workspace regardless.
     }
-    for (let index = window.sessionStorage.length - 1; index >= 0; index--) {
-      const key = window.sessionStorage.key(index);
-      if (key?.startsWith("meridianiq:invoice-draft")) {
-        window.sessionStorage.removeItem(key);
+    for (const storage of [window.localStorage, window.sessionStorage]) {
+      for (let index = storage.length - 1; index >= 0; index--) {
+        const key = storage.key(index);
+        if (key?.startsWith("meridianiq:invoice-draft")) {
+          storage.removeItem(key);
+        }
       }
     }
     window.location.href = "/login";
@@ -410,7 +412,7 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <div className="flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
+      <div className="sticky top-0 z-30 flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
         <BrandMark />
         <div className="flex items-center gap-1">
           <Button

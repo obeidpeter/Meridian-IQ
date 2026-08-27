@@ -8,6 +8,7 @@ import {
   filingStatusLabel,
 } from "@workspace/format/filing-copy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollRegion } from "@/components/scroll-region";
 import { formatDate } from "@/lib/format";
 
 // Filing cockpit (Filing Desk phase 3): the firm-wide grid of the current
@@ -110,7 +111,7 @@ export function FilingMatrixCard() {
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Filing cockpit table">
           <table className="w-full text-sm" data-testid="table-filing-matrix">
             <thead>
               <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -157,7 +158,7 @@ export function FilingMatrixCard() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <p
           className="text-sm font-medium"
           data-testid="text-filing-matrix-totals"

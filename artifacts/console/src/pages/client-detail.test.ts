@@ -1,5 +1,6 @@
 import { test, expect, describe } from "vitest";
 import {
+  CLIENT_VIEW_FEATURES,
   OFFBOARD_EXPLANATION,
   canOffboardClient,
   currentMonthStart,
@@ -8,7 +9,71 @@ import {
   offboardErrorNote,
   offboardSummary,
   packPdfFilename,
+  visibleClientViews,
 } from "./client-detail";
+
+// View gating (PL-02): tabs follow Me.features exactly like the nav — a
+// feature-dark view's API surfaces answer 404, so its tab hides rather than
+// opening a dead pane. A view listing several keys shows when ANY is lit.
+
+describe("visibleClientViews", () => {
+  test("the launch profile (no flags) keeps only the ungated views", () => {
+    expect(visibleClientViews(new Set([]))).toEqual([
+      "today",
+      "invoices",
+      "setup",
+    ]);
+  });
+
+  test("each flag lights exactly its own views", () => {
+    expect(visibleClientViews(new Set(["collection_accounts"]))).toEqual([
+      "today",
+      "invoices",
+      "money",
+      "setup",
+    ]);
+    expect(visibleClientViews(new Set(["statutory_desks"]))).toEqual([
+      "today",
+      "invoices",
+      "money",
+      "compliance",
+      "setup",
+    ]);
+    expect(visibleClientViews(new Set(["client_reports"]))).toEqual([
+      "today",
+      "invoices",
+      "compliance",
+      "setup",
+    ]);
+    expect(visibleClientViews(new Set(["clerk_ai"]))).toEqual([
+      "today",
+      "invoices",
+      "clerk",
+      "setup",
+    ]);
+  });
+
+  test("all flags lit yields the full six views in declared order", () => {
+    expect(
+      visibleClientViews(
+        new Set([
+          "collection_accounts",
+          "statutory_desks",
+          "client_reports",
+          "clerk_ai",
+        ]),
+      ),
+    ).toEqual(["today", "invoices", "money", "compliance", "clerk", "setup"]);
+  });
+
+  test("only money, compliance and clerk carry feature gates", () => {
+    expect(Object.keys(CLIENT_VIEW_FEATURES).sort()).toEqual([
+      "clerk",
+      "compliance",
+      "money",
+    ]);
+  });
+});
 
 // Export & offboarding helpers. The offboard guard is deliberately split:
 // the dialog only requires SOMETHING typed, and the server's 400

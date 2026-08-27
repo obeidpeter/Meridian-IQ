@@ -30,6 +30,8 @@ export function invitationStatusTone(status: string): BadgeTone {
       return "emerald";
     case "revoked":
       return "slate";
+    case "expired":
+      return "slate";
     default:
       return "slate";
   }
@@ -44,7 +46,28 @@ export function invitationStatusLabel(status: string): string {
       return "Accepted";
     case "revoked":
       return "Revoked";
+    case "expired":
+      return "Expired";
     default:
       return humanize(status);
   }
+}
+
+/**
+ * The status a row should display. A pending invitation past its expiresAt
+ * is dead on the wire (the redeem endpoint rejects it) but the stored enum
+ * still says "pending" — derive "expired" here so the admin can see which
+ * pending invites actually need re-issuing. Terminal statuses pass through.
+ */
+export function effectiveInvitationStatus(
+  inv: { status: string; expiresAt: string },
+  now: Date = new Date(),
+): string {
+  if (
+    inv.status === "pending" &&
+    new Date(inv.expiresAt).getTime() <= now.getTime()
+  ) {
+    return "expired";
+  }
+  return inv.status;
 }

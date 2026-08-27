@@ -132,18 +132,20 @@ export function SegmentedControl<T extends string>({
   className?: string;
   testIdPrefix?: string;
 }) {
+  // A segmented switcher is a group of toggle buttons, not tabs: consumers
+  // filter lists in place and no tabpanel exists, so aria-pressed states the
+  // truth without the tabs keyboard contract (real tab UIs use Radix Tabs).
   return (
     <div
       className={joinClasses("mi-segmented", className)}
-      role="tablist"
+      role="group"
       aria-label={label}
     >
       {items.map((item) => (
         <button
           key={item.value}
           type="button"
-          role="tab"
-          aria-selected={item.value === value}
+          aria-pressed={item.value === value}
           className="mi-segmented__item"
           onClick={() => onChange(item.value)}
           data-testid={
@@ -276,6 +278,7 @@ export function CommandMenu({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const open = controlledOpen ?? internalOpen;
 
@@ -341,11 +344,6 @@ export function CommandMenu({
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      hide();
-      return;
-    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActiveIndex((index) => Math.min(index + 1, filtered.length - 1));
@@ -362,6 +360,38 @@ export function CommandMenu({
     }
   };
 
+  // The menu declares aria-modal, so it must behave modally: Escape closes it
+  // from anywhere inside (not just the search input), and Tab cycles within
+  // the dialog instead of walking into the inert page behind the backdrop.
+  const handleBackdropKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hide();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const section = sectionRef.current;
+    if (!section) return;
+    const focusables = Array.from(
+      section.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input, [href], [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey) {
+      if (active === first || !section.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !section.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <>
       {trigger ? trigger(show) : null}
@@ -372,8 +402,10 @@ export function CommandMenu({
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) hide();
           }}
+          onKeyDown={handleBackdropKeyDown}
         >
           <section
+            ref={sectionRef}
             className="mi-command"
             role="dialog"
             aria-modal="true"

@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollRegion } from "@/components/scroll-region";
 import { formatNaira } from "@/lib/format";
 
 // VAT position across the firm's book (contract 0.45.0): per-client output
@@ -99,7 +100,7 @@ export function VatPositionsCard() {
             No VAT activity across the book in {data.monthLabel}.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <ScrollRegion label="Client VAT positions table">
             <table className="w-full text-sm" data-testid="table-vat-positions">
               <thead>
                 <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -166,7 +167,7 @@ export function VatPositionsCard() {
                 </tr>
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
         <p className="text-xs text-muted-foreground">{data.note}</p>
       </CardContent>

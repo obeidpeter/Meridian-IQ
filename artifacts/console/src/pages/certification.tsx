@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
+import { ScrollRegion } from "@/components/scroll-region";
 import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -331,7 +332,7 @@ export function Certification() {
               No enrollments yet. Enroll in a course above to get started.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Firm enrollments table">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
@@ -373,7 +374,7 @@ export function Certification() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardContent>
       </Card>

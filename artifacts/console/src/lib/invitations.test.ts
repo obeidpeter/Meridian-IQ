@@ -4,6 +4,7 @@ import {
   resetPasswordLink,
   invitationStatusTone,
   invitationStatusLabel,
+  effectiveInvitationStatus,
 } from "./invitations";
 
 describe("acceptInviteLink", () => {
@@ -37,6 +38,7 @@ describe("invitationStatusTone", () => {
     expect(invitationStatusTone("pending")).toBe("amber");
     expect(invitationStatusTone("accepted")).toBe("emerald");
     expect(invitationStatusTone("revoked")).toBe("slate");
+    expect(invitationStatusTone("expired")).toBe("slate");
   });
 
   test("falls back to slate for an unrecognised status", () => {
@@ -49,9 +51,45 @@ describe("invitationStatusLabel", () => {
     expect(invitationStatusLabel("pending")).toBe("Pending");
     expect(invitationStatusLabel("accepted")).toBe("Accepted");
     expect(invitationStatusLabel("revoked")).toBe("Revoked");
+    expect(invitationStatusLabel("expired")).toBe("Expired");
   });
 
   test("humanizes an unknown status for its label", () => {
     expect(invitationStatusLabel("weird_state")).toBe("Weird state");
+  });
+});
+
+describe("effectiveInvitationStatus", () => {
+  test("a pending invite past its expiry reads as expired", () => {
+    expect(
+      effectiveInvitationStatus(
+        { status: "pending", expiresAt: "2026-01-01T00:00:00Z" },
+        new Date("2026-02-01T00:00:00Z"),
+      ),
+    ).toBe("expired");
+  });
+
+  test("a pending invite before its expiry stays pending", () => {
+    expect(
+      effectiveInvitationStatus(
+        { status: "pending", expiresAt: "2026-03-01T00:00:00Z" },
+        new Date("2026-02-01T00:00:00Z"),
+      ),
+    ).toBe("pending");
+  });
+
+  test("terminal statuses never flip to expired", () => {
+    expect(
+      effectiveInvitationStatus(
+        { status: "accepted", expiresAt: "2026-01-01T00:00:00Z" },
+        new Date("2026-02-01T00:00:00Z"),
+      ),
+    ).toBe("accepted");
+    expect(
+      effectiveInvitationStatus(
+        { status: "revoked", expiresAt: "2026-01-01T00:00:00Z" },
+        new Date("2026-02-01T00:00:00Z"),
+      ),
+    ).toBe("revoked");
   });
 });

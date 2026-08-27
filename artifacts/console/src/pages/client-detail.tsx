@@ -18,6 +18,10 @@ import {
   useListAdvisoryBriefs,
   getListAdvisoryBriefsQueryKey,
   useGenerateAdvisoryBrief,
+  useListWhtCredits,
+  useGetWhtRemittance,
+  getListWhtCreditsQueryKey,
+  getGetWhtRemittanceQueryKey,
 } from "@workspace/api-client-react";
 import type { OffboardClientResult } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,8 +29,10 @@ import { ClerkActionsCard } from "@/components/clerk-actions-card";
 import { ClerkActionEffectivenessCard } from "@/components/clerk-action-effectiveness-card";
 import { FilingsCard } from "@/components/filings-card";
 import { OnboardingCard } from "@/components/onboarding-card";
-import { WhtCard } from "@/components/wht-card";
+import { WhtCard, whtCardHasContent } from "@/components/wht-card";
 import { ObligationsCard } from "@/components/obligations-card";
+import { EmptyState } from "@/components/empty-state";
+import { PenaltyRiskInfo } from "@/components/penalty-risk-info";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,6 +97,28 @@ const CLIENT_VIEWS = [
   "setup",
 ] as const;
 type ClientView = (typeof CLIENT_VIEWS)[number];
+
+/**
+ * Launch-profile gates per view (PL-02, mirroring layout.tsx's
+ * NavLink.feature): absent from Me.features means the view's API surfaces
+ * answer 404, so the tab hides rather than opening a dead pane. A view
+ * listing several keys shows when ANY is lit; each member card then mounts
+ * only under its own key.
+ */
+export const CLIENT_VIEW_FEATURES: Partial<Record<ClientView, string[]>> = {
+  money: ["collection_accounts", "statutory_desks"],
+  compliance: ["statutory_desks", "client_reports"],
+  clerk: ["clerk_ai"],
+};
+
+export function visibleClientViews(
+  features: ReadonlySet<string>,
+): ClientView[] {
+  return CLIENT_VIEWS.filter((v) => {
+    const required = CLIENT_VIEW_FEATURES[v];
+    return !required || required.some((f) => features.has(f));
+  });
+}
 
 // ---- Export & offboarding helpers -------------------------------------------
 // The data-subject export saves the server's bundle verbatim as JSON; the
@@ -573,6 +601,39 @@ export function ClientDetail() {
   const [offboardNote, setOffboardNote] = useState<string | null>(null);
   const [view, setView] = useUrlTab<ClientView>("view", "today", CLIENT_VIEWS);
 
+  // ---- View gating + Money-view occupancy (portfolio's section-occupancy
+  // pattern): tabs follow Me.features exactly like the nav, and because the
+  // WHT card self-gates to null on an empty ledger, the Money view observes
+  // the SAME queries the card gates on (identical keys — react-query
+  // dedupes) to know when to show an EmptyState instead of a bare grid.
+  const features = new Set(me?.features ?? []);
+  const visibleViews = visibleClientViews(features);
+  const activeView: ClientView = visibleViews.includes(view) ? view : "today";
+  const whtParams = { clientPartyId: id };
+  const whtGate = useListWhtCredits(whtParams, {
+    query: {
+      enabled: !!id && features.has("statutory_desks"),
+      queryKey: getListWhtCreditsQueryKey(whtParams),
+      staleTime: 60_000,
+      retry: false,
+    },
+  });
+  const whtRemitGate = useGetWhtRemittance(whtParams, {
+    query: {
+      enabled: !!id && features.has("statutory_desks"),
+      queryKey: getGetWhtRemittanceQueryKey(whtParams),
+      staleTime: 60_000,
+      retry: false,
+    },
+  });
+  const moneyEmpty =
+    !features.has("collection_accounts") &&
+    (whtGate.isSuccess || whtGate.isError) &&
+    !whtCardHasContent(
+      whtGate.data,
+      whtRemitGate.isSuccess ? whtRemitGate.data : undefined,
+    );
+
   const openOffboard = () => {
     setConfirmText("");
     setOffboardNote(null);
@@ -638,7 +699,7 @@ export function ClientDetail() {
     return (
       <div className="space-y-6">
         <Link
-          href="/"
+          href="/?view=clients"
           className="inline-flex items-center gap-2 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
           data-testid="link-back"
         >
@@ -682,7 +743,9 @@ export function ClientDetail() {
       description: `Due ${formatDate(deadline.dueDate)} · ${humanize(deadline.status)}`,
       tone: deadline.severity === "critical" ? "critical" : "warning",
       icon: <CalendarClock className="size-4" aria-hidden="true" />,
-      action: (
+      // When the Tax & filings tab is feature-dark the deadline still lists
+      // (the Deadlines card beside this queue carries it) — no dead hop.
+      action: visibleViews.includes("compliance") ? (
         <Button
           size="sm"
           variant="outline"
@@ -690,11 +753,11 @@ export function ClientDetail() {
         >
           Open filings
         </Button>
-      ),
+      ) : undefined,
     });
   });
 
-  const views: Array<{
+  const allViews: Array<{
     value: ClientView;
     label: string;
     count?: number;
@@ -706,11 +769,16 @@ export function ClientDetail() {
     { value: "clerk", label: "Clerk" },
     { value: "setup", label: "Setup" },
   ];
+  const views = allViews.filter((v) => visibleViews.includes(v.value));
 
   return (
     <div className="space-y-6">
+      {/* "/?view=clients" deep-links the portfolio's clients tab (useUrlTab
+          reads the param on mount) so client-hopping doesn't restart triage
+          from the Today view. Search/filter/sort are component state and
+          reset — the tab restore alone removes most of the cost. */}
       <Link
-        href="/"
+        href="/?view=clients"
         className="inline-flex items-center gap-2 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
         data-testid="link-back"
       >
@@ -787,17 +855,18 @@ export function ClientDetail() {
           detail="Current client exposure"
           icon={<ShieldCheck className="size-4" aria-hidden="true" />}
           tone={client.penaltyRisk === "high" ? "critical" : "default"}
+          action={<PenaltyRiskInfo />}
         />
       </MetricStrip>
 
       <SegmentedControl<ClientView>
         items={views}
-        value={view}
+        value={activeView}
         onChange={setView}
         label="Client workspace view"
       />
 
-      {view === "today" && (
+      {activeView === "today" && (
         <WorkQueue
           title="Client priorities"
           description="Submission failures and statutory deadlines, ordered for action."
@@ -808,7 +877,7 @@ export function ClientDetail() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {(view === "today" || view === "invoices") && (
+        {(activeView === "today" || activeView === "invoices") && (
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Invoices</CardTitle>
@@ -857,7 +926,10 @@ export function ClientDetail() {
                         <span className={badgeClasses(inv.status)}>
                           {statusLabel(inv.status)}
                         </span>
-                        <InvoiceStatusLight invoiceId={inv.id} />
+                        <InvoiceStatusLight
+                          invoiceId={inv.id}
+                          showWhy={failing}
+                        />
                       </div>
                     );
                   })}
@@ -867,7 +939,7 @@ export function ClientDetail() {
           </Card>
         )}
 
-        {view === "today" && (
+        {activeView === "today" && (
           <Card>
             <CardHeader>
               <CardTitle>Deadlines</CardTitle>
@@ -902,20 +974,38 @@ export function ClientDetail() {
           </Card>
         )}
 
-        {view === "money" && (
+        {activeView === "money" && (
           <>
-            <CollectionAccountsCard clientPartyId={id} />
-            <WhtCard clientPartyId={id} />
+            {features.has("collection_accounts") && (
+              <CollectionAccountsCard clientPartyId={id} />
+            )}
+            {features.has("statutory_desks") && <WhtCard clientPartyId={id} />}
+            {moneyEmpty && (
+              <Card className="lg:col-span-3">
+                <EmptyState
+                  icon={Landmark}
+                  title="Nothing to reconcile yet"
+                  description="WHT credits and remittance rows appear here once buyer deductions or WHT-categorised bills are recorded for this client."
+                  testId="text-money-empty"
+                />
+              </Card>
+            )}
           </>
         )}
-        {view === "compliance" && (
+        {activeView === "compliance" && (
           <>
-            <CompliancePackCard clientPartyId={id} />
-            <ObligationsCard clientPartyId={id} />
-            <FilingsCard clientPartyId={id} />
+            {features.has("client_reports") && (
+              <CompliancePackCard clientPartyId={id} />
+            )}
+            {features.has("statutory_desks") && (
+              <>
+                <ObligationsCard clientPartyId={id} />
+                <FilingsCard clientPartyId={id} />
+              </>
+            )}
           </>
         )}
-        {view === "clerk" && (
+        {activeView === "clerk" && (
           <>
             <AdvisoryBriefCard clientPartyId={id} />
             <ClerkActionsCard clientPartyId={id} />
@@ -925,7 +1015,7 @@ export function ClientDetail() {
         {/* Onboard with Clerk: the evidence-based onboarding checklist —
             steps settle from the record (history, statements, consent,
             duplicates, filings), skips record honest gaps. */}
-        {view === "setup" && <OnboardingCard clientPartyId={id} />}
+        {activeView === "setup" && <OnboardingCard clientPartyId={id} />}
       </div>
 
       <Dialog

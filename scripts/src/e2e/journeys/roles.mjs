@@ -119,6 +119,8 @@ async function journeyOperatorDesk(page, BASE, check) {
   await page.getByTestId("switch-reconciliation").click();
   await page.waitForSelector("text=reconciliation enabled", { timeout: 8000 });
   await page.getByTestId("switch-reconciliation").click();
+  // Disabling is platform-wide, so it is confirm-gated.
+  await page.getByTestId("button-confirm-disable-flag").click();
   await page.waitForSelector("text=reconciliation disabled", { timeout: 8000 });
   check("feature flag toggles round-trip", true);
 
@@ -224,6 +226,9 @@ async function journeyOwnerConsent(page, BASE, check) {
     timeout: 10000,
   });
   await page.getByTestId("button-revoke-2").click();
+  // Revocation is confirm-gated: the dialog restates the consequence before
+  // the ledger event is recorded.
+  await page.getByTestId("button-confirm-revoke").click();
   await page.waitForSelector('[data-testid="button-grant-2"]', {
     timeout: 10000,
   });
