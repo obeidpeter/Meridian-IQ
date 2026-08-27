@@ -1,0 +1,16 @@
+MeridianIQ database disaster-recovery backup
+Created UTC: 2026-08-27T15:31:53Z
+Source commit: 483894b6e37b1d7d77b7c23d7b5bb2c9a4313cfa
+Replit app ID: d096574a-b3d8-4990-8bf5-4be1e6646e06
+Deployment ID: e7fb97fc-c3dd-40b3-be15-94194593bcaf
+Production URL: https://meridian-iq.replit.app
+Production database bytes: 13221888
+Development database bytes: 15045091
+Production migration ledger count|max: 31|31
+Development migration ledger count|max: 44|44
+Production dump TOC entries: 682
+Development dump TOC entries: 887
+Encryption: AES-256-GCM; PBKDF2-HMAC-SHA256, 600000 iterations; random salt and IV per file
+Object storage: not configured; durable server state is PostgreSQL
+Replit production PITR: enabled, 7-day window at capture time
+Validation: pg_restore list plus decrypt-and-byte-compare round trip passed
