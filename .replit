@@ -50,3 +50,8 @@ externalPort = 80
 [[ports]]
 localPort = 26060
 externalPort = 4200
+
+[userenv]
+
+[userenv.development]
+SEED_DEMO = "true"
