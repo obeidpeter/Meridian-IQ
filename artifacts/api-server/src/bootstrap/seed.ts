@@ -563,8 +563,10 @@ async function seedBuyerDemo(): Promise<void> {
 
 // --- Demo login credentials ---------------------------------------------------
 // Every seeded demo user can sign in through the first-party session login with
-// this shared demo password. The explicit email allowlist is critical: an
-// unrelated passwordless account must never inherit demonstration credentials.
+// this shared demo password. Re-apply it on every opted-in development seed so
+// stale demo hashes cannot make the documented credentials stop working. The
+// explicit email allowlist is critical: unrelated accounts must never inherit
+// demonstration credentials.
 async function seedDemoPasswords(): Promise<void> {
   const password = process.env.DEMO_PASSWORD;
   if (!password || password.length < 16) {
@@ -576,12 +578,7 @@ async function seedDemoPasswords(): Promise<void> {
   await getDb()
     .update(usersTable)
     .set({ passwordHash: hash })
-    .where(
-      and(
-        isNull(usersTable.passwordHash),
-        inArray(usersTable.email, [...PRODUCTION_DEMO_EMAILS]),
-      ),
-    );
+    .where(inArray(usersTable.email, [...PRODUCTION_DEMO_EMAILS]));
 }
 
 // --- CPD certification content (CON-05) --------------------------------------
