@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import { downloadBlob } from "@/lib/download";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -49,8 +50,11 @@ export function AuditEvidence() {
         title: "Audit bundle downloaded",
         description: `${bundle?.events.length ?? 0} events with chain verification attached.`,
       });
-    } catch {
-      toast({ title: "Export failed", variant: "destructive" });
+    } catch (e) {
+      serverErrorToast(toast, e, {
+        title: "Export failed",
+        fallback: "Try again.",
+      });
     } finally {
       setExporting(false);
     }

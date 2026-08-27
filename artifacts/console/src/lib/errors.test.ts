@@ -5,6 +5,7 @@ import {
   isForbidden,
   killSwitchTripped,
   serverErrorMessage,
+  serverErrorToast,
 } from "./errors";
 
 describe("errorStatus", () => {
@@ -72,5 +73,55 @@ describe("serverErrorMessage", () => {
     expect(serverErrorMessage(null)).toBeUndefined();
     // It does not read Error.message — only the server's data.error body.
     expect(serverErrorMessage(new Error("network down"))).toBeUndefined();
+  });
+});
+
+describe("serverErrorToast", () => {
+  const capture = () => {
+    const calls: Array<{
+      title: string;
+      description: string;
+      variant: "destructive";
+    }> = [];
+    const toast = (input: {
+      title: string;
+      description: string;
+      variant: "destructive";
+    }) => calls.push(input);
+    return { calls, toast };
+  };
+
+  test("relays the server's own words as the description", () => {
+    const { calls, toast } = capture();
+    serverErrorToast(toast, { data: { error: "TIN is not valid" } }, "Try again.");
+    expect(calls).toEqual([
+      {
+        title: "Something went wrong",
+        description: "TIN is not valid",
+        variant: "destructive",
+      },
+    ]);
+  });
+
+  test("uses the caller's fallback when the server sent no words", () => {
+    const { calls, toast } = capture();
+    serverErrorToast(toast, new Error("network down"), "Try again.");
+    expect(calls[0]).toMatchObject({
+      title: "Something went wrong",
+      description: "Try again.",
+    });
+  });
+
+  test("names the failed action when given { title, fallback }", () => {
+    const { calls, toast } = capture();
+    serverErrorToast(toast, null, {
+      title: "Could not claim case",
+      fallback: "Try again.",
+    });
+    expect(calls[0]).toEqual({
+      title: "Could not claim case",
+      description: "Try again.",
+      variant: "destructive",
+    });
   });
 });

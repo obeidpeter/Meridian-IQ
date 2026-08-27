@@ -253,14 +253,16 @@ describe("Clerk tab dual gate and floor", () => {
     harness.me = me({ features: ["invoice_lifecycle"] });
     harness.summary = summary({ totalInvoices: 3 });
     renderWithClient(<Dashboard />);
-    expect(screen.queryByRole("tab", { name: "Clerk" })).toBeNull();
+    // SegmentedControl announces as a toggle-button group (web-ui finding 59),
+    // so the view switches are buttons, not tabs.
+    expect(screen.queryByRole("button", { name: "Clerk" })).toBeNull();
   });
 
   test("feature lit shows the tab, and the Ask Clerk floor keeps it non-blank", () => {
     harness.me = me({ features: ["invoice_lifecycle", "clerk_ai"] });
     harness.summary = summary({ totalInvoices: 3 });
     renderWithClient(<Dashboard />);
-    expect(screen.getByRole("tab", { name: "Clerk" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clerk" })).toBeTruthy();
     cleanup();
 
     // Deep-link onto the tab: the digest and actions mocks are non-success,

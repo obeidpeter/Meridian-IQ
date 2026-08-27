@@ -47,7 +47,7 @@ import { roleLabel } from "@/components/capability-gate";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { errorStatus } from "@/lib/errors";
+import { errorStatus, serverErrorToast } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import {
   acceptInviteLink,
@@ -248,10 +248,10 @@ export function Invitations() {
             toast({ title: `Invitation to ${invitation.email} revoked` });
           }
         },
-        onError: () =>
-          toast({
+        onError: (e) =>
+          serverErrorToast(toast, e, {
             title: "Could not revoke invitation",
-            variant: "destructive",
+            fallback: "Try again.",
           }),
         onSettled: () => setRevokingId(null),
       },

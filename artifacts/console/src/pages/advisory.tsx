@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
   ClipboardCheck,
@@ -175,8 +176,11 @@ function AssessmentTab() {
             description: "Findings are recorded on the client's engagement.",
           });
         },
-        onError: () =>
-          toast({ title: "Could not run assessment", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not run assessment",
+            fallback: "Try again.",
+          }),
       },
     );
   };
@@ -367,8 +371,11 @@ function VatRiskTab() {
             title: `${result.rowCount} rows checked — ${formatNaira(result.totalVatAtRisk)} at risk`,
           });
         },
-        onError: () =>
-          toast({ title: "Could not analyze ledger", variant: "destructive" }),
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not analyze ledger",
+            fallback: "Try again.",
+          }),
       },
     );
   };

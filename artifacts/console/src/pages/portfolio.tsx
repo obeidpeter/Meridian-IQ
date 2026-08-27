@@ -88,6 +88,7 @@ import {
   Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorToast } from "@/lib/errors";
 import {
   formatNaira,
   formatDate,
@@ -501,8 +502,11 @@ function coverNoteHandlers<T extends { note: string }>(
       setNote(res);
       setNoteText(res.note);
     },
-    onError: () =>
-      toast({ title: "Could not draft the note", variant: "destructive" }),
+    onError: (e: unknown) =>
+      serverErrorToast(toast, e, {
+        title: "Could not draft the note",
+        fallback: "Try again.",
+      }),
   };
 }
 
