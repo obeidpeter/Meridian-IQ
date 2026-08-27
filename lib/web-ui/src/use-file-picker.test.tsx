@@ -7,11 +7,14 @@ import { useFilePicker } from "./use-file-picker";
 afterEach(cleanup);
 
 function Harness({ onFile }: { onFile: (file: File) => void }) {
-  const { inputProps, openPicker } = useFilePicker(onFile);
+  const { inputProps, openPicker, dragActive, dropProps } = useFilePicker(onFile);
   return (
     <>
       <input type="file" data-testid="input" {...inputProps} />
       <button onClick={openPicker}>pick</button>
+      <div data-testid="zone" {...dropProps}>
+        {dragActive ? "active" : "idle"}
+      </div>
     </>
   );
 }
@@ -46,5 +49,45 @@ describe("useFilePicker", () => {
     const click = vi.spyOn(input, "click");
     fireEvent.click(screen.getByText("pick"));
     expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  test("onDrop with a file fires onFile and prevents the browser default", () => {
+    const onFile = vi.fn();
+    render(<Harness onFile={onFile} />);
+    const zone = screen.getByTestId("zone");
+    const file = new File(["a,b,c"], "rows.csv", { type: "text/csv" });
+    // fireEvent returns false when preventDefault was called.
+    const defaultNotPrevented = fireEvent.drop(zone, {
+      dataTransfer: { files: [file] },
+    });
+    expect(onFile).toHaveBeenCalledTimes(1);
+    expect(onFile).toHaveBeenCalledWith(file);
+    expect(defaultNotPrevented).toBe(false);
+  });
+
+  test("file-less drop is ignored and keeps native behaviour", () => {
+    const onFile = vi.fn();
+    render(<Harness onFile={onFile} />);
+    const defaultNotPrevented = fireEvent.drop(screen.getByTestId("zone"), {
+      dataTransfer: { files: [] },
+    });
+    expect(onFile).not.toHaveBeenCalled();
+    expect(defaultNotPrevented).toBe(true);
+  });
+
+  test("dragActive follows a depth-counted enter/leave cycle", () => {
+    const onFile = vi.fn();
+    render(<Harness onFile={onFile} />);
+    const zone = screen.getByTestId("zone");
+    expect(zone.textContent).toBe("idle");
+    fireEvent.dragEnter(zone);
+    expect(zone.textContent).toBe("active");
+    // Crossing a child fires another enter, then a leave — the highlight
+    // must not flicker off until the depth returns to zero.
+    fireEvent.dragEnter(zone);
+    fireEvent.dragLeave(zone);
+    expect(zone.textContent).toBe("active");
+    fireEvent.dragLeave(zone);
+    expect(zone.textContent).toBe("idle");
   });
 });

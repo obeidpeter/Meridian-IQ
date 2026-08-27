@@ -1,5 +1,5 @@
-// The money journeys: supplier bills (payables) and the VAT position page
-// plus the monthly compliance pack.
+// The money journeys: supplier bills (payables), the VAT position page plus
+// the monthly compliance pack, and the SME bulk invoice import.
 import {
   CSRF,
   DEMO_CLIENT_PARTY_ID,
@@ -145,7 +145,12 @@ async function journeyVatPositionAndPack(page, BASE, check) {
   await page.waitForSelector('[data-testid="text-vat-output"]', {
     timeout: 15000,
   });
-  check("SME VAT page renders the position rows", true);
+  // The statutory due-date line rides the compliance calendar, which always
+  // carries the next VAT return — deterministic for the demo client.
+  await page.waitForSelector('[data-testid="text-vat-due"]', {
+    timeout: 15000,
+  });
+  check("SME VAT page renders the position rows and the return due date", true);
 
   const csvRes = await page.request.get(
     BASE + `/api/vat-position/export?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
@@ -197,4 +202,57 @@ async function journeyVatPositionAndPack(page, BASE, check) {
   await apiLogout(page, BASE);
 }
 
-export { journeyPayables, journeyVatPositionAndPack };
+// ---------- SME staff: bulk invoice import (validate-first gate) ----------
+// Pastes two template rows — one valid (with an RFC-4180 quoted comma in the
+// buyer name, so the shared-parser fix is load-bearing) and one missing its
+// buyer TIN — then walks the page's gate: commit stays locked until a
+// validation pass, the skip-invalid dialog fronts the commit, and the
+// committed result reports created vs skipped and offers the Invoices path.
+// The created invoice stays a DRAFT under a Date.now()-unique number (the
+// WHT-journey idiom), so no later journey's picks are disturbed.
+async function journeyBulkImport(page, BASE, check) {
+  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+  await page.goto(BASE + "/app/import", { waitUntil: "networkidle" });
+
+  const stamp = Date.now();
+  const today = new Date().toISOString().slice(0, 10);
+  const csv =
+    "invoiceNumber,buyerName,buyerTin,issueDate,dueDate,description,quantity,unitPrice,vatRate,currency\n" +
+    `E2E-IMP-${stamp},"Bulk, Import Ltd",99887766-0001,${today},,Imported line,1,1000,0.075,NGN\n` +
+    `E2E-IMP-${stamp}-B,No Tin Ltd,,${today},,Imported line,1,1000,0.075,NGN`;
+  await page.getByTestId("input-csv").fill(csv);
+
+  check(
+    "bulk import locks commit until a validation pass",
+    await page.getByTestId("button-commit").isDisabled(),
+  );
+
+  await page.getByTestId("button-validate").click();
+  await page.waitForSelector("text=Validation preview", { timeout: 15000 });
+  check(
+    "validation preview flags the TIN-less row and passes the quoted-comma row",
+    ((await page.getByTestId("text-valid-count").textContent()) ?? "").trim() ===
+      "Valid: 1" &&
+      ((await page.getByTestId("text-invalid-count").textContent()) ?? "").trim() ===
+        "Invalid: 1",
+  );
+
+  await page.getByTestId("button-commit").click();
+  await page.waitForSelector('[data-testid="button-confirm-import"]', {
+    timeout: 10000,
+  });
+  await page.getByTestId("button-confirm-import").click();
+  await page.waitForSelector("text=Import results", { timeout: 15000 });
+  check(
+    "commit skips the invalid row and creates the quoted-comma draft",
+    ((await page.getByTestId("text-created-count").textContent()) ?? "").trim() ===
+      "Created: 1",
+  );
+  check(
+    "import results offer the drafts path to Invoices",
+    await page.getByTestId("button-view-invoices").isVisible(),
+  );
+  await apiLogout(page, BASE);
+}
+
+export { journeyPayables, journeyVatPositionAndPack, journeyBulkImport };

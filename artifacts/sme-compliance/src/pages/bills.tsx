@@ -46,8 +46,9 @@ import {
   canFlagBill,
   formatDate,
   formatAmount,
-  formatNaira,
   pillClasses,
+  IRN_EXPANSION,
+  CSID_EXPANSION,
 } from "@/lib/format";
 
 const FILTERS = [
@@ -102,10 +103,8 @@ function DoublePaymentAdvisory({ clientPartyId }: { clientPartyId: string }) {
         {check.multiPaid.map((b) => (
           <p key={b.invoiceId} data-testid={`multi-paid-${b.invoiceId}`}>
             {b.invoiceNumber} ({b.supplierName},{" "}
-            {b.currency === "NGN"
-              ? formatNaira(b.grandTotal)
-              : `${b.currency} ${b.grandTotal}`}
-            ) is matched to {b.evidenceCount} separate bank debits totalling
+            {formatAmount(b.grandTotal, b.currency)}) is matched to{" "}
+            {b.evidenceCount} separate bank debits totalling
             more than the bill — {formatDate(b.firstPaidAt)} and again{" "}
             {formatDate(b.lastPaidAt)}.
           </p>
@@ -119,20 +118,16 @@ function DoublePaymentAdvisory({ clientPartyId }: { clientPartyId: string }) {
               <>
                 {p.first.invoiceNumber} from {p.supplierName} is already paid,
                 and {p.second.invoiceNumber} looks like the same bill (
-                {p.currency === "NGN"
-                  ? formatNaira(p.grandTotal)
-                  : `${p.currency} ${p.grandTotal}`}
-                , issued {p.daysApart} day{p.daysApart === 1 ? "" : "s"} apart)
+                {formatAmount(p.grandTotal, p.currency)}, issued {p.daysApart}{" "}
+                day{p.daysApart === 1 ? "" : "s"} apart)
                 — check it is not a duplicate before paying it.
               </>
             ) : (
               <>
                 {p.first.invoiceNumber} and {p.second.invoiceNumber} from{" "}
                 {p.supplierName} are both unpaid for the same amount (
-                {p.currency === "NGN"
-                  ? formatNaira(p.grandTotal)
-                  : `${p.currency} ${p.grandTotal}`}
-                ), issued {p.daysApart} day{p.daysApart === 1 ? "" : "s"} apart
+                {formatAmount(p.grandTotal, p.currency)}), issued {p.daysApart}{" "}
+                day{p.daysApart === 1 ? "" : "s"} apart
                 — check one is not a duplicate before paying both.
               </>
             )}
@@ -198,9 +193,7 @@ function MissingBillsAdvisory({ clientPartyId }: { clientPartyId: string }) {
 }
 
 function billAmount(bill: BillSummary): string {
-  return bill.currency === "NGN"
-    ? formatNaira(bill.grandTotal)
-    : `${bill.currency} ${bill.grandTotal}`;
+  return formatAmount(bill.grandTotal, bill.currency);
 }
 
 // Inline IRN+CSID verification against the national record. Local state on
@@ -242,7 +235,7 @@ function VerifyStampForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <Label htmlFor={`verify-irn-${bill.invoiceId}`} className="text-xs">
-            IRN
+            IRN ({IRN_EXPANSION})
           </Label>
           <Input
             id={`verify-irn-${bill.invoiceId}`}
@@ -254,7 +247,7 @@ function VerifyStampForm({
         </div>
         <div>
           <Label htmlFor={`verify-csid-${bill.invoiceId}`} className="text-xs">
-            CSID
+            CSID ({CSID_EXPANSION})
           </Label>
           <Input
             id={`verify-csid-${bill.invoiceId}`}

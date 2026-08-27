@@ -4,13 +4,10 @@ import { Landmark, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
+import { roleLabel, roleHomeHref } from "@workspace/format";
 
 // A full navigation preserves the origin-wide session contract between apps.
 export const PORTAL_URL = "/login";
-
-function formatRole(role: string) {
-  return role.replaceAll("_", " ");
-}
 
 function BrandSplash({
   title,
@@ -111,11 +108,17 @@ export function RequireSession({
   }
 
   if (isError || !me) {
-    window.location.href = PORTAL_URL;
+    // Send the portal the page this session died on so sign-in can land
+    // back here instead of the workspace root.
+    const returnTo = encodeURIComponent(
+      window.location.pathname + window.location.search,
+    );
+    window.location.href = `${PORTAL_URL}?returnTo=${returnTo}&reason=expired`;
     return null;
   }
 
   if (!allowedRoles.includes(me.role)) {
+    const home = roleHomeHref(me.role);
     return (
       <BrandSplash
         title="Wrong workspace"
@@ -123,23 +126,30 @@ export function RequireSession({
           <>
             You are signed in as{" "}
             <span className="font-semibold text-foreground">
-              {formatRole(me.role)}
+              {roleLabel(me.role)}
             </span>
-            . This console requires a{" "}
-            {allowedRoles.map(formatRole).join(" or ")} account.
+            . This console is for accounting firm and operator accounts.
           </>
         }
         icon={<ShieldAlert className="size-6" aria-hidden="true" />}
         testId="card-wrong-role"
       >
-        <Button
-          onClick={() => {
-            window.location.href = PORTAL_URL;
-          }}
-          data-testid="button-back-to-portal"
-        >
-          Back to the MeridianIQ portal
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          {home && (
+            <Button asChild data-testid="button-open-role-home">
+              <a href={home.href}>Open {home.label}</a>
+            </Button>
+          )}
+          <Button
+            variant={home ? "outline" : "default"}
+            onClick={() => {
+              window.location.href = PORTAL_URL;
+            }}
+            data-testid="button-back-to-portal"
+          >
+            Back to the MeridianIQ portal
+          </Button>
+        </div>
       </BrandSplash>
     );
   }

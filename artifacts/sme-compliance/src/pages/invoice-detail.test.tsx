@@ -102,8 +102,10 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 import {
   ApprovalsCard,
   PaymentReminderCard,
+  ValidationErrorsCard,
   canApproveInvoice,
   submitErrorTitle,
+  submittedToastDescription,
 } from "./invoice-detail";
 
 const invoice = {
@@ -313,5 +315,70 @@ describe("submitErrorTitle", () => {
     expect(submitErrorTitle(409)).toBe("Submission blocked");
     expect(submitErrorTitle(500)).toBe("Submission error");
     expect(submitErrorTitle(undefined)).toBe("Submission error");
+  });
+});
+
+describe("submittedToastDescription", () => {
+  test("promises a notification only when the messaging rail is lit", () => {
+    expect(submittedToastDescription(["messaging_notifications"])).toBe(
+      "We'll notify you once it clears the rail.",
+    );
+    expect(submittedToastDescription([])).toBe(
+      "Check back here — this page updates automatically once FIRS answers.",
+    );
+    expect(submittedToastDescription(undefined)).toBe(
+      "Check back here — this page updates automatically once FIRS answers.",
+    );
+    expect(submittedToastDescription(["invoice_lifecycle"])).toBe(
+      "Check back here — this page updates automatically once FIRS answers.",
+    );
+  });
+});
+
+// ---- Validation errors card -------------------------------------------------
+
+describe("ValidationErrorsCard", () => {
+  test("renders every held error with a count in the heading and wires the fix path", () => {
+    const onFix = vi.fn();
+    render(
+      <ValidationErrorsCard
+        errors={[
+          { field: "dueDate", message: "Required" },
+          { field: "lines.0.description", message: "Required" },
+        ]}
+        onFix={onFix}
+        showFixButton
+      />,
+    );
+
+    expect(screen.getByTestId("card-validation-errors").textContent).toContain(
+      "2 issues to fix",
+    );
+    expect(screen.getByTestId("row-validation-error-0").textContent).toContain(
+      "dueDate: Required",
+    );
+    expect(screen.getByTestId("row-validation-error-1").textContent).toContain(
+      "lines.0.description: Required",
+    );
+
+    fireEvent.click(screen.getByTestId("button-fix-draft"));
+    expect(onFix).toHaveBeenCalledTimes(1);
+  });
+
+  test("party-record fields get the where-to-fix-it note, and the fix button can be withheld", () => {
+    render(
+      <ValidationErrorsCard
+        errors={[{ field: "buyer.tin", message: "TIN is invalid" }]}
+        onFix={vi.fn()}
+        showFixButton={false}
+      />,
+    );
+    expect(screen.getByText(/customer or business record/)).toBeTruthy();
+    expect(screen.queryByTestId("button-fix-draft")).toBeNull();
+  });
+
+  test("no errors, no card", () => {
+    render(<ValidationErrorsCard errors={[]} onFix={vi.fn()} showFixButton />);
+    expect(screen.queryByTestId("card-validation-errors")).toBeNull();
   });
 });

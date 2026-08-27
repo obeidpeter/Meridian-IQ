@@ -29,7 +29,11 @@ import {
   journeyOwnerConsent,
   journeyTotp,
 } from "./roles.mjs";
-import { journeyPayables, journeyVatPositionAndPack } from "./money.mjs";
+import {
+  journeyPayables,
+  journeyVatPositionAndPack,
+  journeyBulkImport,
+} from "./money.mjs";
 import {
   journeyGovernance,
   journeyCollections,
@@ -59,6 +63,7 @@ export async function runJourneys(
   await journeyTotp(page, BASE, check);
   await journeyPayables(page, BASE, check);
   await journeyVatPositionAndPack(page, BASE, check);
+  await journeyBulkImport(page, BASE, check);
   await journeyGovernance(page, BASE, check);
   await journeyCollections(page, BASE, check, collectionWebhookToken);
   // Runs BEFORE the credit-note journey on purpose: AUTO-9001 stamps in the

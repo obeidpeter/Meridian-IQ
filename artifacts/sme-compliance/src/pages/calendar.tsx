@@ -12,15 +12,38 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { CalendarClock, AlertTriangle, ChevronRight, Receipt } from "lucide-react";
-import { formatDate, severityBadgeClasses } from "@/lib/format";
+import { formatLagosDate, humanize, lagosDayDiff, pillClasses, severityBadgeClasses } from "@/lib/format";
 
-function daysAway(due: string): string | null {
-  const ms = new Date(due).getTime();
-  if (Number.isNaN(ms)) return null;
-  const diff = Math.round((ms - Date.now()) / (24 * 60 * 60 * 1000));
-  if (diff < 0) return `${Math.abs(diff)} day${Math.abs(diff) === 1 ? "" : "s"} overdue`;
-  if (diff === 0) return "Due today";
-  return `In ${diff} day${diff === 1 ? "" : "s"}`;
+// The badge names the state in words — color alone is invisible to
+// color-blind users — and pairs it with a countdown in LAGOS calendar days
+// (statutory deadlines are Lagos-midnight instants; see lagosDayDiff).
+// Off-contract statuses from a newer server humanize instead of vanishing.
+// Exported for the unit tests.
+export function deadlineBadgeText(
+  status: string,
+  diff: number | null,
+): string {
+  if (status === "met") return "Done";
+  if (status === "overdue") {
+    return diff !== null && diff < 0
+      ? `Overdue · ${Math.abs(diff)} day${Math.abs(diff) === 1 ? "" : "s"}`
+      : "Overdue";
+  }
+  const rel =
+    diff === null
+      ? null
+      : diff < 0
+        ? `${Math.abs(diff)} day${Math.abs(diff) === 1 ? "" : "s"} overdue`
+        : diff === 0
+          ? "today"
+          : `in ${diff} day${diff === 1 ? "" : "s"}`;
+  const word =
+    status === "due_soon"
+      ? "Due soon"
+      : status === "upcoming"
+        ? "On track"
+        : humanize(status);
+  return rel ? `${word} · ${rel}` : word;
 }
 
 export function Calendar() {
@@ -42,12 +65,13 @@ export function Calendar() {
       },
     },
   );
+  const features = new Set(me?.features ?? []);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Compliance calendar"
-        description="Filing deadlines and penalty watch, computed from your invoice book."
+        description="Filing deadlines and penalty watch, computed from your invoice book. Deadlines run on the Lagos (WAT) statutory calendar."
       />
 
       <RequireClientScope thing="compliance calendar">
@@ -66,7 +90,7 @@ export function Calendar() {
         ) : (
           <div className="space-y-3">
             {deadlines.map((d) => {
-              const relative = daysAway(d.dueDate);
+              const diff = lagosDayDiff(d.dueDate);
               return (
               <Card
                 key={d.id}
@@ -94,21 +118,28 @@ export function Calendar() {
                         </p>
                       )}
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        {relative && (
-                          <span className={severityBadgeClasses(d.severity)}>
-                            {relative}
-                          </span>
-                        )}
+                        <span
+                          className={
+                            d.status === "met"
+                              ? pillClasses("emerald")
+                              : severityBadgeClasses(d.severity)
+                          }
+                        >
+                          {deadlineBadgeText(d.status, diff)}
+                        </span>
                         <span className="text-xs text-muted-foreground">
-                          Due {formatDate(d.dueDate)}
+                          Due {formatLagosDate(d.dueDate)}
                         </span>
                       </div>
                     </div>
                   </div>
                   {/* A bill_due deadline's invoice is a supplier bill, which
                       lives on the /bills surface — the invoice vault's detail
-                      route can't show it for client users. */}
-                  {d.invoiceId && (
+                      route can't show it for client users. Statutory rows
+                      carry no invoiceId, so they deep-link by KIND instead:
+                      /vat is always lit; /b2c only when its feature is
+                      (PL-02 — never navigate into a dark page). */}
+                  {d.invoiceId ? (
                     <Link
                       href={
                         d.kind === "bill_due"
@@ -119,7 +150,26 @@ export function Calendar() {
                     >
                       Open <ChevronRight className="w-4 h-4" aria-hidden="true" />
                     </Link>
-                  )}
+                  ) : d.kind === "vat_return" ? (
+                    <Link
+                      href="/vat"
+                      className="text-primary text-sm inline-flex items-center shrink-0 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                      data-testid="link-calendar-vat"
+                    >
+                      Review VAT position{" "}
+                      <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                    </Link>
+                  ) : d.kind === "b2c_report" &&
+                    features.has("b2c_reporting") ? (
+                    <Link
+                      href="/b2c"
+                      className="text-primary text-sm inline-flex items-center shrink-0 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                      data-testid="link-calendar-b2c"
+                    >
+                      Open B2C reports{" "}
+                      <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                    </Link>
+                  ) : null}
                 </CardContent>
               </Card>
               );

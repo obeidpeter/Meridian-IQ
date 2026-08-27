@@ -59,6 +59,26 @@ export function lineTotals(lines: LineDraft[]): { net: number; vat: number } {
 }
 
 /**
+ * A draft with an invoice number, a picked customer, or any filled-in line
+ * is real work — the invoice form persists it (and shows its indicator),
+ * and invoice-detail asks before replacing it. A corrupt draft reads as
+ * empty.
+ */
+export function draftHasWork(d: {
+  invoiceNumber?: string;
+  buyerPartyId?: string;
+  lines?: LineDraft[];
+}): boolean {
+  return Boolean(
+    d.invoiceNumber?.trim() ||
+      d.buyerPartyId ||
+      (d.lines ?? []).some(
+        (l) => l?.description?.trim() || l?.unitPrice?.trim(),
+      ),
+  );
+}
+
+/**
  * The contract payload: trimmed description, numbers normalized through
  * String(Number(...)) so "01" and "1.50" submit as "1" and "1.5".
  */

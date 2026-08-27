@@ -106,6 +106,10 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
     await page.locator("#line-0-unit-price").fill("1500");
     await page.getByRole("button", { name: "Create invoice" }).click();
     await page.waitForSelector(`text=${draftNumber}`, { timeout: 15000 });
+    // The draft detail page offers the pre-submission edit path.
+    await page.waitForSelector('[data-testid="button-edit-invoice"]', {
+      timeout: 15000,
+    });
     check("invoice form creates a draft", true);
   } else {
     check(

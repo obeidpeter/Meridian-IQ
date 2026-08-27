@@ -214,8 +214,8 @@ bell** in the header collects every alert the platform has sent you — see
 
 ### Dashboard
 
-Four tiles summarise the book at a glance — **Pending invoices** (submitted,
-awaiting stamping), **Stamped & valid**, **Drafts**, and **At risk** — plus a
+Four tiles summarise the book at a glance — **Awaiting stamp** (submitted,
+not yet stamped), **Stamped & valid**, **Drafts**, and **At risk** — plus a
 set of cards that appear as their data becomes relevant:
 
 - **Recent activity** and **Next deadline**.
@@ -303,7 +303,7 @@ rate) before **Create invoice** is offered.
 **Invoices** lists everything, write-once and searchable:
 
 - **Search** by invoice number or customer name; **filter pills** (All /
-  Unsubmitted / Pending / Stamped / Failed) with live counts; advanced
+  Drafts / Awaiting stamp / Stamped / Failed) with live counts; advanced
   **Filters** (issue-date range, amount range). Lists load 50 at a time with
   **Load more**.
 - **Export CSV** downloads the (filtered) list. The file now ends with two
@@ -323,7 +323,7 @@ rate) before **Create invoice** is offered.
   (a bill — see "Supplier bills" below) can never be submitted for stamping
   from your account, and the platform refuses the attempt outright: stamping
   a supplier's invoice is the supplier's own job.
-  Stamping is **asynchronous** — the invoice shows **Pending stamp** until
+  Stamping is **asynchronous** — the invoice shows **Awaiting stamp** until
   the national platform answers. Transmission is reliable by design:
   automatic retries with backoff, duplicate protection (retrying can never
   create two stamps), and automatic failover to a second transmission rail.
@@ -1677,7 +1677,7 @@ the audit trail and (one day) financing trustworthy.
 
 ```mermaid
 stateDiagram-v2
-    Pending: Pending stamp
+    Pending: Awaiting stamp
     [*] --> Draft
     Draft --> Validated: passes all checks
     Validated --> Draft: edit
@@ -1704,7 +1704,7 @@ What the states mean in practice:
 | ----------------------- | --------------------------------------------------------------------------------------------- |
 | **Draft**               | Editable working copy. The only mutable state.                                                |
 | **Validated**           | Passed every mandatory-field check locally; ready to submit.                                  |
-| **Submitted / Pending** | In the pipeline / awaiting the national platform's verdict.                                   |
+| **Submitted / Awaiting stamp** | In the pipeline / awaiting the national platform's verdict.                                   |
 | **Stamped**             | Officially valid — IRN, CSID and QR recorded; artifact vaulted forever.                       |
 | **Failed**              | Rejected, with a catalogue explanation. Fix and resubmit, or cancel.                          |
 | **Confirmed**           | The buyer formally acknowledged it in Buyer Rails.                                            |
@@ -2044,7 +2044,7 @@ reissue.
 By design — the Compliance Desk works cases across all firms but doesn't
 browse any single firm's business pages. Firm data belongs to firm roles.
 
-**An invoice is stuck in "Pending stamp."**
+**An invoice is stuck in "Awaiting stamp."**
 The demo rail stamps within seconds; if something ever wedges, the Desk's
 **Platform ops → Reconcile pipeline** re-queues stuck work, and dead-lettered
 events can be replayed there.

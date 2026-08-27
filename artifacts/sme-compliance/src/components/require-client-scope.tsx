@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useGetMe } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Info } from "lucide-react";
 
 /**
@@ -20,17 +21,40 @@ export function RequireClientScope({
   const { data: me } = useGetMe();
 
   if (me && !me.clientPartyId) {
+    // A firm principal's account never gains a client scope — point them at
+    // the console, where their portfolio work lives, instead of telling them
+    // to "sign in with a client account" they will never have.
+    const isFirmUser = me.role === "firm_admin" || me.role === "firm_staff";
     return (
       <Card>
         <CardContent
-          className="pt-6 text-sm text-muted-foreground flex items-start gap-2"
+          className="pt-6 text-sm text-muted-foreground space-y-3"
           data-testid="text-no-client-scope"
         >
-          <Info className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-          <span>
-            Your account isn't scoped to a client business, so there's no{" "}
-            {thing} to show here. Sign in with a client account.
-          </span>
+          <div className="flex items-start gap-2">
+            <Info className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+            <span>
+              {isFirmUser ? (
+                <>
+                  Your firm account isn't pinned to a client business, so
+                  there's no {thing} to show here. Open a client from the
+                  Accountant Console to work on their behalf.
+                </>
+              ) : (
+                <>
+                  Your account isn't scoped to a client business, so there's
+                  no {thing} to show here. Sign in with a client account.
+                </>
+              )}
+            </span>
+          </div>
+          {isFirmUser && (
+            <Button asChild variant="outline" size="sm">
+              <a href="/console/" data-testid="link-open-console">
+                Open the Accountant Console
+              </a>
+            </Button>
+          )}
         </CardContent>
       </Card>
     );

@@ -17,6 +17,7 @@ import {
   Landmark,
   ListChecks,
   LockKeyhole,
+  Mail,
   Menu,
   Mic2,
   ReceiptText,
@@ -26,6 +27,16 @@ import {
   Store,
   X,
 } from "lucide-react";
+import { CSID_EXPANSION, IRN_EXPANSION } from "@workspace/format";
+
+// The one human-contact channel for prospects: the platform is invite-only,
+// so every public surface needs a path that is not the sign-in wall. Same
+// advisory inbox as the penalty calculator's ADVISORY_EMAIL — keep in sync.
+// TODO(product): confirm the advisory inbox address before wide promotion.
+const ADVISORY_EMAIL = "advisory@meridianiq.com";
+const CONTACT_MAILTO = `mailto:${ADVISORY_EMAIL}?subject=${encodeURIComponent(
+  "MeridianIQ access request",
+)}`;
 
 // Copy discipline (PL-02): claim as available only what the launch profile
 // lights (the R0 core — invoicing lifecycle, engagements, consent, evidence).
@@ -75,7 +86,9 @@ const WORKFLOW = [
     number: "03",
     icon: ShieldCheck,
     title: "Stamp",
-    body: "Transmit with retry and failover, then preserve the IRN, CSID and artifact.",
+    // First use of the acronyms on the page — expand them here; the evidence-
+    // chain mock further down may then use the short forms.
+    body: `Transmit with retry and failover, then preserve the ${IRN_EXPANSION} (IRN), ${CSID_EXPANSION} (CSID) and artifact.`,
   },
   {
     number: "04",
@@ -93,7 +106,7 @@ const WORKSPACES = [
     body: "Guided invoicing, bulk import, VAT positions and deadline alerts on one focused workspace.",
     accent: "text-teal-700",
     line: "bg-teal-600",
-    href: "/login",
+    href: "/login?returnTo=/app/",
     cta: "Sign in to open",
   },
   {
@@ -103,7 +116,7 @@ const WORKSPACES = [
     body: "Portfolio risk, receivables aging, firm invitations and exportable audit evidence.",
     accent: "text-indigo-700",
     line: "bg-indigo-600",
-    href: "/login",
+    href: "/login?returnTo=/console/",
     cta: "Sign in to open",
   },
   {
@@ -995,6 +1008,14 @@ export default function LandingPage() {
               >
                 See the product
               </a>
+              <a
+                href={CONTACT_MAILTO}
+                data-testid="link-hero-contact"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+              >
+                Talk to us
+                <Mail className="size-4" aria-hidden="true" />
+              </a>
             </div>
 
             <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/75">
@@ -1382,7 +1403,7 @@ export default function LandingPage() {
                     </p>
                     <span className="mt-auto inline-flex items-center gap-2 pt-8 text-sm font-bold text-slate-950">
                       {workspace.cta}
-                      {workspace.href === "/login" ? (
+                      {workspace.href.startsWith("/login") ? (
                         <LockKeyhole
                           className="size-4 text-slate-400"
                           aria-hidden="true"
@@ -1398,6 +1419,19 @@ export default function LandingPage() {
                 );
               })}
             </div>
+
+            <p className="mt-8 text-sm leading-6 text-slate-600">
+              No account yet? MeridianIQ is invite-based — your accounting firm
+              invites you in. Or write to{" "}
+              <a
+                href={CONTACT_MAILTO}
+                data-testid="link-workspaces-contact"
+                className="font-bold text-teal-800 underline underline-offset-2 hover:text-teal-950"
+              >
+                {ADVISORY_EMAIL}
+              </a>{" "}
+              and we will get you set up.
+            </p>
           </div>
         </section>
 
@@ -1419,6 +1453,14 @@ export default function LandingPage() {
               >
                 Sign in
                 <ArrowRight className="size-4" aria-hidden="true" />
+              </a>
+              <a
+                href={CONTACT_MAILTO}
+                data-testid="link-cta-contact"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#071a1c]/30 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-[#071a1c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#071a1c]"
+              >
+                Talk to us
+                <Mail className="size-4" aria-hidden="true" />
               </a>
               <a
                 href="/penalty-calculator/"
@@ -1459,6 +1501,13 @@ export default function LandingPage() {
             </a>
             <a className="hover:text-white" href="/penalty-calculator/">
               Penalty calculator
+            </a>
+            <a
+              className="hover:text-white"
+              href={CONTACT_MAILTO}
+              data-testid="link-footer-contact"
+            >
+              Talk to us
             </a>
             <a
               className="font-bold text-lime-300 hover:text-lime-200"

@@ -116,7 +116,8 @@ export function AddCustomerDialog({
               id="add-customer-tin-hint"
               className="text-xs text-muted-foreground mt-1"
             >
-              8 digits + -0001 suffix, e.g. 12345678-0001
+              8 digits + -0001 suffix, e.g. 12345678-0001 — needed before an
+              invoice can be submitted for stamping.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-4">

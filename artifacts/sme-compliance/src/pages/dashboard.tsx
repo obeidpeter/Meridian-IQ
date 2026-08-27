@@ -46,6 +46,7 @@ import {
 } from "@workspace/api-client-react";
 import type {
   CashflowBucket,
+  ComplianceDeadline,
   PayablesSummaryGroupsItem,
   ReceivablesBucket,
   ReceivablesSummary,
@@ -62,6 +63,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -94,6 +96,7 @@ import {
 import {
   formatAmount,
   formatDate,
+  formatLagosDate,
   formatNaira,
   planEvidenceLine,
   statusLabel,
@@ -471,6 +474,34 @@ function ClerkDigestCard() {
   );
 }
 
+// The Clerk tab's floor: the digest and "Clerk suggests" cards are
+// render-on-success, so on a quiet week both are absent — this card keeps
+// the tab meaningful by pointing at the surface that always answers.
+function AskClerkCard() {
+  return (
+    <Card data-testid="card-ask-clerk">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5" aria-hidden="true" /> Ask Clerk
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Ask questions about your own invoices, deadlines and filings —
+          Clerk answers from your records, with the workings shown.
+          Clerk&apos;s summaries and suggested actions appear here when
+          there is something worth showing.
+        </p>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/clerk/ask" data-testid="link-ask-clerk">
+            Open Ask Clerk
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // "2026-06-01" -> "June 2026" for the statement's display period.
 const STATEMENT_MONTHS = [
   "January",
@@ -669,6 +700,12 @@ export function MonthEndCloseCard({
 }: {
   clientPartyId: string;
 }) {
+  // PL-02 gate: "Run with Clerk" and the monthly-automation strip are Clerk
+  // surfaces — absent while the clerk_ai feature is dark, exactly like the
+  // nav links and dock (layout.tsx). The deterministic checklist itself
+  // stays: it spends no tokens and works at launch.
+  const { data: me } = useGetMe();
+  const clerkLit = !!me?.features.includes("clerk_ai");
   const { data: close, isSuccess } = useGetMonthEndClose(
     { clientPartyId },
     {
@@ -755,47 +792,48 @@ export function MonthEndCloseCard({
             </li>
           ))}
         </ul>
-        {runId ? (
-          <PlanRunProgress runId={runId} />
-        ) : (
-          close.attentionCount > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={createRun.isPending}
-              data-testid="button-run-month-end"
-              onClick={() =>
-                createRun.mutate(
-                  {
-                    data: { templateKey: "month_end_close", clientPartyId },
-                  },
-                  {
-                    onSuccess: (run) => setRunId(run.id),
-                    onError: (e) =>
-                      // 409 = the honest empty (NOTHING_TO_RUN); anything
-                      // else is a real failure and must not read as one.
-                      toast(
-                        errorStatus(e) === 409
-                          ? {
-                              title: "Nothing to run right now",
-                              description:
-                                "No invoices are currently eligible for the close actions — the remaining checklist items need hands-on attention.",
-                            }
-                          : {
-                              title: "Couldn't start the close run",
-                              description:
-                                "Nothing was changed. Try again shortly, or use the actions card.",
-                            },
-                      ),
-                  },
-                )
-              }
-            >
-              {createRun.isPending ? "Starting…" : "Run with Clerk"}
-            </Button>
-          )
-        )}
-        <MonthlyAutomationStrip clientPartyId={clientPartyId} />
+        {clerkLit &&
+          (runId ? (
+            <PlanRunProgress runId={runId} />
+          ) : (
+            close.attentionCount > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={createRun.isPending}
+                data-testid="button-run-month-end"
+                onClick={() =>
+                  createRun.mutate(
+                    {
+                      data: { templateKey: "month_end_close", clientPartyId },
+                    },
+                    {
+                      onSuccess: (run) => setRunId(run.id),
+                      onError: (e) =>
+                        // 409 = the honest empty (NOTHING_TO_RUN); anything
+                        // else is a real failure and must not read as one.
+                        toast(
+                          errorStatus(e) === 409
+                            ? {
+                                title: "Nothing to run right now",
+                                description:
+                                  "No invoices are currently eligible for the close actions — the remaining checklist items need hands-on attention.",
+                              }
+                            : {
+                                title: "Couldn't start the close run",
+                                description:
+                                  "Nothing was changed. Try again shortly.",
+                              },
+                        ),
+                    },
+                  )
+                }
+              >
+                {createRun.isPending ? "Starting…" : "Run with Clerk"}
+              </Button>
+            )
+          ))}
+        {clerkLit && <MonthlyAutomationStrip clientPartyId={clientPartyId} />}
         <p className="text-xs text-muted-foreground pt-3 border-t">
           {close.note}
         </p>
@@ -1466,6 +1504,63 @@ function DashboardSkeleton() {
   );
 }
 
+// Next statutory deadline — mounted on Today AND on the Compliance tab:
+// the Compliance tab's count chip counts upcoming deadlines, so the tab
+// must show the deadline itself, not only the render-on-success advisory
+// cards (which are all absent on a fresh or healthy book).
+function NextDeadlineCard({
+  deadline,
+}: {
+  deadline: ComplianceDeadline | null | undefined;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="w-5 h-5" aria-hidden="true" /> Next deadline
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {deadline ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium">{deadline.title}</span>
+              <span className={severityBadgeClasses(deadline.severity)}>
+                {severityLabel(deadline.severity)}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {formatLagosDate(deadline.dueDate)}
+            </p>
+            <Link
+              href="/calendar"
+              className="text-primary text-sm mt-2 hover:underline"
+            >
+              View calendar
+            </Link>
+          </div>
+        ) : (
+          <EmptyState
+            icon={CalendarCheck}
+            title="No upcoming deadlines"
+            description="Nothing needs compliance attention right now — statutory deadlines appear here as they approach."
+            className="px-0 py-4"
+            testId="text-no-deadline"
+          >
+            <Link
+              href="/calendar"
+              className="text-primary text-sm hover:underline"
+              data-testid="link-deadline-calendar"
+            >
+              View calendar
+            </Link>
+          </EmptyState>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const DASHBOARD_VIEWS = ["today", "money", "compliance", "clerk"] as const;
 type DashboardView = (typeof DASHBOARD_VIEWS)[number];
 
@@ -1477,9 +1572,13 @@ export function Dashboard() {
     DASHBOARD_VIEWS,
   );
   const { data: me } = useGetMe();
-  // Same capability check CapabilityGate applies, minus its denial card: a
-  // dashboard tile should simply be absent for roles that can't use it.
-  const canAskClerk = !!me?.capabilities.includes("clerk.ask");
+  // Dual gate, mirroring layout.tsx's nav links and ClerkDock: the
+  // capability says this role may ask, the clerk_ai feature says the
+  // platform is lit. Capability alone left the tab visible at launch with
+  // every card on it dark.
+  const canAskClerk =
+    !!me?.capabilities.includes("clerk.ask") &&
+    !!me?.features.includes("clerk_ai");
   // The monthly statement belongs to the client whose month it is (capture,
   // not ask), so a client_user sees it even though it never sees the digest.
   const canSeeStatement = !!me?.capabilities.includes("clerk.capture");
@@ -1583,7 +1682,7 @@ export function Dashboard() {
     workItems.push({
       id: `deadline-${summary.nextDeadline.id}`,
       title: summary.nextDeadline.title,
-      description: `Due ${formatDate(summary.nextDeadline.dueDate)}.`,
+      description: `Due ${formatLagosDate(summary.nextDeadline.dueDate)}.`,
       tone:
         summary.nextDeadline.severity === "critical"
           ? "critical"
@@ -1598,6 +1697,12 @@ export function Dashboard() {
       ),
     });
   }
+
+  // First-run: a zero-invoice book gets a setup block in place of the work
+  // queue — "Today is clear" is earned by an active book, not an empty one.
+  // Same gate as the receivables card's inline nudge (undefined = loading or
+  // failed summary keeps the normal queue rather than guessing).
+  const firstRun = showFirstInvoiceCta(summary?.totalInvoices);
 
   const dashboardViews: Array<{
     value: DashboardView;
@@ -1641,9 +1746,9 @@ export function Dashboard() {
           <>
             <MetricStrip label="Business compliance summary">
               <Metric
-                label="Pending invoices"
+                label="Awaiting stamp"
                 value={String(summary?.pendingCount ?? 0)}
-                detail="Awaiting stamp"
+                detail="Submitted, not yet stamped"
                 icon={<Clock className="size-4" aria-hidden="true" />}
                 tone={(summary?.pendingCount ?? 0) > 0 ? "info" : "default"}
               />
@@ -1677,103 +1782,100 @@ export function Dashboard() {
               label="Dashboard view"
             />
 
-            {view === "today" && (
-              <WorkQueue
-                title="What needs attention"
-                description="Ordered by statutory risk, failed work and cash collection age."
-                items={workItems}
-                emptyTitle="Today is clear"
-                emptyDescription="There are no urgent submissions, failures or aged receivables."
-              />
-            )}
+            {view === "today" &&
+              (firstRun ? (
+                <Card data-testid="card-first-run">
+                  <CardContent className="pt-6">
+                    <EmptyState
+                      icon={FileText}
+                      title="Set up your compliance workspace"
+                      description="You haven't raised any invoices yet. Create your first invoice, or import the ones you've already issued, and the dashboard starts tracking stamping, deadlines and receivables for you."
+                      testId="text-first-run"
+                    >
+                      <div className="mt-2 flex flex-wrap justify-center gap-2">
+                        <Button asChild>
+                          <Link
+                            href="/invoices/new"
+                            data-testid="link-first-run-create"
+                          >
+                            Create your first invoice
+                          </Link>
+                        </Button>
+                        <Button asChild variant="outline">
+                          <Link
+                            href="/import"
+                            data-testid="link-first-run-import"
+                          >
+                            Import existing invoices
+                          </Link>
+                        </Button>
+                      </div>
+                    </EmptyState>
+                  </CardContent>
+                </Card>
+              ) : (
+                <WorkQueue
+                  title="What needs attention"
+                  description="Ordered by statutory risk, failed work and cash collection age."
+                  items={workItems}
+                  emptyTitle="Today is clear"
+                  emptyDescription="There are no urgent submissions, failures or aged receivables."
+                />
+              ))}
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {view === "today" && (
-                <>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Activity className="w-5 h-5" aria-hidden="true" />{" "}
-                        Recent activity
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {summary?.recentActivity &&
-                      summary.recentActivity.length > 0 ? (
-                        <div className="space-y-4">
-                          {summary.recentActivity.map((activity) => (
-                            <div
-                              key={activity.id}
-                              className="flex items-center justify-between gap-3"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">
-                                  {activity.label}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatDate(activity.at)}
-                                </p>
-                              </div>
-                              {activity.status && (
-                                <span className={badgeClasses(activity.status)}>
-                                  {statusLabel(activity.status)}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground text-center py-4">
-                          No recent activity
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Clock className="w-5 h-5" aria-hidden="true" /> Next
-                        deadline
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {summary?.nextDeadline ? (
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="font-medium">
-                              {summary.nextDeadline.title}
-                            </span>
-                            <span
-                              className={severityBadgeClasses(
-                                summary.nextDeadline.severity,
-                              )}
-                            >
-                              {severityLabel(summary.nextDeadline.severity)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {formatDate(summary.nextDeadline.dueDate)}
-                          </p>
-                          <Link
-                            href="/calendar"
-                            className="text-primary text-sm mt-2 hover:underline"
+              {view === "today" && !firstRun && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="w-5 h-5" aria-hidden="true" />{" "}
+                      Recent activity
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {summary?.recentActivity &&
+                    summary.recentActivity.length > 0 ? (
+                      <div className="space-y-4">
+                        {summary.recentActivity.map((activity) => (
+                          <div
+                            key={activity.id}
+                            className="flex items-center justify-between gap-3"
                           >
-                            View calendar
-                          </Link>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground text-center py-4">
-                          No upcoming deadlines
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {activity.label}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatDate(activity.at)}
+                              </p>
+                            </div>
+                            {activity.status && (
+                              <span className={badgeClasses(activity.status)}>
+                                {statusLabel(activity.status)}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground text-center py-4">
+                        No recent activity
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
-                  {me?.clientPartyId && (
-                    <MonthEndCloseCard clientPartyId={me.clientPartyId} />
-                  )}
-                </>
+              {/* The deadline card stays mounted first-run: statutory
+                  deadlines exist even for a zero-invoice book. The empty
+                  activity card and the Month-end "All clear" card have
+                  nothing to say until paper exists. */}
+              {view === "today" && (
+                <NextDeadlineCard deadline={summary?.nextDeadline} />
+              )}
+
+              {view === "today" && !firstRun && me?.clientPartyId && (
+                <MonthEndCloseCard clientPartyId={me.clientPartyId} />
               )}
 
               {(view === "today" || view === "money") && (
@@ -1793,6 +1895,10 @@ export function Dashboard() {
 
               {view === "clerk" && canAskClerk && <ClerkDigestCard />}
 
+              {view === "compliance" && (
+                <NextDeadlineCard deadline={summary?.nextDeadline} />
+              )}
+
               {view === "compliance" &&
                 canSeeStatement &&
                 me?.clientPartyId && (
@@ -1806,9 +1912,11 @@ export function Dashboard() {
                 <PenaltyExposureCard clientPartyId={me.clientPartyId} />
               )}
 
-              {view === "clerk" && me?.clientPartyId && (
+              {view === "clerk" && canAskClerk && me?.clientPartyId && (
                 <ClerkActionsCard clientPartyId={me.clientPartyId} />
               )}
+
+              {view === "clerk" && canAskClerk && <AskClerkCard />}
 
               {view === "money" && me?.clientPartyId && (
                 <UnbilledIncomeCard clientPartyId={me.clientPartyId} />
