@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.81.0
+ * OpenAPI spec version: 0.82.0
  */
 import {
   useMutation,
@@ -26,6 +26,7 @@ import type {
   ActionPolicyList,
   ActionProposals,
   AdvisoryBrief,
+  AdvisoryReviewInput,
   AlertDeliveryResult,
   AlertPreferences,
   AlertPreferencesInput,
@@ -352,6 +353,7 @@ import type {
   RejectionPatternReport,
   RejectionRiskReport,
   ReplyToEscalationInput,
+  RequestPasswordResetInput,
   ResetPasswordInput,
   ResolveCaseInput,
   RetrievalEvalRun,
@@ -399,6 +401,7 @@ import type {
   UpdateFirmPoliciesInput,
   UpdateObligationStatusInput,
   UpdateStaffNotificationPreferencesInput,
+  UsabilityEventInput,
   User,
   UserInput,
   ValidationResult,
@@ -1519,6 +1522,216 @@ export const useResetPassword = <TError = ErrorType<BadRequestResponse>,
         TContext
       > => {
       return useMutation(getResetPasswordMutationOptions(options));
+    }
+
+export const getRequestPasswordResetUrl = () => {
+
+
+
+
+  return `/api/auth/request-password-reset`
+}
+
+/**
+ * @summary Request a one-time password-reset email without disclosing whether the account exists (public)
+ */
+export const requestPasswordReset = async (requestPasswordResetInput: RequestPasswordResetInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRequestPasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(requestPasswordResetInput)
+  }
+);}
+
+
+
+
+export const getRequestPasswordResetMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<RequestPasswordResetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<RequestPasswordResetInput>}, TContext> => {
+
+const mutationKey = ['requestPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPasswordReset>>, {data: BodyType<RequestPasswordResetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof requestPasswordReset>>>
+    export type RequestPasswordResetMutationBody = BodyType<RequestPasswordResetInput>
+    export type RequestPasswordResetMutationError = ErrorType<void>
+
+    /**
+ * @summary Request a one-time password-reset email without disclosing whether the account exists (public)
+ */
+export const useRequestPasswordReset = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPasswordReset>>, TError,{data: BodyType<RequestPasswordResetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPasswordReset>>,
+        TError,
+        {data: BodyType<RequestPasswordResetInput>},
+        TContext
+      > => {
+      return useMutation(getRequestPasswordResetMutationOptions(options));
+    }
+
+export const getRequestAdvisoryReviewUrl = () => {
+
+
+
+
+  return `/api/public/advisory-requests`
+}
+
+/**
+ * @summary Send a public penalty-estimate review request to the configured advisory relay
+ */
+export const requestAdvisoryReview = async (advisoryReviewInput: AdvisoryReviewInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRequestAdvisoryReviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(advisoryReviewInput)
+  }
+);}
+
+
+
+
+export const getRequestAdvisoryReviewMutationOptions = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAdvisoryReview>>, TError,{data: BodyType<AdvisoryReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestAdvisoryReview>>, TError,{data: BodyType<AdvisoryReviewInput>}, TContext> => {
+
+const mutationKey = ['requestAdvisoryReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestAdvisoryReview>>, {data: BodyType<AdvisoryReviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestAdvisoryReview(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestAdvisoryReviewMutationResult = NonNullable<Awaited<ReturnType<typeof requestAdvisoryReview>>>
+    export type RequestAdvisoryReviewMutationBody = BodyType<AdvisoryReviewInput>
+    export type RequestAdvisoryReviewMutationError = ErrorType<BadRequestResponse | void>
+
+    /**
+ * @summary Send a public penalty-estimate review request to the configured advisory relay
+ */
+export const useRequestAdvisoryReview = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAdvisoryReview>>, TError,{data: BodyType<AdvisoryReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestAdvisoryReview>>,
+        TError,
+        {data: BodyType<AdvisoryReviewInput>},
+        TContext
+      > => {
+      return useMutation(getRequestAdvisoryReviewMutationOptions(options));
+    }
+
+export const getRecordUsabilityEventUrl = () => {
+
+
+
+
+  return `/api/public/usability-events`
+}
+
+/**
+ * @summary Record one privacy-safe aggregate product-usability event
+ */
+export const recordUsabilityEvent = async (usabilityEventInput: UsabilityEventInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRecordUsabilityEventUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(usabilityEventInput)
+  }
+);}
+
+
+
+
+export const getRecordUsabilityEventMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordUsabilityEvent>>, TError,{data: BodyType<UsabilityEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordUsabilityEvent>>, TError,{data: BodyType<UsabilityEventInput>}, TContext> => {
+
+const mutationKey = ['recordUsabilityEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordUsabilityEvent>>, {data: BodyType<UsabilityEventInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordUsabilityEvent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordUsabilityEventMutationResult = NonNullable<Awaited<ReturnType<typeof recordUsabilityEvent>>>
+    export type RecordUsabilityEventMutationBody = BodyType<UsabilityEventInput>
+    export type RecordUsabilityEventMutationError = ErrorType<void>
+
+    /**
+ * @summary Record one privacy-safe aggregate product-usability event
+ */
+export const useRecordUsabilityEvent = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordUsabilityEvent>>, TError,{data: BodyType<UsabilityEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordUsabilityEvent>>,
+        TError,
+        {data: BodyType<UsabilityEventInput>},
+        TContext
+      > => {
+      return useMutation(getRecordUsabilityEventMutationOptions(options));
     }
 
 export const getCreatePasswordResetUrl = () => {

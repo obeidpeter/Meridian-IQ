@@ -179,16 +179,24 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     launchDefault: false,
     devDefault: false,
   },
-  // Clerk v0 kill switch (Task #40): flipping this off instantly disables
-  // every Clerk AI surface (capture extraction, Ask Clerk); manual flows keep
-  // working. Launch-dark: the platform spends zero model tokens until Clerk
-  // is deliberately re-lit after R1 activation (budgets set first). Dev/demo
-  // keeps it lit — the e2e clerk journeys and the demo depend on it.
+  // Clerk has two independent controls. The runtime switch is the global
+  // safety wall: a watchdog or operator can stop every model call even when a
+  // pilot firm remains entitled. The rollout flag below decides which firms
+  // may see and use Clerk. Keeping the controls separate prevents a firm
+  // override from accidentally bypassing the global kill switch.
+  {
+    key: "clerk_ai_runtime",
+    releaseTag: "R3",
+    description:
+      "Clerk AI global runtime safety switch: disabling stops every Clerk surface and model call, including entitled pilot firms",
+    launchDefault: false,
+    devDefault: true,
+  },
   {
     key: "clerk_ai",
     releaseTag: "R3",
     description:
-      "Clerk AI copilot: capture extraction and register-backed Q&A (operator-only)",
+      "Clerk AI rollout entitlement: capture extraction and register-backed Q&A; enable per firm for pilots",
     launchDefault: false,
     devDefault: true,
   },

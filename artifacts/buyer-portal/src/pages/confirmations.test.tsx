@@ -78,7 +78,10 @@ function stubFetch() {
         method,
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       });
-      if (url.startsWith("/api/buyer/confirmations/bulk") && method === "POST") {
+      if (
+        url.startsWith("/api/buyer/confirmations/bulk") &&
+        method === "POST"
+      ) {
         return harness.bulkStatus === 200
           ? jsonResponse(harness.bulkResult)
           : jsonResponse({ message: "bad request" }, harness.bulkStatus);
@@ -146,7 +149,13 @@ describe("bulk selection", () => {
   test("awaiting rows gain checkboxes; answered rows never do", async () => {
     harness.invoices = [
       invoice({ id: "i1", invoiceNumber: "INV-001" }),
-      invoice({ id: "i2", invoiceNumber: "INV-002" }),
+      invoice({
+        id: "i2",
+        invoiceNumber: "INV-002",
+        supplierPartyId: "s2",
+        supplierName: "Beta Trading",
+        grandTotal: "2500.00",
+      }),
       invoice({
         id: "i3",
         invoiceNumber: "INV-003",
@@ -204,9 +213,7 @@ describe("bulk selection", () => {
   });
 
   test("a list with no awaiting rows shows no selection column at all", async () => {
-    harness.invoices = [
-      invoice({ id: "i9", confirmationState: "confirmed" }),
-    ];
+    harness.invoices = [invoice({ id: "i9", confirmationState: "confirmed" })];
     await renderPage();
     expect(byTestId("check-select-all")).toBeNull();
     expect(byTestId("check-confirm-i9")).toBeNull();
@@ -217,7 +224,13 @@ describe("bulk confirm", () => {
   test("dialog → POST with ids, method and no-set-off → results panel with each skip's reason, then a list refresh", async () => {
     harness.invoices = [
       invoice({ id: "i1", invoiceNumber: "INV-001" }),
-      invoice({ id: "i2", invoiceNumber: "INV-002" }),
+      invoice({
+        id: "i2",
+        invoiceNumber: "INV-002",
+        supplierPartyId: "s2",
+        supplierName: "Beta Trading",
+        grandTotal: "2500.00",
+      }),
     ];
     harness.bulkResult = {
       confirmed: 1,
@@ -234,13 +247,18 @@ describe("bulk confirm", () => {
     await click(byTestId("checkbox-bulk-no-set-off"));
     await click(byTestId("button-bulk-confirm"));
 
-    // The permanence warning, verbatim.
+    // The confirmation spells out financial and supplier consequences.
     const dialog = document.querySelector('[role="alertdialog"]');
     expect(dialog).not.toBeNull();
     expect(dialog!.textContent).toContain("Confirm 2 invoices?");
-    expect(dialog!.textContent).toContain(
-      "Each records who confirmed and how, permanently.",
+    expect(byTestId("text-bulk-dialog-total")!.textContent).toContain("3,500");
+    expect(byTestId("text-bulk-dialog-method")!.textContent).toBe("Portal");
+    expect(byTestId("text-bulk-dialog-suppliers")!.textContent).toBe("2");
+    expect(dialog!.textContent).toContain("Each supplier will be notified");
+    expect(byTestId("text-bulk-dialog-no-set-off")!.textContent).toContain(
+      "strengthens the supplier's financeability evidence",
     );
+    expect(dialog!.textContent).toContain("does not guarantee financing");
 
     const listCallsBefore = harness.calls.filter((c) =>
       c.url.startsWith("/api/buyer/invoices"),

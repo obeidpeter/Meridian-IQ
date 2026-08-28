@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useImportClients,
   useDraftClientImportWithClerk,
@@ -19,7 +19,7 @@ import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
-import { useFilePicker } from "@workspace/web-ui";
+import { trackUsabilityEvent, useFilePicker } from "@workspace/web-ui";
 import { parseCsvTable } from "@workspace/web-ui/csv";
 import {
   Upload,
@@ -78,6 +78,27 @@ export function ClientImport() {
   const [result, setResult] = useState<ClientImportResult | null>(null);
   const [draft, setDraft] = useState<ClientImportDraft | null>(null);
   const [featureDark, setFeatureDark] = useState(false);
+  const workflowStarted = useRef(false);
+  const workflowCompleted = useRef(false);
+
+  const markWorkflowStarted = () => {
+    if (workflowCompleted.current) {
+      workflowCompleted.current = false;
+      workflowStarted.current = false;
+    }
+    if (workflowStarted.current) return;
+    workflowStarted.current = true;
+    trackUsabilityEvent("workflow_started", "client_import");
+  };
+
+  useEffect(
+    () => () => {
+      if (workflowStarted.current && !workflowCompleted.current) {
+        trackUsabilityEvent("workflow_abandoned", "client_import");
+      }
+    },
+    [],
+  );
 
   const pastedRows = useMemo(() => parseClientRows(raw), [raw]);
   // A Clerk draft supersedes the strict-template parse: its rows already went
@@ -90,6 +111,7 @@ export function ClientImport() {
     setDraft(null);
     setRaw(await file.text());
     setFileName(file.name);
+    markWorkflowStarted();
   };
   const filePicker = useFilePicker(onFile);
 
@@ -100,6 +122,7 @@ export function ClientImport() {
     pastedRows.length > 0 && pastedRows.every((r) => r.legalName.trim() !== "");
 
   const draftWithClerk = () => {
+    markWorkflowStarted();
     clerkDraft.mutate(
       { data: { sampleCsv: raw } },
       {
@@ -124,11 +147,16 @@ export function ClientImport() {
 
   const run = async (commit: boolean) => {
     if (rows.length === 0) return;
+    markWorkflowStarted();
     try {
       const res = await importClients.mutateAsync({ data: { rows, commit } });
       setResult(res);
       if (commit) {
-        await queryClient.invalidateQueries();
+        workflowCompleted.current = true;
+        trackUsabilityEvent("workflow_completed", "client_import");
+        // The server has already committed at this point. A local cache
+        // refresh failure must not misreport the durable import as failed.
+        await queryClient.invalidateQueries().catch(() => undefined);
         toast({
           title: "Import complete",
           description: `${res.createdCount} client(s) created.`,
@@ -156,7 +184,10 @@ export function ClientImport() {
   if (featureDark) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Client import
         </h1>
         <FeatureUnavailable feature="Bulk client import" />
@@ -167,7 +198,10 @@ export function ClientImport() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Client import
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -198,11 +232,16 @@ export function ClientImport() {
             <Button
               variant="ghost"
               onClick={() =>
-                downloadBlob("meridianiq-clients-template.csv", TEMPLATE, "text/csv")
+                downloadBlob(
+                  "meridianiq-clients-template.csv",
+                  TEMPLATE,
+                  "text/csv",
+                )
               }
               data-testid="button-template"
             >
-              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV template
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV
+              template
             </Button>
           </div>
           <div className="space-y-1.5">
@@ -215,7 +254,9 @@ export function ClientImport() {
               placeholder={TEMPLATE}
               value={raw}
               onChange={(e) => {
-                setRaw(e.target.value);
+                const value = e.target.value;
+                setRaw(value);
+                if (value.trim()) markWorkflowStarted();
                 setFileName(null);
                 setResult(null);
                 setDraft(null);
@@ -224,7 +265,10 @@ export function ClientImport() {
             />
           </div>
           {rows.length > 0 && (
-            <p className="text-sm text-muted-foreground" data-testid="text-rows-ready">
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-rows-ready"
+            >
               {fileName ? (
                 <>
                   Loaded <span className="font-medium">{fileName}</span> —{" "}
@@ -253,8 +297,8 @@ export function ClientImport() {
               </Button>
               {raw.length > 20000 && (
                 <p className="text-xs text-violet-900/70 dark:text-violet-200/70">
-                  The file is too large for Clerk mapping (20,000 character
-                  cap) — reshape it to the CSV template instead.
+                  The file is too large for Clerk mapping (20,000 character cap)
+                  — reshape it to the CSV template instead.
                 </p>
               )}
             </div>
@@ -281,7 +325,10 @@ export function ClientImport() {
                 </p>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground" data-testid="text-mapping-stats">
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="text-mapping-stats"
+            >
               Parsed {draft.validation.parsedCount} of{" "}
               {draft.validation.lineCount} data row
               {draft.validation.lineCount === 1 ? "" : "s"} under this mapping.
@@ -310,7 +357,8 @@ export function ClientImport() {
           disabled={rows.length === 0 || importClients.isPending}
           data-testid="button-validate"
         >
-          <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" /> Validate rows
+          <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" /> Validate
+          rows
         </Button>
         <Button
           onClick={() => run(true)}
@@ -378,11 +426,20 @@ export function ClientImport() {
                     data-testid={`row-result-${r.rowNumber}`}
                   >
                     {r.status === "invalid" ? (
-                      <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
+                      <XCircle
+                        className="w-4 h-4 text-destructive mt-0.5 shrink-0"
+                        aria-hidden="true"
+                      />
                     ) : r.status === "exists" ? (
-                      <Copy className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
+                      <Copy
+                        className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"
+                        aria-hidden="true"
+                      />
                     ) : (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
+                      <CheckCircle2
+                        className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0"
+                        aria-hidden="true"
+                      />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">

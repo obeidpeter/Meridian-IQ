@@ -15,14 +15,14 @@ import type { Principal } from "./rbac";
 
 // Password recovery (IDN-02), on the invitation rail's posture.
 //
-// There is no self-serve "forgot password" email loop yet (message delivery
-// ships dark), so recovery is operator-assisted: an operator issues a
-// single-use reset link for the user — 32 random bytes shown once, only the
-// sha256 stored — and shares it out-of-band, exactly like an invite. Redeeming
-// is public (the token IS the credential): it sets the new password, bumps the
-// user's session epoch so every outstanding session token dies (SEC-02), and
-// consumes the reset via a compare-and-set on status so a token cannot be
-// redeemed twice even under a race. Both sides are audited.
+// Recovery has two issue doors over one credential primitive: an operator can
+// receive the raw token for assisted support, while the public forgot-password
+// route sends it only to the account's stored email through the trusted relay.
+// The public door never returns whether the user exists. Both doors mint 32
+// random bytes, store only sha256, revoke any older pending link, and audit the
+// issue. Redeeming is public (the token IS the credential): it sets the new
+// password, bumps the user's session epoch, and consumes the reset via a
+// compare-and-set so concurrent redemption has one winner.
 
 const RESET_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -45,34 +45,29 @@ export interface CreatePasswordResetResult {
   token: string;
 }
 
-export async function createPasswordReset(
-  principal: Principal,
-  emailInput: string,
-): Promise<CreatePasswordResetResult> {
-  const email = normalizeEmail(emailInput);
-  const [user] = await getDb()
-    .select({ id: usersTable.id, email: usersTable.email })
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
-  // The route sits behind identity.write (operators), who can already
-  // enumerate users via identity.read — a plain 404 is fine here.
-  if (!user) {
-    throw new DomainError("USER_NOT_FOUND", "No account with that email", 404);
-  }
+interface ResetSubject {
+  id: string;
+  email: string;
+}
 
+interface ResetActor {
+  userId: string;
+  role?: string | null;
+  action: "password_reset.issue" | "password_reset.self_service_request";
+}
+
+async function issuePasswordReset(
+  user: ResetSubject,
+  actor: ResetActor,
+): Promise<CreatePasswordResetResult> {
   const token = randomBytes(32).toString("hex");
   const values = {
     userId: user.id,
     tokenHash: hashInviteToken(token),
     expiresAt: new Date(Date.now() + RESET_TTL_MS),
-    issuedByUserId: principal.userId,
+    issuedByUserId: actor.userId,
   };
   let row: typeof passwordResetsTable.$inferSelect | undefined;
-  // Serialize production request transactions without locking the user row:
-  // redemption may already hold the reset row before updating that user, so a
-  // user-row-first order here would create a deadlock cycle. The partial unique
-  // index and retry remain the backstop for direct calls without an ambient tx.
   await getDb().execute(
     sql`SELECT pg_advisory_xact_lock(hashtextextended(${`password-reset-issue:${user.id}`}, 0))`,
   );
@@ -100,14 +95,66 @@ export async function createPasswordReset(
     );
   }
   await appendAudit({
-    actorId: principal.userId,
-    actorRole: principal.role,
-    action: "password_reset.issue",
+    actorId: actor.userId,
+    actorRole: actor.role,
+    action: actor.action,
     entityType: "password_reset",
     entityId: row.id,
-    after: { userId: user.id, email: user.email },
+    // The immutable audit row can identify the subject by user id. Repeating
+    // the address here would retain avoidable PII without adding evidence.
+    after: { userId: user.id },
   });
   return { reset: { ...resetView(row), email: user.email }, token };
+}
+
+export async function createPasswordReset(
+  principal: Principal,
+  emailInput: string,
+): Promise<CreatePasswordResetResult> {
+  const email = normalizeEmail(emailInput);
+  const [user] = await getDb()
+    .select({ id: usersTable.id, email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+  // The route sits behind identity.write (operators), who can already
+  // enumerate users via identity.read — a plain 404 is fine here.
+  if (!user) {
+    throw new DomainError("USER_NOT_FOUND", "No account with that email", 404);
+  }
+
+  // Serialize production request transactions without locking the user row:
+  // redemption may already hold the reset row before updating that user, so a
+  // user-row-first order here would create a deadlock cycle. The partial unique
+  // index and retry remain the backstop for direct calls without an ambient tx.
+  return issuePasswordReset(user, {
+    userId: principal.userId,
+    role: principal.role,
+    action: "password_reset.issue",
+  });
+}
+
+// Oracle-free public issue path. Unknown addresses return null after the same
+// normalized lookup; callers answer 202 either way. The bypass transaction is
+// explicit because the route runs outside the ambient request transaction so
+// the relay call never pins a database connection.
+export async function requestPasswordReset(
+  emailInput: string,
+): Promise<{ email: string; token: string } | null> {
+  return runInBypassContext(async () => {
+    const email = normalizeEmail(emailInput);
+    const [user] = await getDb()
+      .select({ id: usersTable.id, email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+    if (!user) return null;
+    const issued = await issuePasswordReset(user, {
+      userId: user.id,
+      action: "password_reset.self_service_request",
+    });
+    return { email: user.email, token: issued.token };
+  });
 }
 
 export async function resetPassword(

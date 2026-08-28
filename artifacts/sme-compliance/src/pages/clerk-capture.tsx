@@ -6,10 +6,12 @@ import {
   useGetClerkBatch,
   useGetClerkCase,
   useGetClerkUsage,
+  useListClerkBatches,
   useListClerkCases,
   getGetClerkBatchQueryKey,
   getGetClerkCaseQueryKey,
   getGetClerkUsageQueryKey,
+  getListClerkBatchesQueryKey,
   getListClerkCasesQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -264,6 +266,32 @@ function CaptureContent() {
   const [batchMode, setBatchMode] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
 
+  // Batch work is server-owned and survives route changes. Recover the newest
+  // in-flight bundle when this page remounts; if processing failed before it
+  // created anything, recover that failure too so it cannot disappear merely
+  // because the user navigated away.
+  const { data: batches } = useListClerkBatches({
+    query: {
+      queryKey: getListClerkBatchesQueryKey(),
+      retry: false,
+    },
+  });
+  useEffect(() => {
+    if (activeBatchId || !batches?.length) return;
+    const newest = [...batches].sort(
+      (a, b) =>
+        Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt)),
+    );
+    const recoverable =
+      newest.find(
+        (batch) => batch.status === "queued" || batch.status === "processing",
+      ) ??
+      newest.find(
+        (batch) => batch.status === "failed" && batch.createdCases === 0,
+      );
+    if (recoverable) setActiveBatchId(recoverable.id);
+  }, [activeBatchId, batches]);
+
   // The server scopes this list to the caller (a client_user sees only their
   // own submissions), so no client-side ownership filter is needed.
   const caseParams: ListClerkCasesParams = { kind: "extraction" };
@@ -302,13 +330,11 @@ function CaptureContent() {
     setDisabledBanner(false);
   };
 
-  // Editing any input drops the previous submission's residue: a held
-  // duplicate payload was offered against the OLD content, and a finished
-  // batch's progress panel describes the OLD bundle — both would mislead
-  // against what is now being composed.
+  // Editing an input drops only the duplicate prompt attached to the old
+  // source. Batch progress is independent server work and must remain visible
+  // while the user composes another submission.
   const clearInputResidue = () => {
     setPendingDuplicate(null);
-    setActiveBatchId(null);
   };
 
   const createCase = useCreateClerkCase({
@@ -353,6 +379,9 @@ function CaptureContent() {
       onSuccess: (batch: ClerkBatchView) => {
         finishSubmission();
         setActiveBatchId(batch.id);
+        queryClient.invalidateQueries({
+          queryKey: getListClerkBatchesQueryKey(),
+        });
       },
       onError: (e) => handleClerkError(e),
     },
@@ -372,8 +401,13 @@ function CaptureContent() {
   });
   // When the batch lands, the new cases and the spent tokens appear at once.
   const activeBatchStatus = activeBatch?.status;
+  const activeBatchInFlight =
+    activeBatchStatus === "queued" || activeBatchStatus === "processing";
   useEffect(() => {
     if (activeBatchStatus === "done" || activeBatchStatus === "failed") {
+      queryClient.invalidateQueries({
+        queryKey: getListClerkBatchesQueryKey(),
+      });
       queryClient.invalidateQueries({ queryKey: getListClerkCasesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetClerkUsageQueryKey() });
     }
@@ -417,7 +451,7 @@ function CaptureContent() {
   });
 
   const submitCapture = async () => {
-    setActiveBatchId(null);
+    if (batchMode && activeBatchInFlight) return;
     if (batchMode && batchEligible && (captureFile || captureText.trim())) {
       if (captureFile) {
         const b64 = await fileToBase64(captureFile);
@@ -595,7 +629,6 @@ function CaptureContent() {
                 checked={batchMode}
                 onChange={(e) => {
                   setBatchMode(e.target.checked);
-                  setActiveBatchId(null);
                 }}
                 data-testid="batch-toggle"
               />
@@ -613,6 +646,7 @@ function CaptureContent() {
             disabled={
               createCase.isPending ||
               createBatch.isPending ||
+              (batchMode && activeBatchInFlight) ||
               (!captureFile && !captureVoice && captureText.trim().length < 10)
             }
             data-testid="button-send-to-clerk"
@@ -623,6 +657,12 @@ function CaptureContent() {
                 : "Reading…"
               : "Send to Clerk"}
           </Button>
+          {batchMode && activeBatchInFlight && (
+            <p className="text-xs text-muted-foreground" role="status">
+              Finish the current bundle before starting another. You can keep
+              using single-invoice capture after switching batch mode off.
+            </p>
+          )}
           {activeBatch && (
             <Alert
               variant={

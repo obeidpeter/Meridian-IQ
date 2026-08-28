@@ -56,11 +56,61 @@ export async function collectAccessibilityIssues(page) {
     }
 
     for (const element of document.querySelectorAll(
-      'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [role="tab"]',
+      'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="switch"], [role="menuitem"]',
     )) {
       if (visible(element) && !accessibleName(element)) {
         findings.push(
           `unnamed ${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`,
+        );
+      }
+    }
+
+    for (const element of document.querySelectorAll(
+      "[aria-labelledby], [aria-describedby], [aria-errormessage]",
+    )) {
+      for (const attribute of [
+        "aria-labelledby",
+        "aria-describedby",
+        "aria-errormessage",
+      ]) {
+        const value = element.getAttribute(attribute);
+        if (!value) continue;
+        for (const id of value.split(/\s+/).filter(Boolean)) {
+          if (!document.getElementById(id)) {
+            findings.push(`${attribute} references missing #${id}`);
+          }
+        }
+      }
+    }
+
+    for (const dialog of document.querySelectorAll(
+      '[role="dialog"], [role="alertdialog"]',
+    )) {
+      if (!visible(dialog)) continue;
+      if (!accessibleName(dialog)) findings.push("visible dialog has no name");
+      if (!dialog.contains(document.activeElement)) {
+        findings.push("visible dialog does not contain keyboard focus");
+      }
+    }
+
+    for (const tablist of document.querySelectorAll('[role="tablist"]')) {
+      if (!visible(tablist)) continue;
+      const selected = tablist.querySelectorAll(
+        '[role="tab"][aria-selected="true"]',
+      ).length;
+      if (selected !== 1) {
+        findings.push(`visible tablist has ${selected} selected tabs`);
+      }
+    }
+
+    for (const control of document.querySelectorAll(
+      'button, a[href][aria-label], [role="button"][aria-label]',
+    )) {
+      if (!visible(control) || text(control)) continue;
+      const rect = control.getBoundingClientRect();
+      if (rect.width < 24 || rect.height < 24) {
+        findings.push(
+          `icon control smaller than 24px (${Math.round(rect.width)}x${Math.round(rect.height)})`,
         );
       }
     }
@@ -116,6 +166,46 @@ export async function collectAccessibilityIssues(page) {
       : "first keyboard target has no visible focus indicator";
   });
   if (focusIssue) issues.push(focusIssue);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  // Let focus and colour transitions that began before the media preference
+  // changed settle. Animations still running after this window are the ones
+  // the reduced-motion override must stop.
+  await page.waitForTimeout(250);
+  const motionIssue = await page.evaluate(() => {
+    const running = document
+      .getAnimations()
+      .filter((animation) => animation.playState === "running")
+      .filter((animation) => {
+        const timing = animation.effect?.getComputedTiming();
+        return (
+          timing &&
+          (timing.iterations === Infinity || Number(timing.duration) > 100)
+        );
+      });
+    return running.length
+      ? `${running.length} long-running animation(s) ignore reduced motion`
+      : null;
+  });
+  if (motionIssue) issues.push(motionIssue);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width >= 640) {
+    await page.setViewportSize({
+      width: Math.max(320, Math.floor(viewport.width / 2)),
+      height: viewport.height,
+    });
+    await page.waitForTimeout(50);
+    const reflowIssue = await page.evaluate(() =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth + 1
+        ? "page has horizontal overflow at 200% reflow"
+        : null,
+    );
+    if (reflowIssue) issues.push(reflowIssue);
+    await page.setViewportSize(viewport);
+  }
   return issues;
 }
 

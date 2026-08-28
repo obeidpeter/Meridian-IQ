@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { CSID_EXPANSION, IRN_EXPANSION } from "@workspace/format";
+import { trackUsabilityEvent } from "@workspace/web-ui";
 
 // The one human-contact channel for prospects: the platform is invite-only,
 // so every public surface needs a path that is not the sign-in wall. Same
@@ -37,6 +38,8 @@ const ADVISORY_EMAIL = "advisory@meridianiq.com";
 const CONTACT_MAILTO = `mailto:${ADVISORY_EMAIL}?subject=${encodeURIComponent(
   "MeridianIQ access request",
 )}`;
+
+const trackLandingCta = () => trackUsabilityEvent("landing_cta", "landing");
 
 // Copy discipline (PL-02): claim as available only what the launch profile
 // lights (the R0 core — invoicing lifecycle, engagements, consent, evidence).
@@ -343,6 +346,7 @@ function LandingNav() {
         <div className="hidden lg:block">
           <a
             href="/login"
+            onClick={trackLandingCta}
             className="inline-flex h-10 items-center gap-2 rounded-md bg-lime-300 px-4 text-sm font-bold text-[#071a1c] transition-colors hover:bg-lime-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
             data-testid="link-header-login"
           >
@@ -385,7 +389,10 @@ function LandingNav() {
           ))}
           <a
             href="/login"
-            onClick={closeMenu}
+            onClick={() => {
+              closeMenu();
+              trackLandingCta();
+            }}
             className="mt-2 flex min-h-11 items-center justify-between rounded-md bg-lime-300 px-3 text-sm font-bold text-[#071a1c]"
           >
             Sign in
@@ -853,7 +860,7 @@ function ProductTour() {
   return (
     <section
       id="product-tour"
-      className="scroll-mt-20 bg-[#eef3f1] py-20 sm:py-24"
+      className="scroll-mt-20 bg-[#eef3f1] py-14 sm:py-24"
     >
       <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
         <div className="max-w-3xl">
@@ -865,12 +872,12 @@ function ProductTour() {
           </h2>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">
             Business owners, accountants and buyers each get their own view of
-            the same records. Views marked "Rolling out" or "Coming soon"
-            arrive in later releases.
+            the same records. Views marked "Rolling out" or "Coming soon" arrive
+            in later releases.
           </p>
         </div>
 
-        <div className="mt-12 grid items-start gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:gap-14">
+        <div className="mt-8 grid items-start gap-10 sm:mt-12 lg:grid-cols-[0.72fr_1.28fr] lg:gap-14">
           <div>
             <div
               className="grid grid-cols-2 gap-1 rounded-md border border-slate-300 bg-white p-1"
@@ -947,6 +954,7 @@ function ProductTour() {
               </ul>
               <a
                 href={active.status ? "#roadmap" : "/login"}
+                onClick={active.status ? undefined : trackLandingCta}
                 className="mt-8 inline-flex items-center gap-2 text-sm font-extrabold text-teal-800 transition-colors hover:text-teal-950"
               >
                 {active.status ? "See the release plan" : "Open your workspace"}
@@ -988,13 +996,14 @@ export default function LandingPage() {
             </p>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/80 sm:text-lg">
               Create invoices, check them against FIRS rules and send them for
-              stamping. Everything you might need to show an auditor stays
-              saved in one place.
+              stamping. Everything you might need to show an auditor stays saved
+              in one place.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
                 href="/login"
+                onClick={trackLandingCta}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-lime-300 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-lime-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
                 data-testid="link-hero-login"
               >
@@ -1009,6 +1018,7 @@ export default function LandingPage() {
               </a>
               <a
                 href={CONTACT_MAILTO}
+                onClick={trackLandingCta}
                 data-testid="link-hero-contact"
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
               >
@@ -1052,7 +1062,7 @@ export default function LandingPage() {
           </dl>
         </section>
 
-        <section id="platform" className="scroll-mt-20 py-20 sm:py-24">
+        <section id="platform" className="scroll-mt-20 py-14 sm:py-24">
           <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
             <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
               <div>
@@ -1108,7 +1118,7 @@ export default function LandingPage() {
 
         <ProductTour />
 
-        <section id="workflow" className="scroll-mt-20 bg-white py-20 sm:py-24">
+        <section id="workflow" className="scroll-mt-20 bg-white py-14 sm:py-24">
           <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
             <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
               <div className="max-w-3xl">
@@ -1125,7 +1135,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-8 grid gap-8 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
               {WORKFLOW.map((step) => {
                 const Icon = step.icon;
                 return (
@@ -1157,7 +1167,7 @@ export default function LandingPage() {
 
         <section
           id="evidence"
-          className="scroll-mt-20 bg-[#071a1c] py-20 text-white sm:py-24"
+          className="scroll-mt-20 bg-[#071a1c] py-14 text-white sm:py-24"
         >
           <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10">
             <div>
@@ -1286,7 +1296,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="roadmap" className="scroll-mt-20 bg-white py-20 sm:py-24">
+        <section id="roadmap" className="scroll-mt-20 bg-white py-14 sm:py-24">
           <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
             <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
               <div className="max-w-3xl">
@@ -1303,7 +1313,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="mt-12 grid gap-6 lg:grid-cols-3">
+            <div className="mt-8 grid gap-6 sm:mt-12 lg:grid-cols-3">
               {ROADMAP_STAGES.map((stage) => {
                 const Icon = stage.icon;
                 return (
@@ -1355,7 +1365,7 @@ export default function LandingPage() {
 
         <section
           id="workspaces"
-          className="scroll-mt-20 bg-[#e7eeec] py-20 sm:py-24"
+          className="scroll-mt-20 bg-[#e7eeec] py-14 sm:py-24"
         >
           <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
             <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
@@ -1369,6 +1379,7 @@ export default function LandingPage() {
               </div>
               <a
                 href="/login"
+                onClick={trackLandingCta}
                 className="inline-flex items-center gap-2 self-start text-sm font-extrabold text-teal-800 hover:text-teal-950 md:self-auto"
               >
                 Go to sign-in
@@ -1376,18 +1387,19 @@ export default function LandingPage() {
               </a>
             </div>
 
-            <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid gap-5 sm:mt-12 md:grid-cols-2 xl:grid-cols-4">
               {WORKSPACES.map((workspace) => {
                 const Icon = workspace.icon;
                 return (
                   <a
                     key={workspace.title}
                     href={workspace.href}
-                    className="group flex min-h-[22rem] flex-col rounded-md border border-slate-200 bg-white p-6 shadow-sm transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+                    onClick={trackLandingCta}
+                    className="group flex flex-col rounded-md border border-slate-200 bg-white p-5 shadow-sm transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 sm:p-6 md:min-h-[18rem] xl:min-h-[22rem]"
                   >
                     <span className={"block h-1 w-12 " + workspace.line} />
                     <Icon
-                      className={"mt-8 size-7 " + workspace.accent}
+                      className={"mt-6 size-7 sm:mt-8 " + workspace.accent}
                       aria-hidden="true"
                     />
                     <p className="mt-6 text-xs font-bold uppercase text-slate-400">
@@ -1423,6 +1435,7 @@ export default function LandingPage() {
               they invite you. Or email{" "}
               <a
                 href={CONTACT_MAILTO}
+                onClick={trackLandingCta}
                 data-testid="link-workspaces-contact"
                 className="font-bold text-teal-800 underline underline-offset-2 hover:text-teal-950"
               >
@@ -1433,7 +1446,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="bg-lime-300 py-16 sm:py-20">
+        <section className="bg-lime-300 py-12 sm:py-20">
           <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 px-5 sm:px-8 lg:flex-row lg:items-center lg:px-10">
             <div className="max-w-3xl">
               <p className="text-sm font-extrabold uppercase text-[#1c4443]">
@@ -1446,6 +1459,7 @@ export default function LandingPage() {
             <div className="flex flex-col gap-3 sm:flex-row lg:shrink-0">
               <a
                 href="/login"
+                onClick={trackLandingCta}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#071a1c] px-6 text-sm font-extrabold text-white transition-colors hover:bg-[#12383a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#071a1c] focus-visible:ring-offset-2 focus-visible:ring-offset-lime-300"
                 data-testid="link-cta-login"
               >
@@ -1454,6 +1468,7 @@ export default function LandingPage() {
               </a>
               <a
                 href={CONTACT_MAILTO}
+                onClick={trackLandingCta}
                 data-testid="link-cta-contact"
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#071a1c]/30 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-[#071a1c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#071a1c]"
               >
@@ -1462,6 +1477,7 @@ export default function LandingPage() {
               </a>
               <a
                 href="/penalty-calculator/"
+                onClick={trackLandingCta}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#071a1c]/30 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-[#071a1c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#071a1c]"
               >
                 Check possible fines
@@ -1503,6 +1519,7 @@ export default function LandingPage() {
             <a
               className="hover:text-white"
               href={CONTACT_MAILTO}
+              onClick={trackLandingCta}
               data-testid="link-footer-contact"
             >
               Talk to us
@@ -1510,6 +1527,7 @@ export default function LandingPage() {
             <a
               className="font-bold text-lime-300 hover:text-lime-200"
               href="/login"
+              onClick={trackLandingCta}
             >
               Sign in
             </a>

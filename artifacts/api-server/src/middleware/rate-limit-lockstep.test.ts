@@ -28,9 +28,11 @@ function literalEntries(source: string, marker: string): string[] {
   const start = source.indexOf(marker);
   assert.ok(start >= 0, `${marker} exists`);
   const end = source.indexOf("])", start);
-  return [...source.slice(start, end).matchAll(/"((?:GET|POST|PATCH|PUT|DELETE) [^"]+)"/g)].map(
-    (m) => m[1],
-  );
+  return [
+    ...source
+      .slice(start, end)
+      .matchAll(/"((?:GET|POST|PATCH|PUT|DELETE) [^"]+)"/g),
+  ].map((m) => m[1]);
 }
 
 function patternEntries(
@@ -72,25 +74,34 @@ const NON_MODEL_NO_CONTEXT = new Set([
   "POST /api/clerk/plan-runs",
 ]);
 
-// Public machine rails: exempt from the authenticated rate classes because
-// PUBLIC_PATHS routes carry their own shared-secret gates and per-firm
-// daily caps (rate-limit.ts header).
-const PUBLIC_RAIL_NO_CONTEXT = new Set([
+// Public rails: exempt from authenticated rate classes. Machine rails carry
+// their own shared-secret gates; browser rails carry bounded raw-pool
+// throttles and closed schemas.
+const PUBLIC_NO_CONTEXT = new Set([
   "POST /api/inbound/email",
   "POST /api/inbound/whatsapp",
+  "POST /api/auth/request-password-reset",
+  "POST /api/public/advisory-requests",
+  "POST /api/public/usability-events",
 ]);
 
 test("every NO_CONTEXT route is rate-classed or explicitly allowlisted", () => {
-  const noContext = literalEntries(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const noContext = literalEntries(
+    src("app.ts"),
+    "NO_CONTEXT_ROUTES = new Set(",
+  );
   const model = new Set(
-    literalEntries(src("middleware/rate-limit.ts"), "MODEL_RATE_LIMITED_ROUTES"),
+    literalEntries(
+      src("middleware/rate-limit.ts"),
+      "MODEL_RATE_LIMITED_ROUTES",
+    ),
   );
   assert.ok(noContext.length >= 10, "the NO_CONTEXT list parsed");
   for (const route of noContext) {
     assert.ok(
       model.has(route) ||
         NON_MODEL_NO_CONTEXT.has(route) ||
-        PUBLIC_RAIL_NO_CONTEXT.has(route),
+        PUBLIC_NO_CONTEXT.has(route),
       `${route} left the request transaction but is neither in MODEL_RATE_LIMITED_ROUTES nor on an explicit allowlist — if it calls a model it MUST join the MODEL class (this exact drift shipped in rounds 18 and 22); if it does not, add it to the allowlist here WITH its reason`,
     );
   }
@@ -101,9 +112,12 @@ test("the allowlists stay honest", () => {
     literalEntries(src("app.ts"), "NO_CONTEXT_ROUTES = new Set("),
   );
   const model = new Set(
-    literalEntries(src("middleware/rate-limit.ts"), "MODEL_RATE_LIMITED_ROUTES"),
+    literalEntries(
+      src("middleware/rate-limit.ts"),
+      "MODEL_RATE_LIMITED_ROUTES",
+    ),
   );
-  for (const route of [...NON_MODEL_NO_CONTEXT, ...PUBLIC_RAIL_NO_CONTEXT]) {
+  for (const route of [...NON_MODEL_NO_CONTEXT, ...PUBLIC_NO_CONTEXT]) {
     assert.ok(
       noContext.has(route),
       `${route} is allowlisted here but no longer in NO_CONTEXT_ROUTES — delete the stale entry`,
@@ -133,16 +147,16 @@ test("every parameterized NO_CONTEXT pattern has a MODEL twin", () => {
   }
 });
 
-test("the public machine rails really are public-path gated", () => {
+test("the public no-context rails really are public-path gated", () => {
   const principalSrc = src("middleware/principal.ts");
   const start = principalSrc.indexOf("PUBLIC_PATHS = new Set(");
   assert.ok(start >= 0);
   const block = principalSrc.slice(start, principalSrc.indexOf("])", start));
-  for (const route of PUBLIC_RAIL_NO_CONTEXT) {
+  for (const route of PUBLIC_NO_CONTEXT) {
     const path = route.split(" ")[1];
     assert.ok(
       block.includes(`"${path}"`),
-      `${path} is exempted from the MODEL class as a public rail but is not in PUBLIC_PATHS — it would ride the authenticated GENERAL class with no shared-secret story`,
+      `${path} is exempted from authenticated rate classes as a public rail but is not in PUBLIC_PATHS`,
     );
   }
 });
@@ -177,11 +191,18 @@ function routeFiles(dir: string): string[] {
   return out;
 }
 
-const GATEWAY_MARKS = ["gatewayOrNull(", "getClerkGateway(", "assertFirmClerkBudget("];
+const GATEWAY_MARKS = [
+  "gatewayOrNull(",
+  "getClerkGateway(",
+  "assertFirmClerkBudget(",
+];
 
 test("every gateway-touching route handler is in the MODEL rate class", () => {
   const model = new Set(
-    literalEntries(src("middleware/rate-limit.ts"), "MODEL_RATE_LIMITED_ROUTES"),
+    literalEntries(
+      src("middleware/rate-limit.ts"),
+      "MODEL_RATE_LIMITED_ROUTES",
+    ),
   );
   const modelPatterns = patternEntries(
     src("middleware/rate-limit.ts"),
@@ -192,7 +213,8 @@ test("every gateway-touching route handler is in the MODEL rate class", () => {
     regex: new RegExp(p.pattern.slice(1, -1)),
   }));
 
-  const registration = /router\.(get|post|patch|put|delete)\(\s*\n?\s*"([^"]+)"/g;
+  const registration =
+    /router\.(get|post|patch|put|delete)\(\s*\n?\s*"([^"]+)"/g;
   let scanned = 0;
   for (const file of routeFiles(join(import.meta.dirname, "..", "routes"))) {
     const source = readFileSync(file, "utf8");
@@ -251,15 +273,30 @@ const BARE_INFER_ALLOWED = new Map<string, string>([
   ["clerk/ask.ts", "intent classification — failure refuses and escalates"],
   ["clerk/batch.ts", "segmentation — failure fails the batch (typed 502)"],
   ["clerk/cases/extraction.ts", "extraction — failure marks the case failed"],
-  ["clerk/scan-batch.ts", "vision segmentation — coverage-validated, fails the scan"],
-  ["statements/scan-intake.ts", "statement extraction — typed operator-facing failure"],
-  ["desk/triage.ts", "closed-enum triage — failure marks the item failed, sweep moves on"],
-  ["clerk/narration-match.ts", "closed-list classification — a failed line is reported per line and retried on re-run; no template to fall back to"],
+  [
+    "clerk/scan-batch.ts",
+    "vision segmentation — coverage-validated, fails the scan",
+  ],
+  [
+    "statements/scan-intake.ts",
+    "statement extraction — typed operator-facing failure",
+  ],
+  [
+    "desk/triage.ts",
+    "closed-enum triage — failure marks the item failed, sweep moves on",
+  ],
+  [
+    "clerk/narration-match.ts",
+    "closed-list classification — a failed line is reported per line and retried on re-run; no template to fall back to",
+  ],
   // Drafting proposals: a failed draft is a typed refusal the user sees and
   // retries; silently substituting template text would misrepresent it.
   ["clerk/draft-catalogue.ts", "drafting proposal — typed refusal on failure"],
   ["clerk/draft-claim.ts", "drafting proposal — typed refusal on failure"],
-  ["clerk/draft-client-import.ts", "drafting proposal — typed refusal on failure"],
+  [
+    "clerk/draft-client-import.ts",
+    "drafting proposal — typed refusal on failure",
+  ],
   ["clerk/draft-format.ts", "drafting proposal — typed refusal on failure"],
   ["clerk/draft-invoice.ts", "drafting proposal — typed refusal on failure"],
   // Eval/canary machinery: a kill-switch throw must ABORT the run — folding
@@ -290,9 +327,7 @@ function moduleFiles(dir: string, rel = ""): string[] {
 const BARE_INFER_RE = /\b([A-Za-z_$][\w$]*)\.infer\s*[<(]/g;
 
 function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n]*/g, "");
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 }
 
 test("no module calls gateway.infer outside gateway.ts and the allowlist", () => {

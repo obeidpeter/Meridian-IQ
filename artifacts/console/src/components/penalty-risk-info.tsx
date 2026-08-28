@@ -31,7 +31,7 @@ export function PenaltyRiskInfo() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="How penalty risk is computed"
           data-testid="button-risk-info"
         >

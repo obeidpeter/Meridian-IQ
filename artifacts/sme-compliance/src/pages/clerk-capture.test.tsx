@@ -5,21 +5,19 @@
 // server, so the default (Invoice) submission must stay byte-identical to
 // what this page sent before notices existed — no documentKind key at all.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithClient } from "../test-utils";
 import type { ClerkCaseCreateInput } from "@workspace/api-client-react";
+import type { ClerkBatchView } from "@workspace/api-client-react";
 
 const harness = vi.hoisted(() => ({
   createCalls: [] as { data: unknown }[],
   batchCalls: [] as { data: unknown }[],
+  batches: [] as ClerkBatchView[],
   reset() {
     this.createCalls = [];
     this.batchCalls = [];
+    this.batches = [];
   },
 }));
 
@@ -42,7 +40,10 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
       isError: false,
       refetch: vi.fn(),
     }),
-    useGetClerkBatch: () => ({ data: undefined }),
+    useListClerkBatches: () => ({ data: harness.batches }),
+    useGetClerkBatch: (id: string) => ({
+      data: harness.batches.find((batch) => batch.id === id),
+    }),
     useCreateClerkCase: () => ({
       isPending: false,
       mutate: (vars: { data: ClerkCaseCreateInput }) => {
@@ -148,5 +149,40 @@ describe("document-kind toggle", () => {
     submitText("INVOICE No: 42 total 1000");
     await waitFor(() => expect(harness.createCalls).toHaveLength(1));
     expect(harness.createCalls[0].data).not.toHaveProperty("documentKind");
+  });
+});
+
+describe("persistent batch progress", () => {
+  test("recovers a processing bundle after the page remounts and blocks a duplicate batch", async () => {
+    harness.batches = [
+      {
+        id: "batch-active",
+        status: "processing",
+        totalSegments: 4,
+        processedSegments: 2,
+        createdCases: 2,
+        skippedDuplicates: 0,
+        reviewedCases: 0,
+        createdAt: "2026-08-28T09:00:00Z",
+        updatedAt: "2026-08-28T09:01:00Z",
+      },
+    ];
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("batch-progress")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("batch-progress").textContent).toContain(
+      "2 of 4 invoices read",
+    );
+
+    fireEvent.change(screen.getByTestId("input-capture-text"), {
+      target: { value: "INVOICE one and INVOICE two" },
+    });
+    fireEvent.click(screen.getByTestId("batch-toggle"));
+    expect(
+      screen.getByTestId("button-send-to-clerk").hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByText(/Finish the current bundle/)).toBeTruthy();
   });
 });

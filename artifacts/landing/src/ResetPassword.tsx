@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { useResetPassword } from "@workspace/api-client-react";
+import {
+  useRequestPasswordReset,
+  useResetPassword,
+} from "@workspace/api-client-react";
 import {
   Loader2,
   CheckCircle2,
   AlertCircle,
   ArrowRight,
   KeyRound,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,12 +23,9 @@ import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
 // administrator above them in-product, still has a human path.
 const SUPPORT_EMAIL = "advisory@meridianiq.com";
 
-// Password recovery (IDN-02), mirroring the accept-invite page: the link an
-// operator issues carries a single-use token; redeeming it sets a new password
-// and signs every outstanding session out. Reached without a token (the
-// login page's "Forgot your password?" path), the page explains how to get a
-// reset link — there is no self-serve email loop yet, recovery is issued by
-// the firm's administrator or MeridianIQ support.
+// Password recovery (IDN-02), mirroring the accept-invite page: a public,
+// non-enumerating request sends a single-use link when the account exists;
+// redeeming it sets a new password and signs every outstanding session out.
 
 function ResetShell({ children }: { children: React.ReactNode }) {
   return (
@@ -53,8 +54,12 @@ function ResetShell({ children }: { children: React.ReactNode }) {
 
 export function ResetPassword() {
   const reset = useResetPassword();
+  const requestReset = useRequestPasswordReset();
   const [token] = useState(() => takeQuerySecret("token"));
 
+  const [email, setEmail] = useState("");
+  const [requestSent, setRequestSent] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -72,13 +77,30 @@ export function ResetPassword() {
     } catch {
       // Uniform server response: never a reason a specific token is unusable.
       setError(
-        "This reset link is invalid or has expired. Ask your administrator for a fresh one.",
+        "This reset link is invalid or has expired. Request a fresh link from this page.",
       );
       document.getElementById("reset-password")?.focus();
     }
   };
 
-  // No token — the "forgot password" guidance path.
+  const onRequestReset = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || requestReset.isPending) return;
+    setRequestError(null);
+    try {
+      await requestReset.mutateAsync({ data: { email: email.trim() } });
+      setRequestSent(true);
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      setRequestError(
+        status === 429
+          ? "Too many reset requests were made. Wait a few minutes, then try again."
+          : "We could not submit the request. Try again or use the support email below.",
+      );
+    }
+  };
+
+  // No token — self-service recovery with a uniform, non-enumerating result.
   if (!token) {
     return (
       <ResetShell>
@@ -87,23 +109,88 @@ export function ResetPassword() {
             <KeyRound className="h-5 w-5 text-primary" aria-hidden="true" />
             <h1 className="text-lg font-semibold">Reset your password</h1>
           </div>
-          <p
-            className="mt-2 text-sm text-muted-foreground"
-            data-testid="text-reset-guidance"
-          >
-            Password resets are issued as one-time links. Client and staff
-            accounts: ask your firm administrator to send you a reset link,
-            then open it here to choose a new password.
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Firm administrators and buyers: email MeridianIQ support to have a
-            reset link issued.
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            For security, the link works once and expires after 24 hours. If
-            you refreshed a reset link and landed here, open the link from
-            your email again — it works until it is redeemed.
-          </p>
+          {requestSent ? (
+            <div
+              className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+              role="status"
+              data-testid="text-reset-request-sent"
+            >
+              <p className="flex items-start gap-2 font-medium">
+                <CheckCircle2
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                Check your email
+              </p>
+              <p className="mt-1 text-xs leading-5">
+                If an account exists for that address and email delivery is
+                available, a one-time reset link is on its way. It expires in 24
+                hours. Check spam or junk before requesting another link.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p
+                className="mt-2 text-sm text-muted-foreground"
+                data-testid="text-reset-guidance"
+              >
+                Enter the email address on your MeridianIQ account. We will send
+                a one-time link if the account exists.
+              </p>
+              <form onSubmit={onRequestReset} className="mt-4 space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="reset-email">Email address</Label>
+                  <Input
+                    id="reset-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setRequestError(null);
+                    }}
+                    aria-invalid={requestError ? true : undefined}
+                    aria-describedby={
+                      requestError ? "request-reset-error" : undefined
+                    }
+                    data-testid="input-reset-email"
+                  />
+                </div>
+                {requestError && (
+                  <p
+                    id="request-reset-error"
+                    role="alert"
+                    className="text-sm text-destructive"
+                    data-testid="text-request-reset-error"
+                  >
+                    {requestError}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={requestReset.isPending || !email.trim()}
+                  data-testid="button-request-reset"
+                >
+                  {requestReset.isPending ? (
+                    <>
+                      <Loader2
+                        className="size-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                      Sending request…
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="size-4" aria-hidden="true" />
+                      Send reset link
+                    </>
+                  )}
+                </Button>
+              </form>
+            </>
+          )}
           <Button asChild variant="outline" className="mt-4 w-full">
             <a href="/login" data-testid="link-guidance-sign-in">
               Back to sign in
@@ -116,7 +203,7 @@ export function ResetPassword() {
               )}`}
               data-testid="link-guidance-support"
             >
-              Email MeridianIQ support
+              Contact MeridianIQ support
             </a>
           </Button>
         </Card>

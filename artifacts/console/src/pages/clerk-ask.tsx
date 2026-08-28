@@ -11,13 +11,33 @@ import type {
   ClerkAnswer,
   ExecuteActionResult,
 } from "@workspace/api-client-react";
+import {
+  actionConfirmButtonLabel,
+  actionConfirmDescription,
+  actionOutcomeSummary,
+  actionTruncatedNote,
+} from "@workspace/format/action-copy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ShieldCheck } from "lucide-react";
-import { ClerkPageHeader } from "@/components/clerk-shell";
+import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
+import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { killSwitchTripped } from "@/lib/errors";
+import { clerkDisabledToast, serverErrorToast } from "@/pages/clerk-shared";
 
 // Do with Clerk Phase 2 (round 32): live plan-run progress — batch-style
 // status-driven polling of the run row the worker advances.
@@ -33,7 +53,10 @@ function PlanRunProgress({ runId }: { runId: string }) {
   });
   if (!run) return null;
   return (
-    <div className="border rounded-md p-3 space-y-1" data-testid="card-plan-run">
+    <div
+      className="border rounded-md p-3 space-y-1"
+      data-testid="card-plan-run"
+    >
       <p className="text-sm font-medium">
         {run.status === "done"
           ? "Plan complete — every decision is recorded."
@@ -116,44 +139,89 @@ function SectionActionApproval({
     const d = outcome.decision;
     return (
       <p className="text-sm" data-testid={`text-action-outcome-${index}`}>
-        Approved: {d.executedCount} of {d.requestedCount} ran
-        {d.skippedCount > 0 ? `, ${d.skippedCount} no longer eligible` : ""}
-        {d.failedCount > 0 ? `, ${d.failedCount} failed` : ""}. The decision
-        has been recorded.
+        {actionOutcomeSummary(d)}{" "}
+        {action.kind === "draft_chasers"
+          ? "Review every draft before the client sends it; nothing was sent automatically. "
+          : ""}
+        The decision has been recorded.
       </p>
     );
   }
+  const count = action.invoiceIds.length;
+  const run = () => {
+    setFailed(false);
+    execute.mutate(
+      {
+        data: {
+          kind: action.kind,
+          invoiceIds: action.invoiceIds,
+          clientPartyId: action.clientPartyId,
+        },
+      },
+      {
+        onSuccess: (result) => setOutcome(result),
+        onError: () => setFailed(true),
+      },
+    );
+  };
   return (
-    <div className="space-y-1">
-      <Button
-        size="sm"
-        disabled={execute.isPending}
-        data-testid={`button-approve-action-${index}`}
-        onClick={() => {
-          setFailed(false);
-          execute.mutate(
-            {
-              data: {
-                kind: action.kind,
-                invoiceIds: action.invoiceIds,
-                clientPartyId: action.clientPartyId,
-              },
-            },
-            {
-              onSuccess: (result) => setOutcome(result),
-              onError: () => setFailed(true),
-            },
-          );
-        }}
-      >
-        {execute.isPending
-          ? "Running…"
-          : `Approve & run (${action.invoiceIds.length})`}
-      </Button>
+    <div className="space-y-2">
+      <div className="rounded-md border bg-muted/30 p-3 text-sm">
+        <p className="font-medium">{action.clientName}</p>
+        <p className="mt-1 text-muted-foreground">{action.why}</p>
+        {action.truncated && (
+          <p className="mt-2 font-medium text-amber-800 dark:text-amber-300">
+            {actionTruncatedNote(count, action.targetCount)}
+          </p>
+        )}
+      </div>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            size="sm"
+            disabled={execute.isPending}
+            data-testid={`button-approve-action-${index}`}
+          >
+            {execute.isPending
+              ? action.kind === "draft_chasers"
+                ? "Preparing…"
+                : "Running…"
+              : actionConfirmButtonLabel(action.kind, count)}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {actionConfirmButtonLabel(action.kind, count)} for{" "}
+              {action.clientName}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {actionConfirmDescription(action.kind, count, "console")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <p className="font-medium">Why Clerk proposed this</p>
+            <p className="mt-1 text-muted-foreground">{action.why}</p>
+            {action.truncated && (
+              <p className="mt-2 text-amber-800 dark:text-amber-300">
+                {actionTruncatedNote(count, action.targetCount)}
+              </p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={run}>
+              {action.kind === "draft_chasers"
+                ? "Prepare drafts"
+                : "Approve and run"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {failed && (
-        <p className="text-xs text-destructive">
-          Couldn't run this action — nothing was changed. Try again, or use
-          the client's actions card.
+        <p className="text-xs text-destructive" role="alert">
+          Couldn't run this action — nothing was changed. Try again, or use the
+          client's actions card.
         </p>
       )}
     </div>
@@ -399,6 +467,7 @@ export function holdsFollowupCase(
 // (not an unmounting tab), the question state and the ask mutation live here.
 export function ClerkAskPage() {
   usePageTitle("Ask Clerk");
+  const { toast } = useToast();
   const ask = useAskClerk();
   const [question, setQuestion] = useState("");
   // The last answer shown, held in component state (see heldAnswer above).
@@ -409,6 +478,7 @@ export function ClerkAskPage() {
   const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
   // The held answer's own case id — the whole-plan approval needs it.
   const [answerCaseId, setAnswerCaseId] = useState<string | null>(null);
+  const [disabledBanner, setDisabledBanner] = useState(false);
   return (
     <div className="space-y-6">
       <ClerkPageHeader
@@ -416,6 +486,11 @@ export function ClerkAskPage() {
         title="Ask Clerk"
         description="Answers come from the approved claims register or live lookups over the firm's own records — nothing is improvised. Follow-ups like “and for June?” carry the previous question's scope."
       />
+      {disabledBanner && (
+        <ClerkDisabledBanner>
+          Questions are unavailable until an operator restores the service.
+        </ClerkDisabledBanner>
+      )}
       <AskPanel
         question={question}
         onQuestionChange={setQuestion}
@@ -433,6 +508,7 @@ export function ClerkAskPage() {
               // scope (Ask 2.0). Keeping the last such id preserves the
               // thread across a refusal or register-claim answer in between.
               onSuccess: (row) => {
+                setDisabledBanner(false);
                 setAnswer((prev) =>
                   heldAnswer(prev, { type: "success", answer: row.answer }),
                 );
@@ -443,8 +519,21 @@ export function ClerkAskPage() {
               },
               // A failed follow-up keeps the previous answer on screen — it
               // is still the newest truth the operator was given.
-              onError: () => {
+              onError: (error) => {
                 setAnswer((prev) => heldAnswer(prev, { type: "error" }));
+                if (killSwitchTripped(error)) {
+                  setDisabledBanner(true);
+                  clerkDisabledToast(
+                    toast,
+                    "Questions are unavailable while the Clerk runtime switch is off.",
+                  );
+                  return;
+                }
+                serverErrorToast(toast, error, {
+                  title: "Clerk couldn't take that question",
+                  fallback:
+                    "Your previous answer is still here. Check your connection and try again.",
+                });
               },
             },
           )
@@ -524,9 +613,9 @@ export function AskPanel({
           ) : null}
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Rules come from the approved claims register; numbers are
-              computed live from the firm's records. Anything else is refused
-              and escalated.
+              Rules come from the approved claims register; numbers are computed
+              live from the firm's records. Anything else is refused and
+              escalated.
             </p>
             <Button
               onClick={onAsk}

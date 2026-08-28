@@ -1,8 +1,13 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
-import { getDb, usersTable, passwordResetsTable } from "@workspace/db";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import {
+  auditEventsTable,
+  getDb,
+  usersTable,
+  passwordResetsTable,
+} from "@workspace/db";
 import identityRouter from "./identity.ts";
 import authRouter from "./auth.ts";
 import { sweepExpiredPasswordResets } from "../modules/auth/password-reset.ts";
@@ -33,6 +38,8 @@ const subjectUserId = randomUUID();
 const subjectEmail = `lost-access-${SALT}@test.local`;
 const concurrentSubjectUserId = randomUUID();
 const concurrentSubjectEmail = `reset-race-${SALT}@test.local`;
+const publicSubjectUserId = randomUUID();
+const publicSubjectEmail = `self-reset-${SALT}@test.local`;
 const expiredSubjectUserId = randomUUID();
 const retentionExpiredUserId = randomUUID();
 const retentionFreshUserId = randomUUID();
@@ -60,6 +67,7 @@ before(async () => {
   });
   await db.insert(usersTable).values([
     { id: concurrentSubjectUserId, email: concurrentSubjectEmail },
+    { id: publicSubjectUserId, email: publicSubjectEmail },
     { id: expiredSubjectUserId, email: `expired-reset-${SALT}@test.local` },
     {
       id: retentionExpiredUserId,
@@ -129,6 +137,50 @@ test("issuing requires identity.write and an existing account", async () => {
   const asOperator = await listen(appFor(operator, identityRouter));
   const unknown = await issueReset(asOperator, `nobody-${SALT}@test.local`);
   assert.equal(unknown.status, 404);
+});
+
+test("public reset requests are oracle-free and never return the raw token", async () => {
+  const base = await listen(appFor(operator, authRouter));
+  const request = (email: string) =>
+    fetch(`${base}/auth/request-password-reset`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email }),
+    });
+
+  const known = await request(publicSubjectEmail.toUpperCase());
+  const unknown = await request(`unknown-${SALT}@test.local`);
+  assert.equal(known.status, 202);
+  assert.equal(unknown.status, 202);
+  assert.equal(
+    await known.text(),
+    "",
+    "known response contains no token or PII",
+  );
+  assert.equal(await unknown.text(), "", "unknown response has the same shape");
+
+  const [row] = await getDb()
+    .select()
+    .from(passwordResetsTable)
+    .where(eq(passwordResetsTable.userId, publicSubjectUserId))
+    .orderBy(desc(passwordResetsTable.createdAt))
+    .limit(1);
+  assert.ok(row, "a known account receives a pending reset");
+  assert.equal(row.status, "pending");
+  assert.match(row.tokenHash, /^[0-9a-f]{64}$/);
+  assert.equal(row.issuedByUserId, publicSubjectUserId);
+
+  const [audit] = await getDb()
+    .select({ after: auditEventsTable.after })
+    .from(auditEventsTable)
+    .where(eq(auditEventsTable.entityId, row.id))
+    .orderBy(desc(auditEventsTable.seq))
+    .limit(1);
+  assert.deepEqual(
+    audit.after,
+    { userId: publicSubjectUserId },
+    "the immutable reset audit retains the subject id without duplicating email PII",
+  );
 });
 
 test("concurrent issuances leave exactly one pending reset", async () => {

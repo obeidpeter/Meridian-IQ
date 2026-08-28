@@ -7,6 +7,15 @@ import { checkPageAccessibility } from "../accessibility.mjs";
 
 // ---------- public landing + portal ----------
 async function journeyPortalAuth(page, BASE, check) {
+  const health = await page.request.get(BASE + "/api/healthz");
+  const healthBody = await health.json();
+  check(
+    "health identifies the deployed build",
+    health.ok() &&
+      typeof healthBody.buildRevision === "string" &&
+      healthBody.buildRevision.length > 0,
+  );
+
   // Clickjacking defence (SEC-02): the served frontend must carry a CSP
   // frame-ancestors allowlist so an attacker origin cannot frame the
   // authenticated app (the session cookie is SameSite=None for the preview
@@ -61,6 +70,22 @@ async function journeyPortalAuth(page, BASE, check) {
     "portal shows sign-in panel",
     await page.getByTestId("input-email").isVisible(),
   );
+
+  await page.getByTestId("link-forgot-password").click();
+  await page.waitForURL(BASE + "/reset-password");
+  await page
+    .getByTestId("input-reset-email")
+    .fill("recovery-probe@nowhere.example");
+  await page.getByTestId("button-request-reset").click();
+  await page.waitForSelector('[data-testid="text-reset-request-sent"]');
+  check(
+    "forgot-password request returns the non-enumerating recovery state",
+    (await page.getByTestId("text-reset-request-sent").innerText()).includes(
+      "If an account exists",
+    ),
+  );
+
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
 
   await page.getByTestId("input-email").fill("ops@meridianiq.example");
   await page.getByTestId("input-password").fill("wrong-password");
@@ -288,8 +313,18 @@ async function journeyTotp(page, BASE, check) {
   );
 
   // Activate with a live code computed in the harness from that secret.
+  const activateButton = page.getByTestId("button-totp-activate");
+  check(
+    "activation waits until the recovery codes are acknowledged",
+    await activateButton.isDisabled(),
+  );
+  await page.getByTestId("checkbox-recovery-saved").check();
   await page.getByTestId("input-totp-activate").fill(await freshCode(secret));
-  await page.getByTestId("button-totp-activate").click();
+  check(
+    "acknowledging the recovery codes enables activation",
+    await activateButton.isEnabled(),
+  );
+  await activateButton.click();
   await page.waitForSelector('[data-testid="text-totp-enabled"]', {
     timeout: 10000,
   });

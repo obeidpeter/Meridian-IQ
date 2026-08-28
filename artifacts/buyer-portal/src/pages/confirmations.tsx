@@ -224,7 +224,11 @@ function PageHeader({ actions }: { actions?: ReactNode }) {
 
 export function Confirmations() {
   usePageTitle("Confirmations");
-  const [filter, setFilter] = useUrlTab<FilterKey>("status", "all", FILTER_KEYS);
+  const [filter, setFilter] = useUrlTab<FilterKey>(
+    "status",
+    "all",
+    FILTER_KEYS,
+  );
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [serverPage, setServerPage] = useState(0);
@@ -380,6 +384,22 @@ export function Confirmations() {
   const selectAllCapped =
     allSelected && awaitingFiltered.length > BULK_LIMIT && !overLimit;
   const numbersById = new Map(invoices.map((i) => [i.id, i.invoiceNumber]));
+  const selectedInvoices = invoices.filter((invoice) =>
+    selected.has(invoice.id),
+  );
+  const selectedTotal = selectedInvoices.reduce(
+    (sum, invoice) => sum + (Number(invoice.grandTotal) || 0),
+    0,
+  );
+  const selectedSupplierCount = new Set(
+    selectedInvoices.map((invoice) => invoice.supplierPartyId),
+  ).size;
+  const bulkMethodLabel =
+    bulkMethod === "email"
+      ? "Email"
+      : bulkMethod === "phone"
+        ? "Phone"
+        : "Portal";
 
   const toggleRow = (id: string, on: boolean) => {
     setSelected((prev) => {
@@ -732,9 +752,62 @@ export function Confirmations() {
                         {selected.size === 1 ? "invoice" : "invoices"}?
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        Each records who confirmed and how, permanently.
+                        Review the value, response method and supplier impact
+                        before creating a permanent confirmation record.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
+                    <div className="grid gap-3 rounded-md border bg-muted/30 p-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Total value
+                        </p>
+                        <p
+                          className="mt-1 font-semibold tabular-nums"
+                          data-testid="text-bulk-dialog-total"
+                        >
+                          {formatNaira(selectedTotal)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Method</p>
+                        <p
+                          className="mt-1 font-semibold"
+                          data-testid="text-bulk-dialog-method"
+                        >
+                          {bulkMethodLabel}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Suppliers
+                        </p>
+                        <p
+                          className="mt-1 font-semibold tabular-nums"
+                          data-testid="text-bulk-dialog-suppliers"
+                        >
+                          {selectedSupplierCount}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <p>
+                        Each supplier will be notified of the recorded response.
+                        The confirmation stores who responded, when, and by
+                        which method.
+                      </p>
+                      {bulkNoSetOff && (
+                        <p
+                          className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+                          data-testid="text-bulk-dialog-no-set-off"
+                        >
+                          You are also recording that no set-off will be
+                          applied. This strengthens the supplier&apos;s
+                          financeability evidence by documenting the receivable
+                          without a declared offset; it does not guarantee
+                          financing.
+                        </p>
+                      )}
+                    </div>
                     <AlertDialogFooter>
                       <AlertDialogCancel data-testid="button-cancel-bulk">
                         Cancel

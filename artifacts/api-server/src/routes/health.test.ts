@@ -2,7 +2,11 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import healthRouter from "./health.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
-import { appFor, listen, closeAllServers } from "../test-helpers/route-harness.ts";
+import {
+  appFor,
+  listen,
+  closeAllServers,
+} from "../test-helpers/route-harness.ts";
 import { crossTenantPrincipal } from "../test-helpers/principals.ts";
 
 // Liveness (/healthz), readiness (/readyz — real DB round-trip) and the
@@ -19,9 +23,14 @@ test("/healthz reports ok and the contract version without touching the DB", asy
   const base = await listen(appFor(principal, healthRouter));
   const res = await fetch(`${base}/healthz`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { status: string; contractVersion: string };
+  const body = (await res.json()) as {
+    status: string;
+    contractVersion: string;
+    buildRevision: string;
+  };
   assert.equal(body.status, "ok");
   assert.ok(body.contractVersion.length > 0);
+  assert.ok(body.buildRevision.length > 0);
 });
 
 test("/readyz returns 200 when the database is reachable", async () => {

@@ -7,11 +7,14 @@ import {
   engagementsTable,
 } from "@workspace/db";
 import {
-  CLERK_FLAG_KEY,
   createGateway,
   type ClerkGateway,
   type ClerkProvider,
 } from "./gateway.ts";
+import {
+  CLERK_ENTITLEMENT_FLAG_KEY,
+  CLERK_RUNTIME_FLAG_KEY,
+} from "../flags/flags.ts";
 import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // Shared support for the clerk test files: save/force-on the kill switch in
@@ -19,17 +22,20 @@ import { makeFlagGuard } from "../../test-helpers/flags.ts";
 // test-helpers/flags.ts (makeFlagGuard — one home for every flag-flipping
 // suite); these wrappers keep the clerk suites' historical names.
 
-const clerkFlagGuard = makeFlagGuard(CLERK_FLAG_KEY);
+const clerkRuntimeFlagGuard = makeFlagGuard(CLERK_RUNTIME_FLAG_KEY);
+const clerkEntitlementFlagGuard = makeFlagGuard(CLERK_ENTITLEMENT_FLAG_KEY);
 
-// Remember + force the kill switch ON so tests exercise real code paths.
+// Remember + force both Clerk gates ON so tests exercise real code paths.
 export async function saveAndEnableClerkFlag(): Promise<void> {
-  await clerkFlagGuard.saveAndSet(true);
+  await clerkRuntimeFlagGuard.saveAndSet(true);
+  await clerkEntitlementFlagGuard.saveAndSet(true);
 }
 
-// Restore the pre-run state: delete the flag if it did not exist before,
-// otherwise set it back to the saved value.
+// Restore the pre-run state in reverse order: delete each flag if it did not
+// exist before, otherwise set it back to the saved value.
 export async function restoreClerkFlag(): Promise<void> {
-  await clerkFlagGuard.restore();
+  await clerkEntitlementFlagGuard.restore();
+  await clerkRuntimeFlagGuard.restore();
 }
 
 // Fixed firm/supplier/buyer/engagement fixtures shared by the clerk test

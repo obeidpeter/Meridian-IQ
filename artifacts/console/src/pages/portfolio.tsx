@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
   getGetFirmReceivablesQueryKey,
@@ -105,6 +105,7 @@ import {
   WorkspaceHeader,
   type WorkQueueItem,
   useUrlTab,
+  trackUsabilityEvent,
 } from "@workspace/web-ui";
 
 // Receivables amounts arrive as decimal strings. NGN rows use the shared
@@ -418,8 +419,8 @@ function GettingStartedCard({
                   <span className="text-xs text-muted-foreground">
                     {" "}
                     — the client signs in to their own workspace and grants
-                    data-sharing consent themselves; this checklist can't see
-                    or do it for them.
+                    data-sharing consent themselves; this checklist can't see or
+                    do it for them.
                   </span>
                 )}
                 {step.id === "first-invoice" && !step.done && (
@@ -1720,6 +1721,20 @@ function ClientWorkbenchTable({
   onSortChange: (value: ClientSort) => void;
   compact?: boolean;
 }) {
+  const zeroResultReported = useRef(false);
+
+  useEffect(() => {
+    const isZeroResultSearch =
+      search.trim().length >= 2 && clients.length === 0;
+    if (!isZeroResultSearch) {
+      zeroResultReported.current = false;
+      return;
+    }
+    if (zeroResultReported.current) return;
+    zeroResultReported.current = true;
+    trackUsabilityEvent("zero_result_search", "portfolio");
+  }, [clients.length, search]);
+
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
@@ -2212,9 +2227,9 @@ export function Portfolio() {
             title="Start your client book"
             description={
               <span className="block max-w-md">
-                Clients appear here once they're on the platform. Add your
-                first client to start tracking risk, deadlines and
-                receivables, or track prospects through onboarding.
+                Clients appear here once they're on the platform. Add your first
+                client to start tracking risk, deadlines and receivables, or
+                track prospects through onboarding.
               </span>
             }
           >
