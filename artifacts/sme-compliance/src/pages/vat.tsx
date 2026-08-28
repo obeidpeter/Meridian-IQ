@@ -71,6 +71,44 @@ export function fxExcludedLine(count: number): string | null {
   } excluded from these naira totals.`;
 }
 
+/** "2026-08-01" -> "2026-07-01" (Lagos months are plain calendar months). */
+export function prevMonthStart(monthStart: string): string {
+  const [y, m] = monthStart.split("-").map(Number);
+  return m === 1
+    ? `${y - 1}-12-01`
+    : `${y}-${String(m - 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * One sentence placing the displayed month against the one before it, or
+ * null when the previous month has nothing to compare against (no issued
+ * documents and no captured bills). Pure so the wording is unit-testable.
+ */
+export function vatComparisonLine(
+  current: VatPositionPayload,
+  previous: VatPositionPayload,
+): string | null {
+  if (previous.outputInvoiceCount === 0 && previous.billCount === 0) {
+    return null;
+  }
+  const phrase = (label: string, cur: string, prev: string) => {
+    const diff = Number(cur) - Number(prev);
+    if (diff === 0) return `${label} is unchanged`;
+    return `${label} is ${formatNaira(Math.abs(diff).toFixed(2))} ${
+      diff > 0 ? "higher" : "lower"
+    }`;
+  };
+  return `Compared with ${previous.monthLabel}: ${phrase(
+    "net VAT",
+    current.netVat,
+    previous.netVat,
+  )}, ${phrase(
+    "defensible net",
+    current.defensibleNetVat,
+    previous.defensibleNetVat,
+  )}.`;
+}
+
 export type VatRow = {
   key: string;
   label: string;
@@ -117,7 +155,7 @@ export function vatRows(p: VatPositionPayload): VatRow[] {
     },
     {
       key: "net",
-      label: "Net VAT position",
+      label: "Net VAT position (output − input)",
       value: formatNaira(p.netVat),
       testId: "text-vat-net",
       strong: true,
@@ -154,6 +192,27 @@ export function Vat() {
       queryKey: getGetClientVatPositionQueryKey(params),
     },
   });
+
+  // The month before the displayed one, fetched only when the server's own
+  // month list carries it — the comparison line is a side-by-side aid, so a
+  // missing previous month simply means no line, never a guessed figure.
+  const prevMonth = position ? prevMonthStart(position.monthStart) : null;
+  const prevKnown =
+    !!prevMonth && !!position && position.months.includes(prevMonth);
+  const prevParams: GetClientVatPositionParams = {
+    clientPartyId,
+    month: prevMonth ?? "",
+  };
+  const { data: previous } = useGetClientVatPosition(prevParams, {
+    query: {
+      enabled: !!clientPartyId && prevKnown,
+      queryKey: getGetClientVatPositionQueryKey(prevParams),
+    },
+  });
+  const comparison =
+    position && previous && prevKnown && previous.monthStart === prevMonth
+      ? vatComparisonLine(position, previous)
+      : null;
 
   // The statutory due date lives on the compliance calendar, not in the VAT
   // position payload — the server owns the day (Filing Desk), this page only
@@ -259,24 +318,34 @@ export function Vat() {
                   yet — nothing to compute.
                 </p>
               ) : (
-                <div className="divide-y text-sm">
-                  {vatRows(position).map((row) => (
-                    <div
-                      key={row.key}
-                      className={`flex items-baseline justify-between gap-4 py-2 ${
-                        row.sub ? "pl-4 text-xs text-muted-foreground" : ""
-                      } ${row.strong ? "font-semibold" : ""}`}
-                    >
-                      <span>{row.label}</span>
-                      <span
-                        className="tabular-nums text-right"
-                        data-testid={row.testId}
+                <>
+                  <div className="divide-y text-sm">
+                    {vatRows(position).map((row) => (
+                      <div
+                        key={row.key}
+                        className={`flex items-baseline justify-between gap-4 py-2 ${
+                          row.sub ? "pl-4 text-xs text-muted-foreground" : ""
+                        } ${row.strong ? "font-semibold" : ""}`}
                       >
-                        {row.value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                        <span>{row.label}</span>
+                        <span
+                          className="tabular-nums text-right"
+                          data-testid={row.testId}
+                        >
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {comparison && (
+                    <p
+                      className="text-xs text-muted-foreground"
+                      data-testid="text-vat-compare"
+                    >
+                      {comparison}
+                    </p>
+                  )}
+                </>
               )}
               {fxLine && (
                 <p

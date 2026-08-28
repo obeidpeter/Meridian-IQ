@@ -8,7 +8,8 @@ findings deferred to the activation rounds).
 | File | What it is |
 |---|---|
 | `findings-register.json` | All 102 audit findings: area, files, severity, NN/g component, user groups, launch-active flag, evidence, proposed fix. Produced by a 15-agent audit workflow, ranked severity-first. |
-| `backlog-deferred.json` | The 37 findings **not** implemented in R64 (all five remaining highs sit on launch-dark surfaces — Clerk, filing cockpit, Buyer Rails — first in line for their activation rounds). |
+| `backlog-deferred.json` | The findings **not** implemented in their round: 37 from R64 (all five remaining highs sit on launch-dark surfaces — Clerk, filing cockpit, Buyer Rails — first in line for their activation rounds) plus 3 from the R67 cognitive walkthrough. |
+| `cognitive-walkthrough.md` | R67: three-question cognitive walkthrough of the two first-run flows (operator invites a client; invited client user reaches their first stamped invoice), executed against the built stack. One high finding (post-submit status contradiction) fixed in-round; the rest deferred to the backlog. |
 | `inventory-routes.json` | 72-route inventory across the five web apps: purpose, launch-active state, and which empty/loading/error states each page handles. |
 | `inventory-components.md` | Design-system inventory: shared vs per-app components, duplication, gaps, status-color practice. |
 | `inventory-flows.md` | The six primary task flows as mapped from code, with context losses and dead ends called out. |

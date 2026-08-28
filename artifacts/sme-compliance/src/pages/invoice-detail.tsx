@@ -120,6 +120,7 @@ import {
   Plus,
 } from "lucide-react";
 import { whtCategoryLabel } from "@workspace/format/wht-copy";
+import { nairaApproxLine } from "@/pages/invoices";
 import {
   formatNaira,
   formatAmount,
@@ -974,6 +975,9 @@ export function InvoiceDetail() {
         queryKey: getGetInvoiceStatusLightQueryKey(id),
         retry: false,
         staleTime: 30_000,
+        // Same rhythm as the invoice itself: when the rail answers, the
+        // light's story must advance with the badge, not lag a remount.
+        refetchInterval: invoice?.status === "submitted" ? 15_000 : false,
       },
     });
   // Draft-time rejection risk (contract 0.36.0): only fetched while the
@@ -1060,6 +1064,12 @@ export function InvoiceDetail() {
     queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
     queryClient.invalidateQueries({
       queryKey: getListSubmissionAttemptsQueryKey(id),
+    });
+    // The status-light card narrates the same lifecycle ("has not been
+    // submitted yet") — left stale it flatly contradicts the badge the
+    // instant after submitting (2026-08 cognitive walkthrough, step A9).
+    queryClient.invalidateQueries({
+      queryKey: getGetInvoiceStatusLightQueryKey(id),
     });
   };
 
@@ -2013,6 +2023,19 @@ export function InvoiceDetail() {
               {formatAmount(invoice.grandTotal, invoice.currency)}
             </span>
           </div>
+          {nairaApproxLine(invoice) && (
+            <p
+              className="text-right text-xs text-muted-foreground tabular-nums"
+              data-testid="text-total-ngn-equivalent"
+            >
+              {nairaApproxLine(invoice)} at the rate captured when this invoice
+              was issued (₦
+              {Number(invoice.fxRateToNgn).toLocaleString("en-NG", {
+                maximumFractionDigits: 4,
+              })}{" "}
+              per {invoice.currency})
+            </p>
+          )}
         </CardContent>
       </Card>
 

@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
+import { AtRiskInfo } from "@/components/at-risk-info";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
@@ -1625,7 +1626,10 @@ export function Dashboard() {
     workItems.push({
       id: "at-risk-invoices",
       title: `${summary.atRiskCount} invoice${summary.atRiskCount === 1 ? " is" : "s are"} at risk`,
-      description: "The statutory submission window is closing or has passed.",
+      // Must state the server's actual rule (overdue deadlines + failed
+      // submissions) — a merely-closing window does not count here.
+      description:
+        "A statutory submission deadline has passed, or a submission failed.",
       tone: "critical",
       icon: <AlertTriangle className="size-4" aria-hidden="true" />,
       action: (
@@ -1772,6 +1776,7 @@ export function Dashboard() {
                 detail="Needs attention"
                 icon={<AlertTriangle className="size-4" aria-hidden="true" />}
                 tone={(summary?.atRiskCount ?? 0) > 0 ? "critical" : "default"}
+                action={<AtRiskInfo />}
               />
             </MetricStrip>
 

@@ -13,6 +13,7 @@ import {
   Grid2x2,
   HandCoins,
   Inbox,
+  Keyboard,
   Landmark,
   LayoutDashboard,
   LockKeyhole,
@@ -43,8 +44,13 @@ import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
   readRecentItems,
+  useGlobalShortcuts,
   type CommandItem,
 } from "@workspace/web-ui";
+import {
+  ShortcutsDialog,
+  type ShortcutRow,
+} from "@/components/shortcuts-dialog";
 import { HELP_TOPICS } from "@/pages/help";
 
 type NavLink = {
@@ -329,6 +335,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
   const mainRef = useRef<HTMLElement>(null);
@@ -365,6 +372,26 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const capabilities = new Set(me?.capabilities ?? []);
   const features = new Set(me?.features ?? []);
+  // Single-key accelerators for the daily grind (the "?" sheet lists them;
+  // useGlobalShortcuts skips typing contexts and open dialogs). "n" only
+  // registers for identities that can actually create paper.
+  const canCreateInvoice = capabilities.has("invoice.create");
+  useGlobalShortcuts([
+    ...(canCreateInvoice
+      ? [{ key: "n", run: () => navigate("/invoices/new") }]
+      : []),
+    { key: "/", run: () => setCommandOpen(true) },
+    { key: "?", run: () => setShortcutsOpen(true) },
+  ]);
+  const shortcutRows: ShortcutRow[] = [
+    { keys: ["Ctrl", "K"], description: "Find work — pages, invoices, help" },
+    { keys: ["/"], description: "Find work — pages, invoices, help" },
+    ...(canCreateInvoice
+      ? [{ keys: ["N"], description: "Start a new invoice" }]
+      : []),
+    { keys: ["?"], description: "Show these shortcuts" },
+    { keys: ["Esc"], description: "Close a dialog or menu" },
+  ];
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
     links: group.links.filter(
@@ -427,6 +454,16 @@ export function Layout({ children }: { children: ReactNode }) {
       }),
     ),
     ...helpItems,
+    {
+      id: "sme-command-shortcuts",
+      label: "Keyboard shortcuts",
+      description: "Work faster without the mouse.",
+      group: "Help",
+      icon: <Keyboard className="size-4" aria-hidden="true" />,
+      keywords: ["keyboard", "shortcuts", "hotkeys"],
+      shortcut: "?",
+      onSelect: () => setShortcutsOpen(true),
+    },
   ];
   const navProps = {
     groups,
@@ -445,6 +482,11 @@ export function Layout({ children }: { children: ReactNode }) {
         onOpenChange={setCommandOpen}
         title="Find work"
         placeholder="Search invoices, compliance and Clerk tools"
+      />
+      <ShortcutsDialog
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+        shortcuts={shortcutRows}
       />
       <a
         href="#main-content"

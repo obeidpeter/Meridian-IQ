@@ -67,6 +67,13 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   });
   await page.waitForSelector("text=Receivables", { timeout: 15000 });
   check("SME dashboard renders the receivables card", true);
+
+  // The "At risk" metric explains its rule in place (hidden-dependency
+  // disclosure): the popover states what the server actually counts.
+  await page.getByTestId("button-at-risk-info").click();
+  await page.waitForSelector("text=What counts as at risk", { timeout: 8000 });
+  await page.keyboard.press("Escape");
+  check("at-risk metric explains what the server counts", true);
   check(
     "no version-skew banner when server and bundle match",
     (await page.locator('[data-testid="banner-stale-server"]').count()) === 0,
@@ -171,6 +178,40 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   });
   await page.getByRole("button", { name: "Cancel" }).click();
   check("bulk-submit confirmation opens and cancels", true);
+
+  // Keyboard accelerators (R67): "?" opens the shortcut sheet, "/" the
+  // find-work menu, "n" jumps to the new-invoice form — and none of them
+  // fire while the user is typing in a field.
+  await page.getByTestId("text-page-title").click();
+  await page.keyboard.press("?");
+  await page.waitForSelector('[data-testid="dialog-shortcuts"]', {
+    timeout: 8000,
+  });
+  check("? opens the keyboard shortcut sheet", true);
+  await page.keyboard.press("Escape");
+  const sheetClosed = await pollUntil(
+    async () =>
+      (await page.locator('[data-testid="dialog-shortcuts"]').count()) === 0,
+    { page },
+  );
+  check("Escape closes the shortcut sheet", sheetClosed);
+  await page.keyboard.press("/");
+  await page.waitForSelector(".mi-command", { timeout: 8000 });
+  check("/ opens the find-work menu", true);
+  await page.keyboard.press("Escape");
+  // While a text field owns focus, the accelerator must stay inert.
+  await page.locator("#invoice-search").click();
+  await page.keyboard.press("n");
+  await page.waitForTimeout(300);
+  check(
+    "accelerators stay inert while typing in the search box",
+    !page.url().includes("/app/invoices/new"),
+  );
+  await page.locator("#invoice-search").fill("");
+  await page.getByTestId("text-page-title").click();
+  await page.keyboard.press("n");
+  await page.waitForURL("**/app/invoices/new", { timeout: 10000 });
+  check("n jumps to the new-invoice form", true);
 
   // Recurring invoices page renders with its create entry point.
   await page.goto(BASE + "/app/recurring", { waitUntil: "networkidle" });

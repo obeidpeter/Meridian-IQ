@@ -9,6 +9,11 @@ export {
   type NotificationFeedRow,
 } from "./notification-feed";
 export { useUrlTab } from "./use-url-tab";
+export {
+  isTypingTarget,
+  useGlobalShortcuts,
+  type ShortcutBinding,
+} from "./use-global-shortcuts";
 export { useUrlParam } from "./use-url-param";
 export {
   readRecentItems,

@@ -190,6 +190,14 @@ async function journeyFirmAdminAdvisory(page, BASE, check) {
       "Client portfolio",
     ),
   );
+  // The console registers the same "?" cheat sheet as the SME app.
+  await page.getByTestId("text-page-title").click();
+  await page.keyboard.press("?");
+  await page.waitForSelector('[data-testid="dialog-shortcuts"]', {
+    timeout: 8000,
+  });
+  check("console ? opens the keyboard shortcut sheet", true);
+  await page.keyboard.press("Escape");
   await page.getByTestId("nav-advisory").click();
   await page.getByTestId("tab-vat-risk").click();
   await page
