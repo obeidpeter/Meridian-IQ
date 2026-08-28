@@ -374,8 +374,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const features = new Set(me?.features ?? []);
   // Single-key accelerators for the daily grind (the "?" sheet lists them;
   // useGlobalShortcuts skips typing contexts and open dialogs). "n" only
-  // registers for identities that can actually create paper.
-  const canCreateInvoice = capabilities.has("invoice.create");
+  // registers for identities that can actually create paper (rbac.ts calls
+  // that invoice.write — there is no invoice.create).
+  const canCreateInvoice = capabilities.has("invoice.write");
   useGlobalShortcuts([
     ...(canCreateInvoice
       ? [{ key: "n", run: () => navigate("/invoices/new") }]
