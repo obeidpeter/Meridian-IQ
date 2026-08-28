@@ -31,6 +31,7 @@ import {
   Inbox,
   CalendarCheck2,
   CircleHelp,
+  Keyboard,
   WalletCards,
   BarChart3,
   Search,
@@ -52,8 +53,13 @@ import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
   readRecentItems,
+  useGlobalShortcuts,
   type CommandItem,
 } from "@workspace/web-ui";
+import {
+  ShortcutsDialog,
+  type ShortcutRow,
+} from "@/components/shortcuts-dialog";
 import { HELP_TOPICS } from "@/pages/help";
 
 // Every console page maps to the RBAC capability its API surface requires
@@ -454,6 +460,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
   const mainRef = useRef<HTMLElement>(null);
@@ -487,6 +494,20 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const capabilities = new Set(me?.capabilities ?? []);
   const features = new Set(me?.features ?? []);
+  // Single-key accelerators (the "?" sheet lists them; useGlobalShortcuts
+  // skips typing contexts and open dialogs). The console's frequent action
+  // is finding a client, and Ctrl+K + recents already owns that — so "/"
+  // is a lighter alias, not a new surface.
+  useGlobalShortcuts([
+    { key: "/", run: () => setCommandOpen(true) },
+    { key: "?", run: () => setShortcutsOpen(true) },
+  ]);
+  const shortcutRows: ShortcutRow[] = [
+    { keys: ["Ctrl", "K"], description: "Go to a workspace, client or tool" },
+    { keys: ["/"], description: "Go to a workspace, client or tool" },
+    { keys: ["?"], description: "Show these shortcuts" },
+    { keys: ["Esc"], description: "Close a dialog or menu" },
+  ];
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
     links: g.links.filter(
@@ -551,6 +572,16 @@ export function Layout({ children }: { children: ReactNode }) {
       }),
     ),
     ...helpItems,
+    {
+      id: "console-command-shortcuts",
+      label: "Keyboard shortcuts",
+      description: "Work faster without the mouse.",
+      group: "Help",
+      icon: <Keyboard className="size-4" aria-hidden="true" />,
+      keywords: ["keyboard", "shortcuts", "hotkeys"],
+      shortcut: "?",
+      onSelect: () => setShortcutsOpen(true),
+    },
   ];
 
   const navProps = {
@@ -570,6 +601,11 @@ export function Layout({ children }: { children: ReactNode }) {
         onOpenChange={setCommandOpen}
         title="Go to a workspace"
         placeholder="Search pages and tools"
+      />
+      <ShortcutsDialog
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+        shortcuts={shortcutRows}
       />
       <a
         href="#main-content"

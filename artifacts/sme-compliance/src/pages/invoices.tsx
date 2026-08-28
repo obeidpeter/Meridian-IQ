@@ -48,6 +48,7 @@ import {
 import {
   formatAmount,
   formatDate,
+  formatNaira,
   statusLabel,
   badgeClasses,
   statusTone,
@@ -85,12 +86,26 @@ const PAGE_SIZE = 50;
 // The vault's Min/Max filters are ₦-labeled, so they compare naira VALUE:
 // foreign invoices convert through their captured FX rate; one without a
 // rate cannot be compared, so it only shows while no amount filter is set.
-function nairaEquivalent(inv: Invoice): number | null {
+export function nairaEquivalent(
+  inv: Pick<Invoice, "currency" | "grandTotal" | "fxRateToNgn">,
+): number | null {
   if (inv.currency === "NGN") return Number(inv.grandTotal);
   const rate = Number(inv.fxRateToNgn);
   return Number.isFinite(rate) && rate > 0
     ? Number(inv.grandTotal) * rate
     : null;
+}
+
+// The same conversion as a visible line: VAT is assessed in naira, so a
+// foreign amount should never appear without its naira value when the
+// captured rate makes one computable (a rate is never assumed). NGN rows and
+// rate-less foreign rows get no line.
+export function nairaApproxLine(
+  inv: Pick<Invoice, "currency" | "grandTotal" | "fxRateToNgn">,
+): string | null {
+  if (inv.currency === "NGN") return null;
+  const value = nairaEquivalent(inv);
+  return value === null ? null : `≈ ${formatNaira(value.toFixed(2))}`;
 }
 
 // Offset-paged accumulation of GET /invoices for the vault list: debounces
@@ -774,9 +789,19 @@ export function Invoices() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-semibold tabular-nums">
-                      {formatAmount(inv.grandTotal, inv.currency)}
-                    </span>
+                    <div className="text-right">
+                      <span className="font-semibold tabular-nums">
+                        {formatAmount(inv.grandTotal, inv.currency)}
+                      </span>
+                      {nairaApproxLine(inv) && (
+                        <p
+                          className="text-xs text-muted-foreground tabular-nums"
+                          data-testid={`text-ngn-equivalent-${inv.id}`}
+                        >
+                          {nairaApproxLine(inv)}
+                        </p>
+                      )}
+                    </div>
                     <ChevronRight
                       className="w-4 h-4 text-muted-foreground"
                       aria-hidden="true"

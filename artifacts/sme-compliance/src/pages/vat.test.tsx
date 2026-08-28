@@ -11,13 +11,18 @@ import type { ClientVatPosition } from "@workspace/api-client-react";
 
 const harness = vi.hoisted(() => ({
   position: null as unknown,
+  // Served for any month request that isn't the main position's month — the
+  // page's previous-month comparison fetch.
+  prev: null as unknown,
   isLoading: false,
   isError: false,
   deadlines: null as unknown,
-  // Every params object useGetClientVatPosition was called with, in order.
+  // Every params object useGetClientVatPosition was called with, in order
+  // (the page mounts TWO hooks: the displayed month, then the month before).
   calls: [] as unknown[],
   reset() {
     this.position = null;
+    this.prev = null;
     this.isLoading = false;
     this.isError = false;
     this.deadlines = null;
@@ -33,8 +38,13 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     useGetMe: () => ({ data: { clientPartyId: "cp-1" } }),
     useGetClientVatPosition: (params: unknown) => {
       harness.calls.push(params);
+      const month = (params as { month?: string }).month;
+      const main = harness.position as { monthStart?: string } | null;
       return {
-        data: harness.position,
+        data:
+          !month || month === main?.monthStart
+            ? harness.position
+            : harness.prev,
         isLoading: harness.isLoading,
         isError: harness.isError,
         refetch: vi.fn(),
@@ -49,7 +59,15 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 });
 
 // Import AFTER the mock so the page module binds the stand-ins.
-import { Vat, fxExcludedLine, vatCsvHref, vatMonthLabel, vatRows } from "./vat";
+import {
+  Vat,
+  fxExcludedLine,
+  prevMonthStart,
+  vatComparisonLine,
+  vatCsvHref,
+  vatMonthLabel,
+  vatRows,
+} from "./vat";
 
 function position(over: Partial<ClientVatPosition> = {}): ClientVatPosition {
   return {
@@ -131,14 +149,61 @@ describe("month picker", () => {
       "2026-05-01",
     ]);
     // The default request carries no month — the server picks the current
-    // Lagos month.
+    // Lagos month. (The previous-month comparison hook also records calls,
+    // so assert membership rather than position.)
     expect(harness.calls[0]).toEqual({ clientPartyId: "cp-1" });
 
     fireEvent.change(select, { target: { value: "2026-06-01" } });
-    expect(harness.calls.at(-1)).toEqual({
+    expect(harness.calls).toContainEqual({
       clientPartyId: "cp-1",
       month: "2026-06-01",
     });
+  });
+});
+
+describe("previous-month comparison", () => {
+  const prevJune = () =>
+    position({
+      monthStart: "2026-06-01",
+      monthLabel: "June 2026",
+      netVat: "90000.00",
+      defensibleNetVat: "130000.00",
+    });
+
+  test("places the displayed month against the one before it", () => {
+    harness.position = position();
+    harness.prev = prevJune();
+    renderPage();
+
+    const line = screen.getByTestId("text-vat-compare").textContent ?? "";
+    expect(line).toContain("Compared with June 2026");
+    expect(line).toContain("net VAT is");
+    expect(line).toContain("20,000.00");
+    expect(line).toContain("higher");
+    expect(line).toContain("defensible net is");
+    expect(line).toContain("10,000.00");
+    expect(line).toContain("lower");
+    // The page asked for exactly the month before the displayed one.
+    expect(harness.calls).toContainEqual({
+      clientPartyId: "cp-1",
+      month: "2026-06-01",
+    });
+  });
+
+  test("absent when the previous month has nothing to compare", () => {
+    harness.position = position();
+    harness.prev = prevJune();
+    (harness.prev as { outputInvoiceCount: number }).outputInvoiceCount = 0;
+    (harness.prev as { billCount: number }).billCount = 0;
+    renderPage();
+    expect(screen.queryByTestId("text-vat-compare")).toBeNull();
+  });
+
+  test("absent when the server's month list stops at the displayed month", () => {
+    harness.position = position({ months: ["2026-07-01"] });
+    harness.prev = prevJune();
+    renderPage();
+    expect(screen.queryByTestId("text-vat-compare")).toBeNull();
   });
 });
 
@@ -217,6 +282,34 @@ describe("pure helpers", () => {
     expect(fxExcludedLine(3)).toBe(
       "3 foreign-currency documents without an exchange rate are excluded from these naira totals.",
     );
+  });
+
+  test("prevMonthStart walks one calendar month back, across years", () => {
+    expect(prevMonthStart("2026-08-01")).toBe("2026-07-01");
+    expect(prevMonthStart("2026-01-01")).toBe("2025-12-01");
+    expect(prevMonthStart("2026-10-01")).toBe("2026-09-01");
+  });
+
+  test("vatComparisonLine phrases both directions and the unchanged case", () => {
+    const cur = position();
+    const prev = position({
+      monthStart: "2026-06-01",
+      monthLabel: "June 2026",
+      netVat: "110000.00",
+      defensibleNetVat: "100000.00",
+    });
+    const line = vatComparisonLine(cur, prev) ?? "";
+    expect(line).toContain("net VAT is unchanged");
+    expect(line).toContain("defensible net is");
+    expect(line).toContain("20,000.00");
+    expect(line).toContain("higher");
+    // An empty previous month yields no sentence at all.
+    expect(
+      vatComparisonLine(
+        cur,
+        position({ outputInvoiceCount: 0, billCount: 0 }),
+      ),
+    ).toBeNull();
   });
 
   test("vatRows carries the six summary rows in reading order", () => {

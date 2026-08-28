@@ -3,7 +3,9 @@
 // between the pure-helper unit tests and the full e2e journeys.
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { AT_RISK_RULES, AtRiskInfo } from "./at-risk-info";
 import { ClerkDisabledBanner } from "./clerk-disabled-banner";
+import { ShortcutsDialog } from "./shortcuts-dialog";
 import { ClerkUsageBreakdown } from "./clerk-usage-breakdown";
 import { FilePickerButton } from "./file-picker-button";
 import { RejectionRiskCard } from "./rejection-risk-card";
@@ -256,5 +258,46 @@ describe("BuyerSelectOptions", () => {
     );
     expect(screen.getByText(/Zenith Retail — 12345678-0001/)).toBeTruthy();
     expect(screen.getByText(/Sahara Stores \(no TIN\)/)).toBeTruthy();
+  });
+});
+
+describe("AtRiskInfo", () => {
+  test("the info button opens the popover stating the server's rule", async () => {
+    render(<AtRiskInfo />);
+    fireEvent.click(screen.getByTestId("button-at-risk-info"));
+    expect(await screen.findByText("What counts as at risk")).toBeTruthy();
+    for (const rule of AT_RISK_RULES) {
+      expect(screen.getByText(rule)).toBeTruthy();
+    }
+    expect(screen.getByText(/no AI involved/)).toBeTruthy();
+  });
+});
+
+describe("ShortcutsDialog", () => {
+  test("lists every registered binding with its keys", () => {
+    render(
+      <ShortcutsDialog
+        open
+        onOpenChange={() => {}}
+        shortcuts={[
+          { keys: ["Ctrl", "K"], description: "Find work" },
+          { keys: ["N"], description: "Start a new invoice" },
+        ]}
+      />,
+    );
+    const dialog = screen.getByTestId("dialog-shortcuts");
+    expect(dialog.textContent).toContain("Keyboard shortcuts");
+    expect(dialog.textContent).toContain("Find work");
+    expect(dialog.textContent).toContain("Start a new invoice");
+    // Keys render as <kbd> so shortcut chords look like keys, not prose.
+    const keys = [...dialog.querySelectorAll("kbd")].map((k) => k.textContent);
+    expect(keys).toEqual(["Ctrl", "K", "N"]);
+  });
+
+  test("renders nothing while closed", () => {
+    render(
+      <ShortcutsDialog open={false} onOpenChange={() => {}} shortcuts={[]} />,
+    );
+    expect(screen.queryByTestId("dialog-shortcuts")).toBeNull();
   });
 });

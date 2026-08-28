@@ -884,5 +884,72 @@
   "effort": "S",
   "source": "",
   "registerIndex": 101
+ },
+ {
+  "title": "Invite-a-client entry point hides behind an employee-sounding nav label",
+  "area": "Console navigation / invitations (launch-active)",
+  "files": [
+   "artifacts/console/src/components/layout.tsx",
+   "artifacts/console/src/pages/invitations.tsx"
+  ],
+  "severity": "medium",
+  "nng": [
+   "match-system-real-world",
+   "learnability"
+  ],
+  "userGroups": [
+   "accountant",
+   "operator"
+  ],
+  "launchActive": true,
+  "problem": "The goal 'get my client into MeridianIQ' has three plausible first clicks (Onboarding, + Add client, Team invitations); the correct one for inviting a client user is 'Team invitations', whose label reads as teammates-only. The page description does say 'teammate or client', but only after the user has already found the page.",
+  "evidence": "Cognitive walkthrough 2026-08 (R67), flow B step B2 \u2014 see cognitive-walkthrough.md W-1.",
+  "fix": "Rename the nav entry (e.g. 'Invitations') and/or surface an 'Invite someone' action on client detail / portfolio rows where the operator is already looking at the client.",
+  "effort": "S",
+  "source": "cognitive-walkthrough-2026-08"
+ },
+ {
+  "title": "SME nav scroll fold hides Calendar/Consent/Alerts/Help with no visible cue",
+  "area": "SME workspace navigation (launch-active)",
+  "files": [
+   "artifacts/sme-compliance/src/components/layout.tsx",
+   "artifacts/sme-compliance/src/index.css"
+  ],
+  "severity": "medium",
+  "nng": [
+   "visibility",
+   "help-documentation"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "At a common 1360x900 desktop viewport the nav's group list overflows; the thin scrollbar on the dark rail is easy to miss and nothing else signals more navigation below, so the whole Workspace group (Calendar, Analytics, Notifications, Alert settings, Consent, Help) is effectively invisible to a first-run user \u2014 the audience the R66 Help pages serve most. Ctrl+K reaches help topics but is itself a discovered feature.",
+  "evidence": "Cognitive walkthrough 2026-08 (R67), flow A step A3 \u2014 see cognitive-walkthrough.md W-2.",
+  "fix": "Add a scroll affordance (bottom fade or persistent scroll cue) to .workspace-nav-scroll, or pin Help into the always-visible footer region next to the account chip.",
+  "effort": "S",
+  "source": "cognitive-walkthrough-2026-08"
+ },
+ {
+  "title": "Accept-invite page names neither the invited email nor the workspace",
+  "area": "Landing portal / accept-invite (launch-active)",
+  "files": [
+   "artifacts/landing/src/AcceptInvite.tsx",
+   "lib/api-spec/openapi.yaml"
+  ],
+  "severity": "low",
+  "nng": [
+   "visibility",
+   "error-prevention"
+  ],
+  "userGroups": [
+   "sme"
+  ],
+  "launchActive": true,
+  "problem": "'Activate your account' shows only name/password fields; the invitee cannot confirm which identity or workspace they are activating before setting a password. The token is deliberately kept out of HTTP logs, so a preview would post the fragment token to learn what to display.",
+  "evidence": "Cognitive walkthrough 2026-08 (R67), flow A step A1 \u2014 see cognitive-walkthrough.md W-4.",
+  "fix": "Add a preview lookup for the token that returns the invited email and workspace name, and show both on the card.",
+  "effort": "M",
+  "source": "cognitive-walkthrough-2026-08"
  }
 ]

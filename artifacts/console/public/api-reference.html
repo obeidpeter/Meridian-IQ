@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.81.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.82.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.81.0</title>
+<title>MeridianIQ API reference — v0.82.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.81.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.82.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -157,7 +157,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">24</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">21</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">13</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">5</span></a><a href="#tag-operator">operator<span class="count">24</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">21</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -214,6 +214,10 @@ request's writes were rolled back.</li>
 <details class="op" id="resetPassword">
 <summary><span class="method m-post">POST</span><code class="path">/api/auth/reset-password</code><span class="sum">Redeem a one-time password-reset token and set a new password (public)</span></summary>
 <div class="opbody"><div class="req">Request body: <code>ResetPasswordInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Password set; sign in with it (outstanding sessions are revoked)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="requestPasswordReset">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/request-password-reset</code><span class="sum">Request a one-time password-reset email without disclosing whether the account exists (public)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RequestPasswordResetInput</code></div><ul class="responses"><li><span class="status s2xx">202</span> <span class="dim">Request accepted; if the account exists and delivery is available, a reset email is sent</span></li><li><span class="status s4xx">429</span> <span class="dim">Too many recovery requests</span></li></ul></div>
 </details>
 </section>
 <section id="tag-identity">
@@ -546,6 +550,14 @@ request's writes were rolled back.</li>
 </section>
 <section id="tag-platform">
 <h2>platform</h2>
+<details class="op" id="requestAdvisoryReview">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/advisory-requests</code><span class="sum">Send a public penalty-estimate review request to the configured advisory relay</span></summary>
+<div class="opbody"><div class="req">Request body: <code>AdvisoryReviewInput</code></div><ul class="responses"><li><span class="status s2xx">202</span> <span class="dim">Advisory request accepted for delivery</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">429</span> <span class="dim">Too many advisory requests</span></li><li><span class="status s5xx">503</span> <span class="dim">Advisory delivery is not configured or temporarily unavailable</span></li></ul></div>
+</details>
+<details class="op" id="recordUsabilityEvent">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/usability-events</code><span class="sum">Record one privacy-safe aggregate product-usability event</span></summary>
+<div class="opbody"><div class="req">Request body: <code>UsabilityEventInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Event recorded</span></li><li><span class="status s4xx">429</span> <span class="dim">Too many events</span></li></ul></div>
+</details>
 <details class="op" id="listFeatureFlags">
 <summary><span class="method m-get">GET</span><code class="path">/api/feature-flags</code><span class="sum">listFeatureFlags</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FeatureFlag[]</code> <span class="dim">Flags</span></li></ul></div>
@@ -1610,7 +1622,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.81.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.82.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>
