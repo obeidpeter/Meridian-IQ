@@ -39,6 +39,7 @@ import { pillClasses, type BadgeTone } from "@/lib/format";
 import { ClipboardCheck, Download, RefreshCw } from "lucide-react";
 import { onboardingStepLabel as sharedOnboardingStepLabel } from "@workspace/format/onboarding-copy";
 import { triggerDownload } from "@/lib/download";
+import { beginOperation, updateOperation } from "@workspace/web-ui";
 
 // Client onboarding checklist (Onboard with Clerk Phase 1): the run the firm
 // opens when it takes on a new client. Every step's state is DETECTED
@@ -79,9 +80,7 @@ export function onboardingProgress(run: Pick<OnboardingRun, "steps">): string {
 }
 
 /** The run the card shows: the active one if any, else the newest. */
-export function pickOnboardingRun(
-  runs: OnboardingRun[],
-): OnboardingRun | null {
+export function pickOnboardingRun(runs: OnboardingRun[]): OnboardingRun | null {
   return runs.find((r) => r.status === "active") ?? runs[0] ?? null;
 }
 
@@ -201,14 +200,14 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
 
   const { data: me } = useGetMe();
   const canWrite = !!me?.capabilities.includes("engagement.write");
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
 
   const [skipPanelKey, setSkipPanelKey] = useState<string | null>(null);
   const [skipReason, setSkipReason] = useState("");
   const [confirmAbandon, setConfirmAbandon] = useState(false);
 
-  const onError =
-    (title: string) => (e: unknown) =>
-      serverErrorToast(toast, e, { title, fallback: "Try again." });
+  const onError = (title: string) => (e: unknown) =>
+    serverErrorToast(toast, e, { title, fallback: "Try again." });
 
   const create = useCreateOnboardingRun({
     mutation: {
@@ -246,6 +245,99 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
     },
   });
 
+  const startOnboarding = () => {
+    const operation = beginOperation(operationKey, {
+      title: "Start client onboarding",
+      kind: "onboarding",
+      route: `/clients/${clientPartyId}?view=setup`,
+    });
+    create.mutate(
+      { data: { clientPartyId } },
+      {
+        onSuccess: () =>
+          updateOperation(operationKey, operation?.id, {
+            status: "succeeded",
+            detail: "The onboarding run and evidence checklist were created.",
+            savedSummary: "A new onboarding run is active.",
+          }),
+        onError: () =>
+          updateOperation(operationKey, operation?.id, {
+            status: "failed",
+            detail: "The onboarding run could not be created.",
+            savedSummary: "No onboarding run was started.",
+          }),
+      },
+    );
+  };
+
+  const refreshOnboarding = () => {
+    if (!run) return;
+    const operation = beginOperation(operationKey, {
+      title: `Re-check onboarding for ${run.clientName}`,
+      kind: "onboarding",
+      route: `/clients/${clientPartyId}?view=setup`,
+    });
+    refresh.mutate(
+      { id: run.id },
+      {
+        onSuccess: () =>
+          updateOperation(operationKey, operation?.id, {
+            status: "succeeded",
+            detail: "Every checklist step was checked against current records.",
+            savedSummary: "The onboarding checklist was refreshed.",
+          }),
+        onError: () =>
+          updateOperation(operationKey, operation?.id, {
+            status: "failed",
+            detail: "The checklist could not be refreshed.",
+            savedSummary: "The previous checklist state remains available.",
+          }),
+      },
+    );
+  };
+
+  const closeOnboarding = () => {
+    if (!run) return;
+    const operation = beginOperation(operationKey, {
+      title: `Close onboarding for ${run.clientName}`,
+      kind: "onboarding",
+      route: `/clients/${clientPartyId}?view=setup`,
+    });
+    abandon.mutate(
+      { id: run.id },
+      {
+        onSuccess: () =>
+          updateOperation(operationKey, operation?.id, {
+            status: "succeeded",
+            detail: "The run was closed with its current evidence preserved.",
+            savedSummary: "The onboarding checklist is frozen and auditable.",
+          }),
+        onError: () =>
+          updateOperation(operationKey, operation?.id, {
+            status: "failed",
+            detail: "The onboarding run could not be closed.",
+            savedSummary: "The run remains active.",
+          }),
+      },
+    );
+  };
+
+  const downloadReadinessReport = () => {
+    if (!run) return;
+    const filename = `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`;
+    const operation = beginOperation(operationKey, {
+      title: `Download onboarding report for ${run.clientName}`,
+      kind: "export",
+      route: `/clients/${clientPartyId}?view=setup`,
+    });
+    triggerDownload(getGetOnboardingReportUrl(run.id), filename);
+    updateOperation(operationKey, operation?.id, {
+      status: "succeeded",
+      detail: "The readiness-report download was started.",
+      savedSummary: `The browser was asked to save ${filename}.`,
+    });
+  };
+
   return (
     <Card data-testid="card-onboarding">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -256,7 +348,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => refresh.mutate({ id: run.id })}
+            onClick={refreshOnboarding}
             disabled={refresh.isPending}
             data-testid="button-onboarding-refresh"
           >
@@ -285,13 +377,12 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
             >
               No onboarding run for this client. Starting one opens an
               evidence-based checklist — history import, statement backfill,
-              consent, duplicates, filings — that tracks itself from the
-              record.
+              consent, duplicates, filings — that tracks itself from the record.
             </p>
             {canWrite && (
               <Button
                 size="sm"
-                onClick={() => create.mutate({ data: { clientPartyId } })}
+                onClick={startOnboarding}
                 disabled={create.isPending}
                 data-testid="button-onboarding-start"
               >
@@ -387,9 +478,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                               data-testid={`panel-onboarding-skip-${step.key}`}
                             >
                               <div className="space-y-1">
-                                <Label
-                                  htmlFor={`onboarding-skip-${step.key}`}
-                                >
+                                <Label htmlFor={`onboarding-skip-${step.key}`}>
                                   Why is this step not needed?
                                 </Label>
                                 <Input
@@ -412,8 +501,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                                   })
                                 }
                                 disabled={
-                                  skipReason.trim().length < 3 ||
-                                  skip.isPending
+                                  skipReason.trim().length < 3 || skip.isPending
                                 }
                                 data-testid={`button-onboarding-skip-confirm-${step.key}`}
                               >
@@ -464,14 +552,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() =>
-                  triggerDownload(
-                    getGetOnboardingReportUrl(run.id),
-                    // Matches the server's Content-Disposition name (which
-                    // governs anyway).
-                    `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`,
-                  )
-                }
+                onClick={downloadReadinessReport}
                 data-testid="button-onboarding-report"
               >
                 <Download className="w-4 h-4 mr-1" aria-hidden="true" />
@@ -500,7 +581,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                 </p>
                 <Button
                   size="sm"
-                  onClick={() => create.mutate({ data: { clientPartyId } })}
+                  onClick={startOnboarding}
                   disabled={create.isPending}
                   data-testid="button-onboarding-restart"
                 >
@@ -508,10 +589,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                 </Button>
               </div>
             )}
-            <AlertDialog
-              open={confirmAbandon}
-              onOpenChange={setConfirmAbandon}
-            >
+            <AlertDialog open={confirmAbandon} onOpenChange={setConfirmAbandon}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
@@ -527,7 +605,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     disabled={abandon.isPending}
-                    onClick={() => abandon.mutate({ id: run.id })}
+                    onClick={closeOnboarding}
                     data-testid="button-onboarding-abandon-confirm"
                   >
                     Close without completing
@@ -536,9 +614,8 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               </AlertDialogContent>
             </AlertDialog>
             <p className="text-xs text-muted-foreground">
-              Steps settle themselves from the record — the checklist only
-              ever claims what the data shows; a skip records the gap it
-              leaves.
+              Steps settle themselves from the record — the checklist only ever
+              claims what the data shows; a skip records the gap it leaves.
             </p>
           </div>
         )}

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AT_RISK_RULES, AtRiskInfo } from "./at-risk-info";
 import { ClerkDisabledBanner } from "./clerk-disabled-banner";
-import { ShortcutsDialog } from "./shortcuts-dialog";
+import { ShortcutsDialog } from "@workspace/web-ui";
 import { ClerkUsageBreakdown } from "./clerk-usage-breakdown";
 import { FilePickerButton } from "./file-picker-button";
 import { RejectionRiskCard } from "./rejection-risk-card";

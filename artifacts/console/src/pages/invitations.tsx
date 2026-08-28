@@ -83,7 +83,7 @@ const ROLE_OPTIONS: CreateInvitationInputRole[] = [
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Invitations() {
-  usePageTitle("Team invitations");
+  usePageTitle("Invitations");
   const { data: me } = useGetMe();
   const canReadPortfolio = (me?.capabilities ?? []).includes(
     "console.portfolio.read",
@@ -92,12 +92,7 @@ export function Invitations() {
   // (the new-firm bootstrap path) instead of the caller's own.
   const isOperator = (me?.capabilities ?? []).includes("identity.write");
 
-  const {
-    data: invitations,
-    isLoading,
-    error,
-    refetch,
-  } = useListInvitations();
+  const { data: invitations, isLoading, error, refetch } = useListInvitations();
   // The firm's engaged clients are exactly the valid targets for a client
   // invitation (the server validates clientPartyId against an engagement), so
   // the portfolio's client list drives the picker. Gated on the capability so
@@ -117,8 +112,15 @@ export function Invitations() {
   const createReset = useCreatePasswordReset();
 
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<CreateInvitationInputRole>("firm_staff");
-  const [clientPartyId, setClientPartyId] = useState("");
+  const [role, setRole] = useState<CreateInvitationInputRole>(() =>
+    new URLSearchParams(window.location.search).get("role") === "client_user"
+      ? "client_user"
+      : "firm_staff",
+  );
+  const [clientPartyId, setClientPartyId] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get("clientPartyId") ?? "",
+  );
   const [firmId, setFirmId] = useState("");
   const [newFirmName, setNewFirmName] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -226,9 +228,7 @@ export function Invitations() {
       {
         onSuccess: () => {
           // Clear the one-time token card if it was for this invite.
-          setCreated((c) =>
-            c?.invitation.id === invitation.id ? null : c,
-          );
+          setCreated((c) => (c?.invitation.id === invitation.id ? null : c));
           invalidate();
           if (replace) {
             // Prefill the form so the admin only has to press "Create
@@ -369,7 +369,7 @@ export function Invitations() {
           className="text-2xl md:text-3xl font-bold"
           data-testid="text-page-title"
         >
-          Team invitations
+          Invitations
         </h1>
         <p className="text-muted-foreground mt-1">
           {isOperator
@@ -382,15 +382,21 @@ export function Invitations() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-primary" aria-hidden="true" />
-            Invite someone
+            Create access link
           </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-4" noValidate>
             {isOperator && (
-              <div className="space-y-3 rounded-lg border p-3" data-testid="section-target-firm">
+              <div
+                className="space-y-3 rounded-lg border p-3"
+                data-testid="section-target-firm"
+              >
                 <p className="text-sm font-medium flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-primary" aria-hidden="true" />
+                  <Building2
+                    className="w-4 h-4 text-primary"
+                    aria-hidden="true"
+                  />
                   Target firm
                 </p>
                 <div className="space-y-1.5">
@@ -423,7 +429,9 @@ export function Invitations() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="new-firm-name">…or provision a new firm</Label>
+                  <Label htmlFor="new-firm-name">
+                    …or provision a new firm
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       id="new-firm-name"
@@ -443,7 +451,9 @@ export function Invitations() {
                       disabled={createFirm.isPending}
                       data-testid="button-provision-firm"
                     >
-                      {createFirm.isPending ? "Provisioning…" : "Provision firm"}
+                      {createFirm.isPending
+                        ? "Provisioning…"
+                        : "Provision firm"}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -775,10 +785,7 @@ export function Invitations() {
             />
           ) : (
             <ScrollRegion label="Invitations table">
-              <table
-                className="w-full text-sm"
-                data-testid="table-invitations"
-              >
+              <table className="w-full text-sm" data-testid="table-invitations">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th scope="col" className="py-2 pr-3 font-medium">
@@ -818,15 +825,13 @@ export function Invitations() {
                         className="py-2.5 pr-3 text-muted-foreground whitespace-nowrap"
                         data-testid={`client-${inv.id}`}
                       >
-                        {inv.clientPartyId ? (
-                          clientNameById.get(inv.clientPartyId) ?? (
-                            <span className="font-mono text-xs">
-                              {inv.clientPartyId.slice(0, 8)}
-                            </span>
-                          )
-                        ) : (
-                          "—"
-                        )}
+                        {inv.clientPartyId
+                          ? (clientNameById.get(inv.clientPartyId) ?? (
+                              <span className="font-mono text-xs">
+                                {inv.clientPartyId.slice(0, 8)}
+                              </span>
+                            ))
+                          : "—"}
                       </td>
                       {isOperator && (
                         <td

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.82.0
+ * OpenAPI spec version: 0.83.0
  */
 
 export type UsabilityEventInputEvent = typeof UsabilityEventInputEvent[keyof typeof UsabilityEventInputEvent];
@@ -22,4 +22,8 @@ export const UsabilityEventInputEvent = {
   workflow_started: 'workflow_started',
   workflow_completed: 'workflow_completed',
   workflow_abandoned: 'workflow_abandoned',
+  help_opened: 'help_opened',
+  help_search_no_result: 'help_search_no_result',
+  help_helpful: 'help_helpful',
+  help_unhelpful: 'help_unhelpful',
 } as const;

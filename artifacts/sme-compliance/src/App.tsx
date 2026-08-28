@@ -30,6 +30,7 @@ import { Collections } from "@/pages/collections";
 import { Analytics } from "@/pages/analytics";
 import { Notifications } from "@/pages/notifications";
 import { Help } from "@/pages/help";
+import { ActivityPage } from "@/pages/activity";
 
 // A 401 must not retry-spin — the session guard redirects to the portal instead.
 const queryClient = new QueryClient({
@@ -53,6 +54,7 @@ function Router() {
         <Route path="/collections" component={Collections} />
         <Route path="/analytics" component={Analytics} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/activity" component={ActivityPage} />
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={InvoiceNew} />
         <Route path="/invoices/:id" component={InvoiceDetail} />

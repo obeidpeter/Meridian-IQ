@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.82.0
+ * OpenAPI spec version: 0.83.0
  */
 import * as zod from 'zod';
 
@@ -257,6 +257,26 @@ export const AcceptInviteResponse = zod.void()
 
 
 /**
+ * @summary Resolve the account and workspace context carried by an invitation token (public)
+ */
+export const previewInvitationBodyTokenMax = 256;
+
+
+
+export const PreviewInvitationBody = zod.object({
+  "token": zod.string().min(1).max(previewInvitationBodyTokenMax)
+})
+
+export const PreviewInvitationResponse = zod.object({
+  "email": zod.string().email(),
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
+  "workspaceName": zod.string(),
+  "clientName": zod.string().nullish(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Redeem a one-time password-reset token and set a new password (public)
  */
 
@@ -312,8 +332,8 @@ export const RequestAdvisoryReviewResponse = zod.void()
  * @summary Record one privacy-safe aggregate product-usability event
  */
 export const RecordUsabilityEventBody = zod.object({
-  "event": zod.enum(['landing_cta', 'login_attempt', 'login_success', 'login_failure', 'password_reset_request', 'calculator_started', 'calculator_completed', 'advisory_request', 'zero_result_search', 'workflow_started', 'workflow_completed', 'workflow_abandoned']),
-  "surface": zod.enum(['landing', 'login', 'password_reset', 'calculator', 'portfolio', 'client_import', 'invoice_import'])
+  "event": zod.enum(['landing_cta', 'login_attempt', 'login_success', 'login_failure', 'password_reset_request', 'calculator_started', 'calculator_completed', 'advisory_request', 'zero_result_search', 'workflow_started', 'workflow_completed', 'workflow_abandoned', 'help_opened', 'help_search_no_result', 'help_helpful', 'help_unhelpful']),
+  "surface": zod.enum(['landing', 'login', 'password_reset', 'calculator', 'portfolio', 'client_import', 'invoice_import', 'console_help', 'sme_help'])
 })
 
 export const RecordUsabilityEventResponse = zod.void()

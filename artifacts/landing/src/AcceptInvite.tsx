@@ -1,6 +1,17 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useAcceptInvite } from "@workspace/api-client-react";
-import { Loader2, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useAcceptInvite,
+  usePreviewInvitation,
+} from "@workspace/api-client-react";
+import {
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  Building2,
+  Mail,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -66,9 +77,29 @@ function InviteShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function inviteRoleLabel(role: string): string {
+  if (role === "firm_admin") return "Firm administrator";
+  if (role === "firm_staff") return "Firm team member";
+  return "Client workspace user";
+}
+
+function previewErrorMessage(err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  if (status === 400) {
+    return "This invitation is invalid, expired, revoked, or already used. Ask the person who invited you to create a new link.";
+  }
+  if (status === 429) {
+    return "Too many invitation checks were made from this connection. Wait a few minutes, then try again.";
+  }
+  return "We could not verify this invitation right now. Check your connection and try again.";
+}
+
 export function AcceptInvite() {
   const accept = useAcceptInvite();
+  const preview = usePreviewInvitation();
+  const requestPreview = preview.mutate;
   const [token] = useState(() => takeQuerySecret("token"));
+  const previewRequestedFor = useRef<string | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -77,6 +108,12 @@ export function AcceptInvite() {
     message: string;
     showSignIn: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    if (!token || previewRequestedFor.current === token) return;
+    previewRequestedFor.current = token;
+    requestPreview({ data: { token } });
+  }, [requestPreview, token]);
 
   // Success replaces the form — and the button the user just pressed — with
   // the confirmation card, dropping focus to <body>. Move focus onto the
@@ -128,16 +165,74 @@ export function AcceptInvite() {
             className="mt-2 text-sm text-muted-foreground"
             data-testid="text-missing-token"
           >
-            This invitation link is missing its token. If you refreshed this
-            page, open the link from your invitation email again — it works
-            until it is redeemed. Otherwise, ask your administrator to resend
-            it.
+            This page does not contain an invitation token. Ask the person who
+            invited you to copy and share a new MeridianIQ invitation link.
           </p>
           <Button asChild variant="outline" className="mt-4 w-full">
             <a href="/login" data-testid="link-missing-token-sign-in">
               Go to sign in
             </a>
           </Button>
+        </Card>
+      </InviteShell>
+    );
+  }
+
+  if (preview.isPending || preview.isIdle) {
+    return (
+      <InviteShell>
+        <Card
+          className="p-6 shadow-sm"
+          aria-live="polite"
+          data-testid="card-invite-checking"
+        >
+          <div className="flex items-center gap-3">
+            <Loader2
+              className="h-5 w-5 animate-spin text-primary"
+              aria-hidden="true"
+            />
+            <div>
+              <h1 className="text-lg font-semibold">Checking invitation</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Confirming which account and workspace this link opens.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </InviteShell>
+    );
+  }
+
+  if (preview.isError) {
+    return (
+      <InviteShell>
+        <Card className="p-6 shadow-sm" data-testid="card-invite-preview-error">
+          <div className="flex items-start gap-2">
+            <AlertCircle
+              className="mt-0.5 h-5 w-5 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
+            <div>
+              <h1 className="text-lg font-semibold">Invitation unavailable</h1>
+              <p role="alert" className="mt-2 text-sm text-muted-foreground">
+                {previewErrorMessage(preview.error)}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              className="flex-1"
+              onClick={() => preview.mutate({ data: { token } })}
+              disabled={preview.isPending}
+              data-testid="button-retry-invite-preview"
+            >
+              Try again
+            </Button>
+            <Button asChild variant="outline" className="flex-1">
+              <a href="/login">Go to sign in</a>
+            </Button>
+          </div>
         </Card>
       </InviteShell>
     );
@@ -181,6 +276,51 @@ export function AcceptInvite() {
         <p className="mt-1 text-sm text-muted-foreground">
           Set a password to finish setting up your MeridianIQ account.
         </p>
+        <dl
+          className="mt-4 divide-y rounded-md border bg-muted/25 px-3 text-sm"
+          data-testid="invite-context"
+        >
+          <div className="flex gap-3 py-2.5">
+            <Mail
+              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">Account email</dt>
+              <dd
+                className="break-all font-medium"
+                data-testid="text-invite-email"
+              >
+                {preview.data.email}
+              </dd>
+            </div>
+          </div>
+          <div className="flex gap-3 py-2.5">
+            <Building2
+              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">Workspace</dt>
+              <dd className="font-medium" data-testid="text-invite-workspace">
+                {preview.data.workspaceName}
+              </dd>
+            </div>
+          </div>
+          <div className="flex gap-3 py-2.5">
+            <UserRound
+              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">Access</dt>
+              <dd className="font-medium" data-testid="text-invite-role">
+                {inviteRoleLabel(preview.data.role)}
+                {preview.data.clientName ? ` · ${preview.data.clientName}` : ""}
+              </dd>
+            </div>
+          </div>
+        </dl>
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="invite-full-name">

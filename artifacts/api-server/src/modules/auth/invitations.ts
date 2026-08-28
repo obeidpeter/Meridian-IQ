@@ -4,6 +4,7 @@ import {
   getDb,
   firmsTable,
   invitationsTable,
+  partiesTable,
   usersTable,
   membershipsTable,
   type Invitation,
@@ -50,6 +51,14 @@ export interface AcceptInvitationInput {
   fullName?: string | null;
 }
 
+export interface InvitationPreview {
+  email: string;
+  role: "firm_admin" | "firm_staff" | "client_user";
+  workspaceName: string;
+  clientName: string | null;
+  expiresAt: Date;
+}
+
 // sha256 of the raw token; what we persist and look up by. Constant-length hex,
 // so the unique index on token_hash never leaks token length.
 export function hashInviteToken(token: string): string {
@@ -73,6 +82,42 @@ function invitationView(row: Invitation) {
 }
 
 export type InvitationView = ReturnType<typeof invitationView>;
+
+// The token is the credential for this deliberately small preview. It gives an
+// invitee recognition before they choose a password without exposing internal
+// ids, inviter identity, or any other tenant data. Invalid, consumed, revoked,
+// and expired tokens intentionally share one response to avoid an invite-state
+// oracle.
+export async function previewInvitation(
+  token: string,
+): Promise<InvitationPreview> {
+  const [invite] = await getDb()
+    .select({
+      email: invitationsTable.email,
+      role: invitationsTable.role,
+      status: invitationsTable.status,
+      expiresAt: invitationsTable.expiresAt,
+      workspaceName: firmsTable.name,
+      clientName: partiesTable.legalName,
+    })
+    .from(invitationsTable)
+    .innerJoin(firmsTable, eq(firmsTable.id, invitationsTable.firmId))
+    .leftJoin(partiesTable, eq(partiesTable.id, invitationsTable.clientPartyId))
+    .where(eq(invitationsTable.tokenHash, hashInviteToken(token)))
+    .limit(1);
+  const invalid = () =>
+    new DomainError("INVALID_INVITE", "Invalid or expired invitation", 400);
+  if (!invite || invite.status !== "pending") throw invalid();
+  if (invite.expiresAt.getTime() <= Date.now()) throw invalid();
+  if (!INVITABLE_ROLES.has(invite.role)) throw invalid();
+  return {
+    email: normalizeEmail(invite.email),
+    role: invite.role as InvitationPreview["role"],
+    workspaceName: invite.workspaceName,
+    clientName: invite.clientName,
+    expiresAt: invite.expiresAt,
+  };
+}
 
 // The firm an invitation targets. A firm-scoped principal always invites into
 // its OWN firm (a foreign firmId is rejected, never silently rewritten). An

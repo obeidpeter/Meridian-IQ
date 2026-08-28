@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.82.0
+ * OpenAPI spec version: 0.83.0
  */
 
 export type ClerkMetricsInferenceCohortsItem = {

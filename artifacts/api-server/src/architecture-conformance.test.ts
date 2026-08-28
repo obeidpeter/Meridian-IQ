@@ -25,16 +25,18 @@ function workspacePackageNames(): string[] {
     }
   }
   names.push(
-    JSON.parse(
-      readFileSync(join(ROOT, "scripts", "package.json"), "utf8"),
-    ).name as string,
+    JSON.parse(readFileSync(join(ROOT, "scripts", "package.json"), "utf8"))
+      .name as string,
   );
   return names;
 }
 
 test("every workspace package is named in the architecture guidebook", () => {
   const names = workspacePackageNames();
-  assert.ok(names.length >= 17, `workspace enumeration looks sane (${names.length})`);
+  assert.ok(
+    names.length >= 17,
+    `workspace enumeration looks sane (${names.length})`,
+  );
   for (const name of names) {
     assert.ok(DOC.includes(name), `docs/architecture.md must mention ${name}`);
   }
@@ -84,4 +86,67 @@ test("the provider client is imported only by the Clerk provider layer (D8)", ()
     [],
     "only modules/clerk/provider.ts may import the provider client",
   );
+});
+
+test("shared usability surfaces do not drift back into app-local copies", () => {
+  const localShortcutDialogs = [
+    join(
+      ROOT,
+      "artifacts",
+      "console",
+      "src",
+      "components",
+      "shortcuts-dialog.tsx",
+    ),
+    join(
+      ROOT,
+      "artifacts",
+      "sme-compliance",
+      "src",
+      "components",
+      "shortcuts-dialog.tsx",
+    ),
+  ];
+  assert.deepEqual(
+    localShortcutDialogs.filter(existsSync),
+    [],
+    "keyboard shortcut help belongs in @workspace/web-ui",
+  );
+
+  for (const app of ["console", "sme-compliance"]) {
+    const appSource = readFileSync(
+      join(ROOT, "artifacts", app, "src", "App.tsx"),
+      "utf8",
+    );
+    const layoutSource = readFileSync(
+      join(ROOT, "artifacts", app, "src", "components", "layout.tsx"),
+      "utf8",
+    );
+    const helpSource = readFileSync(
+      join(ROOT, "artifacts", app, "src", "pages", "help.tsx"),
+      "utf8",
+    );
+
+    assert.match(appSource, /path="\/activity"/, `${app} must route activity`);
+    assert.match(
+      layoutSource,
+      /ShortcutsDialog/,
+      `${app} must use shared shortcuts`,
+    );
+    assert.match(
+      layoutSource,
+      /href: "\/activity"/,
+      `${app} must expose activity`,
+    );
+    assert.match(
+      helpSource,
+      /HelpSearchInput/,
+      `${app} help must remain searchable`,
+    );
+    assert.match(
+      helpSource,
+      /HelpFeedback/,
+      `${app} help must retain feedback`,
+    );
+  }
 });

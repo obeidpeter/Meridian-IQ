@@ -2,6 +2,11 @@ import { useEffect } from "react";
 import { CircleHelp, Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePageTitle } from "@/hooks/use-page-title";
+import {
+  HelpFeedback,
+  HelpSearchInput,
+  useHelpSearch,
+} from "@workspace/web-ui";
 
 // In-app help for the console (Nielsen #10): task-focused, concrete steps,
 // deliberately small. Launch-active firm workflows only — staged desks get
@@ -23,8 +28,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "Add the client, invite their owner, and their workspace is live once they accept.",
     steps: [
-      "From the Portfolio, select \"Add client\" and enter the business's details.",
-      "Go to Team invitations and create a client login for the owner — you share the one-time link yourself.",
+      'From the Portfolio, select "Add client" and enter the business\'s details.',
+      "Go to Invitations and create a client login for the owner — you share the one-time link yourself.",
       "Once they accept and grant consent, their invoices and compliance work appear in your portfolio.",
       "The getting-started checklist on the Portfolio tracks exactly where you are.",
     ],
@@ -35,10 +40,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "MeridianIQ never emails invites — you create a one-time link and share it yourself.",
     steps: [
-      "\"Create invite link\" makes a link that works exactly once and expires after a while.",
+      '"Create invite link" makes a link that works exactly once and expires after a while.',
       "Copy it before dismissing the card — it cannot be shown again.",
       "Send it over a channel you trust (the invitee sets their own password on it).",
-      "Lost or expired? Select \"New link\" on the pending row — the old one stops working.",
+      'Lost or expired? Select "New link" on the pending row — the old one stops working.',
     ],
   },
   {
@@ -48,8 +53,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Each client page shows their invoices, money and setup — tabs appear as features are enabled.",
     steps: [
       "Open any client from the Portfolio (the name is the link).",
-      "\"Today\" lists what needs attention; the flag on an invoice explains why via its \"Why?\" note.",
-      "\"Export data\" downloads the client's full record bundle whenever you need it.",
+      '"Today" lists what needs attention; the flag on an invoice explains why via its "Why?" note.',
+      '"Export data" downloads the client\'s full record bundle whenever you need it.',
     ],
   },
   {
@@ -60,7 +65,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "High: submissions past their statutory window — penalties are accruing.",
       "Medium: deadlines inside the next few days, or repeated failures.",
-      "Low: on track. The \"What does this mean?\" note next to any risk badge explains the ranking in place.",
+      'Low: on track. The "What does this mean?" note next to any risk badge explains the ranking in place.',
     ],
   },
   {
@@ -70,8 +75,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "A per-client checklist that proves the setup is complete — re-checkable at any time.",
     steps: [
       "Start a run from the client's Setup tab; each step verifies itself against the client's real records.",
-      "\"Re-check\" any step after fixing something — the run updates in place.",
-      "\"Close without completing\" ends a run (with a confirmation); you can start a fresh one later.",
+      '"Re-check" any step after fixing something — the run updates in place.',
+      '"Close without completing" ends a run (with a confirmation); you can start a fresh one later.',
     ],
   },
   {
@@ -82,13 +87,14 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Audit & evidence lists the recorded events; nothing there can be edited or deleted.",
       "Export bundles are hash-chained — an auditor can verify them without a MeridianIQ account.",
-      "A client's own data exports live on their client page (\"Export data\").",
+      'A client\'s own data exports live on their client page ("Export data").',
     ],
   },
 ];
 
 export function Help() {
   usePageTitle("Help");
+  const help = useHelpSearch(HELP_TOPICS, "console_help");
 
   useEffect(() => {
     const scrollToTopic = () => {
@@ -115,8 +121,14 @@ export function Help() {
         </p>
       </div>
 
+      <HelpSearchInput
+        query={help.query}
+        onQueryChange={help.setQuery}
+        resultCount={help.filteredTopics.length}
+      />
+
       <nav aria-label="Help topics" className="flex flex-wrap gap-2">
-        {HELP_TOPICS.map((t) => (
+        {help.filteredTopics.map((t) => (
           <a
             key={t.id}
             href={`#${t.id}`}
@@ -129,7 +141,7 @@ export function Help() {
       </nav>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {HELP_TOPICS.map((t) => (
+        {help.filteredTopics.map((t) => (
           <Card key={t.id} id={t.id} className="scroll-mt-24">
             <CardHeader>
               <CardTitle className="flex items-start gap-2 text-base">
@@ -152,7 +164,22 @@ export function Help() {
         ))}
       </div>
 
-      <p className="flex items-center gap-2 border-t pt-5 text-sm text-muted-foreground">
+      {help.filteredTopics.length === 0 && (
+        <section
+          role="status"
+          className="rounded-md border border-dashed p-8 text-center"
+          data-testid="help-no-results"
+        >
+          <h2 className="text-base font-semibold">No matching help topic</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Try a broader term, or contact the advisory team below.
+          </p>
+        </section>
+      )}
+
+      <HelpFeedback surface="console_help" />
+
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <Mail className="size-4 shrink-0" aria-hidden="true" />
         Something these don't cover? Write to&nbsp;
         <a

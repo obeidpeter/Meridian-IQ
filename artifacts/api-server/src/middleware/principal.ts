@@ -58,6 +58,9 @@ export const PUBLIC_PATHS = new Set([
   // Invitation redeem: the single-use token is the credential, so the invitee
   // has no session yet (IDN-01). Firm scoping is enforced by the token lookup.
   "/api/auth/accept-invite",
+  // Invitation preview uses the same bearer token, returning only the account
+  // and workspace context needed to verify the activation target.
+  "/api/auth/invite-preview",
   // Password-reset redeem: same posture (IDN-02) — the caller's session is
   // exactly what was lost, so the single-use token is the credential.
   "/api/auth/reset-password",

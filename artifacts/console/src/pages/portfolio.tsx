@@ -86,6 +86,9 @@ import {
   Minus,
   X,
   Search,
+  Bookmark,
+  BookmarkPlus,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
@@ -107,6 +110,8 @@ import {
   useUrlParam,
   useUrlTab,
   trackUsabilityEvent,
+  useSavedViews,
+  type SavedView,
 } from "@workspace/web-ui";
 
 // Receivables amounts arrive as decimal strings. NGN rows use the shared
@@ -1715,6 +1720,117 @@ const CLIENT_SORTS: readonly ClientSort[] = [
   "deadline",
 ];
 
+function SavedViewsBar({
+  views,
+  onApply,
+  onSave,
+  onRemove,
+}: {
+  views: SavedView[];
+  onApply: (view: SavedView) => void;
+  onSave: (name: string) => void;
+  onRemove: (view: SavedView) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+
+  return (
+    <div
+      className="border-b border-slate-200 bg-slate-50/70 px-4 py-3"
+      data-testid="portfolio-saved-views"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-bold text-slate-600">
+          <Bookmark className="size-3.5" aria-hidden="true" />
+          Saved views
+        </span>
+        {views.map((view) => (
+          <span
+            key={view.id}
+            className="inline-flex min-h-8 max-w-full items-stretch overflow-hidden rounded-md border border-slate-200 bg-white"
+          >
+            <button
+              type="button"
+              className="max-w-48 truncate px-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              onClick={() => onApply(view)}
+              title={`Apply ${view.name}`}
+            >
+              {view.name}
+            </button>
+            <button
+              type="button"
+              className="grid w-8 place-items-center border-l border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              onClick={() => onRemove(view)}
+              aria-label={`Delete saved view ${view.name}`}
+              title={`Delete ${view.name}`}
+            >
+              <Trash2 className="size-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+        {!editing && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 bg-white text-xs"
+            onClick={() => setEditing(true)}
+            data-testid="button-save-portfolio-view"
+          >
+            <BookmarkPlus className="size-3.5" aria-hidden="true" />
+            Save current view
+          </Button>
+        )}
+      </div>
+      {editing && (
+        <form
+          className="mt-2 flex max-w-md gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!name.trim()) return;
+            onSave(name);
+            setName("");
+            setEditing(false);
+          }}
+        >
+          <Input
+            autoFocus
+            value={name}
+            maxLength={48}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="View name, e.g. High risk this week"
+            aria-label="Saved view name"
+            className="h-9"
+            data-testid="input-portfolio-view-name"
+          />
+          <Button type="submit" size="sm" disabled={!name.trim()}>
+            Save
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-9 shrink-0"
+            onClick={() => {
+              setEditing(false);
+              setName("");
+            }}
+            aria-label="Cancel saving view"
+            title="Cancel"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </Button>
+        </form>
+      )}
+      {views.length === 0 && !editing && (
+        <p className="mt-1 text-xs text-slate-500">
+          Keep useful search, risk, and sort combinations one click away.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ClientWorkbenchTable({
   clients,
   totalClients,
@@ -1724,6 +1840,7 @@ function ClientWorkbenchTable({
   onRiskChange,
   sort,
   onSortChange,
+  toolbar,
   compact = false,
 }: {
   clients: ClientRisk[];
@@ -1734,6 +1851,7 @@ function ClientWorkbenchTable({
   onRiskChange: (value: ClientRiskFilter) => void;
   sort: ClientSort;
   onSortChange: (value: ClientSort) => void;
+  toolbar?: ReactNode;
   compact?: boolean;
 }) {
   const zeroResultReported = useRef(false);
@@ -1752,6 +1870,7 @@ function ClientWorkbenchTable({
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      {toolbar}
       <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-extrabold text-slate-950">
@@ -1952,6 +2071,7 @@ function PortfolioHeader({
 
 export function Portfolio() {
   usePageTitle("Client portfolio");
+  const { toast } = useToast();
   const [view, setView] = useUrlTab<PortfolioView>(
     "view",
     "today",
@@ -1968,9 +2088,39 @@ export function Portfolio() {
     "risk",
     CLIENT_SORTS,
   );
+  const [requestedAction, setRequestedAction] = useUrlParam("action");
   const { data: me } = useGetMe();
+  const savedPortfolioViews = useSavedViews(
+    me ? `meridianiq:saved-view-portfolio:${me.userId}` : null,
+  );
   const { data, isLoading, error, refetch } = useGetPortfolio();
   const canImport = canImportClients(me);
+
+  const applySavedView = (saved: SavedView) => {
+    setView("clients");
+    setClientSearch(saved.params.q ?? "");
+    setClientRisk(
+      CLIENT_RISK_FILTERS.includes(saved.params.risk as ClientRiskFilter)
+        ? (saved.params.risk as ClientRiskFilter)
+        : "all",
+    );
+    setClientSort(
+      CLIENT_SORTS.includes(saved.params.sort as ClientSort)
+        ? (saved.params.sort as ClientSort)
+        : "risk",
+    );
+  };
+
+  const savePortfolioView = (name: string) => {
+    const saved = savedPortfolioViews.save(name, {
+      q: clientSearch,
+      risk: clientRisk,
+      sort: clientSort,
+    });
+    if (saved) {
+      toast({ title: `Saved view “${saved.name}”` });
+    }
+  };
 
   // Getting-started checklist state: single-client intake dialog + the
   // localStorage-backed dismissal.
@@ -1978,6 +2128,11 @@ export function Portfolio() {
   const [gettingStartedDismissed, setGettingStartedDismissed] = useState(() =>
     readGettingStartedDismissed(browserStorage()),
   );
+  useEffect(() => {
+    if (requestedAction !== "add-client") return;
+    setAddClientOpen(true);
+    setRequestedAction("");
+  }, [requestedAction, setRequestedAction]);
   // Step 2's evidence. Fetched only while the checklist could still show —
   // a dismissed card costs nothing.
   const { data: invitations } = useListInvitations({
@@ -2382,6 +2537,17 @@ export function Portfolio() {
         >
           {view === "clients" && (
             <ClientWorkbenchTable
+              toolbar={
+                <SavedViewsBar
+                  views={savedPortfolioViews.views}
+                  onApply={applySavedView}
+                  onSave={savePortfolioView}
+                  onRemove={(saved) => {
+                    savedPortfolioViews.remove(saved.id);
+                    toast({ title: `Deleted view “${saved.name}”` });
+                  }}
+                />
+              }
               clients={visibleClients}
               totalClients={data.clientCount}
               search={clientSearch}

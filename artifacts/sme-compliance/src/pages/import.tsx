@@ -30,16 +30,22 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
-import { useFilePicker } from "@workspace/web-ui";
+import {
+  beginOperation,
+  updateOperation,
+  useFilePicker,
+} from "@workspace/web-ui";
 import { RowStatusIcon } from "@/components/row-status-icon";
 import { errorStatus, serverErrorMessage } from "@/lib/errors";
-import {
-  Download,
-  FileSpreadsheet,
-  Upload,
-} from "lucide-react";
+import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { csvCell } from "@workspace/web-ui/csv";
-import { COLUMNS, parseCsv, mapGridRows, isExcel, isLegacyExcel } from "./import-parse";
+import {
+  COLUMNS,
+  parseCsv,
+  mapGridRows,
+  isExcel,
+  isLegacyExcel,
+} from "./import-parse";
 
 // Mirrors MAX_IMPORT_ROWS in the server route (routes/sme/import.ts): the
 // server answers 413 above this, so surface the ceiling before anything is
@@ -104,6 +110,7 @@ export function Import() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const importMut = useImportInvoices();
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
 
   const [raw, setRaw] = useState("");
   const [fileRows, setFileRows] = useState<InvoiceImportRow[] | null>(null);
@@ -112,10 +119,7 @@ export function Import() {
   const [confirmCommit, setConfirmCommit] = useState(false);
   const [commitInterrupted, setCommitInterrupted] = useState(false);
 
-  const rows = useMemo(
-    () => fileRows ?? parseCsv(raw),
-    [fileRows, raw],
-  );
+  const rows = useMemo(() => fileRows ?? parseCsv(raw), [fileRows, raw]);
 
   // Intra-file duplicate invoice numbers. The server never rejects a repeated
   // number — each repeat quietly becomes another draft with the same number —
@@ -170,11 +174,26 @@ export function Import() {
   const run = async (commit: boolean) => {
     if (!me?.clientPartyId || rows.length === 0) return;
     setCommitInterrupted(false);
+    const operation = beginOperation(operationKey, {
+      title: commit ? "Import invoices" : "Validate invoice import",
+      kind: "import",
+      route: "/import",
+      detail: `${rows.length} row${rows.length === 1 ? "" : "s"}`,
+    });
     try {
       const res = await importMut.mutateAsync({
         data: { clientPartyId: me.clientPartyId, commit, rows },
       });
       setResult(res);
+      updateOperation(operationKey, operation?.id, {
+        status: commit && res.invalidCount > 0 ? "partial" : "succeeded",
+        detail: commit
+          ? `${res.createdCount} created, ${res.invalidCount} skipped.`
+          : `${res.validCount} valid, ${res.invalidCount} with issues.`,
+        savedSummary: commit
+          ? `${res.createdCount} invoice draft(s) were created.`
+          : "Validation only; no invoices were created.",
+      });
       if (commit) {
         // Not awaited: a background refetch rejection must not surface as a
         // false "import failed" error after the rows were already created.
@@ -199,7 +218,19 @@ export function Import() {
       if (errorStatus(e) === undefined) {
         if (commit) {
           setCommitInterrupted(true);
+          updateOperation(operationKey, operation?.id, {
+            status: "partial",
+            detail:
+              "The connection ended before the server confirmed the import.",
+            savedSummary:
+              "Outcome unconfirmed. Check the invoice vault before importing again.",
+          });
         } else {
+          updateOperation(operationKey, operation?.id, {
+            status: "failed",
+            detail: "The server could not be reached for validation.",
+            savedSummary: "Nothing was sent or created.",
+          });
           toast({
             title: "Could not validate",
             description:
@@ -211,6 +242,13 @@ export function Import() {
       }
       // An HTTP error means the request's transaction rolled back — nothing
       // was created.
+      updateOperation(operationKey, operation?.id, {
+        status: "failed",
+        detail: commit
+          ? "The server rejected the import."
+          : "Validation failed.",
+        savedSummary: "No invoices were created.",
+      });
       toast({
         title: commit ? "Import failed" : "Validation failed",
         description: commit
@@ -274,275 +312,295 @@ export function Import() {
       />
 
       <RequireClientScope thing="bulk import">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">1. Add your rows</CardTitle>
-        </CardHeader>
-        <CardContent
-          {...filePicker.dropProps}
-          className={
-            "space-y-4 rounded-md " +
-            (filePicker.dragActive
-              ? "outline-dashed outline-2 outline-primary/70 bg-primary/5"
-              : "")
-          }
-        >
-          <div className="flex flex-wrap gap-2">
-            <input
-              type="file"
-              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              {...filePicker.inputProps}
-            />
-            <Button
-              variant="outline"
-              onClick={filePicker.openPicker}
-              disabled={importMut.isPending}
-              data-testid="button-upload"
-            >
-              <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload Excel
-              or CSV
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => download("meridianiq-template.csv", TEMPLATE)}
-            >
-              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV template
-            </Button>
-            <Button variant="ghost" onClick={downloadExcelTemplate}>
-              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Excel template
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground" data-testid="text-import-hint">
-            CSV or Excel (.xlsx, first sheet) with the template’s columns — up
-            to 5,000 rows per import. You can also drag and drop your file
-            anywhere on this card.
-          </p>
-          <div>
-            <Label htmlFor="import-rows" className="sr-only">
-              Paste CSV rows
-            </Label>
-            <Textarea
-              id="import-rows"
-              data-testid="input-csv"
-              className="min-h-[140px] font-mono"
-              placeholder="…or paste CSV rows here (first line = column headers)"
-              value={raw}
-              disabled={importMut.isPending}
-              onChange={(e) => {
-                setRaw(e.target.value);
-                setFileRows(null);
-                setFileName(null);
-                setResult(null);
-                setCommitInterrupted(false);
-              }}
-            />
-          </div>
-          {fileName && (
-            <p className="text-sm text-muted-foreground">
-              Loaded <span className="font-medium">{fileName}</span> — {rows.length} row(s).
-            </p>
-          )}
-          {!fileName && rows.length > 0 && (
-            <p className="text-sm text-muted-foreground" data-testid="text-rows-ready">
-              {rows.length} row(s) ready.
-            </p>
-          )}
-          {overCap && (
-            <p className="text-sm text-destructive" data-testid="text-over-cap">
-              {rows.length.toLocaleString()} rows is over the 5,000-row limit —
-              split the file and import it in batches.
-            </p>
-          )}
-          {duplicateNumbers.length > 0 && (
-            <p
-              className="text-sm text-amber-700 dark:text-amber-400"
-              data-testid="text-duplicate-warning"
-            >
-              Duplicate invoice numbers in these rows:{" "}
-              {duplicateNumbers
-                .slice(0, 3)
-                .map(([n, count]) => `${n} (×${count})`)
-                .join(", ")}
-              {duplicateNumbers.length > 3
-                ? ` and ${duplicateNumbers.length - 3} more`
-                : ""}
-              . Each repeat is imported as a separate draft with the same
-              number — renumber or remove the repeats before importing.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        <h2 className="text-base font-semibold leading-snug">
-          2. Validate and import
-        </h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={() => run(false)}
-            disabled={rows.length === 0 || overCap || importMut.isPending}
-            data-testid="button-validate"
-          >
-            Validate rows
-          </Button>
-          <Button
-            onClick={onCommitClick}
-            disabled={
-              rows.length === 0 ||
-              overCap ||
-              importMut.isPending ||
-              !result ||
-              result.committed
-            }
-            data-testid="button-commit"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" aria-hidden="true" />
-            {importMut.isPending ? "Working…" : "Import valid rows"}
-          </Button>
-          {!result && rows.length > 0 && !overCap && (
-            <p className="text-sm text-muted-foreground">
-              Validate first — commit unlocks after a validation pass.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {commitInterrupted && (
-        <Alert variant="destructive" data-testid="alert-commit-interrupted">
-          <AlertTitle>We couldn't confirm the import</AlertTitle>
-          <AlertDescription>
-            Your connection dropped before the server answered, so the invoices
-            may or may not have been created.{" "}
-            <Link href="/invoices" className="font-medium underline">
-              Check your Invoices list
-            </Link>{" "}
-            before importing again to avoid duplicates.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {importMut.isPending && !result && <Skeleton className="h-40" />}
-
-      <AlertDialog open={confirmCommit} onOpenChange={setConfirmCommit}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Skip {knownInvalidCount} invalid row(s)?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Only valid rows become invoices — the {knownInvalidCount} row(s)
-              with issues are skipped. Afterwards, use “Download failed rows”
-              in the results to fix and re-import just those rows.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Go back and fix</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmCommit(false);
-                run(true);
-              }}
-              data-testid="button-confirm-import"
-            >
-              Import valid rows
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {result && (
         <Card>
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">
-              3. {result.committed ? "Import results" : "Validation preview"}
-            </CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              {result.invalidCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={downloadFailedRows}
-                  data-testid="button-download-failed"
-                >
-                  <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Download
-                  failed rows
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={downloadResults}>
-                <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Download
-                results
-              </Button>
-              {result.committed && result.createdCount > 0 && (
-                <Button asChild size="sm" data-testid="button-view-invoices">
-                  <Link href="/invoices">View invoices</Link>
-                </Button>
-              )}
-            </div>
+          <CardHeader>
+            <CardTitle className="text-base">1. Add your rows</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {result.committed && result.createdCount > 0 && (
-              <p className="text-sm text-muted-foreground" data-testid="text-drafts-note">
-                Imported invoices are saved as drafts — nothing has been sent to
-                FIRS yet. Review and submit them for stamping from the Invoices
-                page.
+          <CardContent
+            {...filePicker.dropProps}
+            className={
+              "space-y-4 rounded-md " +
+              (filePicker.dragActive
+                ? "outline-dashed outline-2 outline-primary/70 bg-primary/5"
+                : "")
+            }
+          >
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="file"
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                {...filePicker.inputProps}
+              />
+              <Button
+                variant="outline"
+                onClick={filePicker.openPicker}
+                disabled={importMut.isPending}
+                data-testid="button-upload"
+              >
+                <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload
+                Excel or CSV
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => download("meridianiq-template.csv", TEMPLATE)}
+              >
+                <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV
+                template
+              </Button>
+              <Button variant="ghost" onClick={downloadExcelTemplate}>
+                <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Excel
+                template
+              </Button>
+            </div>
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="text-import-hint"
+            >
+              CSV or Excel (.xlsx, first sheet) with the template’s columns — up
+              to 5,000 rows per import. You can also drag and drop your file
+              anywhere on this card.
+            </p>
+            <div>
+              <Label htmlFor="import-rows" className="sr-only">
+                Paste CSV rows
+              </Label>
+              <Textarea
+                id="import-rows"
+                data-testid="input-csv"
+                className="min-h-[140px] font-mono"
+                placeholder="…or paste CSV rows here (first line = column headers)"
+                value={raw}
+                disabled={importMut.isPending}
+                onChange={(e) => {
+                  setRaw(e.target.value);
+                  setFileRows(null);
+                  setFileName(null);
+                  setResult(null);
+                  setCommitInterrupted(false);
+                }}
+              />
+            </div>
+            {fileName && (
+              <p className="text-sm text-muted-foreground">
+                Loaded <span className="font-medium">{fileName}</span> —{" "}
+                {rows.length} row(s).
               </p>
             )}
-            <div className="flex flex-wrap gap-4 text-sm">
-              <span data-testid="text-total-count">Total: {result.total}</span>
-              <span
-                className="text-emerald-700 dark:text-emerald-400"
-                data-testid="text-valid-count"
+            {!fileName && rows.length > 0 && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-rows-ready"
               >
-                Valid: {result.validCount}
-              </span>
-              <span className="text-destructive" data-testid="text-invalid-count">
-                Invalid: {result.invalidCount}
-              </span>
-              {result.committed && (
-                <span data-testid="text-created-count">
-                  Created: {result.createdCount}
-                </span>
-              )}
-            </div>
-            <div className="space-y-2">
-              {result.rows.map((r) => (
-                <div
-                  key={r.rowNumber}
-                  className="flex items-start gap-2 text-sm border rounded-md px-3 py-2"
-                >
-                  <RowStatusIcon invalid={r.status === "invalid"} />
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      Row {r.rowNumber}
-                      {r.invoiceNumber ? ` · ${r.invoiceNumber}` : ""}{" "}
-                      <span className="text-muted-foreground font-normal">
-                        (
-                        {r.status === "invalid"
-                          ? "Invalid"
-                          : r.status === "created"
-                            ? "Created"
-                            : "Valid"}
-                        )
-                      </span>
-                    </p>
-                    {r.errors.length > 0 && (
-                      <ul className="text-xs text-destructive mt-1 space-y-0.5">
-                        {r.errors.map((e, i) => (
-                          <li key={i}>
-                            {e.field}: {e.message}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+                {rows.length} row(s) ready.
+              </p>
+            )}
+            {overCap && (
+              <p
+                className="text-sm text-destructive"
+                data-testid="text-over-cap"
+              >
+                {rows.length.toLocaleString()} rows is over the 5,000-row limit
+                — split the file and import it in batches.
+              </p>
+            )}
+            {duplicateNumbers.length > 0 && (
+              <p
+                className="text-sm text-amber-700 dark:text-amber-400"
+                data-testid="text-duplicate-warning"
+              >
+                Duplicate invoice numbers in these rows:{" "}
+                {duplicateNumbers
+                  .slice(0, 3)
+                  .map(([n, count]) => `${n} (×${count})`)
+                  .join(", ")}
+                {duplicateNumbers.length > 3
+                  ? ` and ${duplicateNumbers.length - 3} more`
+                  : ""}
+                . Each repeat is imported as a separate draft with the same
+                number — renumber or remove the repeats before importing.
+              </p>
+            )}
           </CardContent>
         </Card>
-      )}
+
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold leading-snug">
+            2. Validate and import
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => run(false)}
+              disabled={rows.length === 0 || overCap || importMut.isPending}
+              data-testid="button-validate"
+            >
+              Validate rows
+            </Button>
+            <Button
+              onClick={onCommitClick}
+              disabled={
+                rows.length === 0 ||
+                overCap ||
+                importMut.isPending ||
+                !result ||
+                result.committed
+              }
+              data-testid="button-commit"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" aria-hidden="true" />
+              {importMut.isPending ? "Working…" : "Import valid rows"}
+            </Button>
+            {!result && rows.length > 0 && !overCap && (
+              <p className="text-sm text-muted-foreground">
+                Validate first — commit unlocks after a validation pass.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {commitInterrupted && (
+          <Alert variant="destructive" data-testid="alert-commit-interrupted">
+            <AlertTitle>We couldn't confirm the import</AlertTitle>
+            <AlertDescription>
+              Your connection dropped before the server answered, so the
+              invoices may or may not have been created.{" "}
+              <Link href="/invoices" className="font-medium underline">
+                Check your Invoices list
+              </Link>{" "}
+              before importing again to avoid duplicates.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {importMut.isPending && !result && <Skeleton className="h-40" />}
+
+        <AlertDialog open={confirmCommit} onOpenChange={setConfirmCommit}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Skip {knownInvalidCount} invalid row(s)?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Only valid rows become invoices — the {knownInvalidCount} row(s)
+                with issues are skipped. Afterwards, use “Download failed rows”
+                in the results to fix and re-import just those rows.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Go back and fix</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirmCommit(false);
+                  run(true);
+                }}
+                data-testid="button-confirm-import"
+              >
+                Import valid rows
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {result && (
+          <Card>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">
+                3. {result.committed ? "Import results" : "Validation preview"}
+              </CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                {result.invalidCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={downloadFailedRows}
+                    data-testid="button-download-failed"
+                  >
+                    <Download className="w-4 h-4 mr-2" aria-hidden="true" />{" "}
+                    Download failed rows
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={downloadResults}>
+                  <Download className="w-4 h-4 mr-2" aria-hidden="true" />{" "}
+                  Download results
+                </Button>
+                {result.committed && result.createdCount > 0 && (
+                  <Button asChild size="sm" data-testid="button-view-invoices">
+                    <Link href="/invoices">View invoices</Link>
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {result.committed && result.createdCount > 0 && (
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-drafts-note"
+                >
+                  Imported invoices are saved as drafts — nothing has been sent
+                  to FIRS yet. Review and submit them for stamping from the
+                  Invoices page.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span data-testid="text-total-count">
+                  Total: {result.total}
+                </span>
+                <span
+                  className="text-emerald-700 dark:text-emerald-400"
+                  data-testid="text-valid-count"
+                >
+                  Valid: {result.validCount}
+                </span>
+                <span
+                  className="text-destructive"
+                  data-testid="text-invalid-count"
+                >
+                  Invalid: {result.invalidCount}
+                </span>
+                {result.committed && (
+                  <span data-testid="text-created-count">
+                    Created: {result.createdCount}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {result.rows.map((r) => (
+                  <div
+                    key={r.rowNumber}
+                    className="flex items-start gap-2 text-sm border rounded-md px-3 py-2"
+                  >
+                    <RowStatusIcon invalid={r.status === "invalid"} />
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        Row {r.rowNumber}
+                        {r.invoiceNumber ? ` · ${r.invoiceNumber}` : ""}{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (
+                          {r.status === "invalid"
+                            ? "Invalid"
+                            : r.status === "created"
+                              ? "Created"
+                              : "Valid"}
+                          )
+                        </span>
+                      </p>
+                      {r.errors.length > 0 && (
+                        <ul className="text-xs text-destructive mt-1 space-y-0.5">
+                          {r.errors.map((e, i) => (
+                            <li key={i}>
+                              {e.field}: {e.message}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </RequireClientScope>
     </div>
   );

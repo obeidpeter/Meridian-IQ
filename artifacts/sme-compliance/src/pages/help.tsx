@@ -3,6 +3,11 @@ import { CircleHelp, Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { usePageTitle } from "@/hooks/use-page-title";
+import {
+  HelpFeedback,
+  HelpSearchInput,
+  useHelpSearch,
+} from "@workspace/web-ui";
 
 // In-app help (Nielsen #10): task-focused, concrete steps, deliberately
 // small. Topics cover the launch-active surfaces only — a staged feature
@@ -26,15 +31,15 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "An invoice starts as a draft, gets checked, then goes for stamping.",
     steps: [
-      "Go to Invoices and select \"New invoice\".",
+      'Go to Invoices and select "New invoice".',
       "Pick the customer, add your line items and check the totals in the sidebar.",
-      "Select \"Create invoice\" — it is saved as a draft in your vault.",
-      "On the invoice page, select \"Submit for stamping\" when you are ready. We check it first and show anything that needs fixing.",
+      'Select "Create invoice" — it is saved as a draft in your vault.',
+      'On the invoice page, select "Submit for stamping" when you are ready. We check it first and show anything that needs fixing.',
     ],
   },
   {
     id: "stamping",
-    title: "What \"stamping\" means",
+    title: 'What "stamping" means',
     summary:
       "Stamping is FIRS officially registering your invoice. The stamp is your proof.",
     steps: [
@@ -51,7 +56,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "A rejected invoice shows the reason and a form to fix it — nothing is lost.",
     steps: [
       "Open the invoice. The red card explains what FIRS rejected and why.",
-      "Select \"Fix & resubmit\", correct the highlighted details and send it again.",
+      'Select "Fix & resubmit", correct the highlighted details and send it again.',
       "If the same rejection keeps coming back, ask your accountant — the reason text tells them exactly what to check.",
     ],
   },
@@ -59,9 +64,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "duplicate-invoice",
     title: "Repeat a previous invoice",
     summary:
-      "\"New from this invoice\" copies an invoice into a fresh draft so you never retype regular work.",
+      '"New from this invoice" copies an invoice into a fresh draft so you never retype regular work.',
     steps: [
-      "Open the invoice you want to repeat and select \"New from this invoice\".",
+      'Open the invoice you want to repeat and select "New from this invoice".',
       "A new draft opens with the same customer, lines and currency — today's date, and a blank invoice number for you to set.",
       "Adjust anything that changed, then create and submit as usual.",
     ],
@@ -73,9 +78,9 @@ export const HELP_TOPICS: HelpTopic[] = [
       "The importer checks every row before anything is created — up to 5,000 rows.",
     steps: [
       "Go to Import and download the CSV or Excel template.",
-      "Fill it in (or paste rows directly), then select \"Validate rows\".",
+      'Fill it in (or paste rows directly), then select "Validate rows".',
       "Fix anything marked invalid — you can download the failed rows, correct them and try again.",
-      "Select \"Import valid rows\". Imported invoices are drafts: submit them from the vault when ready.",
+      'Select "Import valid rows". Imported invoices are drafts: submit them from the vault when ready.',
     ],
   },
   {
@@ -85,8 +90,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       "The invoice form saves to this device as you type; drafts in the vault live on the server.",
     steps: [
       "While you fill in a new invoice, it is saved on this device automatically — closing the tab is safe on this same browser.",
-      "\"Discard draft\" clears it (with an Undo in case you slip).",
-      "Once you select \"Create invoice\", the draft is in your vault from any device.",
+      '"Discard draft" clears it (with an Undo in case you slip).',
+      'Once you select "Create invoice", the draft is in your vault from any device.',
     ],
   },
   {
@@ -96,7 +101,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "VAT you charged on sales minus VAT you paid on purchases, month by month.",
     steps: [
       "The VAT page adds up output VAT from your issued invoices and input VAT from supplier bills.",
-      "\"Verified\" figures come from stamped documents; unverified ones still need their stamp.",
+      '"Verified" figures come from stamped documents; unverified ones still need their stamp.',
       "The page shows when the next return is due — your accountant files it, this is your live view.",
     ],
   },
@@ -129,7 +134,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "The calendar computes your statutory deadlines from your own invoice book — Lagos time.",
     steps: [
       "The Calendar page lists what is due, with plain labels: Due today, Overdue, In N days.",
-      "The dashboard's \"Next deadline\" card always shows the closest one.",
+      'The dashboard\'s "Next deadline" card always shows the closest one.',
       "Alert settings control how you are reminded as delivery channels roll out.",
     ],
   },
@@ -137,6 +142,7 @@ export const HELP_TOPICS: HelpTopic[] = [
 
 export function Help() {
   usePageTitle("Help");
+  const help = useHelpSearch(HELP_TOPICS, "sme_help");
 
   // Deep links (/help#topic) land with the topic on screen; the command menu
   // and the contextual "learn more" links rely on this. hashchange covers
@@ -159,8 +165,14 @@ export function Help() {
         description="Short answers for the work this app does today. Your accountant is the right contact for tax questions about your business."
       />
 
+      <HelpSearchInput
+        query={help.query}
+        onQueryChange={help.setQuery}
+        resultCount={help.filteredTopics.length}
+      />
+
       <nav aria-label="Help topics" className="flex flex-wrap gap-2">
-        {HELP_TOPICS.map((t) => (
+        {help.filteredTopics.map((t) => (
           <a
             key={t.id}
             href={`#${t.id}`}
@@ -173,7 +185,7 @@ export function Help() {
       </nav>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {HELP_TOPICS.map((t) => (
+        {help.filteredTopics.map((t) => (
           <Card key={t.id} id={t.id} className="scroll-mt-24">
             <CardHeader>
               <CardTitle className="flex items-start gap-2 text-base">
@@ -198,7 +210,24 @@ export function Help() {
         ))}
       </div>
 
-      <p className="flex items-center gap-2 border-t border-slate-200 pt-5 text-sm text-muted-foreground">
+      {help.filteredTopics.length === 0 && (
+        <section
+          role="status"
+          className="rounded-md border border-dashed border-slate-300 p-8 text-center"
+          data-testid="help-no-results"
+        >
+          <h2 className="text-base font-semibold text-slate-900">
+            No matching help topic
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Try a broader term, or ask your accountant using the contact below.
+          </p>
+        </section>
+      )}
+
+      <HelpFeedback surface="sme_help" />
+
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <Mail className="size-4 shrink-0" aria-hidden="true" />
         Stuck on something these don't cover? Ask your accountant — or write
         to&nbsp;

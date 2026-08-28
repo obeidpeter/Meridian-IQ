@@ -190,7 +190,12 @@ Decision: tables come from `drizzle push`; RLS policies/triggers come from
 numbered guardrail migrations in `lib/db/src/migrations` with rollback tests.
 Consequences: a new tenant table is not done until its policy migration
 exists; scratch databases need push THEN migrate, in that order; production
-applies migrations manually, not at boot.
+table changes are applied by the release procedure, while every production
+boot applies the hand-written guardrail migrations idempotently under an
+advisory lock and then verifies coverage before readiness. The manual
+`@workspace/db migrate` command remains the pre-deploy/recovery path; boot is
+the fail-closed safety net for RLS, trigger, and index guardrails that Publish
+cannot express.
 
 ### D6 — Prefix-mounted SPAs on one origin
 

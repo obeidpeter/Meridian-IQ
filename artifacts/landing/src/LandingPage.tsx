@@ -1,4 +1,10 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -313,6 +319,7 @@ function BrandLockup({ inverted = false }: { inverted?: boolean }) {
 
 function LandingNav() {
   const [open, setOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeMenu = () => setOpen(false);
   const links = [
     ["What it does", "#platform"],
@@ -322,6 +329,19 @@ function LandingNav() {
     ["Workspaces", "#workspaces"],
     ["Penalty calculator", "/penalty-calculator/"],
   ];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const dismissMenu = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      requestAnimationFrame(() => menuButtonRef.current?.focus());
+    };
+
+    document.addEventListener("keydown", dismissMenu);
+    return () => document.removeEventListener("keydown", dismissMenu);
+  }, [open]);
 
   return (
     <header className="relative z-20 border-b border-white/15 bg-[#071a1c]">
@@ -356,6 +376,7 @@ function LandingNav() {
         </div>
 
         <button
+          ref={menuButtonRef}
           type="button"
           className="grid size-10 place-items-center rounded-md border border-white/20 text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 lg:hidden"
           aria-label={open ? "Close navigation" : "Open navigation"}

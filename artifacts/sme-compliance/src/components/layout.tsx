@@ -1,14 +1,17 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
+  Activity,
   Bell,
   BarChart3,
   Bot,
   Calendar as CalendarIcon,
   CalendarCheck2,
+  ChevronDown,
   CircleHelp,
   CircleUserRound,
   FileCheck2,
+  FilePlus,
   FileText,
   Grid2x2,
   HandCoins,
@@ -28,6 +31,7 @@ import {
   Sparkles,
   Store,
   Upload,
+  Pin,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
@@ -44,13 +48,12 @@ import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
   readRecentItems,
+  ShortcutsDialog,
+  type ShortcutRow,
+  usePinnedItems,
   useGlobalShortcuts,
   type CommandItem,
 } from "@workspace/web-ui";
-import {
-  ShortcutsDialog,
-  type ShortcutRow,
-} from "@/components/shortcuts-dialog";
 import { HELP_TOPICS } from "@/pages/help";
 
 type NavLink = {
@@ -76,7 +79,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/month-end", label: "Month-end", icon: CalendarCheck2 },
       { href: "/invoices", label: "Invoices", icon: FileText },
-      { href: "/bills", label: "Bills", icon: Receipt, feature: "money_analytics" },
+      {
+        href: "/bills",
+        label: "Bills",
+        icon: Receipt,
+        feature: "money_analytics",
+      },
       {
         href: "/collections",
         label: "Collections",
@@ -156,9 +164,9 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/calendar", label: "Calendar", icon: CalendarIcon },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/notifications", label: "Notifications", icon: Inbox },
+      { href: "/activity", label: "Activity", icon: Activity },
       { href: "/alerts", label: "Alert settings", icon: Bell },
       { href: "/consent", label: "Consent", icon: ShieldCheck },
-      { href: "/help", label: "Help", icon: CircleHelp },
     ],
   },
 ];
@@ -238,6 +246,27 @@ function NavLinks({
   onSignOut: () => void;
   signingOut: boolean;
 }) {
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const [hasMoreTools, setHasMoreTools] = useState(false);
+
+  useEffect(() => {
+    const element = navScrollRef.current;
+    if (!element) return;
+    const update = () =>
+      setHasMoreTools(
+        element.scrollTop + element.clientHeight < element.scrollHeight - 4,
+      );
+    update();
+    window.addEventListener("resize", update);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(element);
+    return () => {
+      window.removeEventListener("resize", update);
+      observer?.disconnect();
+    };
+  }, [groups]);
+
   return (
     <nav className="flex h-full min-h-0 flex-col bg-[#071a1c] px-3 py-5 text-white">
       <div className="mb-6 px-2">
@@ -252,36 +281,66 @@ function NavLinks({
         </div>
       </div>
 
-      <div className="workspace-nav-scroll min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
-        {groups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-1">
-            <p className="px-3 pb-1.5 text-xs font-bold text-white/70">
-              {group.title}
-            </p>
-            {group.links.map((link) => {
-              const Icon = link.icon;
-              const active = isLinkActive(location, link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={onNavigate}
-                  data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
-                  className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] ${
-                    active
-                      ? "bg-lime-300 font-bold text-[#071a1c]"
-                      : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
-                  }`}
-                >
-                  <Icon className="size-[1.1rem] shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 truncate" title={link.label}>
-                    {link.label}
-                  </span>
-                </Link>
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={navScrollRef}
+          onScroll={() => {
+            const element = navScrollRef.current;
+            if (element) {
+              setHasMoreTools(
+                element.scrollTop + element.clientHeight <
+                  element.scrollHeight - 4,
               );
-            })}
-          </div>
-        ))}
+            }
+          }}
+          className="workspace-nav-scroll h-full space-y-6 overflow-y-auto pr-1"
+        >
+          {groups.map((group) => (
+            <div key={group.title} className="flex flex-col gap-1">
+              <p className="px-3 pb-1.5 text-xs font-bold text-white/70">
+                {group.title}
+              </p>
+              {group.links.map((link) => {
+                const Icon = link.icon;
+                const active = isLinkActive(location, link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={onNavigate}
+                    data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] ${
+                      active
+                        ? "bg-lime-300 font-bold text-[#071a1c]"
+                        : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
+                    }`}
+                  >
+                    <Icon
+                      className="size-[1.1rem] shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 truncate" title={link.label}>
+                      {link.label}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        {hasMoreTools && (
+          <button
+            type="button"
+            className="absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-[#071a1c] via-[#071a1c]/95 to-transparent pb-1 text-[11px] font-bold text-lime-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-lime-300"
+            onClick={() =>
+              navScrollRef.current?.scrollBy({ top: 180, behavior: "smooth" })
+            }
+            data-testid="button-more-workspace-tools"
+          >
+            More tools
+            <ChevronDown className="ml-1 size-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <div className="mt-auto space-y-1 border-t border-white/10 pt-4">
@@ -309,6 +368,19 @@ function NavLinks({
             </div>
           </div>
         )}
+        <Link
+          href="/help"
+          onClick={onNavigate}
+          className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] ${
+            isLinkActive(location, "/help")
+              ? "bg-lime-300 font-bold text-[#071a1c]"
+              : "font-medium text-white/65 hover:bg-white/8 hover:text-white"
+          }`}
+          data-testid="nav-help"
+        >
+          <CircleHelp className="size-[1.1rem]" aria-hidden="true" />
+          Help
+        </Link>
         <a
           href="/login"
           className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
@@ -361,7 +433,10 @@ export function Layout({ children }: { children: ReactNode }) {
         const key = storage.key(index);
         if (
           key?.startsWith("meridianiq:invoice-draft") ||
-          key?.startsWith("meridianiq:recent-")
+          key?.startsWith("meridianiq:recent-") ||
+          key?.startsWith("meridianiq:pinned-") ||
+          key?.startsWith("meridianiq:saved-view-") ||
+          key?.startsWith("meridianiq:operations:")
         ) {
           storage.removeItem(key);
         }
@@ -411,6 +486,20 @@ export function Layout({ children }: { children: ReactNode }) {
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
   const pageTitle = activeLink?.label ?? roleContext.title;
+  const pinnedInvoices = usePinnedItems(
+    me ? `meridianiq:pinned-invoices:${me.userId}` : null,
+  );
+  const pinnedInvoiceCommands: CommandItem[] = pinnedInvoices.items.map(
+    (item) => ({
+      id: `sme-command-pinned-${item.id}`,
+      label: item.label,
+      description: item.detail ?? "Open this pinned invoice.",
+      group: "Pinned invoices",
+      icon: <Pin className="size-4" aria-hidden="true" />,
+      keywords: ["pinned", "invoice"],
+      onSelect: () => navigate(`/invoices/${item.id}`),
+    }),
+  );
   // Recently opened invoices lead the menu (recognition over recall): the
   // record you were just working on beats re-finding it through the vault.
   const recentInvoices: CommandItem[] = (
@@ -438,8 +527,39 @@ export function Layout({ children }: { children: ReactNode }) {
       window.location.hash = topic.id;
     },
   }));
+  const actionItems: CommandItem[] = [
+    ...(canCreateInvoice
+      ? [
+          {
+            id: "sme-action-create-invoice",
+            label: "Create invoice",
+            description: "Start a new invoice draft.",
+            group: "Actions",
+            icon: <FilePlus className="size-4" aria-hidden="true" />,
+            keywords: ["new", "invoice", "draft"],
+            shortcut: "N",
+            onSelect: () => navigate("/invoices/new"),
+          },
+        ]
+      : []),
+    ...(capabilities.has("clerk.capture") && features.has("clerk_ai")
+      ? [
+          {
+            id: "sme-action-send-clerk",
+            label: "Send document to Clerk",
+            description: "Start a Clerk invoice or notice submission.",
+            group: "Actions",
+            icon: <Sparkles className="size-4" aria-hidden="true" />,
+            keywords: ["capture", "upload", "invoice", "notice"],
+            onSelect: () => navigate("/clerk"),
+          },
+        ]
+      : []),
+  ];
   const commandItems: CommandItem[] = [
+    ...pinnedInvoiceCommands,
     ...recentInvoices,
+    ...actionItems,
     ...groups.flatMap((group) =>
       group.links.map((link) => {
         const Icon = link.icon;
