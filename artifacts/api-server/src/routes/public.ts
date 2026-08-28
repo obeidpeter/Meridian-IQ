@@ -47,7 +47,7 @@ router.post("/public/usability-events", async (req, res): Promise<void> => {
     sendThrottled429(res, retryAfter, "Too many events");
     return;
   }
-  const body = parseOrThrow(RecordUsabilityEventBody, req.body);
+  const body = parseOrThrow(RecordUsabilityEventBody.strict(), req.body);
   recordUsabilityEvent(body.event, body.surface);
   res.status(204).end();
 });
