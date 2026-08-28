@@ -4,8 +4,9 @@ Nigeria-first e-invoicing **compliance** platform: accounting firms and their
 SME clients prepare, validate, stamp (via FIRS/MBS rails), and reconcile
 invoices, with an operator "Compliance Desk" and an AI intake assistant
 ("Clerk"). This file is the lean index — the deep references are
-`docs/clerk-ai.md` (the AI assistant) and `docs/platform.md` (tenancy, auth,
-background work, rails, exports).
+`docs/clerk-ai.md` (the AI assistant), `docs/platform.md` (tenancy, auth,
+background work, rails, exports) and `docs/architecture.md` (the C4 context
+and container maps plus the decision log — start there for the big picture).
 
 ## Monorepo layout (pnpm workspaces)
 
