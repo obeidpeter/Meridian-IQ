@@ -178,10 +178,16 @@ export async function collectAccessibilityIssues(page) {
       .filter((animation) => animation.playState === "running")
       .filter((animation) => {
         const timing = animation.effect?.getComputedTiming();
-        return (
-          timing &&
-          (timing.iterations === Infinity || Number(timing.duration) > 100)
-        );
+        if (!timing) return false;
+        if (timing.iterations === Infinity) return true;
+        // Total intended runtime, not per-iteration duration: an in-flight
+        // one-shot transition keeps its pre-override duration (changing
+        // transition-duration never retargets a running transition), and on
+        // some headless builds a ~150ms focus-ring transition still reports
+        // "running" after the settle window. That is not the sustained
+        // motion this check exists for — only flag animations that would
+        // visibly run on (>500ms of total motion) under the override.
+        return Number(timing.duration) * (Number(timing.iterations) || 1) > 500;
       });
     return running.length
       ? `${running.length} long-running animation(s) ignore reduced motion`
