@@ -45,26 +45,26 @@ const CONTACT_MAILTO = `mailto:${ADVISORY_EMAIL}?subject=${encodeURIComponent(
 const PLATFORM_FEATURES = [
   {
     icon: FileCheck2,
-    title: "Move compliance on reliable rails",
-    body: "Validate, submit, retry and vault Nigerian e-invoices from one controlled workflow.",
+    title: "Send invoices the right way",
+    body: "We check each invoice against FIRS rules, submit it, retry if the connection drops, and save the stamped copy for you.",
     tone: "bg-teal-100 text-teal-800",
   },
   {
     icon: BadgeCheck,
-    title: "Build evidence into the transaction",
-    body: "Keep stamps, consent and settlement evidence attached to the invoice record from day one.",
+    title: "Keep the proof attached",
+    body: "The official stamp, the payment record and your sharing permissions stay attached to each invoice.",
     tone: "bg-blue-100 text-blue-800",
   },
   {
     icon: BarChart3,
-    title: "See the risk and the cash",
-    body: "Track deadlines, portfolio exceptions and receivables aging before they compound.",
+    title: "See deadlines and money early",
+    body: "Know what is due, what needs attention and who owes you — before it becomes a problem.",
     tone: "bg-amber-100 text-amber-900",
   },
   {
     icon: Bot,
-    title: "Catch the work at source",
-    body: "MeridianIQ Clerk — rolling out to firms — turns voice notes, scans and messages into structured cases that stay under human review.",
+    title: "Let Clerk do the typing",
+    body: "Clerk — our assistant, coming to firms soon — turns voice notes, photos and messages into draft invoices. A person always checks before anything is saved.",
     tone: "bg-lime-100 text-lime-900",
   },
 ];
@@ -73,14 +73,14 @@ const WORKFLOW = [
   {
     number: "01",
     icon: ReceiptText,
-    title: "Capture",
-    body: "Create invoices directly or import them in bulk with row-level outcomes.",
+    title: "Create",
+    body: "Create an invoice, or upload many at once from a spreadsheet.",
   },
   {
     number: "02",
     icon: ScanLine,
-    title: "Review",
-    body: "Resolve field, party and policy issues before anything is submitted.",
+    title: "Check",
+    body: "We point out anything wrong so you can fix it before it goes out.",
   },
   {
     number: "03",
@@ -88,22 +88,22 @@ const WORKFLOW = [
     title: "Stamp",
     // First use of the acronyms on the page — expand them here; the evidence-
     // chain mock further down may then use the short forms.
-    body: `Transmit with retry and failover, then preserve the ${IRN_EXPANSION} (IRN), ${CSID_EXPANSION} (CSID) and artifact.`,
+    body: `We send it to FIRS and save the official stamp — the ${IRN_EXPANSION} (IRN) and ${CSID_EXPANSION} (CSID) — as your proof.`,
   },
   {
     number: "04",
     icon: Landmark,
-    title: "Settle",
-    body: "Attach settlement evidence to a trusted receivable as it arrives.",
+    title: "Get paid",
+    body: "When money comes in, the payment record attaches to the invoice.",
   },
 ];
 
 const WORKSPACES = [
   {
     icon: ReceiptText,
-    audience: "For owners and finance teams",
+    audience: "For business owners and their teams",
     title: "SME Compliance",
-    body: "Guided invoicing, bulk import, VAT positions and deadline alerts on one focused workspace.",
+    body: "Create invoices, upload in bulk, see your VAT position and never miss a deadline.",
     accent: "text-teal-700",
     line: "bg-teal-600",
     href: "/login?returnTo=/app/",
@@ -111,9 +111,9 @@ const WORKSPACES = [
   },
   {
     icon: Building2,
-    audience: "For firms and operators",
+    audience: "For accounting firms",
     title: "Accountant Console",
-    body: "Portfolio risk, receivables aging, firm invitations and exportable audit evidence.",
+    body: "Watch every client's compliance, invite your team and clients, and download the records you need.",
     accent: "text-indigo-700",
     line: "bg-indigo-600",
     href: "/login?returnTo=/console/",
@@ -121,9 +121,9 @@ const WORKSPACES = [
   },
   {
     icon: Store,
-    audience: "Coming soon for buyer finance teams",
+    audience: "Coming soon for buyer teams",
     title: "Buyer Rails",
-    body: "Confirm supplier invoices, flag payments, protect input VAT and monitor supplier quality.",
+    body: "Check and confirm supplier invoices before you pay, and protect your VAT claims.",
     accent: "text-blue-700",
     line: "bg-blue-600",
     href: "#roadmap",
@@ -131,9 +131,9 @@ const WORKSPACES = [
   },
   {
     icon: Calculator,
-    audience: "Public, no account needed",
+    audience: "Free — no account needed",
     title: "Penalty Calculator",
-    body: "Estimate exposure under sections 103 and 104 before non-compliance disrupts the business.",
+    body: "See what late or missing e-invoicing could cost your business in fines.",
     accent: "text-amber-700",
     line: "bg-amber-500",
     href: "/penalty-calculator/",
@@ -165,37 +165,37 @@ const PRODUCT_VIEWS: Array<{
   {
     key: "sme",
     label: "SME",
-    eyebrow: "Compliance workspace",
-    title: "Know what is ready, at risk and already evidenced.",
-    body: "SME teams get a focused operating view for invoices, submission deadlines, VAT positions and settlement evidence without needing to learn the underlying rail complexity.",
+    eyebrow: "For business owners",
+    title: "Know what is done, what is due and what needs you.",
+    body: "A simple view of your invoices, deadlines, VAT position and payments — without needing to learn the tax rules behind them.",
     bullets: [
-      "Local validation and draft recovery",
-      "Bulk import with row-level outcomes",
-      "Deadline alerts and VAT position visibility",
+      "Mistakes caught before you submit",
+      "Upload many invoices at once",
+      "Deadline reminders and a clear VAT view",
     ],
   },
   {
     key: "firm",
     label: "Firm",
-    eyebrow: "Accountant console",
-    title: "Run the whole client book from one risk-ranked view.",
-    body: "Firms can onboard teams, see receivables and compliance exposure across clients, resolve exceptions and export the evidence behind every decision.",
+    eyebrow: "For accounting firms",
+    title: "Manage every client from one screen.",
+    body: "See which clients need attention, invite new ones, fix problems early and download the records behind every decision.",
     bullets: [
-      "Self-serve firm and client invitations",
-      "Bulk submission and operator queues",
-      "Portfolio receivables and risk rollups",
+      "Invite your team and clients yourself",
+      "Submit many invoices at once",
+      "One view of risk and unpaid invoices across clients",
     ],
   },
   {
     key: "clerk",
     label: "Clerk AI",
-    eyebrow: "Governed AI intake",
-    title: "Turn unstructured requests into review-ready work.",
-    body: "Clerk captures what arrived, extracts the useful facts and shows the reviewer exactly what needs a decision. Every case keeps its source, status and correction history. Rolling out to firms after launch.",
+    eyebrow: "Your assistant",
+    title: "Send a voice note. Get a draft invoice.",
+    body: "Clerk listens to voice notes and reads photos and messages, then turns them into drafts. It shows what it found, and a person approves before anything is saved. Coming to firms after launch.",
     bullets: [
-      "Voice, document and message intake",
-      "Human approval before action",
-      "Corrections feed measurable quality controls",
+      "Works from voice notes, photos and messages",
+      "A person approves every action",
+      "Every correction makes it better",
     ],
     status: "rolling-out",
   },
@@ -203,22 +203,22 @@ const PRODUCT_VIEWS: Array<{
     key: "buyer",
     label: "Buyer",
     eyebrow: "Buyer Rails",
-    title: "Verify supplier invoices before VAT exposure grows.",
-    body: "Buyer finance teams will confirm, query or reject invoices, record payment signals and monitor supplier compliance from a dedicated workspace. Arriving in a later release.",
+    title: "Check supplier invoices before you pay.",
+    body: "Buyer teams will confirm or query supplier invoices, record payments and see which suppliers keep getting it right. Arriving in a later release.",
     bullets: [
-      "Formal confirmation decisions",
-      "Supplier quality scoreboard",
-      "Payment flags linked to the invoice history",
+      "Confirm or query each invoice",
+      "See which suppliers get it right",
+      "Payment notes saved with each invoice",
     ],
     status: "coming-soon",
   },
 ];
 
 const PLATFORM_FACTS = [
-  ["5,000", "rows per bulk import"],
-  ["2", "submission rails with failover"],
-  ["3", "client-owned consent layers"],
-  ["100%", "append-only audit history"],
+  ["5,000", "invoices in one upload"],
+  ["2", "ways to submit, with backup"],
+  ["3", "data-sharing controls you own"],
+  ["100%", "of your history kept — nothing erased"],
 ];
 
 // The staged release plan, in public terms (the engineering source of truth
@@ -229,14 +229,14 @@ const ROADMAP_STAGES = [
     badge: "Live today",
     badgeTone: "border-emerald-200 bg-emerald-50 text-emerald-800",
     iconTone: "bg-emerald-100 text-emerald-800",
-    title: "The compliance core",
-    body: "Proven end to end before anything else ships. Every later stage lands on this same invoice record.",
+    title: "Invoicing done right",
+    body: "The heart of the product, live and proven. Everything that comes later builds on these same records.",
     items: [
-      "Invoice lifecycle: draft, validate, stamp, vault",
-      "Advisory engagements and client onboarding",
-      "Client-owned consent ledger",
-      "Append-only, exportable audit evidence",
-      "Bulk import, VAT positions and deadlines",
+      "Create, check, stamp and store invoices",
+      "Your accountant sets you up and works with you",
+      "You control what your data is used for",
+      "A full history you can download anytime",
+      "Bulk upload, VAT view and deadlines",
     ],
   },
   {
@@ -244,14 +244,14 @@ const ROADMAP_STAGES = [
     badge: "Rolling out",
     badgeTone: "border-amber-200 bg-amber-50 text-amber-900",
     iconTone: "bg-amber-100 text-amber-900",
-    title: "The firm's daily desks",
-    body: "Activated in stages as firms onboard, on the record the core already keeps.",
+    title: "More tools for your accountant",
+    body: "Switched on step by step as firms come on board — no waiting, no redoing.",
     items: [
-      "Statutory desks: filings, WHT, authority notices",
-      "Payables and recurring invoicing",
-      "Monthly client compliance packs",
-      "Buyer confirmations and stamp verification",
-      "Clerk AI intake under human review",
+      "Tax filings, withholding tax and authority notices",
+      "Supplier bills and repeat invoices",
+      "A monthly report pack for your business",
+      "Buyer confirmations and stamp checks",
+      "Clerk, the assistant — always human-checked",
     ],
   },
   {
@@ -259,14 +259,14 @@ const ROADMAP_STAGES = [
     badge: "On the horizon",
     badgeTone: "border-slate-200 bg-slate-100 text-slate-700",
     iconTone: "bg-slate-200 text-slate-700",
-    title: "Scale and rails",
-    body: "The connected economy around the invoice: banks, buyers and partners.",
+    title: "Further ahead",
+    body: "Connecting banks, buyers and partners around your invoices.",
     items: [
-      "Bank reconciliation and statement feeds",
-      "B2C 24-hour reporting clocks",
-      "Buyer Rails workspace",
-      "White-label, certification and ERP connectors",
-      "Credit readiness and financing rails",
+      "Match bank statements to invoices",
+      "Same-day reporting for consumer sales",
+      "A workspace for buyers",
+      "Firm branding, training and accounting-software links",
+      "Get ready for loans and financing",
     ],
   },
 ];
@@ -301,7 +301,7 @@ function BrandLockup({ inverted = false }: { inverted?: boolean }) {
             (inverted ? "text-white/65" : "text-slate-500")
           }
         >
-          Compliance intelligence
+          Invoicing, done right
         </span>
       </span>
     </a>
@@ -312,10 +312,10 @@ function LandingNav() {
   const [open, setOpen] = useState(false);
   const closeMenu = () => setOpen(false);
   const links = [
-    ["Platform", "#platform"],
+    ["What it does", "#platform"],
     ["Product tour", "#product-tour"],
     ["How it works", "#workflow"],
-    ["Roadmap", "#roadmap"],
+    ["What's coming", "#roadmap"],
     ["Workspaces", "#workspaces"],
     ["Penalty calculator", "/penalty-calculator/"],
   ];
@@ -861,13 +861,12 @@ function ProductTour() {
             Product tour
           </p>
           <h2 className="landing-display mt-4 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
-            One platform, tuned to the decision in front of you.
+            One platform. A clear view for each person.
           </h2>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">
-            Move between compliance, portfolio oversight, AI intake and buyer
-            verification without rebuilding the invoice history at each
-            handoff. Views marked rolling out or coming soon light up in later
-            releases — on the same record.
+            Business owners, accountants and buyers each get their own view of
+            the same records. Views marked "Rolling out" or "Coming soon"
+            arrive in later releases.
           </p>
         </div>
 
@@ -979,18 +978,18 @@ export default function LandingPage() {
           <div className="max-w-4xl">
             <div className="mb-6 inline-flex items-center gap-2 border-l-2 border-lime-300 pl-3 text-sm font-semibold text-lime-200">
               <ShieldCheck className="size-4" aria-hidden="true" />
-              Nigerian e-invoicing, built around evidence
+              E-invoicing for Nigerian businesses
             </div>
             <h1 className="landing-display text-5xl font-extrabold leading-none text-white sm:text-7xl lg:text-8xl">
               MeridianIQ
             </h1>
             <p className="landing-display mt-5 max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-5xl">
-              Turn every invoice into evidence.
+              Send correct invoices. Keep the proof.
             </p>
             <p className="mt-6 max-w-2xl text-base leading-7 text-white/80 sm:text-lg">
-              Create and validate invoices, move them through Nigerian
-              compliance rails and keep the proof auditors and finance teams
-              need on one trusted record.
+              Create invoices, check them against FIRS rules and send them for
+              stamping. Everything you might need to show an auditor stays
+              saved in one place.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -1020,9 +1019,9 @@ export default function LandingPage() {
 
             <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/75">
               {[
-                "Human-controlled, evidence-first",
-                "Role and tenant aware",
-                "Traceable from intake to settlement",
+                "You approve every important step",
+                "Each person sees only their own work",
+                "A full history for every invoice",
               ].map((item) => (
                 <span key={item} className="inline-flex items-center gap-2">
                   <Check className="size-4 text-lime-300" aria-hidden="true" />
@@ -1061,18 +1060,18 @@ export default function LandingPage() {
                   One connected platform
                 </p>
                 <h2 className="landing-display mt-4 max-w-lg text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
-                  Less chasing. More controlled movement.
+                  Less chasing. Fewer surprises.
                 </h2>
                 <p className="mt-5 max-w-lg text-base leading-7 text-slate-600">
-                  MeridianIQ connects intake, compliance operations and
-                  receivables evidence so every team acts from the same invoice
-                  history.
+                  Your invoices, your compliance work and your payment records
+                  live in one place — so you and your accountant always see the
+                  same thing.
                 </p>
                 <a
                   href="#product-tour"
                   className="mt-7 inline-flex items-center gap-2 text-sm font-extrabold text-teal-800 hover:text-teal-950"
                 >
-                  Explore each role
+                  See how each person uses it
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </a>
               </div>
@@ -1114,15 +1113,15 @@ export default function LandingPage() {
             <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
               <div className="max-w-3xl">
                 <p className="text-sm font-extrabold uppercase text-teal-700">
-                  From intake to settlement
+                  How it works
                 </p>
                 <h2 className="landing-display mt-4 text-4xl font-bold leading-tight sm:text-5xl">
-                  One invoice. One continuous history.
+                  One invoice. One complete story.
                 </h2>
               </div>
               <p className="max-w-md text-sm leading-6 text-slate-600">
-                Each step adds evidence instead of replacing what came before,
-                so the transaction stays understandable after every handoff.
+                Each step adds to the invoice's record. Nothing is overwritten,
+                so you can always see what happened and when.
               </p>
             </div>
 
@@ -1163,34 +1162,34 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10">
             <div>
               <p className="text-sm font-extrabold uppercase text-lime-300">
-                Evidence by design
+                Built to be trusted
               </p>
               <h2 className="landing-display mt-4 text-4xl font-bold leading-tight sm:text-5xl">
-                Compliance is only useful if the proof survives.
+                Proof you can stand behind.
               </h2>
               <p className="mt-5 max-w-xl text-base leading-7 text-white/70">
-                MeridianIQ keeps decisions attached to the transaction, limits
-                access by role and tenant, and makes the audit trail
-                independently verifiable.
+                Every decision stays attached to its invoice. Only the right
+                people can see your records — and the history can be checked
+                outside MeridianIQ.
               </p>
 
               <div className="mt-8 grid gap-x-8 gap-y-5 sm:grid-cols-2">
                 {[
                   [
-                    "Tenant boundaries",
-                    "Data access is scoped at the request and database layers.",
+                    "Your data is yours",
+                    "Each business's records are locked to that business.",
                   ],
                   [
-                    "Append-only history",
-                    "Submitted invoice records preserve every later adjustment.",
+                    "Nothing gets erased",
+                    "Changes are added on top — the original record always remains.",
                   ],
                   [
-                    "Hash-chained audit",
-                    "Audit bundles can be exported and verified outside the app.",
+                    "History you can check",
+                    "Download your records and verify them outside the app.",
                   ],
                   [
-                    "Client-owned consent",
-                    "Clients grant and revoke each data-use layer themselves.",
+                    "You control sharing",
+                    "You decide what your data is used for, and you can change your mind.",
                   ],
                 ].map(([title, body]) => (
                   <div key={title} className="border-t border-white/15 pt-4">
@@ -1227,31 +1226,31 @@ export default function LandingPage() {
                 {[
                   {
                     title: "Drafted",
-                    body: "Created for the July delivery, validated locally",
+                    body: "Created for the July delivery and checked",
                     Icon: ReceiptText,
                     time: "09:42",
                   },
                   {
                     title: "Reviewed",
-                    body: "Field and party checks resolved by Tola",
+                    body: "Details checked and fixed by Tola",
                     Icon: ListChecks,
                     time: "09:47",
                   },
                   {
                     title: "Stamped",
-                    body: "IRN and CSID written to the vault",
+                    body: "Official stamp (IRN and CSID) saved",
                     Icon: BadgeCheck,
                     time: "10:03",
                   },
                   {
-                    title: "Settled",
-                    body: "Payment evidence attached to the receivable",
+                    title: "Paid",
+                    body: "Payment record attached to the invoice",
                     Icon: Landmark,
                     time: "14:26",
                   },
                   {
                     title: "Exported",
-                    body: "Hash-chained audit bundle verified outside the app",
+                    body: "Full history downloaded and verified",
                     Icon: ShieldCheck,
                     time: "Jul 29",
                   },
@@ -1295,13 +1294,12 @@ export default function LandingPage() {
                   The release plan
                 </p>
                 <h2 className="landing-display mt-4 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
-                  Live where it counts. Staged where it matters.
+                  What's live now. What's coming next.
                 </h2>
               </div>
               <p className="max-w-md text-sm leading-6 text-slate-600">
-                The compliance core is live and proven end to end. Every later
-                capability activates on that same record — nothing gets rebuilt,
-                and nothing ships before its evidence base is ready.
+                The core is live and proven. Each new part switches on when it
+                is ready — on the same records, with nothing to redo.
               </p>
             </div>
 
@@ -1363,17 +1361,17 @@ export default function LandingPage() {
             <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
               <div className="max-w-3xl">
                 <p className="text-sm font-extrabold uppercase text-teal-700">
-                  Built around each role
+                  Who uses MeridianIQ
                 </p>
                 <h2 className="landing-display mt-4 text-4xl font-bold leading-tight sm:text-5xl">
-                  The right workspace, backed by the same truth.
+                  One account. The right workspace for you.
                 </h2>
               </div>
               <a
                 href="/login"
                 className="inline-flex items-center gap-2 self-start text-sm font-extrabold text-teal-800 hover:text-teal-950 md:self-auto"
               >
-                View the sign-in portal
+                Go to sign-in
                 <ArrowRight className="size-4" aria-hidden="true" />
               </a>
             </div>
@@ -1421,8 +1419,8 @@ export default function LandingPage() {
             </div>
 
             <p className="mt-8 text-sm leading-6 text-slate-600">
-              No account yet? MeridianIQ is invite-based — your accounting firm
-              invites you in. Or write to{" "}
+              No account yet? MeridianIQ works through your accounting firm —
+              they invite you. Or email{" "}
               <a
                 href={CONTACT_MAILTO}
                 data-testid="link-workspaces-contact"
@@ -1430,7 +1428,7 @@ export default function LandingPage() {
               >
                 {ADVISORY_EMAIL}
               </a>{" "}
-              and we will get you set up.
+              and we will help you get started.
             </p>
           </div>
         </section>
@@ -1439,10 +1437,10 @@ export default function LandingPage() {
           <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 px-5 sm:px-8 lg:flex-row lg:items-center lg:px-10">
             <div className="max-w-3xl">
               <p className="text-sm font-extrabold uppercase text-[#1c4443]">
-                Start where the work is
+                Ready when you are
               </p>
               <h2 className="landing-display mt-3 text-4xl font-bold leading-tight text-[#071a1c] sm:text-5xl">
-                Keep compliance moving. Keep the evidence attached.
+                Get your invoicing right — and keep the proof.
               </h2>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:shrink-0">
@@ -1466,7 +1464,7 @@ export default function LandingPage() {
                 href="/penalty-calculator/"
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#071a1c]/30 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-[#071a1c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#071a1c]"
               >
-                Estimate exposure
+                Check possible fines
                 <Calculator className="size-4" aria-hidden="true" />
               </a>
             </div>
@@ -1479,8 +1477,8 @@ export default function LandingPage() {
           <div>
             <BrandLockup inverted />
             <p className="mt-5 max-w-sm text-sm leading-6 text-white/60">
-              Nigerian e-invoicing compliance and its evidence on one connected
-              record.
+              E-invoicing for Nigerian businesses — done right, with the proof
+              to show for it.
             </p>
           </div>
           <nav
@@ -1488,16 +1486,16 @@ export default function LandingPage() {
             aria-label="Footer"
           >
             <a className="hover:text-white" href="#platform">
-              Platform
+              What it does
             </a>
             <a className="hover:text-white" href="#product-tour">
               Product tour
             </a>
             <a className="hover:text-white" href="#evidence">
-              Evidence
+              Trust &amp; proof
             </a>
             <a className="hover:text-white" href="#roadmap">
-              Roadmap
+              What's coming
             </a>
             <a className="hover:text-white" href="/penalty-calculator/">
               Penalty calculator
@@ -1519,7 +1517,7 @@ export default function LandingPage() {
         </div>
         <div className="mx-auto mt-9 flex max-w-7xl flex-col gap-2 border-t border-white/10 px-5 pt-6 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
           <span>MeridianIQ, Lagos, Nigeria.</span>
-          <span>Compliance intelligence for the full invoice lifecycle.</span>
+          <span>Correct invoices, from first draft to final payment.</span>
         </div>
       </footer>
     </div>

@@ -69,7 +69,7 @@ async function journeyPortalAuth(page, BASE, check) {
   check(
     "bad password shows uniform error",
     (await page.getByTestId("text-login-error").innerText()).includes(
-      "Invalid email or password",
+      "That email or password is not right",
     ),
   );
 
