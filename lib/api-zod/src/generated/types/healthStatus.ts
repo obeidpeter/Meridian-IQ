@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.81.0
+ * OpenAPI spec version: 0.82.0
  */
 
 export interface HealthStatus {
   status: string;
   contractVersion: string;
+  buildRevision: string;
 }

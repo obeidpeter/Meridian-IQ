@@ -8,7 +8,11 @@ import {
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { lagosMonthStart } from "./client-statement";
-import { isFeatureEnabled } from "../flags/flags";
+import {
+  CLERK_ENTITLEMENT_FLAG_KEY,
+  isEffectiveFeatureEnabled,
+  isFeatureEnabled,
+} from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 import { atMostHourly } from "./watch-shared";
 import {
@@ -305,7 +309,7 @@ export async function indexMemoryBatch(
     // its budget charged by a background sweep the request paths would
     // refuse (the agreement-watch precedent for firm-spending sweeps).
     if (
-      !(await isFeatureEnabled(CLERK_FLAG_KEY, firmId)) ||
+      !(await isEffectiveFeatureEnabled(CLERK_ENTITLEMENT_FLAG_KEY, firmId)) ||
       !(await isFeatureEnabled(MEMORY_FLAG_KEY, firmId))
     ) {
       skippedFirms += 1;

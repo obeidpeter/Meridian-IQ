@@ -46,6 +46,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 // Import AFTER the mock so the component module binds the stand-in.
 import {
   FilingMatrixCard,
+  isMatrixCellOverdue,
   matrixCellLabel,
   sortMatrixRows,
 } from "./filing-matrix-card";
@@ -66,7 +67,9 @@ function matrix(over: Partial<FilingMatrix> = {}): FilingMatrix {
   return {
     period: "2026-07",
     periodLabel: "July 2026",
-    dueDates: { vat: "2026-08-21", paye: "2026-08-10", wht: "2026-08-21" },
+    // Keep render tests independent of the wall clock. Past-due behavior is
+    // exercised explicitly against fixed dates in the helper tests above.
+    dueDates: { vat: "2099-08-21", paye: "2099-08-10", wht: "2099-08-21" },
     rows: [row()],
     totals: { clients: 1, filed: 0, unfiled: 2, overdue: 0 },
     ...over,
@@ -86,6 +89,8 @@ describe("matrixCellLabel", () => {
     expect(matrixCellLabel("upcoming")).toBe("Upcoming");
     expect(matrixCellLabel("prepared")).toBe("Prepared");
     expect(matrixCellLabel("filed")).toBe("Filed");
+    expect(matrixCellLabel("upcoming", "vat", true)).toBe("Overdue");
+    expect(matrixCellLabel("filed", "vat", true)).toBe("Filed");
     // An off-catalogue status from a newer server degrades to a title-cased
     // word, never a crash.
     expect(matrixCellLabel("in_review")).toBe("In review");
@@ -97,6 +102,24 @@ describe("matrixCellLabel", () => {
     // A minted WHT row speaks the ordinary vocabulary.
     expect(matrixCellLabel("upcoming", "wht")).toBe("Upcoming");
     expect(matrixCellLabel("filed", "wht")).toBe("Filed");
+  });
+});
+
+describe("isMatrixCellOverdue", () => {
+  test("only minted, unfiled returns past the due day are overdue", () => {
+    expect(isMatrixCellOverdue("upcoming", "2026-08-21", "2026-08-22")).toBe(
+      true,
+    );
+    expect(isMatrixCellOverdue("prepared", "2026-08-21", "2026-08-22")).toBe(
+      true,
+    );
+    expect(isMatrixCellOverdue("filed", "2026-08-21", "2026-08-22")).toBe(
+      false,
+    );
+    expect(isMatrixCellOverdue(null, "2026-08-21", "2026-08-22")).toBe(false);
+    expect(isMatrixCellOverdue("upcoming", "2026-08-21", "2026-08-21")).toBe(
+      false,
+    );
   });
 });
 
@@ -135,11 +158,36 @@ describe("sortMatrixRows", () => {
     expect(rows.map((r) => r.clientPartyId)).toEqual(["cp-done", "cp-up"]);
   });
 
+  test("puts a past-due unfiled return ahead of other unstarted work", () => {
+    const dueDates = {
+      vat: "2026-08-21",
+      paye: "2026-09-10",
+      wht: "2026-09-21",
+    };
+    const sorted = sortMatrixRows(
+      [
+        row({ clientPartyId: "cp-future", vat: "filed", paye: "upcoming" }),
+        row({ clientPartyId: "cp-overdue", vat: "prepared", paye: "filed" }),
+      ],
+      dueDates,
+      "2026-08-22",
+    );
+    expect(sorted.map((r) => r.clientPartyId)).toEqual([
+      "cp-overdue",
+      "cp-future",
+    ]);
+  });
+
   test("a null WHT cell (no duty) never reads unstarted; a minted one counts", () => {
     const sorted = sortMatrixRows([
       // All filed with no withholding duty: done — the null wht cell must
       // not drag the row back to unstarted the way a vat/paye null does.
-      row({ clientPartyId: "cp-noduty", vat: "filed", paye: "filed", wht: null }),
+      row({
+        clientPartyId: "cp-noduty",
+        vat: "filed",
+        paye: "filed",
+        wht: null,
+      }),
       // All filed INCLUDING the WHT remittance: done as well (same client
       // name, so input order holds inside the bucket via the stable sort).
       row({

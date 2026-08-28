@@ -1,9 +1,4 @@
-import {
-  Router,
-  type IRouter,
-  type Request,
-  type Response,
-} from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb, membershipsTable, usersTable } from "@workspace/db";
 import {
@@ -12,6 +7,7 @@ import {
   ChangePasswordBody,
   AcceptInviteBody,
   ResetPasswordBody,
+  RequestPasswordResetBody,
   TotpChallengeBody,
   TotpChallengeResponse,
   GetTotpStatusResponse,
@@ -48,11 +44,18 @@ import {
   clearActionFailures,
   throttleActionAttempt,
   throttleLoginAttempt,
+  throttlePasswordResetRequest,
 } from "../modules/auth/throttle";
 import { litFeatureKeys } from "../modules/flags/flags";
 import { acceptInvitation } from "../modules/auth/invitations";
-import { resetPassword } from "../modules/auth/password-reset";
+import {
+  requestPasswordReset,
+  resetPassword,
+} from "../modules/auth/password-reset";
 import { appendAudit } from "../modules/audit/audit";
+import { sendRawToRelay } from "../modules/messaging/messaging";
+import { logger } from "../lib/logger";
+import { recordUsabilityEvent } from "../lib/metrics";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly session cookie;
 // the principal middleware resolves it on subsequent requests. Login/logout
@@ -60,6 +63,22 @@ import { appendAudit } from "../modules/audit/audit";
 // must work even with an expired session); change-password is authenticated.
 
 const router: IRouter = Router();
+
+function resetLink(token: string): string {
+  const configured = process.env.PUBLIC_APP_URL?.trim();
+  let base: URL;
+  try {
+    base = new URL(configured || "https://meridian-iq.replit.app");
+    if (base.protocol !== "https:" && process.env.NODE_ENV === "production") {
+      throw new Error("production app URL must use https");
+    }
+  } catch {
+    base = new URL("https://meridian-iq.replit.app");
+  }
+  const link = new URL("/reset-password", base);
+  link.hash = `token=${encodeURIComponent(token)}`;
+  return link.toString();
+}
 
 function cookieOptions(req: {
   secure?: boolean;
@@ -137,11 +156,11 @@ async function accountPayload(
     clientPartyId: membership.clientPartyId,
     buyerPartyId: membership.buyerPartyId,
     capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
-    // Platform defaults only: the sign-in transaction is pre-auth (no
-    // app.firm_id GUC bound), so RLS would hide this firm's override rows
-    // anyway — passing the firm id here would only pretend to apply them.
-    // The canonical per-firm list is /me's, which every app queries on boot.
-    features: await litFeatureKeys(null),
+    // Platform defaults plus any override visible in this pre-auth context.
+    // /me remains the canonical post-auth list, but passing the membership's
+    // firm here still composes Clerk's platform entitlement correctly and
+    // avoids a transient runtime-only feature result during sign-in.
+    features: await litFeatureKeys(membership.firmId),
   };
 }
 
@@ -818,6 +837,34 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(ResetPasswordBody, req.body);
   await resetPassword(parsed.token, parsed.password);
   res.sendStatus(204);
+});
+
+// Public, oracle-free forgot-password door. Rate limits are reserved before
+// account lookup; unknown addresses, dark delivery, and successful delivery
+// all receive the same 202. The raw token crosses only to the configured
+// messaging relay and never enters a response, URL query, or application log.
+router.post("/auth/request-password-reset", async (req, res): Promise<void> => {
+  const parsed = parseOrThrow(RequestPasswordResetBody, req.body);
+  const retryAfter = await throttlePasswordResetRequest(req, parsed.email);
+  if (retryAfter !== null) {
+    sendThrottled429(res, retryAfter, "Too many password reset requests");
+    return;
+  }
+  const issued = await requestPasswordReset(parsed.email);
+  if (issued) {
+    const delivery = await sendRawToRelay("password_reset", {
+      email: issued.email,
+      resetUrl: resetLink(issued.token),
+    });
+    if (!delivery.ok) {
+      logger.warn(
+        { reason: delivery.error ?? "unknown" },
+        "password reset relay did not accept a recovery request",
+      );
+    }
+  }
+  recordUsabilityEvent("password_reset_request", "password_reset");
+  res.status(202).end();
 });
 
 export default router;

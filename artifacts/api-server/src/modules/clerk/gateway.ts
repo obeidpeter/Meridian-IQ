@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { db, clerkInferenceCallsTable } from "@workspace/db";
 import type { z } from "zod/v4";
 import { DomainError } from "../errors";
-import { isFeatureEnabled } from "../flags/flags";
+import { CLERK_RUNTIME_FLAG_KEY, isFeatureEnabled } from "../flags/flags";
 import { acquireFirmClerkBudgetPermit } from "./budget";
 import type { Database } from "@workspace/db";
 
@@ -27,7 +27,10 @@ import type { Database } from "@workspace/db";
 // The provider is injected so fail-closed behaviour is testable without live
 // model calls; the production provider lives in provider.ts.
 
-export const CLERK_FLAG_KEY = "clerk_ai";
+// Backward-compatible export used by the watchdog and tests. This is the
+// GLOBAL safety switch; firm rollout entitlement remains `clerk_ai` and is
+// composed at the route/identity boundary.
+export const CLERK_FLAG_KEY = CLERK_RUNTIME_FLAG_KEY;
 
 // User-message content: plain text, or OpenAI-style content parts (for vision).
 export type UserContent =

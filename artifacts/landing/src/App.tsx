@@ -26,6 +26,8 @@ import {
 } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
 import { pillClasses } from "@workspace/format";
+import { trackUsabilityEvent } from "@workspace/web-ui";
+import QRCode from "qrcode";
 import {
   FileCheck2,
   Building2,
@@ -41,6 +43,7 @@ import {
   KeyRound,
   CheckCircle2,
   Copy,
+  Download,
   Eye,
   EyeOff,
   ShieldOff,
@@ -341,6 +344,7 @@ function SignInPanel() {
   // the default workspace for the membership. A full navigation, so the app
   // boots against the fresh session cookie.
   const completeSignIn = async (me: Me): Promise<boolean> => {
+    trackUsabilityEvent("login_success", "login");
     await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
     const target =
       resolveReturnTo(arrival.returnTo, me.role, APPS) ??
@@ -357,6 +361,7 @@ function SignInPanel() {
     source: string,
     creds: { email: string; password: string },
   ) => {
+    trackUsabilityEvent("login_attempt", "login");
     setError(null);
     setPending(source);
     try {
@@ -372,6 +377,7 @@ function SignInPanel() {
       if (await completeSignIn(me)) return;
       setPending(null);
     } catch (err) {
+      trackUsabilityEvent("login_failure", "login");
       setError(loginErrorMessage(err));
       setPending(null);
       document.getElementById("email")?.focus();
@@ -395,6 +401,7 @@ function SignInPanel() {
       if (await completeSignIn(me)) return;
       setPending(null);
     } catch (err) {
+      trackUsabilityEvent("login_failure", "login");
       setPending(null);
       // The server 401s identically for a wrong code and an expired token;
       // the pure helper splits them on this client's own clock (lib/mfa).
@@ -908,8 +915,54 @@ function TotpSecurityCard() {
     disableError,
   } = card;
   const [activateCode, setActivateCode] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
   const [disableCode, setDisableCode] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setQrDataUrl("");
+    setRecoveryAcknowledged(false);
+    if (!material)
+      return () => {
+        active = false;
+      };
+    void QRCode.toDataURL(material.otpauthUri, {
+      width: 192,
+      margin: 1,
+      errorCorrectionLevel: "M",
+      color: { dark: "#071a1c", light: "#ffffff" },
+    })
+      .then((url) => {
+        if (active) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (active) setQrDataUrl("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [material]);
+
+  const downloadRecoveryCodes = () => {
+    if (!material) return;
+    const blob = new Blob(
+      [
+        "MeridianIQ two-factor recovery codes\n",
+        "Store these securely. Each code works once.\n\n",
+        material.recoveryCodes.join("\n"),
+        "\n",
+      ],
+      { type: "text/plain;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "meridianiq-recovery-codes.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const begin = async () => {
     try {
@@ -929,6 +982,7 @@ function TotpSecurityCard() {
 
   const onActivate = async (e: FormEvent) => {
     e.preventDefault();
+    if (!recoveryAcknowledged) return;
     try {
       const status = await activate.mutateAsync({
         data: { code: activateCode.trim() },
@@ -1002,9 +1056,21 @@ function TotpSecurityCard() {
       {material ? (
         <div className="mt-3 space-y-3">
           <p className="text-xs text-muted-foreground">
-            Add this secret to your authenticator app (paste the setup link or
-            type the secret in), then confirm with a live code.
+            Scan the QR code with your authenticator app. If scanning is not
+            available, use the secret or setup link, then confirm with a live
+            code.
           </p>
+          {qrDataUrl && (
+            <div className="flex justify-center rounded-md border bg-white p-3">
+              <img
+                src={qrDataUrl}
+                width={192}
+                height={192}
+                alt="QR code for adding MeridianIQ to an authenticator app"
+                data-testid="image-totp-qr"
+              />
+            </div>
+          )}
           <div className="rounded-md border bg-background p-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-semibold uppercase text-muted-foreground">
@@ -1051,12 +1117,34 @@ function TotpSecurityCard() {
                 <li key={code}>{code}</li>
               ))}
             </ul>
-            <div className="mt-1.5">
+            <div className="mt-2 flex flex-wrap gap-2">
               <CopyButton
                 value={material.recoveryCodes.join("\n")}
                 label="Copy recovery codes"
               />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={downloadRecoveryCodes}
+                data-testid="button-download-recovery-codes"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                Download
+              </Button>
             </div>
+            <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs font-medium text-amber-950 dark:text-amber-100">
+              <input
+                type="checkbox"
+                checked={recoveryAcknowledged}
+                onChange={(event) =>
+                  setRecoveryAcknowledged(event.target.checked)
+                }
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+                data-testid="checkbox-recovery-saved"
+              />
+              I saved these recovery codes somewhere secure.
+            </label>
           </div>
           <form onSubmit={onActivate} className="space-y-1.5">
             <Label htmlFor="totp-activate" className="text-xs">
@@ -1098,7 +1186,11 @@ function TotpSecurityCard() {
               <Button
                 type="submit"
                 size="sm"
-                disabled={activate.isPending || activateCode.trim().length < 6}
+                disabled={
+                  activate.isPending ||
+                  activateCode.trim().length < 6 ||
+                  !recoveryAcknowledged
+                }
                 data-testid="button-totp-activate"
               >
                 {activate.isPending ? "Verifying…" : "Verify & turn on"}
@@ -1749,6 +1841,18 @@ function Portal() {
 
 export default function App() {
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+  const pageTitle =
+    pathname === "/login"
+      ? "Sign in | MeridianIQ"
+      : pathname === "/reset-password"
+        ? "Reset password | MeridianIQ"
+        : pathname === "/accept-invite"
+          ? "Accept invitation | MeridianIQ"
+          : "MeridianIQ | Turn every invoice into evidence";
+
+  useEffect(() => {
+    document.title = pageTitle;
+  }, [pageTitle]);
 
   if (pathname === "/accept-invite") {
     return (

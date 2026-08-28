@@ -18,6 +18,12 @@
   },
   "references": [
     {
+      "path": "../../lib/api-client-react"
+    },
+    {
+      "path": "../../lib/api-errors"
+    },
+    {
       "path": "../../lib/web-ui"
     }
   ]

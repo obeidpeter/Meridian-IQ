@@ -9,6 +9,7 @@ import draftsRouter from "./drafts";
 import actionsRouter from "./actions";
 import planRunsRouter from "./plan-runs";
 import planPoliciesRouter from "./plan-policies";
+import { requireFlag } from "../../modules/flags/flags";
 
 // Clerk copilot surface (Task #40 + expansion A). Shadow-mode throughout:
 // extraction proposes, a human disposes, and approval can only create a DRAFT
@@ -32,6 +33,12 @@ import planPoliciesRouter from "./plan-policies";
 //   actions.ts  proposed actions — live proposals, human-approved execution
 
 const router: IRouter = Router();
+
+// One effective wall for every Clerk route. Firm principals need both their
+// rollout entitlement and the global runtime switch; cross-tenant operators
+// need the runtime switch. The gateway repeats the runtime check immediately
+// before provider work to close the flag-flip race.
+router.use("/clerk", requireFlag("clerk_ai"));
 
 router.use(casesRouter);
 router.use(evalRouter);

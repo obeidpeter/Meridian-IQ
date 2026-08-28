@@ -17,14 +17,19 @@ import { startStaticServer } from "./serve.mjs";
 import { collectAccessibilityIssues } from "./accessibility.mjs";
 import { apiLogin, apiLogout, DEMO_PASSWORD } from "./journeys/shared.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 const API_PORT = Number(process.env.UX_API_PORT ?? 5140);
 const WEB_PORT = Number(process.env.UX_WEB_PORT ?? 8095);
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
 const OUT_DIR = process.env.OUT_DIR ?? path.join(ROOT, "ux-snapshot");
 
 if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL must point at a scratch database (it will be seeded).");
+  console.error(
+    "DATABASE_URL must point at a scratch database (it will be seeded).",
+  );
   process.exit(1);
 }
 mkdirSync(OUT_DIR, { recursive: true });
@@ -42,13 +47,28 @@ const PAGES = [
   ["sme-vat", "/app/vat", "owner@adaezefoods.example"],
   ["console-portfolio", "/console", "demo.admin@meridianiq.example"],
   ["console-pipeline", "/console/pipeline", "demo.admin@meridianiq.example"],
-  ["console-invitations", "/console/invitations", "demo.admin@meridianiq.example"],
+  [
+    "console-invitations",
+    "/console/invitations",
+    "demo.admin@meridianiq.example",
+  ],
   ["console-advisory", "/console/advisory", "demo.admin@meridianiq.example"],
-  ["console-notifications", "/console/notifications", "demo.admin@meridianiq.example"],
+  [
+    "console-notifications",
+    "/console/notifications",
+    "demo.admin@meridianiq.example",
+  ],
+];
+
+const VIEWPORTS = [
+  ["mobile", { width: 390, height: 844 }],
+  ["desktop", { width: 1360, height: 900 }],
+  ["wide", { width: 1920, height: 1080 }],
 ];
 
 function browserExecutable() {
-  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) return process.env.PLAYWRIGHT_EXECUTABLE_PATH;
+  if (process.env.PLAYWRIGHT_EXECUTABLE_PATH)
+    return process.env.PLAYWRIGHT_EXECUTABLE_PATH;
   return "/opt/pw-browsers/chromium";
 }
 
@@ -88,8 +108,11 @@ let exitCode = 0;
 try {
   await waitForApi();
   staticServer = await startStaticServer({ port: WEB_PORT, apiPort: API_PORT });
-  browser = await chromium.launch({ headless: true, executablePath: browserExecutable() });
-  const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: browserExecutable(),
+  });
+  const page = await browser.newPage({ viewport: VIEWPORTS[1][1] });
 
   const report = [];
   let identity = null;
@@ -99,20 +122,42 @@ try {
       else await apiLogout(page, BASE);
       identity = who;
     }
-    await page.goto(BASE + url, { waitUntil: "networkidle" });
-    // Settle render-on-success cards before measuring.
-    await page.waitForTimeout(750);
-    const issues = await collectAccessibilityIssues(page);
-    await page.screenshot({ path: path.join(OUT_DIR, `${id}.png`), fullPage: true });
-    report.push({ id, url, identity: who, issueCount: issues.length, issues });
-    console.log(`${id}: ${issues.length} accessibility issue(s)`);
+    for (const [viewportName, viewport] of VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      await page.goto(BASE + url, { waitUntil: "networkidle" });
+      // Settle render-on-success cards before measuring.
+      await page.waitForTimeout(750);
+      const issues = await collectAccessibilityIssues(page);
+      await page.screenshot({
+        path: path.join(OUT_DIR, `${id}-${viewportName}.png`),
+        fullPage: true,
+      });
+      report.push({
+        id,
+        viewport: viewportName,
+        url,
+        identity: who,
+        issueCount: issues.length,
+        issues,
+      });
+      console.log(
+        `${id} (${viewportName}): ${issues.length} accessibility issue(s)`,
+      );
+    }
   }
-  writeFileSync(path.join(OUT_DIR, "report.json"), JSON.stringify(report, null, 2));
+  writeFileSync(
+    path.join(OUT_DIR, "report.json"),
+    JSON.stringify(report, null, 2),
+  );
   const total = report.reduce((n, r) => n + r.issueCount, 0);
-  console.log(`ux-snapshot: ${report.length} pages, ${total} total issues -> ${OUT_DIR}`);
+  console.log(
+    `ux-snapshot: ${report.length} pages, ${total} total issues -> ${OUT_DIR}`,
+  );
 } catch (err) {
   console.error("ux-snapshot crashed:", err);
-  console.error("--- api log tail ---\n" + apiLog.split("\n").slice(-20).join("\n"));
+  console.error(
+    "--- api log tail ---\n" + apiLog.split("\n").slice(-20).join("\n"),
+  );
   exitCode = 2;
 } finally {
   await browser?.close().catch(() => {});

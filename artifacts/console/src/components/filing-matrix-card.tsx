@@ -7,6 +7,7 @@ import {
   filingKindLabel,
   filingStatusLabel,
 } from "@workspace/format/filing-copy";
+import { localDayIso } from "@workspace/format/notice-copy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollRegion } from "@/components/scroll-region";
 import { formatDate } from "@/lib/format";
@@ -36,9 +37,21 @@ import { formatDate } from "@/lib/format";
 export function matrixCellLabel(
   status: string | null,
   kind: "vat" | "paye" | "wht" = "vat",
+  overdue = false,
 ): string {
   if (status === null) return kind === "wht" ? "No duty" : "Not minted";
+  if (overdue && status !== "filed") return "Overdue";
   return filingStatusLabel(status);
+}
+
+type MatrixDueDates = { vat: string; paye: string; wht: string };
+
+export function isMatrixCellOverdue(
+  status: string | null,
+  dueDate: string,
+  today: string,
+): boolean {
+  return status !== null && status !== "filed" && dueDate < today;
 }
 
 /**
@@ -50,7 +63,20 @@ export function matrixCellLabel(
  * status from a newer server lands in the done bucket rather than crashing
  * the sort.
  */
-function rowUrgency(row: Pick<FilingMatrixRow, "vat" | "paye" | "wht">): number {
+function rowUrgency(
+  row: Pick<FilingMatrixRow, "vat" | "paye" | "wht">,
+  dueDates?: MatrixDueDates,
+  today?: string,
+): number {
+  if (
+    dueDates &&
+    today &&
+    (["vat", "paye", "wht"] as const).some((kind) =>
+      isMatrixCellOverdue(row[kind], dueDates[kind], today),
+    )
+  ) {
+    return -1;
+  }
   const cells = [row.vat, row.paye, ...(row.wht === null ? [] : [row.wht])];
   if (cells.some((c) => c === null || c === "upcoming")) return 0;
   if (cells.some((c) => c === "prepared")) return 1;
@@ -65,9 +91,12 @@ function rowUrgency(row: Pick<FilingMatrixRow, "vat" | "paye" | "wht">): number 
  */
 export function sortMatrixRows(
   rows: readonly FilingMatrixRow[],
+  dueDates?: MatrixDueDates,
+  today?: string,
 ): FilingMatrixRow[] {
   return [...rows].sort((a, b) => {
-    const diff = rowUrgency(a) - rowUrgency(b);
+    const diff =
+      rowUrgency(a, dueDates, today) - rowUrgency(b, dueDates, today);
     if (diff !== 0) return diff;
     return a.clientName.localeCompare(b.clientName);
   });
@@ -76,8 +105,11 @@ export function sortMatrixRows(
 // Cell tones are deliberately console-local (the filings-card pill palette):
 // emerald a filed return, blue the prepared intermediate, slate an upcoming
 // one, and a muted italic for a row the register hasn't minted.
-function matrixCellClass(status: string | null): string {
+function matrixCellClass(status: string | null, overdue = false): string {
   if (status === null) return "italic text-muted-foreground";
+  if (overdue && status !== "filed") {
+    return "font-semibold text-red-700 dark:text-red-400";
+  }
   if (status === "filed") return "text-emerald-600 dark:text-emerald-400";
   if (status === "prepared") return "text-blue-600 dark:text-blue-400";
   return "text-slate-600 dark:text-slate-400";
@@ -92,7 +124,8 @@ export function FilingMatrixCard() {
   if (!isSuccess || !data) return null;
   // A firm with no clients has no cockpit — no card, not an empty grid.
   if (data.rows.length === 0) return null;
-  const rows = sortMatrixRows(data.rows);
+  const today = localDayIso(new Date());
+  const rows = sortMatrixRows(data.rows, data.dueDates, today);
   return (
     <Card
       className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
@@ -126,36 +159,43 @@ export function FilingMatrixCard() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {rows.map((r) => (
-                <tr
-                  key={r.clientPartyId}
-                  data-testid={`row-filing-matrix-${r.clientPartyId}`}
-                >
-                  <td className="py-2 pr-3 max-w-[16rem] truncate">
-                    {r.clientName}
-                  </td>
-                  <td
-                    className={`py-2 pr-3 ${matrixCellClass(r.vat)}`}
-                    data-testid={`cell-filing-vat-${r.clientPartyId}`}
+              {rows.map((r) => {
+                const overdue = {
+                  vat: isMatrixCellOverdue(r.vat, data.dueDates.vat, today),
+                  paye: isMatrixCellOverdue(r.paye, data.dueDates.paye, today),
+                  wht: isMatrixCellOverdue(r.wht, data.dueDates.wht, today),
+                };
+                return (
+                  <tr
+                    key={r.clientPartyId}
+                    data-testid={`row-filing-matrix-${r.clientPartyId}`}
                   >
-                    {matrixCellLabel(r.vat)}
-                  </td>
-                  <td
-                    className={`py-2 pr-3 ${matrixCellClass(r.paye)}`}
-                    data-testid={`cell-filing-paye-${r.clientPartyId}`}
-                  >
-                    {matrixCellLabel(r.paye, "paye")}
-                  </td>
-                  <td
-                    className={`py-2 ${matrixCellClass(r.wht)}`}
-                    data-testid={`cell-filing-wht-${r.clientPartyId}`}
-                  >
-                    {/* null = no withholding duty this period (the common
+                    <td className="py-2 pr-3 max-w-[16rem] truncate">
+                      {r.clientName}
+                    </td>
+                    <td
+                      className={`py-2 pr-3 ${matrixCellClass(r.vat, overdue.vat)}`}
+                      data-testid={`cell-filing-vat-${r.clientPartyId}`}
+                    >
+                      {matrixCellLabel(r.vat, "vat", overdue.vat)}
+                    </td>
+                    <td
+                      className={`py-2 pr-3 ${matrixCellClass(r.paye, overdue.paye)}`}
+                      data-testid={`cell-filing-paye-${r.clientPartyId}`}
+                    >
+                      {matrixCellLabel(r.paye, "paye", overdue.paye)}
+                    </td>
+                    <td
+                      className={`py-2 ${matrixCellClass(r.wht, overdue.wht)}`}
+                      data-testid={`cell-filing-wht-${r.clientPartyId}`}
+                    >
+                      {/* null = no withholding duty this period (the common
                         cell), so it reads "No duty", not "Not minted". */}
-                    {matrixCellLabel(r.wht, "wht")}
-                  </td>
-                </tr>
-              ))}
+                      {matrixCellLabel(r.wht, "wht", overdue.wht)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </ScrollRegion>

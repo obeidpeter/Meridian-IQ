@@ -8,6 +8,20 @@ import { getReadiness } from "../lib/readiness";
 
 const router: IRouter = Router();
 
+export function deployedBuildRevision(): string {
+  const candidate = [
+    process.env.BUILD_REVISION,
+    process.env.REPLIT_DEPLOYMENT_ID,
+    process.env.GITHUB_SHA,
+    process.env.COMMIT_SHA,
+  ]
+    .map((value) => value?.trim())
+    .find(Boolean);
+  if (!candidate)
+    return process.env.NODE_ENV === "production" ? "unknown" : "development";
+  return /^[A-Za-z0-9._-]{1,128}$/.test(candidate) ? candidate : "unknown";
+}
+
 // contractVersion is baked in at build time from openapi.yaml info.version.
 // The web apps compare it with their own baked-in copy and show a "stale
 // server build" banner on mismatch — turning the recurring
@@ -20,6 +34,7 @@ router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({
     status: "ok",
     contractVersion: API_CONTRACT_VERSION,
+    buildRevision: deployedBuildRevision(),
   });
   res.json(data);
 });

@@ -3,11 +3,12 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.81.0
+ * OpenAPI spec version: 0.82.0
  */
 export interface HealthStatus {
   status: string;
   contractVersion: string;
+  buildRevision: string;
 }
 
 export interface Error {
@@ -190,6 +191,11 @@ export interface CreatePasswordResetInput {
   email: string;
 }
 
+export interface RequestPasswordResetInput {
+  /** @maxLength 254 */
+  email: string;
+}
+
 export interface ResetPasswordInput {
   /** @minLength 1 */
   token: string;
@@ -198,6 +204,55 @@ export interface ResetPasswordInput {
      * @maxLength 256
      */
   password: string;
+}
+
+export interface AdvisoryReviewInput {
+  /** @maxLength 254 */
+  email: string;
+  /** @maxLength 120 */
+  businessName?: string;
+  /**
+     * @minLength 1
+     * @maxLength 5000
+     */
+  estimateSummary: string;
+  consent: boolean;
+}
+
+export type UsabilityEventInputEvent = typeof UsabilityEventInputEvent[keyof typeof UsabilityEventInputEvent];
+
+
+export const UsabilityEventInputEvent = {
+  landing_cta: 'landing_cta',
+  login_attempt: 'login_attempt',
+  login_success: 'login_success',
+  login_failure: 'login_failure',
+  password_reset_request: 'password_reset_request',
+  calculator_started: 'calculator_started',
+  calculator_completed: 'calculator_completed',
+  advisory_request: 'advisory_request',
+  zero_result_search: 'zero_result_search',
+  workflow_started: 'workflow_started',
+  workflow_completed: 'workflow_completed',
+  workflow_abandoned: 'workflow_abandoned',
+} as const;
+
+export type UsabilityEventInputSurface = typeof UsabilityEventInputSurface[keyof typeof UsabilityEventInputSurface];
+
+
+export const UsabilityEventInputSurface = {
+  landing: 'landing',
+  login: 'login',
+  password_reset: 'password_reset',
+  calculator: 'calculator',
+  portfolio: 'portfolio',
+  client_import: 'client_import',
+  invoice_import: 'invoice_import',
+} as const;
+
+export interface UsabilityEventInput {
+  event: UsabilityEventInputEvent;
+  surface: UsabilityEventInputSurface;
 }
 
 /**

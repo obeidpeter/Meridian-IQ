@@ -1,11 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { requestAdvisoryReview } from "@workspace/api-client-react";
+import { serverError } from "@workspace/api-errors";
+import { trackUsabilityEvent } from "@workspace/web-ui";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  CheckCircle2,
   Copy,
   FileCheck2,
   Grid2x2,
+  LoaderCircle,
   ShieldCheck,
 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
@@ -30,6 +35,7 @@ import {
 
 // TODO(product): confirm the advisory inbox address before wide promotion.
 const ADVISORY_EMAIL = "advisory@meridianiq.com";
+const MODEL_BASIS_REVIEWED = "28 August 2026";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -190,6 +196,20 @@ export default function App() {
   const [days, setDays] = useState("");
   const [invoices, setInvoices] = useState("");
   const [email, setEmail] = useState("");
+  const [submittedEmail, setSubmittedEmail] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [contactConsent, setContactConsent] = useState(false);
+  const [advisoryStatus, setAdvisoryStatus] = useState<
+    "idle" | "pending" | "success" | "error"
+  >("idle");
+  const [advisoryError, setAdvisoryError] = useState("");
+  const [touched, setTouched] = useState({
+    turnover: false,
+    days: false,
+    invoices: false,
+  });
+  const startedRef = useRef(false);
+  const completedRef = useRef(false);
 
   const turnoverParsed = parseNumberInput(turnover);
   const daysParsed = parseNumberInput(days);
@@ -240,7 +260,41 @@ export default function App() {
       ? `Counted as ${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"}`
       : undefined;
 
+  const markStarted = () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    trackUsabilityEvent("calculator_started", "calculator");
+  };
+
+  useEffect(() => {
+    const complete =
+      hasTurnover &&
+      result.total > 0 &&
+      turnoverParsed.isValid &&
+      daysParsed.isValid &&
+      invoicesParsed.isValid;
+    if (!complete || completedRef.current) return;
+    completedRef.current = true;
+    trackUsabilityEvent("calculator_completed", "calculator");
+  }, [
+    daysParsed.isValid,
+    hasTurnover,
+    invoicesParsed.isValid,
+    result.total,
+    turnoverParsed.isValid,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (startedRef.current && !completedRef.current) {
+        trackUsabilityEvent("workflow_abandoned", "calculator");
+      }
+    },
+    [],
+  );
+
   const handleTurnoverBlur = () => {
+    setTouched((current) => ({ ...current, turnover: true }));
     if (hasTurnover) setTurnover(GROUPED_NUMBER.format(turnoverParsed.value));
   };
 
@@ -276,6 +330,7 @@ export default function App() {
     const body = [
       summaryText,
       "",
+      businessName.trim() ? `Business: ${businessName.trim()}` : "",
       email.trim() ? `Reply to: ${email.trim()}` : "",
       "Please contact me to review my e-invoicing compliance.",
     ]
@@ -284,7 +339,39 @@ export default function App() {
     return `mailto:${ADVISORY_EMAIL}?subject=${encodeURIComponent(
       subject,
     )}&body=${encodeURIComponent(body)}`;
-  }, [summaryText, email]);
+  }, [businessName, summaryText, email]);
+
+  const handleAdvisorySubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (advisoryStatus === "pending" || advisoryStatus === "success") return;
+    if (!contactConsent) {
+      setAdvisoryStatus("error");
+      setAdvisoryError(
+        "Confirm that MeridianIQ may contact you about this estimate.",
+      );
+      return;
+    }
+    setAdvisoryStatus("pending");
+    setAdvisoryError("");
+    const normalizedEmail = email.trim();
+    try {
+      await requestAdvisoryReview({
+        email: normalizedEmail,
+        ...(businessName.trim() ? { businessName: businessName.trim() } : {}),
+        estimateSummary: summaryText,
+        consent: true,
+      });
+      setSubmittedEmail(normalizedEmail);
+      setAdvisoryStatus("success");
+      trackUsabilityEvent("advisory_request", "calculator");
+    } catch (error) {
+      setAdvisoryStatus("error");
+      setAdvisoryError(
+        serverError(error) ??
+          "Online requests are temporarily unavailable. Use the email option below.",
+      );
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -358,8 +445,8 @@ export default function App() {
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Estimate your potential exposure under s.103 (blocking a
             tax-authority systems audit) and s.104 (invoices issued without a
-            valid e-invoice stamp). Everything runs in your browser — nothing
-            you enter is sent or stored.
+            valid e-invoice stamp). The calculator runs in your browser. Nothing
+            is sent unless you submit the optional advisor request.
           </p>
         </div>
 
@@ -383,9 +470,12 @@ export default function App() {
                     SMALL_TURNOVER_CEILING,
                   )}, Medium ≤ ${formatNaira(MEDIUM_TURNOVER_CEILING)}, Large above.`}
                   value={turnover}
-                  onChange={setTurnover}
+                  onChange={(value) => {
+                    markStarted();
+                    setTurnover(value);
+                  }}
                   onBlur={handleTurnoverBlur}
-                  error={turnoverError}
+                  error={touched.turnover ? turnoverError : undefined}
                   echo={turnoverEcho}
                 />
                 <NumberField
@@ -396,8 +486,14 @@ export default function App() {
                     S103_PER_ADDITIONAL_DAY,
                   )} for each additional day.`}
                   value={days}
-                  onChange={setDays}
-                  error={daysError}
+                  onChange={(value) => {
+                    markStarted();
+                    setDays(value);
+                  }}
+                  onBlur={() =>
+                    setTouched((current) => ({ ...current, days: true }))
+                  }
+                  error={touched.days ? daysError : undefined}
                   echo={daysEcho}
                 />
                 <NumberField
@@ -416,8 +512,14 @@ export default function App() {
                         )} (Large).`
                   }
                   value={invoices}
-                  onChange={setInvoices}
-                  error={invoicesError}
+                  onChange={(value) => {
+                    markStarted();
+                    setInvoices(value);
+                  }}
+                  onBlur={() =>
+                    setTouched((current) => ({ ...current, invoices: true }))
+                  }
+                  error={touched.invoices ? invoicesError : undefined}
                   echo={invoicesEcho}
                 />
               </div>
@@ -483,11 +585,19 @@ export default function App() {
                 />
               </div>
 
-              <p className="mt-4 text-xs text-muted-foreground">
-                This is an estimate for guidance only — not legal or tax advice,
-                and not a demand from any authority. Actual penalties are
-                determined by the tax authority.
-              </p>
+              <div
+                className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                data-testid="notice-model-basis"
+              >
+                <p className="font-semibold">MeridianIQ planning model</p>
+                <p className="mt-1">
+                  These amounts are planning assumptions, not an official
+                  statutory tariff, legal advice, tax advice, or an authority
+                  demand. Model basis last reviewed {MODEL_BASIS_REVIEWED};
+                  confirm your position against current FIRS notices or with an
+                  advisor.
+                </p>
+              </div>
 
               <a
                 href="/#product-tour"
@@ -512,40 +622,120 @@ export default function App() {
 
           {/* Optional contact */}
           <div className="order-3 lg:order-none lg:col-span-3 lg:col-start-1 lg:row-start-2">
-            <div className="rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
+            <form
+              onSubmit={handleAdvisorySubmit}
+              className="rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6"
+            >
               <h2 className="text-base font-semibold">
                 Talk to an advisor (optional)
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                "Request a review" opens your email app with the estimate
-                pre-filled — nothing is sent until you press send. Prefer
-                another channel? Copy the summary instead.
+                Submit your email and this estimate to the MeridianIQ advisory
+                team. Calculator inputs remain in your browser until you press
+                Request review.
               </p>
-              <div className="mt-4 space-y-1.5">
-                <label
-                  htmlFor="advisor-email"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  Your email
-                </label>
-                <input
-                  id="advisor-email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-                />
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="advisor-business"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    Business name{" "}
+                    <span className="text-muted-foreground">(optional)</span>
+                  </label>
+                  <input
+                    id="advisor-business"
+                    type="text"
+                    autoComplete="organization"
+                    maxLength={120}
+                    disabled={advisoryStatus === "success"}
+                    value={businessName}
+                    onChange={(event) => setBusinessName(event.target.value)}
+                    placeholder="Company name"
+                    className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="advisor-email"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    Your email
+                  </label>
+                  <input
+                    id="advisor-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                    disabled={advisoryStatus === "success"}
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="you@company.com"
+                    className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
+                  />
+                </div>
               </div>
+              <div className="mt-4 flex items-start gap-2.5">
+                <input
+                  id="advisor-consent"
+                  type="checkbox"
+                  required
+                  disabled={advisoryStatus === "success"}
+                  checked={contactConsent}
+                  onChange={(event) => setContactConsent(event.target.checked)}
+                  className="mt-0.5 size-5 shrink-0 accent-primary"
+                />
+                <label
+                  htmlFor="advisor-consent"
+                  className="text-sm leading-5 text-muted-foreground"
+                >
+                  MeridianIQ may use my email, business name, and estimate to
+                  contact me about this review.
+                </label>
+              </div>
+
+              {advisoryStatus === "success" && (
+                <div
+                  className="mt-4 flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+                  role="status"
+                  data-testid="notice-review-sent"
+                >
+                  <CheckCircle2
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  Request sent. The advisory team will reply to {submittedEmail}
+                  .
+                </div>
+              )}
+              {advisoryStatus === "error" && (
+                <p className="mt-4 text-sm text-destructive" role="alert">
+                  {advisoryError}
+                </p>
+              )}
+
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href={mailtoHref}
+                <button
+                  type="submit"
+                  disabled={
+                    advisoryStatus === "pending" || advisoryStatus === "success"
+                  }
                   data-testid="link-request-review"
                   className={`inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 ${FOCUS_RING}`}
                 >
-                  Request a review
-                </a>
+                  {advisoryStatus === "pending" && (
+                    <LoaderCircle
+                      className="mr-2 size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {advisoryStatus === "pending"
+                    ? "Sending…"
+                    : advisoryStatus === "success"
+                      ? "Request sent"
+                      : "Request review"}
+                </button>
                 <button
                   type="button"
                   onClick={handleCopySummary}
@@ -557,7 +747,15 @@ export default function App() {
                 </button>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Or email us directly at{" "}
+                Online request unavailable?{" "}
+                <a
+                  href={mailtoHref}
+                  data-testid="link-request-review-email"
+                  className={`font-medium text-foreground underline underline-offset-2 rounded ${FOCUS_RING}`}
+                >
+                  Open a pre-filled email
+                </a>{" "}
+                or write to{" "}
                 <a
                   href={`mailto:${ADVISORY_EMAIL}`}
                   className={`font-medium text-foreground underline underline-offset-2 rounded ${FOCUS_RING}`}
@@ -566,7 +764,7 @@ export default function App() {
                 </a>
                 .
               </p>
-            </div>
+            </form>
           </div>
         </div>
 
@@ -576,7 +774,8 @@ export default function App() {
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             The e-invoicing mandate is rolling out in waves by taxpayer size.
             Indicative planning dates — always confirm against the tax
-            authority's official notices.
+            authority's official notices. Planning basis last reviewed{" "}
+            {MODEL_BASIS_REVIEWED}.
           </p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -654,6 +853,13 @@ export default function App() {
         {/* Methodology */}
         <section className="mt-12 rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
           <h2 className="text-base font-semibold">How this is calculated</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            The monetary constants below are MeridianIQ planning assumptions,
+            not an official tariff. They are deliberately shown so an advisor
+            can replace them with the current authoritative amounts when
+            reviewing your circumstances. Basis last reviewed{" "}
+            {MODEL_BASIS_REVIEWED}.
+          </p>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>
               <span className="font-medium text-foreground">Band</span> — set by
@@ -697,7 +903,9 @@ export default function App() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-6xl px-4 py-6 pb-20 text-xs text-muted-foreground sm:px-6 lg:pb-6">
           © {new Date().getFullYear()} MeridianIQ. Estimates only — not legal or
-          tax advice. No data entered here leaves your device.
+          tax advice. Calculator entries stay on your device unless you submit
+          the optional advisor request; that sends your contact details and the
+          estimate summary.
         </div>
       </footer>
     </div>

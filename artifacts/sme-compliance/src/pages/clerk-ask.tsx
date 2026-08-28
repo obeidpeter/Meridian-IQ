@@ -13,11 +13,28 @@ import type {
   ClerkAnswer,
   ExecuteActionResult,
 } from "@workspace/api-client-react";
+import {
+  actionConfirmButtonLabel,
+  actionConfirmDescription,
+  actionOutcomeSummary,
+  actionTruncatedNote,
+} from "@workspace/format/action-copy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { CapabilityGate } from "@/components/capability-gate";
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { PageHeader } from "@/components/page-header";
@@ -83,7 +100,10 @@ export function PlanRunProgress({ runId }: { runId: string }) {
   });
   if (!run) return null;
   return (
-    <div className="border rounded-md p-3 space-y-1" data-testid="card-plan-run">
+    <div
+      className="border rounded-md p-3 space-y-1"
+      data-testid="card-plan-run"
+    >
       <p className="text-sm font-medium">
         {run.status === "done"
           ? "Plan complete — every decision is recorded."
@@ -171,43 +191,89 @@ function SectionActionApproval({
     const d = outcome.decision;
     return (
       <p className="text-sm" data-testid={`text-action-outcome-${index}`}>
-        Approved: {d.executedCount} of {d.requestedCount} ran
-        {d.skippedCount > 0 ? `, ${d.skippedCount} no longer eligible` : ""}
-        {d.failedCount > 0 ? `, ${d.failedCount} failed` : ""}. The decision
-        has been recorded.
+        {actionOutcomeSummary(d)}{" "}
+        {action.kind === "draft_chasers"
+          ? "Review every draft before sending it; nothing was sent automatically. "
+          : ""}
+        The decision has been recorded.
       </p>
     );
   }
+  const count = action.invoiceIds.length;
+  const run = () =>
+    execute.mutate(
+      {
+        data: {
+          kind: action.kind,
+          invoiceIds: action.invoiceIds,
+          clientPartyId: action.clientPartyId,
+        },
+      },
+      {
+        onSuccess: (result) => setOutcome(result),
+        onError: () =>
+          toast({
+            title: "Couldn't run this action",
+            description:
+              "Nothing was changed. Review it on the dashboard's actions card, or try again.",
+          }),
+      },
+    );
   return (
-    <Button
-      size="sm"
-      disabled={execute.isPending}
-      data-testid={`button-approve-action-${index}`}
-      onClick={() =>
-        execute.mutate(
-          {
-            data: {
-              kind: action.kind,
-              invoiceIds: action.invoiceIds,
-              clientPartyId: action.clientPartyId,
-            },
-          },
-          {
-            onSuccess: (result) => setOutcome(result),
-            onError: () =>
-              toast({
-                title: "Couldn't run this action",
-                description:
-                  "Nothing was changed. Review it on the dashboard's actions card, or try again.",
-              }),
-          },
-        )
-      }
-    >
-      {execute.isPending
-        ? "Running…"
-        : `Approve & run (${action.invoiceIds.length})`}
-    </Button>
+    <div className="space-y-2">
+      <div className="rounded-md border bg-muted/30 p-3 text-sm">
+        <p className="font-medium">{action.clientName}</p>
+        <p className="mt-1 text-muted-foreground">{action.why}</p>
+        {action.truncated && (
+          <p className="mt-2 font-medium text-amber-800 dark:text-amber-300">
+            {actionTruncatedNote(count, action.targetCount)}
+          </p>
+        )}
+      </div>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            size="sm"
+            disabled={execute.isPending}
+            data-testid={`button-approve-action-${index}`}
+          >
+            {execute.isPending
+              ? action.kind === "draft_chasers"
+                ? "Preparing…"
+                : "Running…"
+              : actionConfirmButtonLabel(action.kind, count)}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {actionConfirmButtonLabel(action.kind, count)} for{" "}
+              {action.clientName}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {actionConfirmDescription(action.kind, count, "sme")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <p className="font-medium">Why Clerk proposed this</p>
+            <p className="mt-1 text-muted-foreground">{action.why}</p>
+            {action.truncated && (
+              <p className="mt-2 text-amber-800 dark:text-amber-300">
+                {actionTruncatedNote(count, action.targetCount)}
+              </p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={run}>
+              {action.kind === "draft_chasers"
+                ? "Prepare drafts"
+                : "Approve and run"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -609,9 +675,9 @@ export function AskContent() {
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Rules come from the approved register; numbers are computed
-                live from your own records. Anything else is refused and
-                escalated rather than guessed.
+                Rules come from the approved register; numbers are computed live
+                from your own records. Anything else is refused and escalated
+                rather than guessed.
               </p>
               <Button
                 onClick={() => submitQuestion(question)}

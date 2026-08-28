@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.81.0
+ * OpenAPI spec version: 0.82.0
  */
 import * as zod from 'zod';
 
@@ -14,7 +14,8 @@ import * as zod from 'zod';
  */
 export const HealthCheckResponse = zod.object({
   "status": zod.string(),
-  "contractVersion": zod.string()
+  "contractVersion": zod.string(),
+  "buildRevision": zod.string()
 })
 
 
@@ -270,6 +271,52 @@ export const ResetPasswordBody = zod.object({
 })
 
 export const ResetPasswordResponse = zod.void()
+
+
+/**
+ * @summary Request a one-time password-reset email without disclosing whether the account exists (public)
+ */
+export const requestPasswordResetBodyEmailMax = 254;
+
+
+
+export const RequestPasswordResetBody = zod.object({
+  "email": zod.string().email().max(requestPasswordResetBodyEmailMax)
+})
+
+export const RequestPasswordResetResponse = zod.void()
+
+
+/**
+ * @summary Send a public penalty-estimate review request to the configured advisory relay
+ */
+export const requestAdvisoryReviewBodyEmailMax = 254;
+
+export const requestAdvisoryReviewBodyBusinessNameMax = 120;
+
+export const requestAdvisoryReviewBodyEstimateSummaryMax = 5000;
+
+
+
+export const RequestAdvisoryReviewBody = zod.object({
+  "email": zod.string().email().max(requestAdvisoryReviewBodyEmailMax),
+  "businessName": zod.string().max(requestAdvisoryReviewBodyBusinessNameMax).optional(),
+  "estimateSummary": zod.string().min(1).max(requestAdvisoryReviewBodyEstimateSummaryMax),
+  "consent": zod.boolean()
+})
+
+export const RequestAdvisoryReviewResponse = zod.void()
+
+
+/**
+ * @summary Record one privacy-safe aggregate product-usability event
+ */
+export const RecordUsabilityEventBody = zod.object({
+  "event": zod.enum(['landing_cta', 'login_attempt', 'login_success', 'login_failure', 'password_reset_request', 'calculator_started', 'calculator_completed', 'advisory_request', 'zero_result_search', 'workflow_started', 'workflow_completed', 'workflow_abandoned']),
+  "surface": zod.enum(['landing', 'login', 'password_reset', 'calculator', 'portfolio', 'client_import', 'invoice_import'])
+})
+
+export const RecordUsabilityEventResponse = zod.void()
 
 
 /**

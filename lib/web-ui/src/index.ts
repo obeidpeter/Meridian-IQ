@@ -33,3 +33,8 @@ export {
 export { useFilePicker } from "./use-file-picker";
 export { usePageTitle } from "./use-page-title";
 export { toast, useToast } from "./use-toast";
+export {
+  trackUsabilityEvent,
+  type UsabilityEvent,
+  type UsabilitySurface,
+} from "./usability";

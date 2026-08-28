@@ -7,7 +7,11 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
-import { isFeatureEnabled } from "../flags/flags";
+import {
+  CLERK_ENTITLEMENT_FLAG_KEY,
+  isEffectiveFeatureEnabled,
+  isFeatureEnabled,
+} from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { assertFirmClerkBudget } from "./budget";
@@ -205,6 +209,21 @@ export async function processBatch(
   gateway: ClerkGateway,
 ): Promise<SliceOutcome> {
   if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return "noop";
+  const [candidate] = await getDb()
+    .select({ firmId: clerkBatchesTable.firmId })
+    .from(clerkBatchesTable)
+    .where(eq(clerkBatchesTable.id, batchId))
+    .limit(1);
+  if (
+    !candidate ||
+    (candidate.firmId &&
+      !(await isEffectiveFeatureEnabled(
+        CLERK_ENTITLEMENT_FLAG_KEY,
+        candidate.firmId,
+      )))
+  ) {
+    return "noop";
+  }
   const claimed = await claimBatch(batchId);
   if (!claimed) return "noop";
   const { batch } = claimed;
@@ -476,7 +495,7 @@ export async function sweepClerkBatches(): Promise<void> {
   // has minute-sensitive statutory work behind this, so a pass is bounded at
   // roughly a slice's worth of model calls; the queue drains across passes
   // (and the kick path drives the interactive case slice-to-slice anyway).
-  const [candidate] = await getDb()
+  const candidates = await getDb()
     .select({ id: clerkBatchesTable.id, firmId: clerkBatchesTable.firmId })
     .from(clerkBatchesTable)
     .where(
@@ -489,21 +508,30 @@ export async function sweepClerkBatches(): Promise<void> {
       ),
     )
     .orderBy(asc(clerkBatchesTable.createdAt))
-    .limit(1);
-  if (!candidate) return;
-  // Budget PEEK before claiming: claim + park both write the row (refreshing
-  // updated_at), so a permanently-exhausted firm's batch cycling through the
-  // sweep would keep itself forever inside the retention window — holding
-  // its stored document content (for a scan bundle, the full PDF)
-  // indefinitely. Skipping without any write lets the retention backstop
-  // see the batch go stale and purge it.
-  if (candidate.firmId) {
-    try {
-      await assertFirmClerkBudget(candidate.firmId);
-    } catch {
-      return;
+    .limit(25);
+  let candidate: (typeof candidates)[number] | undefined;
+  for (const row of candidates) {
+    if (
+      row.firmId &&
+      !(await isEffectiveFeatureEnabled(CLERK_ENTITLEMENT_FLAG_KEY, row.firmId))
+    ) {
+      continue;
     }
+    // Budget PEEK before claiming: claim + park both write the row (refreshing
+    // updated_at), so a permanently-exhausted firm's batch cycling through the
+    // sweep would keep itself forever inside the retention window. Skip it
+    // without a write and let another entitled firm make progress.
+    if (row.firmId) {
+      try {
+        await assertFirmClerkBudget(row.firmId);
+      } catch {
+        continue;
+      }
+    }
+    candidate = row;
+    break;
   }
+  if (!candidate) return;
   // No provider configured: leave the batches queued for when one exists.
   let gateway: ClerkGateway;
   try {

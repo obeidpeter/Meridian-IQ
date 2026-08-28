@@ -4,6 +4,12 @@ import path from "path";
 const root = path.resolve(__dirname, "..", "..");
 const apiClientReactSrc = path.resolve(root, "lib", "api-client-react", "src");
 const apiZodSrc = path.resolve(root, "lib", "api-zod", "src");
+// esbuild treats backslashes in a Windows absolute entry point as escape
+// characters while Orval inspects a custom mutator. Forward slashes are valid
+// on every supported host and keep local Windows codegen aligned with CI.
+const customFetchPath = path
+  .resolve(apiClientReactSrc, "custom-fetch.ts")
+  .replaceAll(path.sep, "/");
 
 // Our exports make assumptions about the title of the API being "Api" (i.e. generated output is `api.ts`).
 const titleTransformer: InputTransformerFn = (config) => {
@@ -34,7 +40,7 @@ export default defineConfig({
           includeHttpResponseReturnType: false,
         },
         mutator: {
-          path: path.resolve(apiClientReactSrc, "custom-fetch.ts"),
+          path: customFetchPath,
           name: "customFetch",
         },
       },
@@ -58,10 +64,10 @@ export default defineConfig({
       override: {
         zod: {
           coerce: {
-            query: ['boolean', 'number', 'string'],
-            param: ['boolean', 'number', 'string'],
-            body: ['bigint', 'date'],
-            response: ['bigint', 'date'],
+            query: ["boolean", "number", "string"],
+            param: ["boolean", "number", "string"],
+            body: ["bigint", "date"],
+            response: ["bigint", "date"],
           },
         },
         useDates: true,

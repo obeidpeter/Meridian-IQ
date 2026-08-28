@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.81.0
+  version: 0.82.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -287,6 +287,61 @@ paths:
           description: Password set; sign in with it (outstanding sessions are revoked)
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /auth/request-password-reset:
+    post:
+      operationId: requestPasswordReset
+      tags: [auth]
+      summary: Request a one-time password-reset email without disclosing whether the account exists (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestPasswordResetInput"
+      responses:
+        "202":
+          description: Request accepted; if the account exists and delivery is available, a reset email is sent
+        "429":
+          description: Too many recovery requests
+
+  /public/advisory-requests:
+    post:
+      operationId: requestAdvisoryReview
+      tags: [platform]
+      summary: Send a public penalty-estimate review request to the configured advisory relay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdvisoryReviewInput"
+      responses:
+        "202":
+          description: Advisory request accepted for delivery
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Too many advisory requests
+        "503":
+          description: Advisory delivery is not configured or temporarily unavailable
+
+  /public/usability-events:
+    post:
+      operationId: recordUsabilityEvent
+      tags: [platform]
+      summary: Record one privacy-safe aggregate product-usability event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsabilityEventInput"
+      responses:
+        "204":
+          description: Event recorded
+        "429":
+          description: Too many events
 
   /password-resets:
     post:
@@ -6509,9 +6564,12 @@ components:
           type: string
         contractVersion:
           type: string
+        buildRevision:
+          type: string
       required:
         - status
         - contractVersion
+        - buildRevision
     Error:
       type: object
       properties:
@@ -6743,6 +6801,14 @@ components:
         email:
           type: string
           format: email
+    RequestPasswordResetInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
     ResetPasswordInput:
       type: object
       required: [token, password]
@@ -6754,6 +6820,59 @@ components:
           type: string
           minLength: 8
           maxLength: 256
+
+    AdvisoryReviewInput:
+      type: object
+      required: [email, estimateSummary, consent]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        businessName:
+          type: string
+          maxLength: 120
+        estimateSummary:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        consent:
+          type: boolean
+
+    UsabilityEventInput:
+      type: object
+      required: [event, surface]
+      additionalProperties: false
+      properties:
+        event:
+          type: string
+          enum:
+            [
+              landing_cta,
+              login_attempt,
+              login_success,
+              login_failure,
+              password_reset_request,
+              calculator_started,
+              calculator_completed,
+              advisory_request,
+              zero_result_search,
+              workflow_started,
+              workflow_completed,
+              workflow_abandoned,
+            ]
+        surface:
+          type: string
+          enum:
+            [
+              landing,
+              login,
+              password_reset,
+              calculator,
+              portfolio,
+              client_import,
+              invoice_import,
+            ]
 
     Firm:
       type: object

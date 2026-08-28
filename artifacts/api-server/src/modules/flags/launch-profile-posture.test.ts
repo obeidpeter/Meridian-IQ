@@ -13,12 +13,20 @@ import { RELEASE_FLAGS } from "./releases.ts";
 // the manifest deliberately, then this test, in the same change.
 
 // The R0 Field Kit core — the ONLY flags a fresh production database lights.
-const LAUNCH_LIT = ["advisory_engagements", "consent_ledger", "invoice_lifecycle"];
+const LAUNCH_LIT = [
+  "advisory_engagements",
+  "consent_ledger",
+  "invoice_lifecycle",
+];
 
 // Flags deliberately NOT seeded ("dark-by-absence"): they resolve false until
 // a row is inserted by hand, a stricter posture than a seeded-dark row (the
 // operator flags surface is UPDATE-only and cannot create them).
-const DARK_BY_ABSENCE = ["clerk_digest", "clerk_client_statements", "clerk_triage"];
+const DARK_BY_ABSENCE = [
+  "clerk_digest",
+  "clerk_client_statements",
+  "clerk_triage",
+];
 
 test("the manifest is well-formed and the launch profile lights ONLY the R0 core", () => {
   const keys = RELEASE_FLAGS.map((f) => f.key);
@@ -39,7 +47,11 @@ test("the manifest is well-formed and the launch profile lights ONLY the R0 core
     "launchDefault=true is the R0 core exactly — lighting anything else at launch is an activation decision, not a default",
   );
   for (const f of RELEASE_FLAGS.filter((x) => x.launchDefault)) {
-    assert.equal(f.releaseTag, "R0", `${f.key} is launch-lit, so it must be R0`);
+    assert.equal(
+      f.releaseTag,
+      "R0",
+      `${f.key} is launch-lit, so it must be R0`,
+    );
   }
   for (const key of DARK_BY_ABSENCE) {
     assert.ok(
@@ -55,6 +67,7 @@ test("the launch-dark opt-ins the roadmap deferred stay launch-dark, dev-lit", (
   const deferred = [
     "buyer_confirmations",
     "clerk_ai",
+    "clerk_ai_runtime",
     "client_reports",
     "collection_accounts",
     "money_analytics",
@@ -66,6 +79,46 @@ test("the launch-dark opt-ins the roadmap deferred stay launch-dark, dev-lit", (
     assert.ok(flag, `${key} is in the manifest`);
     assert.equal(flag.launchDefault, false, `${key} ships dark at launch`);
     assert.equal(flag.devDefault, true, `${key} stays lit in dev/CI/demo`);
+  }
+});
+
+test("Clerk composes a global runtime wall with per-firm entitlement", () => {
+  const flags = src("modules/flags/flags.ts");
+  assert.ok(
+    flags.includes('export const CLERK_ENTITLEMENT_FLAG_KEY = "clerk_ai"') &&
+      flags.includes(
+        'export const CLERK_RUNTIME_FLAG_KEY = "clerk_ai_runtime"',
+      ),
+    "the independent entitlement and runtime controls are named centrally",
+  );
+  assert.ok(
+    flags.includes("if (!runtimeEnabled) return false") &&
+      flags.includes("lit.delete(CLERK_RUNTIME_FLAG_KEY)") &&
+      flags.includes("if (key === CLERK_RUNTIME_FLAG_KEY)"),
+    "a dark runtime always wins and its internal key is not exposed as a client capability",
+  );
+  assert.ok(
+    src("routes/clerk/index.ts").includes(
+      'router.use("/clerk", requireFlag("clerk_ai"))',
+    ),
+    "every Clerk route rides the path-prefixed effective gate",
+  );
+  assert.ok(
+    src("routes/auth.ts").includes(
+      "features: await litFeatureKeys(membership.firmId)",
+    ),
+    "the sign-in response composes the member's firm entitlement instead of runtime alone",
+  );
+  for (const file of [
+    "modules/clerk/ask-memory.ts",
+    "modules/clerk/batch-async.ts",
+    "modules/clerk/memory.ts",
+    "modules/desk/draft-reply.ts",
+  ]) {
+    assert.ok(
+      !src(file).includes("isFeatureEnabled(CLERK_FLAG_KEY,"),
+      `${file} must not apply a firm override to the global runtime key`,
+    );
   }
 });
 
@@ -134,7 +187,8 @@ test("no route file gates a whole router (the prefix-less mounting trap)", () =>
 
 test("collections: the firm routes ride the flag; the machine rail does not", () => {
   const routesSrc = src("routes/collections.ts");
-  const gated = routesSrc.split('requireFlag("collection_accounts")').length - 1;
+  const gated =
+    routesSrc.split('requireFlag("collection_accounts")').length - 1;
   assert.equal(
     gated,
     4,
@@ -159,7 +213,9 @@ test("collections: the firm routes ride the flag; the machine rail does not", ()
 // instead of navigating into a flag-gated 404.
 test("Me.features is wired end to end", () => {
   assert.ok(
-    src("modules/flags/flags.ts").includes("export async function litFeatureKeys"),
+    src("modules/flags/flags.ts").includes(
+      "export async function litFeatureKeys",
+    ),
     "the lit-keys resolver exists",
   );
   assert.ok(

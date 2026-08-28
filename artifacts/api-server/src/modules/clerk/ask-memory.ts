@@ -6,12 +6,12 @@ import {
   EMBEDDING_DIMS,
 } from "@workspace/db";
 import { logger } from "../../lib/logger";
-import { isFeatureEnabled } from "../flags/flags";
 import {
-  CLERK_FLAG_KEY,
-  embedWithLedger,
-  type MemoryEmbedder,
-} from "./gateway";
+  CLERK_ENTITLEMENT_FLAG_KEY,
+  isEffectiveFeatureEnabled,
+  isFeatureEnabled,
+} from "../flags/flags";
+import { embedWithLedger, type MemoryEmbedder } from "./gateway";
 import {
   EMBED_QUERY_PROMPT_VERSION,
   MEMORY_FLAG_KEY,
@@ -89,7 +89,10 @@ export async function computeAskMemory(
   return Promise.race([
     computeAskMemoryInner(params),
     new Promise<undefined>((resolve) => {
-      const timer = setTimeout(() => resolve(undefined), ASK_MEMORY_DEADLINE_MS);
+      const timer = setTimeout(
+        () => resolve(undefined),
+        ASK_MEMORY_DEADLINE_MS,
+      );
       timer.unref();
     }),
   ]);
@@ -121,7 +124,12 @@ async function computeAskMemoryInner(
 ): Promise<AskAnswerMemory | undefined> {
   try {
     if (!(await memoryRailReady())) return undefined;
-    if (!(await isFeatureEnabled(CLERK_FLAG_KEY, params.firmId))) {
+    if (
+      !(await isEffectiveFeatureEnabled(
+        CLERK_ENTITLEMENT_FLAG_KEY,
+        params.firmId,
+      ))
+    ) {
       return undefined;
     }
     if (!(await isFeatureEnabled(MEMORY_FLAG_KEY, params.firmId))) {

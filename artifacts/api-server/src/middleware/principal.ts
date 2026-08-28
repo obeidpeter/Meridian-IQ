@@ -61,6 +61,12 @@ export const PUBLIC_PATHS = new Set([
   // Password-reset redeem: same posture (IDN-02) — the caller's session is
   // exactly what was lost, so the single-use token is the credential.
   "/api/auth/reset-password",
+  // Forgot-password request: always answers the same way whether the address
+  // exists; its route owns IP/account throttles and sends only via the trusted
+  // messaging relay.
+  "/api/auth/request-password-reset",
+  "/api/public/advisory-requests",
+  "/api/public/usability-events",
   // TOTP challenge: like accept-invite, the signed short-lived mfaToken issued
   // by /auth/login IS the credential — the caller by definition holds no
   // session yet (the cookie is only issued once the second factor passes).

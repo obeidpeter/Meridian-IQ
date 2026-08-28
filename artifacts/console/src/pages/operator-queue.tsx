@@ -558,39 +558,6 @@ export function OperatorQueue() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatTile
-          label="Open"
-          value={String(stats?.openCount ?? "—")}
-          loading={statsLoading}
-          testId="stat-open"
-        />
-        <StatTile
-          label="In progress"
-          value={String(stats?.inProgressCount ?? "—")}
-          loading={statsLoading}
-          testId="stat-in-progress"
-        />
-        <StatTile
-          label="Resolved"
-          value={String(stats?.resolvedCount ?? "—")}
-          loading={statsLoading}
-          testId="stat-resolved"
-        />
-        <StatTile
-          label="Clients served"
-          value={String(stats?.clientsServed ?? "—")}
-          loading={statsLoading}
-          testId="stat-clients-served"
-        />
-        <StatTile
-          label="Avg handle time"
-          value={formatDuration(stats?.avgHandleSeconds)}
-          loading={statsLoading}
-          testId="stat-avg-handle"
-        />
-      </div>
-
       <Tabs
         value={status}
         onValueChange={(v) => setStatus(v as ListOperatorCasesStatus)}
@@ -640,6 +607,49 @@ export function OperatorQueue() {
           ))}
         </div>
       )}
+
+      <section className="space-y-3" aria-labelledby="queue-health-heading">
+        <div>
+          <h2 id="queue-health-heading" className="text-base font-semibold">
+            Queue health
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Throughput and service indicators for the current operator desk.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <StatTile
+            label="Open"
+            value={String(stats?.openCount ?? "—")}
+            loading={statsLoading}
+            testId="stat-open"
+          />
+          <StatTile
+            label="In progress"
+            value={String(stats?.inProgressCount ?? "—")}
+            loading={statsLoading}
+            testId="stat-in-progress"
+          />
+          <StatTile
+            label="Resolved"
+            value={String(stats?.resolvedCount ?? "—")}
+            loading={statsLoading}
+            testId="stat-resolved"
+          />
+          <StatTile
+            label="Clients served"
+            value={String(stats?.clientsServed ?? "—")}
+            loading={statsLoading}
+            testId="stat-clients-served"
+          />
+          <StatTile
+            label="Avg handle time"
+            value={formatDuration(stats?.avgHandleSeconds)}
+            loading={statsLoading}
+            testId="stat-avg-handle"
+          />
+        </div>
+      </section>
     </div>
   );
 }

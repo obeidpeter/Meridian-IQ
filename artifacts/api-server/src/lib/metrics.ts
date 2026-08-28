@@ -49,7 +49,10 @@ export class Counter implements Metric {
     this.series.set(key, entry);
   }
   expose(): string {
-    const lines = [`# HELP ${this.name} ${this.help}`, `# TYPE ${this.name} counter`];
+    const lines = [
+      `# HELP ${this.name} ${this.help}`,
+      `# TYPE ${this.name} counter`,
+    ];
     if (this.series.size === 0) lines.push(`${this.name} 0`);
     for (const { labels, value } of this.series.values()) {
       lines.push(`${this.name}${fmtLabels(labels)} ${value}`);
@@ -96,7 +99,12 @@ export class Histogram implements Metric {
     const key = fmtLabels(labels);
     let s = this.series.get(key);
     if (!s) {
-      s = { labels, counts: new Array(this.buckets.length).fill(0), sum: 0, count: 0 };
+      s = {
+        labels,
+        counts: new Array(this.buckets.length).fill(0),
+        sum: 0,
+        count: 0,
+      };
       this.series.set(key, s);
     }
     s.sum += value;
@@ -116,7 +124,10 @@ export class Histogram implements Metric {
     };
   }
   expose(): string {
-    const lines = [`# HELP ${this.name} ${this.help}`, `# TYPE ${this.name} histogram`];
+    const lines = [
+      `# HELP ${this.name} ${this.help}`,
+      `# TYPE ${this.name} histogram`,
+    ];
     for (const s of this.series.values()) {
       for (let i = 0; i < this.buckets.length; i++) {
         lines.push(
@@ -162,6 +173,10 @@ export const outboxClaimFailuresTotal = new Counter(
   "meridian_outbox_claim_failures_total",
   "Errors thrown while claiming the next outbox event.",
 );
+export const usabilityEventsTotal = new Counter(
+  "meridian_usability_events_total",
+  "Privacy-safe aggregate product usability events by closed event and surface.",
+);
 
 const METRICS: Metric[] = [
   httpDuration,
@@ -169,7 +184,12 @@ const METRICS: Metric[] = [
   sweepErrorsTotal,
   sweepLastSuccess,
   outboxClaimFailuresTotal,
+  usabilityEventsTotal,
 ];
+
+export function recordUsabilityEvent(event: string, surface: string): void {
+  usabilityEventsTotal.inc({ event, surface });
+}
 
 // Event-loop lag: the single most useful process-health signal for a Node
 // service. Started once at module load; read at scrape time.
@@ -179,7 +199,12 @@ loopDelay.enable();
 function processMetrics(): string {
   const mem = process.memoryUsage();
   const rows = [
-    ["nodejs_eventloop_lag_seconds", "gauge", "Mean event-loop delay.", loopDelay.mean / 1e9],
+    [
+      "nodejs_eventloop_lag_seconds",
+      "gauge",
+      "Mean event-loop delay.",
+      loopDelay.mean / 1e9,
+    ],
     ["process_resident_memory_bytes", "gauge", "Resident set size.", mem.rss],
     ["nodejs_heap_used_bytes", "gauge", "V8 heap used.", mem.heapUsed],
     ["nodejs_heap_total_bytes", "gauge", "V8 heap total.", mem.heapTotal],

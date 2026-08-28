@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { pool } from "@workspace/db";
 import { bumpFixedWindow } from "../../lib/fixed-window";
@@ -59,6 +60,51 @@ export async function throttleLoginAttempt(
   if (row.count <= IP_ATTEMPT_MAX) return null;
   const elapsed = Date.now() - new Date(row.window_start).getTime();
   return Math.max(1, Math.ceil((IP_ATTEMPT_WINDOW_MS - elapsed) / 1000));
+}
+
+async function throttlePublicWindow(
+  key: string,
+  windowMs: number,
+  max: number,
+): Promise<number | null> {
+  const row = await bumpFixedWindow(key, windowMs);
+  if (row.count <= max) return null;
+  const elapsed = Date.now() - new Date(row.window_start).getTime();
+  return Math.max(1, Math.ceil((windowMs - elapsed) / 1000));
+}
+
+// Browser-public actions are exempt from the principal limiter, so each owns
+// a bounded raw-pool counter. Namespace and limits are server constants; the
+// caller can never choose labels or create arbitrary policy.
+export async function throttlePublicRequest(
+  req: Request,
+  namespace: "advisory" | "usability",
+): Promise<number | null> {
+  const policy =
+    namespace === "advisory"
+      ? { windowMs: 15 * 60 * 1000, max: 5 }
+      : { windowMs: 15 * 60 * 1000, max: 120 };
+  return throttlePublicWindow(
+    `${namespace}-ip:${requestIp(req)}`,
+    policy.windowMs,
+    policy.max,
+  );
+}
+
+export async function throttlePasswordResetRequest(
+  req: Request,
+  email: string,
+): Promise<number | null> {
+  const accountDigest = createHash("sha256")
+    .update(normalizeEmail(email))
+    .digest("hex")
+    .slice(0, 32);
+  const waits = await Promise.all([
+    throttlePublicWindow(`pwreset-ip:${requestIp(req)}`, 15 * 60 * 1000, 10),
+    throttlePublicWindow(`pwreset-account:${accountDigest}`, 60 * 60 * 1000, 5),
+  ]);
+  const active = waits.filter((wait): wait is number => wait !== null);
+  return active.length ? Math.max(...active) : null;
 }
 
 function accountKey(email: string): string {

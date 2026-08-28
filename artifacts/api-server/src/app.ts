@@ -56,6 +56,12 @@ const NO_CONTEXT_PATHS = new Set([
 // method+path pairs listed here are exempt, so the GET list/read routes that
 // share the paths keep the ordinary tenant transaction.
 const NO_CONTEXT_ROUTES = new Set([
+  // Public recovery/contact rails own short raw-pool throttles. Password reset
+  // issuance opens its own bypass transaction before the external relay call;
+  // the other two do no tenant data work at all.
+  "POST /api/auth/request-password-reset",
+  "POST /api/public/advisory-requests",
+  "POST /api/public/usability-events",
   "POST /api/clerk/cases",
   "POST /api/clerk/cases/batch",
   "POST /api/clerk/ask",

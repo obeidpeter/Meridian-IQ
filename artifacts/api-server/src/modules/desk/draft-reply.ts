@@ -11,7 +11,11 @@ import {
 import { DomainError } from "../errors";
 import { ensureGrounded } from "../clerk/grounding";
 import { appendAudit } from "../audit/audit";
-import { isFeatureEnabled } from "../flags/flags";
+import {
+  CLERK_ENTITLEMENT_FLAG_KEY,
+  isEffectiveFeatureEnabled,
+  isFeatureEnabled,
+} from "../flags/flags";
 import {
   CLERK_FLAG_KEY,
   embedWithLedger,
@@ -166,7 +170,10 @@ export function copiesExampleSpecifics(
   const tokens = example.match(/[A-Z0-9][A-Z0-9/-]{4,}/gi) ?? [];
   for (const token of tokens) {
     if (!/\d/.test(token)) continue;
-    if (currentErrorCode && token.toUpperCase() === currentErrorCode.toUpperCase()) {
+    if (
+      currentErrorCode &&
+      token.toUpperCase() === currentErrorCode.toUpperCase()
+    ) {
       continue;
     }
     if (draft.toUpperCase().includes(token.toUpperCase())) return true;
@@ -286,7 +293,10 @@ export async function draftEscalationReply(
   try {
     if (
       (await memoryRailReady()) &&
-      (await isFeatureEnabled(CLERK_FLAG_KEY, escalation.firmId)) &&
+      (await isEffectiveFeatureEnabled(
+        CLERK_ENTITLEMENT_FLAG_KEY,
+        escalation.firmId,
+      )) &&
       (await isFeatureEnabled(MEMORY_FLAG_KEY, escalation.firmId))
     ) {
       const embedder =

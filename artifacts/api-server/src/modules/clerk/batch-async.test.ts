@@ -67,7 +67,9 @@ function batchGateway(labels: string[]) {
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `Batch Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Batch Firm ${SALT}` });
   await db
     .insert(usersTable)
     .values({ id: userId, email: `batch-${SALT}@test.example` })
@@ -159,7 +161,11 @@ test("a big bundle processes in slices with truthful counters", async () => {
   // batch's own earlier work as duplicates.
   const labels = Array.from({ length: 12 }, (_, i) => `SLICE-${i}`);
   const batch = await createClerkBatch(
-    { sourceType: "text", name: `Big ${SALT}`, text: `twelve invoices ${SALT}` },
+    {
+      sourceType: "text",
+      name: `Big ${SALT}`,
+      text: `twelve invoices ${SALT}`,
+    },
     userId,
     { firmId },
   );
@@ -208,7 +214,11 @@ test("a big bundle processes in slices with truthful counters", async () => {
   assert.equal(done.status, "done");
   assert.equal(done.processedSegments, 12);
   assert.equal(done.createdCases, 12);
-  assert.equal(done.skippedDuplicates, 0, "own progress never counted as dupes");
+  assert.equal(
+    done.skippedDuplicates,
+    0,
+    "own progress never counted as dupes",
+  );
   assert.equal(done.segments, null);
 });
 
@@ -236,7 +246,10 @@ test("garbage segmentation fails the batch with a reason", async () => {
     userId,
     { firmId },
   );
-  await processBatch(batch.id, fakeGateway(() => "not json"));
+  await processBatch(
+    batch.id,
+    fakeGateway(() => "not json"),
+  );
   const [row] = await getDb()
     .select()
     .from(clerkBatchesTable)
@@ -252,7 +265,7 @@ test("the kill switch parks a queued batch instead of consuming it", async () =>
     userId,
     { firmId },
   );
-  await setFlag("clerk_ai", false);
+  await setFlag("clerk_ai_runtime", false);
   try {
     await processBatch(batch.id, batchGateway(["PARKED"]));
     await sweepClerkBatches();
@@ -265,7 +278,7 @@ test("the kill switch parks a queued batch instead of consuming it", async () =>
   } finally {
     await getDb()
       .insert(featureFlagsTable)
-      .values({ key: "clerk_ai", enabled: true, description: "test" })
+      .values({ key: "clerk_ai_runtime", enabled: true, description: "test" })
       .onConflictDoUpdate({
         target: featureFlagsTable.key,
         set: { enabled: true },
