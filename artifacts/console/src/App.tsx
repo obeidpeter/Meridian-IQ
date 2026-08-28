@@ -34,6 +34,7 @@ import { ClerkWorkspace } from "@/pages/clerk";
 import { ClerkAskPage } from "@/pages/clerk-ask";
 import { ClerkHealthPage } from "@/pages/clerk-health";
 import { Notifications } from "@/pages/notifications";
+import { Help } from "@/pages/help";
 import { FilingDesk } from "@/pages/filing-desk";
 import { CollectionsDesk } from "@/pages/collections-desk";
 import { PracticeAnalytics } from "@/pages/analytics";
@@ -123,6 +124,7 @@ function ConsoleRoutes() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/help" component={Help} />
         <Route path="/filing-desk">
           <CapabilityGate capability="filing.read">
             <FilingDesk />

@@ -87,6 +87,7 @@ import { draftStorageKey, type DraftState } from "@/pages/invoice-new";
 import { LineItemRow } from "@/components/line-item-row";
 import { FieldError } from "@/components/field-error";
 import {
+  draftHasWork,
   emptyLine,
   lineTotals,
   todayIsoDate,
@@ -96,6 +97,7 @@ import {
 } from "@/lib/invoice-lines";
 import { ERROR_FOCUS } from "@/lib/error-focus";
 import { invoicePdfFilename, triggerDownload } from "@/lib/download";
+import { useRecordRecentItem } from "@workspace/web-ui";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -1012,6 +1014,15 @@ export function InvoiceDetail() {
   const createConfirmation = useCreateConfirmation();
   const { data: me } = useGetMe();
 
+  // Recognition over recall: the command menu offers the last few invoices
+  // this user opened; record this one once it resolves.
+  useRecordRecentItem(
+    me ? `meridianiq:recent-invoices:${me.userId}` : null,
+    invoice
+      ? { id, label: invoice.invoiceNumber, detail: statusLabel(invoice.status) }
+      : null,
+  );
+
   const [reason, setReason] = useState("");
   const [showEscalate, setShowEscalate] = useState(false);
   // "Fix & resubmit" (fix-and-retry): an editable copy of the failed
@@ -1292,20 +1303,19 @@ export function InvoiceDetail() {
     };
   };
 
-  // A stored draft with an invoice number, a picked customer, or any
-  // filled-in line is real work — ask before replacing it. A corrupt draft
-  // reads as empty (the form ignores it too).
+  // A stored draft with real work must be asked about before replacing.
+  // The form's draft lives in localStorage (with a pre-move sessionStorage
+  // fallback) — check BOTH homes, or a durable draft gets silently shadowed.
+  // draftHasWork is the form's own bar, so the guard and the form agree on
+  // what counts as work; a corrupt draft reads as empty (the form ignores
+  // it too).
   const storedDraftHasWork = (): boolean => {
     try {
       if (!me) return false;
-      const raw = sessionStorage.getItem(draftStorageKey(me.userId, me.firmId));
+      const key = draftStorageKey(me.userId, me.firmId);
+      const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
       if (!raw) return false;
-      const d = JSON.parse(raw) as DraftState;
-      return Boolean(
-        d.invoiceNumber?.trim() ||
-        d.buyerPartyId ||
-        (d.lines ?? []).some((l) => l.description.trim() || l.unitPrice.trim()),
-      );
+      return draftHasWork(JSON.parse(raw) as Partial<DraftState>);
     } catch {
       return false;
     }
@@ -1314,10 +1324,11 @@ export function InvoiceDetail() {
   const startNewFromInvoice = () => {
     const draft = buildDraftFromInvoice();
     if (!draft || !invoice || !me) return;
-    sessionStorage.setItem(
-      draftStorageKey(me.userId, me.firmId),
-      JSON.stringify(draft),
-    );
+    const key = draftStorageKey(me.userId, me.firmId);
+    // The form reads localStorage first — seed there, and drop any stale
+    // sessionStorage copy so nothing shadows the new draft.
+    localStorage.setItem(key, JSON.stringify(draft));
+    sessionStorage.removeItem(key);
     toast({
       title: "New invoice drafted",
       description: `Copied from ${invoice.invoiceNumber} — give it a new invoice number.`,
@@ -1637,6 +1648,15 @@ export function InvoiceDetail() {
               WHT category: {whtCategoryLabel(invoice.whtCategory)}
             </p>
           )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            <Link
+              href="/help#stamping"
+              className="font-bold text-teal-800 underline underline-offset-2"
+              data-testid="link-help-stamping"
+            >
+              What does stamping mean?
+            </Link>
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canSubmit && (

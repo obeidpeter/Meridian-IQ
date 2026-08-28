@@ -176,7 +176,19 @@ export function Vat() {
     <div className="space-y-6">
       <PageHeader
         title="VAT position"
-        description="Output VAT from your issued documents against input VAT from your supplier bills — one month at a time."
+        description={
+          <>
+            Output VAT from your issued documents against input VAT from your
+            supplier bills — one month at a time.{" "}
+            <Link
+              href="/help#vat"
+              className="font-bold text-teal-800 underline underline-offset-2"
+              data-testid="link-help-vat"
+            >
+              How this is calculated
+            </Link>
+          </>
+        }
       />
 
       <RequireClientScope thing="VAT position">

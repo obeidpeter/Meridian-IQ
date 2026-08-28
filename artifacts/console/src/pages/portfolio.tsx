@@ -104,6 +104,7 @@ import {
   WorkQueue,
   WorkspaceHeader,
   type WorkQueueItem,
+  useUrlParam,
   useUrlTab,
 } from "@workspace/web-ui";
 
@@ -1698,6 +1699,20 @@ const PORTFOLIO_VIEWS = [
 type PortfolioView = (typeof PORTFOLIO_VIEWS)[number];
 type ClientRiskFilter = "all" | "high" | "medium" | "low";
 type ClientSort = "risk" | "name" | "unsubmitted" | "deadline";
+// URL-persisted (recognition over recall): back-navigation from a client
+// returns to the exact filtered view, and a filtered book is shareable.
+const CLIENT_RISK_FILTERS: readonly ClientRiskFilter[] = [
+  "all",
+  "high",
+  "medium",
+  "low",
+];
+const CLIENT_SORTS: readonly ClientSort[] = [
+  "risk",
+  "name",
+  "unsubmitted",
+  "deadline",
+];
 
 function ClientWorkbenchTable({
   clients,
@@ -1927,9 +1942,17 @@ export function Portfolio() {
     "today",
     PORTFOLIO_VIEWS,
   );
-  const [clientSearch, setClientSearch] = useState("");
-  const [clientRisk, setClientRisk] = useState<ClientRiskFilter>("all");
-  const [clientSort, setClientSort] = useState<ClientSort>("risk");
+  const [clientSearch, setClientSearch] = useUrlParam("q");
+  const [clientRisk, setClientRisk] = useUrlTab<ClientRiskFilter>(
+    "risk",
+    "all",
+    CLIENT_RISK_FILTERS,
+  );
+  const [clientSort, setClientSort] = useUrlTab<ClientSort>(
+    "sort",
+    "risk",
+    CLIENT_SORTS,
+  );
   const { data: me } = useGetMe();
   const { data, isLoading, error, refetch } = useGetPortfolio();
   const canImport = canImportClients(me);

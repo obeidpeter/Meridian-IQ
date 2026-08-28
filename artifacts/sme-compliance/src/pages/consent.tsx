@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import {
   exportClientData,
   useGetMe,
@@ -195,7 +196,19 @@ export function Consent() {
     <div className="space-y-6">
       <PageHeader
         title="Consent"
-        description="Every permission you've given us, with a full history — changes are always recorded, never overwritten."
+        description={
+          <>
+            Every permission you've given us, with a full history — changes
+            are always recorded, never overwritten.{" "}
+            <Link
+              href="/help#consent"
+              className="font-bold text-teal-800 underline underline-offset-2"
+              data-testid="link-help-consent"
+            >
+              How consent works
+            </Link>
+          </>
+        }
       />
 
       <RequireClientScope thing="consent ledger">

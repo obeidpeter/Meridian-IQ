@@ -25,7 +25,8 @@ export function WorkspaceHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description?: string;
+  /** One line under the title; a node so pages can append a help link. */
+  description?: ReactNode;
   status?: ReactNode;
   actions?: ReactNode;
   className?: string;

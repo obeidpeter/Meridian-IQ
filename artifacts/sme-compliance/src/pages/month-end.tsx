@@ -147,7 +147,19 @@ export function MonthEnd() {
       <WorkspaceHeader
         eyebrow="Close"
         title="Month-end"
-        description="A single control room for unresolved paper, money checks, filings and approved Clerk automation."
+        description={
+          <>
+            A single control room for unresolved paper, money checks, filings
+            and approved Clerk automation.{" "}
+            <Link
+              href="/help#month-end"
+              className="font-bold text-teal-800 underline underline-offset-2"
+              data-testid="link-help-month-end"
+            >
+              What a close is
+            </Link>
+          </>
+        }
         status={
           close.attentionCount > 0 ? (
             <span className="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">

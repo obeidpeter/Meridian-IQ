@@ -6,6 +6,7 @@ import {
   Bot,
   Calendar as CalendarIcon,
   CalendarCheck2,
+  CircleHelp,
   CircleUserRound,
   FileCheck2,
   FileText,
@@ -39,7 +40,12 @@ import {
 import { NotificationBell } from "@/components/notification-bell";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { ClerkDock } from "@/components/clerk-dock";
-import { CommandMenu, type CommandItem } from "@workspace/web-ui";
+import {
+  CommandMenu,
+  readRecentItems,
+  type CommandItem,
+} from "@workspace/web-ui";
+import { HELP_TOPICS } from "@/pages/help";
 
 type NavLink = {
   href: string;
@@ -146,6 +152,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/notifications", label: "Notifications", icon: Inbox },
       { href: "/alerts", label: "Alert settings", icon: Bell },
       { href: "/consent", label: "Consent", icon: ShieldCheck },
+      { href: "/help", label: "Help", icon: CircleHelp },
     ],
   },
 ];
@@ -345,7 +352,10 @@ export function Layout({ children }: { children: ReactNode }) {
     for (const storage of [window.localStorage, window.sessionStorage]) {
       for (let index = storage.length - 1; index >= 0; index--) {
         const key = storage.key(index);
-        if (key?.startsWith("meridianiq:invoice-draft")) {
+        if (
+          key?.startsWith("meridianiq:invoice-draft") ||
+          key?.startsWith("meridianiq:recent-")
+        ) {
           storage.removeItem(key);
         }
       }
@@ -373,20 +383,51 @@ export function Layout({ children }: { children: ReactNode }) {
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
   const pageTitle = activeLink?.label ?? roleContext.title;
-  const commandItems: CommandItem[] = groups.flatMap((group) =>
-    group.links.map((link) => {
-      const Icon = link.icon;
-      return {
-        id: `sme-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
-        label: link.label,
-        description: `Open ${link.label.toLowerCase()} for this business.`,
-        group: group.title,
-        icon: <Icon className="size-4" aria-hidden="true" />,
-        keywords: [group.title, "business", "compliance"],
-        onSelect: () => navigate(link.href),
-      };
-    }),
-  );
+  // Recently opened invoices lead the menu (recognition over recall): the
+  // record you were just working on beats re-finding it through the vault.
+  const recentInvoices: CommandItem[] = (
+    me ? readRecentItems(`meridianiq:recent-invoices:${me.userId}`) : []
+  ).map((item) => ({
+    id: `sme-command-recent-${item.id}`,
+    label: item.label,
+    description: item.detail ?? "Open this recent invoice.",
+    group: "Recent invoices",
+    icon: <FileText className="size-4" aria-hidden="true" />,
+    keywords: ["recent", "invoice"],
+    onSelect: () => navigate(`/invoices/${item.id}`),
+  }));
+  const helpItems: CommandItem[] = HELP_TOPICS.map((topic) => ({
+    id: `sme-command-help-${topic.id}`,
+    label: topic.title,
+    description: topic.summary,
+    group: "Help",
+    icon: <CircleHelp className="size-4" aria-hidden="true" />,
+    keywords: ["help", "how", "guide"],
+    onSelect: () => {
+      navigate("/help");
+      // wouter drops the hash; set it after the route lands so the page's
+      // mount effect scrolls to the topic.
+      window.location.hash = topic.id;
+    },
+  }));
+  const commandItems: CommandItem[] = [
+    ...recentInvoices,
+    ...groups.flatMap((group) =>
+      group.links.map((link) => {
+        const Icon = link.icon;
+        return {
+          id: `sme-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
+          label: link.label,
+          description: `Open ${link.label.toLowerCase()} for this business.`,
+          group: group.title,
+          icon: <Icon className="size-4" aria-hidden="true" />,
+          keywords: [group.title, "business", "compliance"],
+          onSelect: () => navigate(link.href),
+        };
+      }),
+    ),
+    ...helpItems,
+  ];
   const navProps = {
     groups,
     location,
