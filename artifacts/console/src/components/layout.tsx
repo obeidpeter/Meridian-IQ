@@ -30,6 +30,7 @@ import {
   KeyRound,
   Inbox,
   CalendarCheck2,
+  CircleHelp,
   WalletCards,
   BarChart3,
   Search,
@@ -48,7 +49,12 @@ import { roleLabel } from "@/components/capability-gate";
 import { PORTAL_URL } from "@/components/require-session";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { ClerkDock } from "@/components/clerk-dock";
-import { CommandMenu, type CommandItem } from "@workspace/web-ui";
+import {
+  CommandMenu,
+  readRecentItems,
+  type CommandItem,
+} from "@workspace/web-ui";
+import { HELP_TOPICS } from "@/pages/help";
 
 // Every console page maps to the RBAC capability its API surface requires
 // (modules/auth/rbac.ts). The nav renders only what the signed-in principal
@@ -150,6 +156,11 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/notifications",
         label: "Notifications",
         icon: Inbox,
+      },
+      {
+        href: "/help",
+        label: "Help",
+        icon: CircleHelp,
       },
     ],
   },
@@ -461,6 +472,14 @@ export function Layout({ children }: { children: ReactNode }) {
     } catch {
       /* clearing the cookie is best-effort; leave regardless */
     }
+    // Per-viewer conveniences must not survive an account switch on a shared
+    // machine (the sme/landing sign-outs sweep the same prefix).
+    for (let index = window.localStorage.length - 1; index >= 0; index--) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith("meridianiq:recent-")) {
+        window.localStorage.removeItem(key);
+      }
+    }
     // Full navigation to the portal so every app re-resolves the (now absent)
     // session instead of trusting cached queries.
     window.location.href = PORTAL_URL;
@@ -488,20 +507,51 @@ export function Layout({ children }: { children: ReactNode }) {
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
   const pageTitle = activeLink?.label ?? roleContext.title;
-  const commandItems: CommandItem[] = groups.flatMap((group) =>
-    group.links.map((link) => {
-      const Icon = link.icon;
-      return {
-        id: `console-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
-        label: link.label,
-        description: `Open ${link.label.toLowerCase()} in the ${roleContext.title.toLowerCase()}.`,
-        group: group.title,
-        icon: <Icon className="size-4" aria-hidden="true" />,
-        keywords: [group.title, roleContext.badge],
-        onSelect: () => navigate(link.href),
-      };
-    }),
-  );
+  // Recently opened clients lead the menu (recognition over recall): the
+  // client you were just working on beats re-finding them in the book.
+  const recentClients: CommandItem[] = (
+    me ? readRecentItems(`meridianiq:recent-clients:${me.userId}`) : []
+  ).map((item) => ({
+    id: `console-command-recent-${item.id}`,
+    label: item.label,
+    description: item.detail ?? "Open this recent client.",
+    group: "Recent clients",
+    icon: <Users className="size-4" aria-hidden="true" />,
+    keywords: ["recent", "client"],
+    onSelect: () => navigate(`/clients/${item.id}`),
+  }));
+  const helpItems: CommandItem[] = HELP_TOPICS.map((topic) => ({
+    id: `console-command-help-${topic.id}`,
+    label: topic.title,
+    description: topic.summary,
+    group: "Help",
+    icon: <CircleHelp className="size-4" aria-hidden="true" />,
+    keywords: ["help", "how", "guide"],
+    onSelect: () => {
+      navigate("/help");
+      // wouter drops the hash; set it after the route lands so the page's
+      // mount effect scrolls to the topic.
+      window.location.hash = topic.id;
+    },
+  }));
+  const commandItems: CommandItem[] = [
+    ...recentClients,
+    ...groups.flatMap((group) =>
+      group.links.map((link) => {
+        const Icon = link.icon;
+        return {
+          id: `console-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
+          label: link.label,
+          description: `Open ${link.label.toLowerCase()} in the ${roleContext.title.toLowerCase()}.`,
+          group: group.title,
+          icon: <Icon className="size-4" aria-hidden="true" />,
+          keywords: [group.title, roleContext.badge],
+          onSelect: () => navigate(link.href),
+        };
+      }),
+    ),
+    ...helpItems,
+  ];
 
   const navProps = {
     groups,

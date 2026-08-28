@@ -1411,7 +1411,10 @@ function SignedInPanel({ me }: { me: Me }) {
     for (const storage of [window.localStorage, window.sessionStorage]) {
       for (let index = storage.length - 1; index >= 0; index--) {
         const key = storage.key(index);
-        if (key?.startsWith("meridianiq:invoice-draft")) {
+        if (
+          key?.startsWith("meridianiq:invoice-draft") ||
+          key?.startsWith("meridianiq:recent-")
+        ) {
           storage.removeItem(key);
         }
       }

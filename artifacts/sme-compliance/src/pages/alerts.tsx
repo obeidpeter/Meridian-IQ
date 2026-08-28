@@ -21,6 +21,7 @@ import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { serverErrorMessage } from "@/lib/errors";
 import { MessageSquare, Phone, Mail, Send, Lock } from "lucide-react";
 import { humanize } from "@/lib/format";
@@ -106,6 +107,22 @@ export function Alerts() {
   ) => setForm((f) => ({ ...f, [key]: value }));
 
   const save = async () => {
+    // Snapshot the last-loaded server state BEFORE saving: the success toast
+    // offers one Undo that writes these values back (a plain second save —
+    // preferences are ordinary settings, so save-again IS the undo).
+    const previous: AlertPreferencesInput | null = prefs
+      ? {
+          whatsappEnabled: prefs.whatsappEnabled,
+          smsEnabled: prefs.smsEnabled,
+          emailEnabled: prefs.emailEnabled,
+          whatsappTo: prefs.whatsappTo,
+          phone: prefs.phone,
+          email: prefs.email,
+          deadlineAlerts: prefs.deadlineAlerts,
+          failureAlerts: prefs.failureAlerts,
+          penaltyAlerts: prefs.penaltyAlerts,
+        }
+      : null;
     try {
       await update.mutateAsync({ id: clientPartyId, data: form });
       // Not awaited: a background refetch rejection must not surface as a false
@@ -113,7 +130,39 @@ export function Alerts() {
       queryClient.invalidateQueries({
         queryKey: getGetAlertPreferencesQueryKey(clientPartyId),
       });
-      toast({ title: "Alert settings saved", description: "Alert settings updated." });
+      toast({
+        title: "Alert settings saved",
+        description: "Alert settings updated.",
+        action: previous ? (
+          <ToastAction
+            altText="Undo and restore your previous alert settings"
+            data-testid="button-undo-alert-save"
+            onClick={() => {
+              void (async () => {
+                try {
+                  await update.mutateAsync({ id: clientPartyId, data: previous });
+                  setForm(previous);
+                  queryClient.invalidateQueries({
+                    queryKey: getGetAlertPreferencesQueryKey(clientPartyId),
+                  });
+                  toast({
+                    title: "Previous settings restored",
+                    description: "Your alert settings are back as they were.",
+                  });
+                } catch (e) {
+                  toast({
+                    title: "Couldn't restore previous settings",
+                    description: serverErrorMessage(e),
+                    variant: "destructive",
+                  });
+                }
+              })();
+            }}
+          >
+            Undo
+          </ToastAction>
+        ) : undefined,
+      });
     } catch (e) {
       toast({
         title: "Couldn't save alert preferences",

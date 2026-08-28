@@ -85,6 +85,7 @@ import {
   WorkQueue,
   WorkspaceHeader,
   type WorkQueueItem,
+  useRecordRecentItem,
   useUrlTab,
 } from "@workspace/web-ui";
 
@@ -567,6 +568,13 @@ export function ClientDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
+
+  // Recognition over recall: the command menu offers the last few clients
+  // this user opened; record this one once it resolves.
+  useRecordRecentItem(
+    me ? `meridianiq:recent-clients:${me.userId}` : null,
+    data ? { id, label: data.client.legalName } : null,
+  );
 
   // Data-subject export: the query sits armed but idle; the button fetches
   // once and saves the server's bundle verbatim.

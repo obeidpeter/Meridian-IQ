@@ -28,6 +28,7 @@ import {
 import { WHT_CATEGORY_LABELS } from "@workspace/format/wht-copy";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { AddCustomerDialog } from "@/components/add-customer-dialog";
@@ -263,7 +264,12 @@ export function InvoiceNew() {
     return () => clearTimeout(t);
   }, [draft, draftKey, draftOwner]);
 
+  // Discard with an escape hatch (user control and freedom): the cleared
+  // draft is held in the closure and one Undo puts it — and its device copy —
+  // back exactly as it was. Only offered when the draft carried real work.
   const discardDraft = () => {
+    const stashedDraft = draft;
+    const stashedSavedAt = savedAt;
     if (draftKey) {
       localStorage.removeItem(draftKey);
       sessionStorage.removeItem(draftKey);
@@ -271,6 +277,30 @@ export function InvoiceNew() {
     setDraft(emptyDraft());
     setSavedAt(null);
     setShowErrors(false);
+    if (!draftHasWork(stashedDraft)) return;
+    toast({
+      title: "Draft discarded",
+      description: "Your unfinished invoice was cleared from this device.",
+      action: (
+        <ToastAction
+          altText="Undo discarding the draft"
+          data-testid="button-undo-discard"
+          onClick={() => {
+            setDraft(stashedDraft);
+            setSavedAt(stashedSavedAt ?? new Date());
+            if (draftKey) {
+              try {
+                localStorage.setItem(draftKey, JSON.stringify(stashedDraft));
+              } catch {
+                /* storage full/blocked — the in-memory restore still holds */
+              }
+            }
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    });
   };
 
   const selectedBuyer = buyers.find((b) => b.id === draft.buyerPartyId);
