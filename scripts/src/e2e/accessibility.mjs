@@ -168,7 +168,10 @@ export async function collectAccessibilityIssues(page) {
   if (focusIssue) issues.push(focusIssue);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.waitForTimeout(30);
+  // Let focus and colour transitions that began before the media preference
+  // changed settle. Animations still running after this window are the ones
+  // the reduced-motion override must stop.
+  await page.waitForTimeout(250);
   const motionIssue = await page.evaluate(() => {
     const running = document
       .getAnimations()
