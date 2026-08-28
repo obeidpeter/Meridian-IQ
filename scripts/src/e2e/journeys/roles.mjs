@@ -313,8 +313,18 @@ async function journeyTotp(page, BASE, check) {
   );
 
   // Activate with a live code computed in the harness from that secret.
+  const activateButton = page.getByTestId("button-totp-activate");
+  check(
+    "activation waits until the recovery codes are acknowledged",
+    await activateButton.isDisabled(),
+  );
+  await page.getByTestId("checkbox-recovery-saved").check();
   await page.getByTestId("input-totp-activate").fill(await freshCode(secret));
-  await page.getByTestId("button-totp-activate").click();
+  check(
+    "acknowledging the recovery codes enables activation",
+    await activateButton.isEnabled(),
+  );
+  await activateButton.click();
   await page.waitForSelector('[data-testid="text-totp-enabled"]', {
     timeout: 10000,
   });
