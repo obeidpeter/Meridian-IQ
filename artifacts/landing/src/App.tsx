@@ -103,7 +103,7 @@ const APPS: AppTile[] = [
     key: "sme",
     name: "Compliance App",
     tagline:
-      "Guided invoicing, submission & vault, reconciliation, B2C clocks and deadline alerts for SMEs.",
+      "Create and submit invoices, keep the stamped copies, and stay ahead of deadlines.",
     href: "/app/",
     icon: FileCheck2,
     allowedRoles: ["firm_admin", "firm_staff", "client_user"],
@@ -113,7 +113,7 @@ const APPS: AppTile[] = [
     key: "console",
     name: "Accountant Console",
     tagline:
-      "Multi-client portfolio, onboarding, billing, white-label branding, certification and the operator queue.",
+      "Manage all your clients' compliance in one place — onboarding, daily work and billing.",
     href: "/console/",
     icon: Building2,
     allowedRoles: ["firm_admin", "firm_staff", "operator", "auditor"],
@@ -123,7 +123,7 @@ const APPS: AppTile[] = [
     key: "buyer",
     name: "Buyer Rails",
     tagline:
-      "Confirm supplier invoices for VAT protection, flag payments, track exposure and score suppliers.",
+      "Check and confirm supplier invoices before paying, and protect your VAT claims.",
     href: "/buyer/",
     icon: Store,
     allowedRoles: ["buyer_user"],
@@ -133,7 +133,7 @@ const APPS: AppTile[] = [
     key: "calc",
     name: "Penalty Calculator",
     tagline:
-      "See what non-compliance costs: fines for not connecting your systems to the tax authority (s.103) and for invoices issued without e-invoicing (s.104), estimated from your turnover. Free, no account needed.",
+      "See what late or missing e-invoicing could cost in fines, based on your turnover. Free — no account needed.",
     href: "/penalty-calculator/",
     icon: Calculator,
     allowedRoles: null,
@@ -167,13 +167,13 @@ function loginErrorMessage(err: unknown): string {
   const serverError = serverErrorFrom(err);
   if (status === 401) {
     return serverError === "Account has no active membership"
-      ? "This account exists but has no workspace membership yet. Ask your administrator to add one."
-      : "Invalid email or password.";
+      ? "This account isn't linked to a workspace yet. Ask your administrator to add you."
+      : "That email or password is not right. Try again.";
   }
   if (status !== undefined) {
     return serverError ?? "Sign-in failed. Please try again.";
   }
-  return "Could not reach the server. Check your connection and try again.";
+  return "We can't reach MeridianIQ right now. Check your internet connection and try again.";
 }
 
 function AppCard({
@@ -223,7 +223,7 @@ function AppCard({
         ) : (
           <span className={pillClasses("slate")}>
             <Lock className="h-3 w-3" aria-hidden="true" />{" "}
-            {role ? "Not for your role" : "Requires sign-in"}
+            {role ? "Not for this account" : "Sign in first"}
           </span>
         )}
       </div>
@@ -245,7 +245,7 @@ function AppCard({
         ) : needsOtherRole ? (
           <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
             <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            Available to {roleListLabel(app.allowedRoles!)} accounts
+            For {roleListLabel(app.allowedRoles!)} accounts
           </p>
         ) : (
           <Button
@@ -409,7 +409,7 @@ function SignInPanel() {
         setTotpCode("");
         setPassword("");
         setError(
-          "That sign-in attempt expired. Enter your password again to get a new code prompt.",
+          "That sign-in took too long and expired. Enter your password again to get a new code.",
         );
         return;
       }
@@ -456,9 +456,9 @@ function SignInPanel() {
           Enter your code
         </h1>
         <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
-          <span className="font-semibold text-slate-900">{email}</span> is
-          protected by two-factor authentication. Enter the 6-digit code from
-          your authenticator app — or one of your saved recovery codes.
+          <span className="font-semibold text-slate-900">{email}</span> has an
+          extra security step. Type the 6-digit code from your authenticator
+          app, or use one of your saved recovery codes.
         </p>
 
         <form onSubmit={onVerifyCode} className="mt-8 space-y-5">
@@ -487,7 +487,8 @@ function SignInPanel() {
               data-testid="input-totp-code"
             />
             <p id="totp-help" className="text-xs text-slate-500">
-              Codes rotate every 30 seconds. A recovery code works here too.
+              Your app shows a new code every 30 seconds. A recovery code also
+              works here.
             </p>
           </div>
           {totpError && (
@@ -539,14 +540,14 @@ function SignInPanel() {
         <span className="grid size-8 place-items-center rounded-md bg-teal-100">
           <LockKeyhole className="size-4" aria-hidden="true" />
         </span>
-        Secure workspace access
+        Secure sign-in
       </div>
 
       <h1 className="landing-display mt-6 text-4xl font-bold text-slate-950 sm:text-5xl">
         Welcome back
       </h1>
       <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
-        Sign in once. MeridianIQ will take you straight to your workspace.
+        Sign in and we&apos;ll take you straight to your workspace.
       </p>
 
       {arrival.expired && arrival.returnTo && (
@@ -650,7 +651,7 @@ function SignInPanel() {
           {pending === "form" && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           )}
-          Sign in securely
+          Sign in
           {pending !== "form" && (
             <ArrowRight className="size-4" aria-hidden="true" />
           )}
@@ -659,7 +660,7 @@ function SignInPanel() {
 
       <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
         <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
-        Role-scoped access and encrypted session cookies
+        Your connection is secure. You only see what your account allows.
       </div>
     </div>
   );
@@ -1354,7 +1355,7 @@ function SignedInPanel({ me }: { me: Me }) {
       </div>
       <TotpSecurityCard />
       <p className="mt-3 text-sm text-muted-foreground">
-        Open a workspace highlighted below, or switch accounts.
+        Open your workspace below, or sign out to switch accounts.
       </p>
       <div className="mt-4 space-y-2">
         {target && (
@@ -1417,20 +1418,20 @@ function focusEmailField() {
 
 const ACCESS_PATHS = [
   {
-    title: "SME teams",
-    detail: "Capture, submit and reconcile",
+    title: "Business owners",
+    detail: "Create invoices, submit and get paid",
     icon: ReceiptText,
     tone: "bg-lime-300 text-[#071a1c]",
   },
   {
     title: "Accounting firms",
-    detail: "Portfolio risk and client delivery",
+    detail: "Manage every client's compliance",
     icon: UsersRound,
     tone: "bg-cyan-200 text-[#071a1c]",
   },
   {
-    title: "Platform operations",
-    detail: "Exceptions, evidence and Clerk review",
+    title: "MeridianIQ staff",
+    detail: "Support, checks and reviews",
     icon: Headphones,
     tone: "bg-amber-200 text-[#071a1c]",
   },
@@ -1457,7 +1458,7 @@ function AccessStory() {
               MeridianIQ
             </span>
             <span className="mt-1 block text-[11px] font-semibold text-white/50">
-              Compliance intelligence
+              Invoicing, done right
             </span>
           </span>
         </a>
@@ -1473,14 +1474,14 @@ function AccessStory() {
       <div className="flex flex-1 flex-col justify-center px-10 py-10 xl:px-14">
         <div className="max-w-xl">
           <p className="text-xs font-extrabold uppercase text-lime-300">
-            Connected compliance workspace
+            One sign-in for everything
           </p>
           <h2 className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl">
-            One account. The right operational view.
+            One account. The right workspace.
           </h2>
           <p className="mt-6 max-w-lg text-base leading-7 text-white/65">
-            Every MeridianIQ role works from the same governed invoice record,
-            with access narrowed to the decisions that role owns.
+            Everyone works from the same records. Each person sees only what
+            their role needs.
           </p>
         </div>
 
@@ -1511,25 +1512,25 @@ function AccessStory() {
         <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/55">
           <span className="inline-flex items-center gap-2">
             <ShieldCheck className="size-4 text-lime-300" aria-hidden="true" />
-            Role-scoped access
+            Access by role
           </span>
           <span className="inline-flex items-center gap-2">
             <ScanLine className="size-4 text-cyan-200" aria-hidden="true" />
-            Human-reviewed AI
+            AI checked by people
           </span>
           <span className="inline-flex items-center gap-2">
             <CheckCircle2
               className="size-4 text-amber-200"
               aria-hidden="true"
             />
-            Verifiable evidence
+            Proof you can check
           </span>
         </div>
       </div>
 
       <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/35 xl:px-14">
         <span>Lagos, Nigeria</span>
-        <span>Built for the Nigerian invoice lifecycle</span>
+        <span>Made for Nigerian invoicing</span>
       </div>
     </section>
   );
@@ -1593,7 +1594,7 @@ function AccessPortal({
                     className="mt-0.5 size-4 shrink-0"
                     aria-hidden="true"
                   />
-                  MeridianIQ is temporarily unreachable.
+                  We can&apos;t reach MeridianIQ right now.
                 </span>
                 <Button size="sm" variant="outline" onClick={onRetry}>
                   Retry
@@ -1605,7 +1606,7 @@ function AccessPortal({
         </main>
 
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-500 sm:px-10 xl:px-16">
-          <span>Protected by role-based access controls</span>
+          <span>Sign-in protected. Access by role.</span>
           <a
             className="font-bold hover:text-slate-900"
             href="/penalty-calculator/"
@@ -1686,8 +1687,7 @@ function Portal() {
             Choose your workspace
           </h1>
           <p className="mt-3 text-base leading-7 text-slate-600 sm:text-lg">
-            Your default workspace is ready. The options below reflect the
-            access attached to this account.
+            Your workspace is ready. These are the apps this account can open.
           </p>
         </section>
 
@@ -1721,8 +1721,8 @@ function Portal() {
 
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-xs text-muted-foreground">
           <p>
-            MeridianIQ — Lagos, Nigeria. The Penalty Calculator is public; every
-            other workspace is protected by sign-in and role.
+            MeridianIQ — Lagos, Nigeria. The Penalty Calculator is free for
+            everyone; the other workspaces need a sign-in.
           </p>
           <nav className="flex items-center gap-4" aria-label="Footer">
             <a
