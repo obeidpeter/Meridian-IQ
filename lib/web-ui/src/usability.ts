@@ -10,7 +10,11 @@ export type UsabilityEvent =
   | "zero_result_search"
   | "workflow_started"
   | "workflow_completed"
-  | "workflow_abandoned";
+  | "workflow_abandoned"
+  | "help_opened"
+  | "help_search_no_result"
+  | "help_helpful"
+  | "help_unhelpful";
 
 export type UsabilitySurface =
   | "landing"
@@ -19,7 +23,9 @@ export type UsabilitySurface =
   | "calculator"
   | "portfolio"
   | "client_import"
-  | "invoice_import";
+  | "invoice_import"
+  | "console_help"
+  | "sme_help";
 
 // Fire-and-forget, aggregate-only telemetry. The closed payload contains no
 // user, tenant, field value, free text, URL, or identifier. Failures never

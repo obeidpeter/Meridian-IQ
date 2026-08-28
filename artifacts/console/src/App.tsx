@@ -38,6 +38,7 @@ import { Help } from "@/pages/help";
 import { FilingDesk } from "@/pages/filing-desk";
 import { CollectionsDesk } from "@/pages/collections-desk";
 import { PracticeAnalytics } from "@/pages/analytics";
+import { ActivityPage } from "@/pages/activity";
 import { ClerkShell } from "@/components/clerk-shell";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
@@ -124,6 +125,7 @@ function ConsoleRoutes() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/activity" component={ActivityPage} />
         <Route path="/help" component={Help} />
         <Route path="/filing-desk">
           <CapabilityGate capability="filing.read">

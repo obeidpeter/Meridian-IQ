@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useImportClients,
   useDraftClientImportWithClerk,
+  useGetMe,
   type ClientImportRow,
   type ClientImportResult,
   type ClientImportDraft,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,11 +17,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { StatTile } from "@/components/stat-tile";
 import { downloadBlob } from "@/lib/download";
-import { isFeatureDisabled } from "@/lib/errors";
+import { errorStatus, isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
-import { trackUsabilityEvent, useFilePicker } from "@workspace/web-ui";
+import {
+  beginOperation,
+  trackUsabilityEvent,
+  updateOperation,
+  useFilePicker,
+} from "@workspace/web-ui";
 import { parseCsvTable } from "@workspace/web-ui/csv";
 import {
   Upload,
@@ -72,12 +79,15 @@ export function ClientImport() {
   const queryClient = useQueryClient();
   const importClients = useImportClients();
   const clerkDraft = useDraftClientImportWithClerk();
+  const { data: me } = useGetMe();
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
 
   const [raw, setRaw] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<ClientImportResult | null>(null);
   const [draft, setDraft] = useState<ClientImportDraft | null>(null);
   const [featureDark, setFeatureDark] = useState(false);
+  const [commitInterrupted, setCommitInterrupted] = useState(false);
   const workflowStarted = useRef(false);
   const workflowCompleted = useRef(false);
 
@@ -123,10 +133,21 @@ export function ClientImport() {
 
   const draftWithClerk = () => {
     markWorkflowStarted();
+    const operation = beginOperation(operationKey, {
+      title: "Map client import with Clerk",
+      kind: "clerk",
+      route: "/clients/import",
+      detail: `${raw.length.toLocaleString("en-NG")} characters to map`,
+    });
     clerkDraft.mutate(
       { data: { sampleCsv: raw } },
       {
         onSuccess: (res) => {
+          updateOperation(operationKey, operation?.id, {
+            status: "succeeded",
+            detail: `${res.rows.length} row(s) mapped and ready for review.`,
+            savedSummary: "No clients were created; the mapping is a draft.",
+          });
           setDraft(res);
           setResult(null);
           toast({
@@ -134,13 +155,19 @@ export function ClientImport() {
             description: `${res.rows.length} row(s) mapped from your file — review, then validate.`,
           });
         },
-        onError: () =>
+        onError: () => {
+          updateOperation(operationKey, operation?.id, {
+            status: "failed",
+            detail: "Clerk could not map the supplied headers.",
+            savedSummary: "No clients were created and no mapping was saved.",
+          });
           toast({
             title: "Clerk could not map that file",
             description:
               "Check the sample includes a header row naming the client column, or reshape it to the CSV template.",
             variant: "destructive",
-          }),
+          });
+        },
       },
     );
   };
@@ -148,9 +175,28 @@ export function ClientImport() {
   const run = async (commit: boolean) => {
     if (rows.length === 0) return;
     markWorkflowStarted();
+    setCommitInterrupted(false);
+    const operation = beginOperation(operationKey, {
+      title: commit ? "Import clients" : "Validate client import",
+      kind: "import",
+      route: "/clients/import",
+      detail: `${rows.length} row${rows.length === 1 ? "" : "s"}`,
+    });
     try {
       const res = await importClients.mutateAsync({ data: { rows, commit } });
       setResult(res);
+      updateOperation(operationKey, operation?.id, {
+        status:
+          commit && (res.invalidCount > 0 || res.existsCount > 0)
+            ? "partial"
+            : "succeeded",
+        detail: commit
+          ? `${res.createdCount} created, ${res.existsCount} existing, ${res.invalidCount} invalid.`
+          : `${res.createdCount} new, ${res.existsCount} existing, ${res.invalidCount} invalid.`,
+        savedSummary: commit
+          ? `${res.createdCount} client record(s) were created.`
+          : "Validation only; no client records were created.",
+      });
       if (commit) {
         workflowCompleted.current = true;
         trackUsabilityEvent("workflow_completed", "client_import");
@@ -169,13 +215,36 @@ export function ClientImport() {
       }
     } catch (err) {
       if (isFeatureDisabled(err)) {
+        updateOperation(operationKey, operation?.id, {
+          status: "failed",
+          detail: "Client import is not enabled for this workspace.",
+          savedSummary: "No client records were created.",
+        });
         setFeatureDark(true);
         return;
       }
+      const outcomeUnknown = commit && errorStatus(err) === undefined;
+      updateOperation(operationKey, operation?.id, {
+        status: outcomeUnknown ? "partial" : "failed",
+        detail: outcomeUnknown
+          ? "The connection ended before the server confirmed the import."
+          : "The server rejected the import.",
+        savedSummary: outcomeUnknown
+          ? "Outcome unconfirmed. Check the portfolio before importing again."
+          : "No client records were created.",
+      });
+      if (outcomeUnknown) setCommitInterrupted(true);
       toast({
-        title: commit ? "Import failed" : "Validation failed",
-        description:
-          err instanceof Error ? err.message : "Please check your rows.",
+        title: outcomeUnknown
+          ? "Import outcome not confirmed"
+          : commit
+            ? "Import failed"
+            : "Validation failed",
+        description: outcomeUnknown
+          ? "Check the client portfolio before trying again to avoid duplicates."
+          : err instanceof Error
+            ? err.message
+            : "Please check your rows.",
         variant: "destructive",
       });
     }
@@ -379,6 +448,23 @@ export function ClientImport() {
           </p>
         )}
       </div>
+
+      {commitInterrupted && (
+        <div
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
+          data-testid="alert-client-import-interrupted"
+        >
+          <p className="font-semibold">The import may have completed.</p>
+          <p className="mt-1">
+            The connection ended before MeridianIQ answered. Check the{" "}
+            <Link href="/?view=clients" className="font-semibold underline">
+              client portfolio
+            </Link>{" "}
+            before importing again to avoid duplicate client records.
+          </p>
+        </div>
+      )}
 
       {importClients.isPending && !result && <Skeleton className="h-40" />}
 

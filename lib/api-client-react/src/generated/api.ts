@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.82.0
+ * OpenAPI spec version: 0.83.0
  */
 import {
   useMutation,
@@ -243,6 +243,8 @@ import type {
   IntentEvalRun,
   IntentFixtureSummary,
   Invitation,
+  InvitationPreview,
+  InvitationPreviewInput,
   InvitationWithToken,
   Invoice,
   InvoiceApproval,
@@ -1452,6 +1454,76 @@ export const useAcceptInvite = <TError = ErrorType<BadRequestResponse | void>,
         TContext
       > => {
       return useMutation(getAcceptInviteMutationOptions(options));
+    }
+
+export const getPreviewInvitationUrl = () => {
+
+
+
+
+  return `/api/auth/invite-preview`
+}
+
+/**
+ * @summary Resolve the account and workspace context carried by an invitation token (public)
+ */
+export const previewInvitation = async (invitationPreviewInput: InvitationPreviewInput, options?: RequestInit): Promise<InvitationPreview> => {
+
+  return customFetch<InvitationPreview>(getPreviewInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invitationPreviewInput)
+  }
+);}
+
+
+
+
+export const getPreviewInvitationMutationOptions = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewInvitation>>, TError,{data: BodyType<InvitationPreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewInvitation>>, TError,{data: BodyType<InvitationPreviewInput>}, TContext> => {
+
+const mutationKey = ['previewInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewInvitation>>, {data: BodyType<InvitationPreviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewInvitation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof previewInvitation>>>
+    export type PreviewInvitationMutationBody = BodyType<InvitationPreviewInput>
+    export type PreviewInvitationMutationError = ErrorType<BadRequestResponse | void>
+
+    /**
+ * @summary Resolve the account and workspace context carried by an invitation token (public)
+ */
+export const usePreviewInvitation = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewInvitation>>, TError,{data: BodyType<InvitationPreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewInvitation>>,
+        TError,
+        {data: BodyType<InvitationPreviewInput>},
+        TContext
+      > => {
+      return useMutation(getPreviewInvitationMutationOptions(options));
     }
 
 export const getResetPasswordUrl = () => {

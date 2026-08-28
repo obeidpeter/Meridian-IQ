@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.82.0
+ * OpenAPI spec version: 0.83.0
  */
 export interface HealthStatus {
   status: string;
@@ -154,6 +154,32 @@ export interface InvitationWithToken {
   token: string;
 }
 
+export interface InvitationPreviewInput {
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
+  token: string;
+}
+
+export type InvitationPreviewRole = typeof InvitationPreviewRole[keyof typeof InvitationPreviewRole];
+
+
+export const InvitationPreviewRole = {
+  firm_admin: 'firm_admin',
+  firm_staff: 'firm_staff',
+  client_user: 'client_user',
+} as const;
+
+export interface InvitationPreview {
+  email: string;
+  role: InvitationPreviewRole;
+  workspaceName: string;
+  /** @nullable */
+  clientName?: string | null;
+  expiresAt: string;
+}
+
 export interface AcceptInvitationInput {
   /** @minLength 1 */
   token: string;
@@ -235,6 +261,10 @@ export const UsabilityEventInputEvent = {
   workflow_started: 'workflow_started',
   workflow_completed: 'workflow_completed',
   workflow_abandoned: 'workflow_abandoned',
+  help_opened: 'help_opened',
+  help_search_no_result: 'help_search_no_result',
+  help_helpful: 'help_helpful',
+  help_unhelpful: 'help_unhelpful',
 } as const;
 
 export type UsabilityEventInputSurface = typeof UsabilityEventInputSurface[keyof typeof UsabilityEventInputSurface];
@@ -248,6 +278,8 @@ export const UsabilityEventInputSurface = {
   portfolio: 'portfolio',
   client_import: 'client_import',
   invoice_import: 'invoice_import',
+  console_help: 'console_help',
+  sme_help: 'sme_help',
 } as const;
 
 export interface UsabilityEventInput {

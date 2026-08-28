@@ -22,7 +22,12 @@ import type {
   ClerkActionPolicy,
   PaymentChaserDraft,
 } from "@workspace/api-client-react";
-import { useActionPolicyControls, useClerkActionsDialog } from "@workspace/web-ui";
+import {
+  beginOperation,
+  updateOperation,
+  useActionPolicyControls,
+  useClerkActionsDialog,
+} from "@workspace/web-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { errorStatus, serverErrorMessage } from "@/lib/errors";
 import {
   ACTION_OUTCOME_LABELS,
   ACTION_TARGET_DISPLAY_CAP,
@@ -85,6 +90,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   // but no buttons that could only ever 403.
   const { data: me } = useGetMe();
   const canAct = !!me?.capabilities.includes("invoice.submit");
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
   const execute = useExecuteAction();
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },
@@ -211,14 +217,41 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   >({
     mutation: execute,
     run: async (action) => {
-      const res = await execute.mutateAsync({
-        data: {
-          kind: action.kind,
-          invoiceIds: action.targets.map((t) => t.invoiceId),
-          clientPartyId,
-        },
+      const operation = beginOperation(operationKey, {
+        title: `Run Clerk action: ${policyKindLabel(action.kind)}`,
+        kind: "clerk",
+        route: `/clients/${clientPartyId}?view=clerk`,
+        detail: `${action.targets.length} target${action.targets.length === 1 ? "" : "s"}`,
       });
-      return { decision: res.decision, drafts: res.drafts };
+      try {
+        const res = await execute.mutateAsync({
+          data: {
+            kind: action.kind,
+            invoiceIds: action.targets.map((t) => t.invoiceId),
+            clientPartyId,
+          },
+        });
+        updateOperation(operationKey, operation?.id, {
+          status: "succeeded",
+          detail:
+            "The approved Clerk action finished and its decision was recorded.",
+          savedSummary:
+            "A durable Clerk decision is available on the client record.",
+        });
+        return { decision: res.decision, drafts: res.drafts };
+      } catch (error) {
+        const outcomeUnknown = errorStatus(error) === undefined;
+        updateOperation(operationKey, operation?.id, {
+          status: outcomeUnknown ? "partial" : "failed",
+          detail: outcomeUnknown
+            ? "The connection ended before the Clerk decision was returned."
+            : "The Clerk action failed before completion.",
+          savedSummary: outcomeUnknown
+            ? "Outcome unconfirmed. Reopen the client Clerk tab before retrying."
+            : "No completed decision was returned.",
+        });
+        throw error;
+      }
     },
     onExecuted: () => {
       queryClient.invalidateQueries({
@@ -290,7 +323,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <p className="text-sm text-muted-foreground">{action.why}</p>
             <div className="space-y-1 text-xs text-muted-foreground">
               {action.targets.slice(0, ACTION_TARGET_DISPLAY_CAP).map((t) => (
-                <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
+                <p
+                  key={t.invoiceId}
+                  data-testid={`action-target-${t.invoiceId}`}
+                >
                   {t.invoiceNumber} · issued {formatDate(t.issueDate)}
                   {t.grandTotal
                     ? ` · ${formatAmount(t.grandTotal, t.currency)}`
@@ -417,7 +453,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
           {proposals.note}
         </p>
       </CardContent>
-      <Dialog open={!!confirming} onOpenChange={(open) => !open && closeDialog()}>
+      <Dialog
+        open={!!confirming}
+        onOpenChange={(open) => !open && closeDialog()}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           {decision === null ? (
             <>

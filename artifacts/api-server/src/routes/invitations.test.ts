@@ -245,6 +245,21 @@ test("redeeming a token provisions the user + membership and is single-use", asy
   const inviteId = (created.json.invitation as Record<string, unknown>)
     .id as string;
 
+  const preview = await fetch(`${authBase}/auth/invite-preview`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await preview.json(), {
+    email,
+    role: "client_user",
+    workspaceName: `Invite Firm ${SALT}`,
+    clientName: `Engaged Client ${SALT}`,
+    expiresAt: (created.json.invitation as Record<string, unknown>).expiresAt,
+  });
+
   const accept = await fetch(`${authBase}/auth/accept-invite`, {
     method: "POST",
     headers: JSON_HEADERS,
@@ -294,6 +309,13 @@ test("redeeming a token provisions the user + membership and is single-use", asy
     body: JSON.stringify({ token, password: "another-pw-123" }),
   });
   assert.equal(replay.status, 400);
+
+  const consumedPreview = await fetch(`${authBase}/auth/invite-preview`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(consumedPreview.status, 400);
 });
 
 test("redeeming an unknown token is a generic 400", async () => {
@@ -307,6 +329,13 @@ test("redeeming an unknown token is a generic 400", async () => {
     }),
   });
   assert.equal(res.status, 400);
+
+  const preview = await fetch(`${authBase}/auth/invite-preview`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ token: "deadbeef".repeat(8) }),
+  });
+  assert.equal(preview.status, 400);
 });
 
 test("two invitations racing for one email yield one account and a controlled conflict", async () => {

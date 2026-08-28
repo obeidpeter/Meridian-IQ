@@ -6,6 +6,7 @@ import {
   LoginResponse,
   ChangePasswordBody,
   AcceptInviteBody,
+  PreviewInvitationBody,
   ResetPasswordBody,
   RequestPasswordResetBody,
   TotpChallengeBody,
@@ -45,9 +46,13 @@ import {
   throttleActionAttempt,
   throttleLoginAttempt,
   throttlePasswordResetRequest,
+  throttlePublicRequest,
 } from "../modules/auth/throttle";
 import { litFeatureKeys } from "../modules/flags/flags";
-import { acceptInvitation } from "../modules/auth/invitations";
+import {
+  acceptInvitation,
+  previewInvitation,
+} from "../modules/auth/invitations";
 import {
   requestPasswordReset,
   resetPassword,
@@ -829,6 +834,21 @@ router.post("/auth/accept-invite", async (req, res): Promise<void> => {
     fullName: parsed.fullName ?? null,
   });
   res.sendStatus(204);
+});
+
+// Resolve the minimal invitation context before activation. The secret stays
+// in the request body (never the URL), responses are not cacheable, and the
+// same generic 400 covers every unusable-token state.
+router.post("/auth/invite-preview", async (req, res): Promise<void> => {
+  const retryAfter = await throttlePublicRequest(req, "invite-preview");
+  if (retryAfter !== null) {
+    sendThrottled429(res, retryAfter, "Too many invitation checks");
+    return;
+  }
+  const parsed = parseOrThrow(PreviewInvitationBody, req.body);
+  const preview = await previewInvitation(parsed.token);
+  res.setHeader("Cache-Control", "no-store");
+  res.json(preview);
 });
 
 // Public like accept-invite: the single-use reset token is the credential

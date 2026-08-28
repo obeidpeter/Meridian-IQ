@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetInvoice,
+  useGetParty,
+  getGetPartyQueryKey,
   useApproveInvoice,
   useListInvoiceApprovals,
   getListInvoiceApprovalsQueryKey,
@@ -97,7 +99,12 @@ import {
 } from "@/lib/invoice-lines";
 import { ERROR_FOCUS } from "@/lib/error-focus";
 import { invoicePdfFilename, triggerDownload } from "@/lib/download";
-import { useRecordRecentItem } from "@workspace/web-ui";
+import {
+  beginOperation,
+  updateOperation,
+  usePinnedItems,
+  useRecordRecentItem,
+} from "@workspace/web-ui";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -118,6 +125,7 @@ import {
   UserCheck,
   Wrench,
   Plus,
+  Pin,
 } from "lucide-react";
 import { whtCategoryLabel } from "@workspace/format/wht-copy";
 import { nairaApproxLine } from "@/pages/invoices";
@@ -927,6 +935,13 @@ export function InvoiceDetail() {
     },
   });
   const invoice = data?.invoice;
+  const { data: buyer } = useGetParty(invoice?.buyerPartyId ?? "", {
+    query: {
+      enabled: !!invoice?.buyerPartyId,
+      queryKey: getGetPartyQueryKey(invoice?.buyerPartyId ?? ""),
+      retry: false,
+    },
+  });
   usePageTitle(invoice ? invoice.invoiceNumber : "Invoice");
   const tone = invoice ? statusTone(invoice.status) : "draft";
   // Settled/credited invoices were stamped first, so keep their stamp visible.
@@ -1017,13 +1032,21 @@ export function InvoiceDetail() {
   const creditNote = useCreditNoteInvoice();
   const createConfirmation = useCreateConfirmation();
   const { data: me } = useGetMe();
+  const pinnedInvoices = usePinnedItems(
+    me ? `meridianiq:pinned-invoices:${me.userId}` : null,
+  );
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
 
   // Recognition over recall: the command menu offers the last few invoices
   // this user opened; record this one once it resolves.
   useRecordRecentItem(
     me ? `meridianiq:recent-invoices:${me.userId}` : null,
     invoice
-      ? { id, label: invoice.invoiceNumber, detail: statusLabel(invoice.status) }
+      ? {
+          id,
+          label: invoice.invoiceNumber,
+          detail: statusLabel(invoice.status),
+        }
       : null,
   );
 
@@ -1050,6 +1073,7 @@ export function InvoiceDetail() {
   // "New from this invoice" overwrite guard: only shown when the stored
   // invoice-form draft already holds real work.
   const [confirmNewFrom, setConfirmNewFrom] = useState(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   const closeAdjust = () => {
     setAdjustKind(null);
@@ -1075,6 +1099,12 @@ export function InvoiceDetail() {
 
   const handleSubmit = async () => {
     if (!invoice) return;
+    const operation = beginOperation(operationKey, {
+      title: `Submit ${invoice.invoiceNumber} for stamping`,
+      kind: "submission",
+      route: `/invoices/${id}`,
+      detail: `${formatAmount(invoice.grandTotal, invoice.currency)} total`,
+    });
     // A new attempt makes any fetched explanation stale: if this submission
     // fails again the error may be different, and yesterday's explanation
     // must not sit next to today's catalogue entry.
@@ -1084,6 +1114,11 @@ export function InvoiceDetail() {
       if (invoice.status === "draft") {
         const res = await validate.mutateAsync({ id });
         if (!res.ok) {
+          updateOperation(operationKey, operation?.id, {
+            status: "failed",
+            detail: `${res.errors.length} validation issue${res.errors.length === 1 ? "" : "s"} must be fixed before transmission.`,
+            savedSummary: "The invoice remains a draft; nothing was sent.",
+          });
           setValidationErrors(res.errors);
           refreshInvoiceState();
           toast({
@@ -1095,15 +1130,35 @@ export function InvoiceDetail() {
         }
       }
       await submit.mutateAsync({ id });
+      updateOperation(operationKey, operation?.id, {
+        status: "succeeded",
+        detail:
+          "The transmission request was accepted and is awaiting the rail result.",
+        savedSummary: "A submission attempt was recorded for this invoice.",
+      });
       refreshInvoiceState();
       toast({
         title: "Submitted for stamping",
         description: submittedToastDescription(me?.features),
       });
     } catch (e) {
+      const outcomeUnknown = errorStatus(e) === undefined;
+      updateOperation(operationKey, operation?.id, {
+        status: outcomeUnknown ? "partial" : "failed",
+        detail: outcomeUnknown
+          ? "The connection ended before the submission response arrived."
+          : "The submission was rejected before it could be accepted.",
+        savedSummary: outcomeUnknown
+          ? "Outcome unconfirmed. Reopen this invoice and inspect its attempt history before retrying."
+          : "No new accepted submission was recorded.",
+      });
       toast({
-        title: submitErrorTitle(errorStatus(e)),
-        description: serverErrorMessage(e),
+        title: outcomeUnknown
+          ? "Submission outcome not confirmed"
+          : submitErrorTitle(errorStatus(e)),
+        description: outcomeUnknown
+          ? "Check the attempt history on this invoice before retrying."
+          : serverErrorMessage(e),
         variant: "destructive",
       });
     }
@@ -1183,7 +1238,9 @@ export function InvoiceDetail() {
       refreshInvoiceState();
       toast({
         title:
-          tone === "failed" ? "Corrected and resubmitted" : "Submitted for stamping",
+          tone === "failed"
+            ? "Corrected and resubmitted"
+            : "Submitted for stamping",
         description: submittedToastDescription(me?.features),
       });
     } catch (e) {
@@ -1478,7 +1535,10 @@ export function InvoiceDetail() {
       )}
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
-          <Label htmlFor="fix-invoice-number" className="flex items-center gap-2">
+          <Label
+            htmlFor="fix-invoice-number"
+            className="flex items-center gap-2"
+          >
             Invoice number
             {focus.includes("invoiceNumber") && (
               <span className={pillClasses("amber")}>flagged</span>
@@ -1597,7 +1657,9 @@ export function InvoiceDetail() {
         <Button
           size="sm"
           onClick={handleFixResubmit}
-          disabled={updateInvoice.isPending || validate.isPending || submit.isPending}
+          disabled={
+            updateInvoice.isPending || validate.isPending || submit.isPending
+          }
           data-testid="button-fix-resubmit"
         >
           {updateInvoice.isPending || validate.isPending || submit.isPending
@@ -1669,9 +1731,28 @@ export function InvoiceDetail() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={pinnedInvoices.isPinned(id)}
+            onClick={() =>
+              pinnedInvoices.toggle({
+                id,
+                label: invoice.invoiceNumber,
+                detail: statusLabel(invoice.status),
+              })
+            }
+            data-testid="button-pin-invoice"
+          >
+            <Pin
+              className={`w-4 h-4 mr-2 ${pinnedInvoices.isPinned(id) ? "fill-current" : ""}`}
+              aria-hidden="true"
+            />
+            {pinnedInvoices.isPinned(id) ? "Pinned" : "Pin"}
+          </Button>
           {canSubmit && (
             <Button
-              onClick={handleSubmit}
+              onClick={() => setConfirmSubmit(true)}
               disabled={validate.isPending || submit.isPending}
             >
               <Send className="w-4 h-4 mr-2" aria-hidden="true" />
@@ -1742,6 +1823,62 @@ export function InvoiceDetail() {
         </div>
       </div>
 
+      <AlertDialog open={confirmSubmit} onOpenChange={setConfirmSubmit}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Review stamping submission</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm the target and tax totals before this invoice is sent to
+              the configured e-invoicing rail.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <dl className="divide-y rounded-md border bg-muted/25 px-3 text-sm">
+            <div className="flex justify-between gap-4 py-2.5">
+              <dt className="text-muted-foreground">Invoice</dt>
+              <dd className="text-right font-medium">
+                {invoice.invoiceNumber}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4 py-2.5">
+              <dt className="text-muted-foreground">Buyer</dt>
+              <dd className="max-w-[65%] text-right font-medium">
+                {buyer?.legalName ??
+                  `Party ${invoice.buyerPartyId.slice(0, 8)}`}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4 py-2.5">
+              <dt className="text-muted-foreground">Invoice total</dt>
+              <dd className="text-right font-medium tabular-nums">
+                {formatAmount(invoice.grandTotal, invoice.currency)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4 py-2.5">
+              <dt className="text-muted-foreground">VAT included</dt>
+              <dd className="text-right font-medium tabular-nums">
+                {formatAmount(invoice.vatTotal, invoice.currency)}
+              </dd>
+            </div>
+          </dl>
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            Once the rail accepts and stamps this invoice, corrections require
+            the cancellation or credit-note workflow. Do not submit while the
+            buyer, amount, currency, or VAT is still being checked.
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back and review</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmSubmit(false);
+                void handleSubmit();
+              }}
+              data-testid="button-confirm-submit"
+            >
+              Confirm and submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={confirmNewFrom} onOpenChange={setConfirmNewFrom}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1801,7 +1938,9 @@ export function InvoiceDetail() {
           </CardHeader>
           <CardContent className="text-sm space-y-1">
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">IRN ({IRN_EXPANSION})</span>
+              <span className="text-muted-foreground">
+                IRN ({IRN_EXPANSION})
+              </span>
               <span className="font-mono text-xs break-all text-right">
                 {stamp.irn}
               </span>
@@ -2004,9 +2143,8 @@ export function InvoiceDetail() {
               <div>
                 <p className="font-medium">{l.description}</p>
                 <p className="text-muted-foreground text-xs">
-                  {l.quantity} × {formatAmount(l.unitPrice, invoice.currency)}{" "}
-                  · VAT{" "}
-                  {formatPct(l.vatRate)}
+                  {l.quantity} × {formatAmount(l.unitPrice, invoice.currency)} ·
+                  VAT {formatPct(l.vatRate)}
                 </p>
               </div>
               <span className="font-medium tabular-nums">

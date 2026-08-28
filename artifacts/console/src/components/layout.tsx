@@ -35,6 +35,7 @@ import {
   WalletCards,
   BarChart3,
   Search,
+  Pin,
 } from "lucide-react";
 import {
   Sheet,
@@ -53,13 +54,12 @@ import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
   readRecentItems,
+  ShortcutsDialog,
+  type ShortcutRow,
+  usePinnedItems,
   useGlobalShortcuts,
   type CommandItem,
 } from "@workspace/web-ui";
-import {
-  ShortcutsDialog,
-  type ShortcutRow,
-} from "@/components/shortcuts-dialog";
 import { HELP_TOPICS } from "@/pages/help";
 
 // Every console page maps to the RBAC capability its API surface requires
@@ -141,7 +141,7 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/invitations",
-        label: "Team invitations",
+        label: "Invitations",
         icon: UserPlus,
         capability: "invitation.write",
       },
@@ -162,6 +162,11 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/notifications",
         label: "Notifications",
         icon: Inbox,
+      },
+      {
+        href: "/activity",
+        label: "Activity",
+        icon: Activity,
       },
       {
         href: "/help",
@@ -483,7 +488,12 @@ export function Layout({ children }: { children: ReactNode }) {
     // machine (the sme/landing sign-outs sweep the same prefix).
     for (let index = window.localStorage.length - 1; index >= 0; index--) {
       const key = window.localStorage.key(index);
-      if (key?.startsWith("meridianiq:recent-")) {
+      if (
+        key?.startsWith("meridianiq:recent-") ||
+        key?.startsWith("meridianiq:pinned-") ||
+        key?.startsWith("meridianiq:saved-view-") ||
+        key?.startsWith("meridianiq:operations:")
+      ) {
         window.localStorage.removeItem(key);
       }
     }
@@ -528,6 +538,20 @@ export function Layout({ children }: { children: ReactNode }) {
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
   const pageTitle = activeLink?.label ?? roleContext.title;
+  const pinnedClients = usePinnedItems(
+    me ? `meridianiq:pinned-clients:${me.userId}` : null,
+  );
+  const pinnedClientCommands: CommandItem[] = pinnedClients.items.map(
+    (item) => ({
+      id: `console-command-pinned-${item.id}`,
+      label: item.label,
+      description: item.detail ?? "Open this pinned client.",
+      group: "Pinned clients",
+      icon: <Pin className="size-4" aria-hidden="true" />,
+      keywords: ["pinned", "client"],
+      onSelect: () => navigate(`/clients/${item.id}`),
+    }),
+  );
   // Recently opened clients lead the menu (recognition over recall): the
   // client you were just working on beats re-finding them in the book.
   const recentClients: CommandItem[] = (
@@ -555,8 +579,38 @@ export function Layout({ children }: { children: ReactNode }) {
       window.location.hash = topic.id;
     },
   }));
+  const actionItems: CommandItem[] = [
+    ...(capabilities.has("engagement.write")
+      ? [
+          {
+            id: "console-action-add-client",
+            label: "Add client",
+            description: "Open the client intake form.",
+            group: "Actions",
+            icon: <Users className="size-4" aria-hidden="true" />,
+            keywords: ["new", "client", "intake"],
+            onSelect: () => navigate("/?action=add-client"),
+          },
+        ]
+      : []),
+    ...(capabilities.has("invitation.write")
+      ? [
+          {
+            id: "console-action-create-access",
+            label: "Create access link",
+            description: "Invite a teammate or client user.",
+            group: "Actions",
+            icon: <UserPlus className="size-4" aria-hidden="true" />,
+            keywords: ["invite", "access", "client", "team"],
+            onSelect: () => navigate("/invitations"),
+          },
+        ]
+      : []),
+  ];
   const commandItems: CommandItem[] = [
+    ...pinnedClientCommands,
     ...recentClients,
+    ...actionItems,
     ...groups.flatMap((group) =>
       group.links.map((link) => {
         const Icon = link.icon;

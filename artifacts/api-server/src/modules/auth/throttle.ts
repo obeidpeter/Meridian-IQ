@@ -78,12 +78,14 @@ async function throttlePublicWindow(
 // caller can never choose labels or create arbitrary policy.
 export async function throttlePublicRequest(
   req: Request,
-  namespace: "advisory" | "usability",
+  namespace: "advisory" | "usability" | "invite-preview",
 ): Promise<number | null> {
   const policy =
     namespace === "advisory"
       ? { windowMs: 15 * 60 * 1000, max: 5 }
-      : { windowMs: 15 * 60 * 1000, max: 120 };
+      : namespace === "invite-preview"
+        ? { windowMs: 15 * 60 * 1000, max: 30 }
+        : { windowMs: 15 * 60 * 1000, max: 120 };
   return throttlePublicWindow(
     `${namespace}-ip:${requestIp(req)}`,
     policy.windowMs,

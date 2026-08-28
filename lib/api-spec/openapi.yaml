@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.82.0
+  version: 0.83.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -270,6 +270,29 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "409":
           description: An account with this email already exists
+
+  /auth/invite-preview:
+    post:
+      operationId: previewInvitation
+      tags: [invitation]
+      summary: Resolve the account and workspace context carried by an invitation token (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationPreviewInput"
+      responses:
+        "200":
+          description: Invitation context for the bearer of the single-use token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationPreview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Too many preview requests
 
   /auth/reset-password:
     post:
@@ -6753,6 +6776,33 @@ components:
         # /accept-invite#token=<token> with the invitee; fragments stay out of HTTP logs.
         token:
           type: string
+    InvitationPreviewInput:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 256
+    InvitationPreview:
+      type: object
+      additionalProperties: false
+      required: [email, role, workspaceName, expiresAt]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [firm_admin, firm_staff, client_user]
+        workspaceName:
+          type: string
+        clientName:
+          type: ["string", "null"]
+        expiresAt:
+          type: string
+          format: date-time
     AcceptInvitationInput:
       type: object
       required: [token, password]
@@ -6860,6 +6910,10 @@ components:
               workflow_started,
               workflow_completed,
               workflow_abandoned,
+              help_opened,
+              help_search_no_result,
+              help_helpful,
+              help_unhelpful,
             ]
         surface:
           type: string
@@ -6872,6 +6926,8 @@ components:
               portfolio,
               client_import,
               invoice_import,
+              console_help,
+              sme_help,
             ]
 
     Firm:

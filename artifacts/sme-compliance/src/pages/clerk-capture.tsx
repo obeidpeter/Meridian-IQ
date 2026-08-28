@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   useCreateClerkCase,
   useCreateClerkBatch,
+  useGetMe,
   useGetClerkBatch,
   useGetClerkCase,
   useGetClerkUsage,
@@ -19,6 +20,7 @@ import type {
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseCreateInputDocumentKind,
+  CreateClerkBatchInput,
   ListClerkCasesParams,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -51,6 +53,7 @@ import {
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { ClerkUsageBreakdown } from "@/components/clerk-usage-breakdown";
 import { SkeletonList } from "@/components/skeleton-list";
+import { beginOperation, updateOperation } from "@workspace/web-ui";
 import {
   AlertTriangle,
   ChevronDown,
@@ -239,6 +242,8 @@ function CaseDetail({ caseId }: { caseId: string }) {
 function CaptureContent() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
 
   const [captureText, setCaptureText] = useState("");
   const [captureFile, setCaptureFile] = useState<File | null>(null);
@@ -265,6 +270,9 @@ function CaptureContent() {
   // batch's counters while the platform segments and extracts out of band.
   const [batchMode, setBatchMode] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [activeBatchOperationId, setActiveBatchOperationId] = useState<
+    string | null
+  >(null);
 
   // Batch work is server-owned and survives route changes. Recover the newest
   // in-flight bundle when this page remounts; if processing failed before it
@@ -412,6 +420,45 @@ function CaptureContent() {
       queryClient.invalidateQueries({ queryKey: getGetClerkUsageQueryKey() });
     }
   }, [activeBatchStatus, queryClient]);
+  useEffect(() => {
+    if (!activeBatch || !activeBatchOperationId) return;
+    if (activeBatch.status === "queued") {
+      updateOperation(operationKey, activeBatchOperationId, {
+        status: "queued",
+        detail: "The bundle is queued for segmentation and extraction.",
+        savedSummary:
+          "The batch is stored server-side and can continue after navigation.",
+      });
+      return;
+    }
+    if (activeBatch.status === "processing") {
+      updateOperation(operationKey, activeBatchOperationId, {
+        status: "running",
+        detail: activeBatch.totalSegments
+          ? `${activeBatch.processedSegments} of ${activeBatch.totalSegments} segment(s) processed.`
+          : "Clerk is splitting the bundle into invoices.",
+        savedSummary: `${activeBatch.createdCases} submission(s) created so far.`,
+      });
+      return;
+    }
+    const hasPartialResult =
+      activeBatch.createdCases > 0 || activeBatch.skippedDuplicates > 0;
+    updateOperation(operationKey, activeBatchOperationId, {
+      status:
+        activeBatch.status === "done"
+          ? activeBatch.skippedDuplicates > 0
+            ? "partial"
+            : "succeeded"
+          : hasPartialResult
+            ? "partial"
+            : "failed",
+      detail:
+        activeBatch.status === "done"
+          ? `${activeBatch.createdCases} submission(s) created; ${activeBatch.skippedDuplicates} duplicate(s) skipped.`
+          : (activeBatch.failReason ?? "The batch could not be completed."),
+      savedSummary: `${activeBatch.createdCases} Clerk submission(s) were saved.`,
+    });
+  }, [activeBatch, activeBatchOperationId, operationKey]);
 
   const isPdfFile =
     captureFile != null &&
@@ -450,41 +497,121 @@ function CaptureContent() {
     text: captureText,
   });
 
+  const submitCase = (payload: ClerkCaseCreateInput) => {
+    const operation = beginOperation(operationKey, {
+      title:
+        payload.documentKind === "notice"
+          ? "Send notice to Clerk"
+          : "Send invoice to Clerk",
+      kind: "clerk",
+      route: "/clerk",
+      detail: `Source: ${payload.sourceType}`,
+    });
+    createCase.mutate(
+      { data: payload },
+      {
+        onSuccess: (kase) =>
+          updateOperation(operationKey, operation?.id, {
+            status: kase.status === "failed" ? "partial" : "succeeded",
+            detail:
+              kase.status === "failed"
+                ? (kase.failReason ??
+                  "Clerk stored the submission but could not read it.")
+                : "The submission is stored and ready for accountant review.",
+            savedSummary:
+              kase.status === "failed"
+                ? "The source submission was saved; no draft was created."
+                : "A Clerk case was created. No invoice is created until review.",
+          }),
+        onError: (error) => {
+          const duplicate = errorStatus(error) === 409;
+          const outcomeUnknown = errorStatus(error) === undefined;
+          updateOperation(operationKey, operation?.id, {
+            status: duplicate || outcomeUnknown ? "partial" : "failed",
+            detail: duplicate
+              ? "A matching live submission already exists; confirmation is required."
+              : outcomeUnknown
+                ? "The connection ended before Clerk confirmed receipt."
+                : "Clerk rejected the submission.",
+            savedSummary: duplicate
+              ? "No duplicate case was created."
+              : outcomeUnknown
+                ? "Outcome unconfirmed. Check My submissions before retrying."
+                : "No Clerk case was created.",
+          });
+        },
+      },
+    );
+  };
+
+  const submitBatch = (payload: CreateClerkBatchInput) => {
+    const operation = beginOperation(operationKey, {
+      title: "Process invoice bundle with Clerk",
+      kind: "clerk",
+      route: "/clerk",
+      detail: `Source: ${payload.sourceType}`,
+    });
+    createBatch.mutate(
+      { data: payload },
+      {
+        onSuccess: () => {
+          setActiveBatchOperationId(operation?.id ?? null);
+          updateOperation(operationKey, operation?.id, {
+            status: "queued",
+            detail: "The bundle is queued for segmentation and extraction.",
+            savedSummary:
+              "The batch is stored server-side and continues after navigation.",
+          });
+        },
+        onError: (error) => {
+          const outcomeUnknown = errorStatus(error) === undefined;
+          updateOperation(operationKey, operation?.id, {
+            status: outcomeUnknown ? "partial" : "failed",
+            detail: outcomeUnknown
+              ? "The connection ended before Clerk confirmed the batch."
+              : "Clerk rejected the batch.",
+            savedSummary: outcomeUnknown
+              ? "Outcome unconfirmed. Reopen Send to Clerk before retrying."
+              : "No Clerk batch was created.",
+          });
+        },
+      },
+    );
+  };
+
   const submitCapture = async () => {
     if (batchMode && activeBatchInFlight) return;
     if (batchMode && batchEligible && (captureFile || captureText.trim())) {
       if (captureFile) {
         const b64 = await fileToBase64(captureFile);
-        createBatch.mutate({
-          data: { sourceType: "pdf", name: captureFile.name, pdfBase64: b64 },
+        submitBatch({
+          sourceType: "pdf",
+          name: captureFile.name,
+          pdfBase64: b64,
         });
       } else {
-        createBatch.mutate({ data: textPayload() });
+        submitBatch(textPayload());
       }
       return;
     }
     if (captureVoice) {
       const b64 = await fileToBase64(captureVoice);
-      createCase.mutate({
-        data: {
-          sourceType: "voice",
-          audioBase64: b64,
-          name: captureVoice.name,
-        },
+      submitCase({
+        sourceType: "voice",
+        audioBase64: b64,
+        name: captureVoice.name,
       });
     } else if (captureFile) {
       const b64 = await fileToBase64(captureFile);
-      createCase.mutate({
-        data: {
-          sourceType: isPdfFile ? "pdf" : "image",
-          ...kindFields,
-          name: captureFile.name,
-          contentType: captureFile.type || undefined,
-          ...(isPdfFile ? { pdfBase64: b64 } : { imageBase64: b64 }),
-        },
+      submitCase({
+        sourceType: isPdfFile ? "pdf" : "image",
+        ...kindFields,
+        name: captureFile.name,
+        contentType: captureFile.type || undefined,
+        ...(isPdfFile ? { pdfBase64: b64 } : { imageBase64: b64 }),
       });
     } else if (captureText.trim()) {
-      createCase.mutate({ data: { ...textPayload(), ...kindFields } });
+      submitCase({ ...textPayload(), ...kindFields });
     }
   };
 
@@ -716,11 +843,9 @@ function CaptureContent() {
                   <Button
                     size="sm"
                     onClick={() =>
-                      createCase.mutate({
-                        data: {
-                          ...pendingDuplicate.payload,
-                          allowDuplicate: true,
-                        },
+                      submitCase({
+                        ...pendingDuplicate.payload,
+                        allowDuplicate: true,
                       })
                     }
                     disabled={createCase.isPending}

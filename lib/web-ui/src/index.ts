@@ -22,6 +22,17 @@ export {
   type RecentItem,
 } from "./use-recent-items";
 export {
+  readPinnedItems,
+  togglePinnedItem,
+  readSavedViews,
+  saveNamedView,
+  removeSavedView,
+  usePinnedItems,
+  useSavedViews,
+  type PinnedItem,
+  type SavedView,
+} from "./use-saved-work";
+export {
   CommandMenu,
   Metric,
   MetricStrip,
@@ -50,3 +61,24 @@ export {
   type UsabilityEvent,
   type UsabilitySurface,
 } from "./usability";
+export {
+  beginOperation,
+  updateOperation,
+  readOperations,
+  dismissOperation,
+  clearCompletedOperations,
+  useOperationJournal,
+  type BeginOperationInput,
+  type OperationRecord,
+  type OperationState,
+} from "./operation-journal";
+export { ActivityCenter, OperationStatusPanel } from "./operation-status";
+export { ShortcutsDialog, type ShortcutRow } from "./shortcuts-dialog";
+export {
+  filterHelpTopics,
+  useHelpSearch,
+  HelpSearchInput,
+  HelpFeedback,
+  type SearchableHelpTopic,
+  type HelpSurface,
+} from "./help-centre";

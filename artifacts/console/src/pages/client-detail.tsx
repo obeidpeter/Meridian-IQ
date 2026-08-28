@@ -58,6 +58,8 @@ import {
   CalendarClock,
   FileText,
   ShieldCheck,
+  UserPlus,
+  Pin,
 } from "lucide-react";
 import {
   formatNaira,
@@ -81,11 +83,14 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import {
   Metric,
   MetricStrip,
+  beginOperation,
   SegmentedControl,
+  updateOperation,
   WorkQueue,
   WorkspaceHeader,
   type WorkQueueItem,
   useRecordRecentItem,
+  usePinnedItems,
   useUrlTab,
 } from "@workspace/web-ui";
 
@@ -565,6 +570,10 @@ export function ClientDetail() {
   usePageTitle(data?.client.legalName ?? "Client detail");
 
   const { data: me } = useGetMe();
+  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const pinnedClients = usePinnedItems(
+    me ? `meridianiq:pinned-clients:${me.userId}` : null,
+  );
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -586,8 +595,18 @@ export function ClientDetail() {
     },
   });
   const handleExport = async () => {
+    const operation = beginOperation(operationKey, {
+      title: data ? `Export ${data.client.legalName}` : "Export client data",
+      kind: "export",
+      route: `/clients/${id}`,
+    });
     const res = await exportQuery.refetch();
     if (res.error || !res.data) {
+      updateOperation(operationKey, operation?.id, {
+        status: "failed",
+        detail: "The export bundle could not be prepared.",
+        savedSummary: "No file was saved.",
+      });
       toast({
         title: "Could not export the client's data",
         description: serverErrorMessage(res.error),
@@ -600,6 +619,11 @@ export function ClientDetail() {
       JSON.stringify(res.data, null, 2),
       "application/json",
     );
+    updateOperation(operationKey, operation?.id, {
+      status: "succeeded",
+      detail: "The client data bundle was prepared successfully.",
+      savedSummary: `${exportFilename(id)} was saved to this device.`,
+    });
   };
 
   // Offboarding (firm_admin only): typed-name confirm, server-verified.
@@ -805,6 +829,36 @@ export function ClientDetail() {
         }
         actions={
           <>
+            <Button
+              type="button"
+              variant="outline"
+              aria-pressed={pinnedClients.isPinned(id)}
+              onClick={() =>
+                pinnedClients.toggle({
+                  id,
+                  label: client.legalName,
+                  detail: `${humanize(client.penaltyRisk)} penalty risk`,
+                })
+              }
+              data-testid="button-pin-client"
+            >
+              <Pin
+                className={`w-4 h-4 mr-1 ${pinnedClients.isPinned(id) ? "fill-current" : ""}`}
+                aria-hidden="true"
+              />
+              {pinnedClients.isPinned(id) ? "Pinned" : "Pin client"}
+            </Button>
+            {(me?.capabilities ?? []).includes("invitation.write") && (
+              <Button asChild variant="outline">
+                <Link
+                  href={`/invitations?role=client_user&clientPartyId=${encodeURIComponent(id)}`}
+                  data-testid="link-invite-client-user"
+                >
+                  <UserPlus className="w-4 h-4 mr-1" aria-hidden="true" />
+                  Invite client user
+                </Link>
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleExport}
