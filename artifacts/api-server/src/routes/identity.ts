@@ -32,6 +32,7 @@ import {
 import { DomainError } from "../modules/errors";
 import { litFeatureKeys } from "../modules/flags/flags";
 import { activationReleaseTag } from "../modules/flags/releases";
+import { hasConsentDecision } from "../modules/consent/consent";
 import { createPasswordReset } from "../modules/auth/password-reset";
 import { normalizeEmail } from "../modules/auth/session";
 
@@ -74,6 +75,18 @@ async function workspaceNameFor(p: {
   return null;
 }
 
+// CORE-03 first-landing capture (D15): only a client user owns consent
+// decisions for a business, so every other role answers null (not
+// applicable), and a client scope that names no real party answers false.
+export async function consentCapturedFor(p: {
+  role: string;
+  clientPartyId: string | null;
+}): Promise<boolean | null> {
+  if (p.role !== "client_user" || !p.clientPartyId) return null;
+  if (!isUuid(p.clientPartyId)) return false;
+  return hasConsentDecision(p.clientPartyId, 1);
+}
+
 router.get("/me", async (req, res): Promise<void> => {
   const p = req.principal;
   // Display identity for the signed-in UI. Dev-header principals may carry a
@@ -104,6 +117,7 @@ router.get("/me", async (req, res): Promise<void> => {
       // the same workspace without a second round trip.
       releaseTag: activationReleaseTag(me.features),
       workspaceName: await workspaceNameFor(p),
+      consentCaptured: await consentCapturedFor(p),
     }),
   );
 });

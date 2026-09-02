@@ -108,7 +108,12 @@ worker tick would be too often. The sweep inventory lives in the code, not
 here: grep `registerSweep(` for the authoritative list.
 
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
-grant, no alert (CORE-03). Statutory day boundaries — submission windows,
+grant, no alert (CORE-03). The decision is captured on a client user's FIRST
+landing (D15): `Me.consentCaptured` is false until the business has any
+layer-1 event, the SME app's `RequireConsentCapture` gate then records one
+event per layer with channel `first_landing` (a decline is a `revoke` with
+basis `declined`), and the step never re-prompts because a recorded decline
+is a decision too. Statutory day boundaries — submission windows,
 VAT due dates, "overdue today" — use the LAGOS calendar via
 `lib/lagos-time.ts` (SQL: `AT TIME ZONE 'Africa/Lagos'`); never derive a
 business "today" from `toISOString().slice(0, 10)` or `current_date`.

@@ -102,6 +102,14 @@ function downloadBlob(filename: string, content: BlobPart, type: string): void {
   URL.revokeObjectURL(url);
 }
 
+// A "not now" chosen on the first landing (D15) is recorded as a revoke event
+// so the ledger stays two-valued, but it never followed a grant — read it as
+// a decline, not a revocation.
+function actionLabel(r: Pick<ConsentRecord, "action" | "channel">): string {
+  if (r.action === "grant") return "Granted";
+  return r.channel === "first_landing" ? "Declined" : "Revoked";
+}
+
 // Latest grant/revoke wins per layer.
 function layerStatus(records: ConsentRecord[], layer: number): ConsentRecord | null {
   const forLayer = records
@@ -266,7 +274,7 @@ export function Consent() {
                         <p className="text-sm text-muted-foreground">{l.description}</p>
                         {current && (
                           <p className="text-xs text-muted-foreground">
-                            Last change: {current.action === "grant" ? "Granted" : "Revoked"} ·{" "}
+                            Last change: {actionLabel(current)} ·{" "}
                             {formatDate(current.createdAt)} via {humanize(current.channel)}
                           </p>
                         )}
@@ -334,7 +342,7 @@ export function Consent() {
                                     : "text-red-700 dark:text-red-400"
                                 }`}
                               >
-                                {r.action === "grant" ? "Granted" : "Revoked"}
+                                {actionLabel(r)}
                               </span>{" "}
                               · {scopeTitle(r.scope)} · Layer {r.layer}
                             </span>

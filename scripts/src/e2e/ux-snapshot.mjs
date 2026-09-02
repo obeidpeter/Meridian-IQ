@@ -38,6 +38,9 @@ mkdirSync(OUT_DIR, { recursive: true });
 const PAGES = [
   ["landing", "/", null],
   ["login", "/login", null],
+  // Tunde Prints is seeded with no consent event: /app is the first-landing
+  // consent step for its owner (the snapshot never continues past it).
+  ["sme-first-landing", "/app", "owner@tundeprints.example"],
   ["sme-dashboard", "/app", "owner@adaezefoods.example"],
   ["sme-invoices", "/app/invoices", "owner@adaezefoods.example"],
   ["sme-invoice-new", "/app/invoices/new", "owner@adaezefoods.example"],

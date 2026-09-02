@@ -659,10 +659,14 @@ const CONSOLE = {
   operatorUserId: "99999999-9999-4999-8999-999999999999",
   auditorUserId: "88888888-8888-4888-8888-888888888888",
   clientOwnerUserId: "ce000001-0000-4000-8000-00000000ce01",
+  // Tunde Prints' owner: a client persona seeded with NO consent event so the
+  // first-landing capture (D15) has a real first landing to show.
+  tundeOwnerUserId: "ce000002-0000-4000-8000-00000000ce02",
   clients: {
     kano: "cb000002-0000-4000-8000-0000000000b2",
     pharma: "cb000003-0000-4000-8000-0000000000b3",
     build: "cb000004-0000-4000-8000-0000000000b4",
+    tunde: "cb000005-0000-4000-8000-0000000000b5",
   },
   tiers: {
     essential: "17e00001-0000-4000-8000-000000000001",
@@ -705,6 +709,11 @@ async function seedConsoleDemo(): Promise<void> {
         id: CONSOLE.clientOwnerUserId,
         email: "owner@adaezefoods.example",
         fullName: "Adaeze Obi",
+      },
+      {
+        id: CONSOLE.tundeOwnerUserId,
+        email: "owner@tundeprints.example",
+        fullName: "Tunde Bakare",
       },
     ])
     .onConflictDoNothing({ target: usersTable.id });
@@ -793,8 +802,33 @@ async function seedConsoleDemo(): Promise<void> {
         city: "Lagos",
         countryCode: "NG",
       },
+      {
+        // Deliberately outside the consent backfill below: a freshly onboarded
+        // business whose owner has not yet decided (first-landing capture).
+        id: CONSOLE.clients.tunde,
+        type: "client_business",
+        legalName: "Tunde Prints Ltd",
+        tin: "90000000-0009",
+        tinValidated: true,
+        cacNumber: "RC5555555",
+        street: "18 Allen Avenue",
+        city: "Lagos",
+        countryCode: "NG",
+      },
     ])
     .onConflictDoNothing({ target: partiesTable.id });
+
+  // Tunde Prints' owner — after the party exists (memberships reference it),
+  // and outside the consent backfill below.
+  await getDb()
+    .insert(membershipsTable)
+    .values({
+      userId: CONSOLE.tundeOwnerUserId,
+      firmId: DEMO.firmId,
+      role: "client_user",
+      clientPartyId: CONSOLE.clients.tunde,
+    })
+    .onConflictDoNothing();
 
   // Demo-client completeness so every demo client can submit and issue credit
   // notes: UBL needs a street and submission needs layer-1 consent. The street
@@ -828,6 +862,13 @@ async function seedConsoleDemo(): Promise<void> {
       id: "e0000004-0000-4000-8000-0000000000e4",
       clientPartyId: CONSOLE.clients.build,
       title: "Lagos BuildRight — compliance retainer",
+    },
+    {
+      // The firm engages Tunde Prints (party access is engagement-keyed), but
+      // the business has made no consent decision yet — see CONSOLE.clients.
+      id: "e0000005-0000-4000-8000-0000000000e5",
+      clientPartyId: CONSOLE.clients.tunde,
+      title: "Tunde Prints — onboarding retainer",
     },
   ];
   for (const e of engagements) {

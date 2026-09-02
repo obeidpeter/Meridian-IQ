@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.84.0
+  version: 0.85.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -6646,6 +6646,13 @@ components:
         # principals with no resolvable row.
         workspaceName:
           type: ["string", "null"]
+        # CORE-03 first-landing capture (architecture.md D15): true once the
+        # business has recorded an explicit layer-1 decision (grant OR a
+        # recorded decline), so the SME app can gate the first landing on a
+        # consent step and never show it again. Null for principals that are
+        # not client users, or that carry no client scope.
+        consentCaptured:
+          type: ["boolean", "null"]
         # Bearer session token, returned ONLY by /auth/login for native mobile
         # clients that cannot rely on the HttpOnly cookie (Expo). Same signed
         # token as the cookie; sent as `Authorization: Bearer <token>`.

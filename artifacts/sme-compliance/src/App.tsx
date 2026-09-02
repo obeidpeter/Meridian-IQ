@@ -7,6 +7,7 @@ import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
+import { RequireConsentCapture } from "@/components/require-consent-capture";
 import { Dashboard } from "@/pages/dashboard";
 import { Invoices } from "@/pages/invoices";
 import { InvoiceNew } from "@/pages/invoice-new";
@@ -88,7 +89,11 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <RequireSession>
-            <Router />
+            {/* CORE-03 first landing (D15): a business decides on its
+                consent layers once, before the workspace ever renders. */}
+            <RequireConsentCapture>
+              <Router />
+            </RequireConsentCapture>
           </RequireSession>
         </WouterRouter>
         <Toaster />

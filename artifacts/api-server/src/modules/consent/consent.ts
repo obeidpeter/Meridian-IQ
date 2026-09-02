@@ -86,6 +86,26 @@ export async function hasLayerConsent(
   return latest?.action === "grant";
 }
 
+// Has the business ever DECIDED on this layer — granted or declined? The
+// first-landing capture (D15) keys off this, not off permission: a recorded
+// decline is a decision too, and must not re-prompt on every sign-in.
+export async function hasConsentDecision(
+  partyId: string,
+  layer = 1,
+): Promise<boolean> {
+  const [any] = await getDb()
+    .select({ id: consentRecordsTable.id })
+    .from(consentRecordsTable)
+    .where(
+      and(
+        eq(consentRecordsTable.partyId, partyId),
+        eq(consentRecordsTable.layer, layer),
+      ),
+    )
+    .limit(1);
+  return !!any;
+}
+
 // The single permission query used by every purpose-gated code path (CORE-03).
 export async function isPurposePermitted(
   partyId: string,

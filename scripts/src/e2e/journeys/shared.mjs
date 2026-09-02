@@ -12,6 +12,8 @@ const DEMO_EMAIL_BY_TEST_ID = {
   "button-demo-audit": "audit@meridianiq.example",
   "button-demo-owner": "owner@adaezefoods.example",
   "button-demo-demo.staff": "demo.staff@meridianiq.example",
+  // Seeded WITHOUT any consent event: the first-landing capture journey.
+  "button-demo-tunde": "owner@tundeprints.example",
 };
 
 // Every state-changing page.request call presents the CSRF marker header.

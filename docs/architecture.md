@@ -328,6 +328,9 @@ interstitial).
 Consequences: outbound rails find a consent record from day one; the
 interstitial can never block a returning user (one-time by design); layer 3
 copy must not promise a rail that is dark.
+Status: shipped in R71 — `Me.consentCaptured` (an explicit layer-1 decision
+exists, grant or recorded decline), the SME app's `RequireConsentCapture`
+gate and its `first_landing` consent events.
 
 ### D16 — The design system is a refresh of the existing shell, not new apps
 

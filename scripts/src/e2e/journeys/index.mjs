@@ -27,6 +27,7 @@ import {
   journeyFirmAdminAdvisory,
   journeyAuditorReadOnly,
   journeyOwnerConsent,
+  journeyFirstLandingConsent,
   journeyTotp,
 } from "./roles.mjs";
 import {
@@ -60,6 +61,7 @@ export async function runJourneys(
   await journeyFirmAdminAdvisory(page, BASE, check);
   await journeyAuditorReadOnly(page, BASE, check);
   await journeyOwnerConsent(page, BASE, check);
+  await journeyFirstLandingConsent(page, BASE, check);
   await journeyTotp(page, BASE, check);
   await journeyPayables(page, BASE, check);
   await journeyVatPositionAndPack(page, BASE, check);
