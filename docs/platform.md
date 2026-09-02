@@ -151,6 +151,29 @@ VAT due dates, "overdue today" — use the LAGOS calendar via
 `lib/lagos-time.ts` (SQL: `AT TIME ZONE 'Africa/Lagos'`); never derive a
 business "today" from `toISOString().slice(0, 10)` or `current_date`.
 
+**Outage policy (R96).** A rail outage is survived, not dead-lettered. A
+retriable rail error (`RAIL_TIMEOUT`, `RAIL_UNAVAILABLE`, `RAIL_RATE_LIMITED`,
+unknown) is retried on a capped, jittered exponential backoff (2 s doubling
+to `OUTBOX_MAX_BACKOFF_MS`, default 15 min, each delay drawn from the upper
+half of its range so a waking backlog never hits the rail in one wave) for as
+long as a **wall-clock horizon** allows — `OUTBOX_RETRY_HORIZON_MS`, default
+24 h, measured from the event's first attempt (`first_attempt_at`; a replay
+resets it). An event dead-letters only once both that horizon and its
+`max_attempts` minimum tries are spent, so an event that spent its horizon
+parked still gets its tries once the rail is back. While EVERY rail's
+breaker is open the submit handler returns `park` instead of `retry`: nothing
+was sent, so no attempt is burned and no `submission_attempts` row is
+written; the row stays `pending` (the drain index still holds it) with
+`next_attempt_at` = the breaker's `retry_at` plus up to 2 s of jitter, and
+`parked_until` / `park_count` say so. The breaker itself keeps `opened_at` as
+the OUTAGE INSTANCE across every failed half-open probe and re-arms
+`retry_at` (`RAIL_OPEN_COOLDOWN_MS`, default 30 s) instead, so exactly one
+probe runs per cooldown and the health watch's `rail:openedAt` key raises
+one alert per outage. `reconcile()` treats a DEAD outbox row as terminal —
+it never re-queues beside one — so a dead-lettered invoice waits for an
+operator replay rather than minting a fresh row, a fresh alert and a fresh
+Desk case every pass. `GET /operator/rails` reports `retryAt`.
+
 **Resubmission safety (R97).** Everything that talks to an access point sits
 behind the `RailTransport` seam in `modules/rails/adapter.ts` (`submit` and
 `lookup`; the simulator is bound unless `setRailTransport` binds another —
@@ -161,7 +184,7 @@ never reached us, so the pipeline asks the rail for the stamp it holds
 instead of failing a stamped invoice; only when no rail knows the
 submission does the terminal rejection stand (`invoice.stamp_recovery_failed`
 on the audit chain). `reconcile()` makes the same lookup before it re-queues
-a stuck `submitted` invoice. Every `submission_attempts` row now retains the
+a stuck `submitted` invoice (and never beside a dead-lettered row, R96). Every `submission_attempts` row now retains the
 canonical request that was sent and the response received, and every
 `stamp_records` row carries `provider` and `environment` (`simulator` /
 `sandbox` today), so sandbox stamps issued before accreditation can never be
@@ -1040,7 +1063,10 @@ legacy header still admitted).
   (`meridian_sweep_runs_total`, `meridian_sweep_last_success_timestamp_seconds`)
   and per named sweep (`meridian_sweep_errors_total{sweep,kind}`,
   `meridian_sweep_last_success_by_sweep_timestamp_seconds{sweep}`,
-  `meridian_sweep_duration_seconds{sweep,outcome}`). Hand-rolled in
+  `meridian_sweep_duration_seconds{sweep,outcome}`), and outbox depth
+  (`meridian_outbox_events{state}` for pending / parked / processing / dead,
+  `meridian_outbox_oldest_pending_age_seconds`, set by the `pipeline.gauges`
+  sweep). Hand-rolled in
   `lib/metrics.ts` (a metrics lib would fork drizzle via
   `@opentelemetry/api`).
 - `/api/internal/sweep` is fail-closed unless its ring (`SWEEP_KEYS` or the

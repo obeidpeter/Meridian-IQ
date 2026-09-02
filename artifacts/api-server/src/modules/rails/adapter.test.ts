@@ -11,6 +11,8 @@ import {
   submitWithFailover,
   type RailTransport,
   type StampResult,
+  breakerStatus,
+  railOpenCooldownMs,
 } from "./adapter.ts";
 
 // The rail adapter's transport seam (R97). Pinned:
@@ -63,7 +65,7 @@ async function closeBreakers(): Promise<void> {
   for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
     await getDb()
       .update(railStatesTable)
-      .set({ state: "closed", failureCount: 0, openedAt: null })
+      .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null })
       .where(eq(railStatesTable.rail, rail));
   }
 }
@@ -166,5 +168,75 @@ test("recovery returns null when no rail knows the submission", async () => {
     assert.equal(await recoverExistingStamp(INV, "k", "rail_primary"), null);
   } finally {
     setRailTransport(null);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The breaker under an outage (R96)
+// ---------------------------------------------------------------------------
+
+test("the breaker opens after three transient errors, keeps its outage start across a failed probe, and re-arms retry-at", async () => {
+  await closeBreakers();
+  const calls: string[] = [];
+  const failing: RailTransport = {
+    name: "failing",
+    environment: "sandbox",
+    async submit(rail) {
+      calls.push(rail);
+      return { status: "error", rail, errorCode: "RAIL_TIMEOUT", raw: {} };
+    },
+    async lookup() {
+      return null;
+    },
+  };
+  setRailTransport(failing);
+  try {
+    // Each call fails over primary → secondary: two failures per rail per call.
+    await submitWithFailover(INV, "k-1");
+    await submitWithFailover(INV, "k-2");
+    assert.equal((await breakerStatus("rail_primary")).state, "closed", "two failures stay under the threshold");
+    const opened = await submitWithFailover(INV, "k-3");
+    assert.equal(opened.circuitOpen, false, "the third call still reached the rails before they tripped");
+    const primary = await breakerStatus("rail_primary");
+    assert.equal(primary.state, "open");
+    assert.ok(primary.openedAt, "the outage instance is stamped");
+    assert.ok(primary.retryAt && primary.retryAt.getTime() > Date.now(), "a retry-at is armed");
+    assert.ok(primary.retryAt!.getTime() <= Date.now() + railOpenCooldownMs() + 1_000);
+
+    // Every breaker open: refused without a call, with the earliest retry-at.
+    const before = calls.length;
+    const refused = await submitWithFailover(INV, "k-4");
+    assert.equal(refused.circuitOpen, true);
+    assert.equal(refused.result.errorCode, "RAIL_UNAVAILABLE");
+    assert.deepEqual(refused.tried.map((t) => t.raw.circuit), ["open", "open"]);
+    assert.equal(refused.retryAfter?.getTime(), primary.retryAt?.getTime());
+    assert.equal(calls.length, before, "no rail was called while refused");
+
+    // Retry-at reached: one probe goes through, fails, and the outage start
+    // stays put while retry-at moves forward.
+    const probeAt = new Date(Date.now() - 1_000);
+    for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
+      await getDb().update(railStatesTable).set({ retryAt: probeAt }).where(eq(railStatesTable.rail, rail));
+    }
+    const probed = await submitWithFailover(INV, "k-5");
+    assert.equal(probed.circuitOpen, false, "the probe was sent");
+    assert.equal(calls.length, before + 2);
+    const after = await breakerStatus("rail_primary");
+    assert.equal(after.state, "open");
+    assert.equal(after.openedAt?.getTime(), primary.openedAt?.getTime(), "same outage instance");
+    assert.ok(after.retryAt!.getTime() > probeAt.getTime(), "retry-at re-armed");
+
+    // A successful probe closes the breaker and clears both clocks.
+    setRailTransport(null);
+    for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
+      await getDb().update(railStatesTable).set({ retryAt: probeAt }).where(eq(railStatesTable.rail, rail));
+    }
+    const recovered = await submitWithFailover(INV, "k-6");
+    assert.equal(recovered.result.status, "accepted");
+    const closed = await breakerStatus("rail_primary");
+    assert.deepEqual([closed.state, closed.failureCount, closed.openedAt, closed.retryAt], ["closed", 0, null, null]);
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
   }
 });

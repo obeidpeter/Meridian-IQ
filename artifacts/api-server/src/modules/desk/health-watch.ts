@@ -92,7 +92,9 @@ const realDeps: HealthWatchDeps = {
 
 // One alert per OUTAGE INSTANCE, not per sweep pass: the entity key carries
 // openedAt, so a rail that recovers and trips again is a new alert while a
-// long outage stays one. (openedAt is always stamped when the breaker opens;
+// long outage stays one — the breaker keeps openedAt fixed across failed
+// half-open probes and re-arms retryAt instead (R96), so this key holds.
+// (openedAt is always stamped when the breaker opens;
 // "unknown" is a defensive key for a hand-seeded row, deduped like any other.)
 const alertRailOpen = alertOnceViaAuditLedger({
   action: RAIL_CIRCUIT_OPEN_ACTION,

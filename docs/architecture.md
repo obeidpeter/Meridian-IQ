@@ -401,3 +401,21 @@ Consequences: keys rotate by adding then removing ring entries; a captured
 credential is bound to one rail, one payload and a few minutes; providers
 migrate on their own schedule; the fail-closed posture of D10 is unchanged
 (an empty ring is a dark rail).
+
+### D19 — A rail outage is sat out, never dead-lettered through
+
+Context: six attempts of doubling backoff gave a submission about two
+minutes before dead-lettering, reconcile re-queued a fresh row beside every
+dead one each pass, and each failed breaker probe re-stamped the outage
+start — so a real outage would have produced an unbounded stream of dead
+rows, alerts and Desk cases.
+Decision: retriable failures retry under a wall-clock horizon with capped,
+jittered backoff; when every breaker is open the submission parks (no
+attempt burned, nothing recorded as sent) until the breaker's retry-at; the
+breaker keeps its outage start and re-arms retry-at only, so one probe runs
+per cooldown and one alert per outage; a dead row is terminal until an
+operator replays it; outbox depth, age and dead counts are gauges.
+Consequences: an outage shorter than the horizon costs nothing but delay;
+a longer one leaves a dead-letter queue the operator drains with replays
+after the rail returns; the runbook in the manual describes the signs and
+the one deliberate action.

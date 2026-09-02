@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.91.0
+ * OpenAPI spec version: 0.92.0
  */
 export interface HealthStatus {
   status: string;
@@ -1931,8 +1931,16 @@ export interface RailState {
   rail: string;
   state: RailStateState;
   failureCount: number;
-  /** @nullable */
+  /**
+     * When this outage instance began; stays fixed across failed probes.
+     * @nullable
+     */
   openedAt?: string | null;
+  /**
+     * When the breaker next lets a probe through (open rails only).
+     * @nullable
+     */
+  retryAt?: string | null;
   updatedAt: string;
 }
 

@@ -137,6 +137,9 @@ function RailsSection() {
                     {rail.openedAt
                       ? ` · opened ${formatDateTime(rail.openedAt)}`
                       : ""}
+                    {rail.state !== "closed" && rail.retryAt
+                      ? ` · next probe ${formatDateTime(rail.retryAt)}`
+                      : ""}
                   </p>
                 </div>
                 <span className={`${railBadgeClasses(rail.state)} shrink-0`}>

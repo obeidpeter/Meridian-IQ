@@ -153,6 +153,14 @@ export const outboxTable = pgTable(
       .defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lastError: text("last_error"),
+    // Outage policy (R96): the retry horizon is wall-clock from the FIRST
+    // attempt (a replay resets it), and a submission that met an open
+    // breaker is PARKED — status stays pending, next_attempt_at moves to the
+    // breaker's retry-at, no attempt is burned; parked_until / park_count
+    // make that visible to the gauges and the operator.
+    firstAttemptAt: timestamp("first_attempt_at", { withTimezone: true }),
+    parkedUntil: timestamp("parked_until", { withTimezone: true }),
+    parkCount: integer("park_count").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -185,7 +193,10 @@ export const railStatesTable = pgTable("rail_states", {
   rail: text("rail").primaryKey(),
   state: circuitStateEnum("state").notNull().default("closed"),
   failureCount: integer("failure_count").notNull().default(0),
+  // openedAt is the OUTAGE INSTANCE start and stays put across failed
+  // half-open probes (R96); retryAt is when the next probe may run.
   openedAt: timestamp("opened_at", { withTimezone: true }),
+  retryAt: timestamp("retry_at", { withTimezone: true }),
   updatedAt: updatedAt(),
 });
 

@@ -130,8 +130,42 @@ export function setRailTransport(next: RailTransport | null): RailTransport {
 }
 
 // ---- Circuit breaker (persisted per rail) ----
+//
+// Outage policy (R96): `openedAt` is the OUTAGE INSTANCE — stamped when the
+// breaker first opens and left alone while it stays open, so the health
+// watch's one-alert-per-outage key (`rail:openedAt`) holds across every
+// failed half-open probe. `retryAt` is the separate clock: when the next
+// probe may run. A failed probe re-arms retryAt only; a success closes the
+// breaker and clears both.
 const FAILURE_THRESHOLD = 3;
-const OPEN_COOLDOWN_MS = 30_000;
+const DEFAULT_OPEN_COOLDOWN_MS = 30_000;
+
+export function railOpenCooldownMs(): number {
+  const configured = Number(process.env.RAIL_OPEN_COOLDOWN_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_OPEN_COOLDOWN_MS;
+}
+
+export interface BreakerStatus {
+  rail: Rail;
+  state: "closed" | "open" | "half_open";
+  failureCount: number;
+  openedAt: Date | null;
+  retryAt: Date | null;
+}
+
+/** The breaker as an operator or a parked submission reads it. */
+export async function breakerStatus(rail: Rail): Promise<BreakerStatus> {
+  const state = await ensureRailState(rail);
+  return {
+    rail,
+    state: state.state,
+    failureCount: state.failureCount,
+    openedAt: state.openedAt,
+    retryAt: state.retryAt,
+  };
+}
 
 async function ensureRailState(rail: Rail) {
   await getDb()
@@ -146,26 +180,34 @@ async function ensureRailState(rail: Rail) {
   return row;
 }
 
-async function railAvailable(rail: Rail): Promise<boolean> {
+// The gate a call passes through: an open breaker whose retry-at has come
+// lets ONE probe through (half_open); otherwise it refuses and says when.
+async function railGate(
+  rail: Rail,
+): Promise<{ allowed: boolean; retryAt: Date | null }> {
   const state = await ensureRailState(rail);
-  if (state.state === "open") {
-    const openedAt = state.openedAt?.getTime() ?? 0;
-    if (Date.now() - openedAt >= OPEN_COOLDOWN_MS) {
-      await getDb()
-        .update(railStatesTable)
-        .set({ state: "half_open" })
-        .where(eq(railStatesTable.rail, rail));
-      return true;
-    }
-    return false;
+  if (state.state !== "open") return { allowed: true, retryAt: null };
+  const retryAt =
+    state.retryAt ??
+    new Date((state.openedAt?.getTime() ?? 0) + railOpenCooldownMs());
+  if (Date.now() >= retryAt.getTime()) {
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "half_open" })
+      .where(eq(railStatesTable.rail, rail));
+    return { allowed: true, retryAt: null };
   }
-  return true;
+  return { allowed: false, retryAt };
+}
+
+async function railAvailable(rail: Rail): Promise<boolean> {
+  return (await railGate(rail)).allowed;
 }
 
 async function recordSuccess(rail: Rail): Promise<void> {
   await getDb()
     .update(railStatesTable)
-    .set({ state: "closed", failureCount: 0, openedAt: null })
+    .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null })
     .where(eq(railStatesTable.rail, rail));
 }
 
@@ -173,9 +215,17 @@ async function recordFailure(rail: Rail): Promise<void> {
   const state = await ensureRailState(rail);
   const failureCount = state.failureCount + 1;
   if (failureCount >= FAILURE_THRESHOLD) {
+    const now = new Date();
     await getDb()
       .update(railStatesTable)
-      .set({ state: "open", failureCount, openedAt: new Date() })
+      .set({
+        state: "open",
+        failureCount,
+        // The outage instance started when the breaker FIRST opened; a
+        // failed probe re-arms the retry clock only.
+        openedAt: state.openedAt ?? now,
+        retryAt: new Date(now.getTime() + railOpenCooldownMs()),
+      })
       .where(eq(railStatesTable.rail, rail));
   } else {
     await getDb()
@@ -185,16 +235,37 @@ async function recordFailure(rail: Rail): Promise<void> {
   }
 }
 
+export interface FailoverResult {
+  result: StampResult;
+  tried: StampResult[];
+  /** True when every rail's breaker refused the call — nothing was sent. */
+  circuitOpen: boolean;
+  /** The earliest moment a rail will accept a probe, when circuitOpen. */
+  retryAfter: Date | null;
+}
+
 // Submit with idempotent failover across rails and circuit-breaker awareness.
 // A rejection (invalid TIN, schema) is terminal and NOT retried on the other
-// rail; a transient error (timeout, unavailable) triggers failover.
+// rail; a transient error (timeout, unavailable) triggers failover. When every
+// breaker is open the call is refused without touching a rail and the caller
+// PARKS the submission until `retryAfter` (R96) rather than burning a retry.
 export async function submitWithFailover(
   inv: CanonicalInvoice,
   idempotencyKey: string,
-): Promise<{ result: StampResult; tried: StampResult[] }> {
+): Promise<FailoverResult> {
   const tried: StampResult[] = [];
+  let refused = 0;
+  let retryAfter: Date | null = null;
   for (const rail of RAILS) {
-    if (!(await railAvailable(rail))) {
+    const gate = await railGate(rail);
+    if (!gate.allowed) {
+      refused += 1;
+      if (
+        gate.retryAt &&
+        (retryAfter === null || gate.retryAt.getTime() < retryAfter.getTime())
+      ) {
+        retryAfter = gate.retryAt;
+      }
       tried.push({
         status: "error",
         rail,
@@ -207,19 +278,20 @@ export async function submitWithFailover(
     tried.push(result);
     if (result.status === "accepted") {
       await recordSuccess(rail);
-      return { result, tried };
+      return { result, tried, circuitOpen: false, retryAfter: null };
     }
     if (result.status === "rejected") {
       // Terminal business rejection; do not failover.
       await recordSuccess(rail);
-      return { result, tried };
+      return { result, tried, circuitOpen: false, retryAfter: null };
     }
     // Transient error: count against the breaker and try the next rail.
     await recordFailure(rail);
     if (!isRetriable(result.errorCode ?? "UNKNOWN")) {
-      return { result, tried };
+      return { result, tried, circuitOpen: false, retryAfter: null };
     }
   }
+  const circuitOpen = refused === RAILS.length;
   return {
     result: tried[tried.length - 1] ?? {
       status: "error",
@@ -228,6 +300,8 @@ export async function submitWithFailover(
       raw: {},
     },
     tried,
+    circuitOpen,
+    retryAfter: circuitOpen ? retryAfter : null,
   };
 }
 

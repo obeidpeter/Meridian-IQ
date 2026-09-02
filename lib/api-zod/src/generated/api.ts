@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.91.0
+ * OpenAPI spec version: 0.92.0
  */
 import * as zod from 'zod';
 
@@ -2656,7 +2656,8 @@ export const ListRailStatesResponseItem = zod.object({
   "rail": zod.string(),
   "state": zod.enum(['closed', 'open', 'half_open']),
   "failureCount": zod.number(),
-  "openedAt": zod.string().nullish(),
+  "openedAt": zod.string().nullish().describe('When this outage instance began; stays fixed across failed probes.'),
+  "retryAt": zod.string().nullish().describe('When the breaker next lets a probe through (open rails only).'),
   "updatedAt": zod.coerce.date()
 })
 export const ListRailStatesResponse = zod.array(ListRailStatesResponseItem)
