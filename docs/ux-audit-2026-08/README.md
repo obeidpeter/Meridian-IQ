@@ -27,6 +27,8 @@ entries the deferred backlog then carried (37 from R64, three from the R67
 cognitive walkthrough, one D16 follow-through), the 20 on launch-active
 surfaces were closed by R69–R87 — the shell and page-body restyle, then the
 four launch-active rounds R84–R87 — and removed from
-`backlog-deferred.json`. The 21 that remain all sit on launch-dark surfaces
-(filing desk, Ask/Clerk dock, batch capture, buyer portal) and are the next
-candidates once those flags light.
+`backlog-deferred.json`. The 21 on launch-dark surfaces (filing desk,
+Ask/Clerk dock, batch capture, buyer portal) were closed by R89–R93 — six of
+them had already been fixed by earlier rounds and were verified in place —
+so the file is now empty. New findings go into a fresh audit round, not this
+snapshot.

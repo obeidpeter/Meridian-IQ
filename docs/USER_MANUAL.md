@@ -723,7 +723,11 @@ this one?") so a re-forwarded email never creates two cases. Your
 **submissions list** shows each _invoice_ item's status — _Clerk is reading… →
 extracted (your accountant reviews everything before anything is created) →
 approved ("Draft invoice created") or failed (with the reason)_ — including
-a "What Clerk read" table of every extracted field.
+a "What Clerk read" table of every extracted field. Two outcomes explain
+themselves in a sentence where the badge alone said little: an
+**escalated** submission ("your accountant has escalated this for a closer
+look — nothing is needed from you yet") and a **rejected** one recorded
+without a reason ("send a corrected copy or ask them why").
 
 ### Forwarding by email or WhatsApp
 
@@ -838,7 +842,9 @@ shows exactly what a follow-up will keep — _"Follow-ups keep: June 2026 ·
 Adaeze Foods Ltd"_. The thread remembers the exact month and the exact
 business (not just a name two clients might share), and **New topic**
 clears it whenever you want a fresh start; the answer you were reading
-stays on screen.
+stays on screen. When an answer threads but carried nothing to display,
+the chip simply reads _"Follow-ups continue this question"_ — the thread
+is never invisible, so **New topic** is always there to break it.
 
 Every answer — including a refusal — carries a **"Was this helpful?"**
 prompt; a one-tap thumbs-up or thumbs-down (yours to give as the asker)
@@ -862,7 +868,25 @@ stays one click away, where reading it re-checks your access), client
 accounts are only ever shown their _own_ past questions and their own
 business's briefs, and a refused question is never offered as precedent.
 If nothing similar exists, or memory is off, there is simply no card —
-the answer itself is unchanged either way.
+the answer itself is unchanged either way. Each item on the card is a
+button: tap it and the old answer reopens in the answer card.
+
+**Recent questions.** Under the Ask card, your last five answered
+questions are listed with their dates. Opening one reloads the answer that
+was stored with it — a read, not a re-ask, so it spends nothing from the
+monthly Clerk allowance. A new question joins the list as soon as it is
+answered.
+
+**Ask from any page.** The floating **Ask Clerk** button opens a compact
+dock on every workspace page (not on the Ask page itself, which it would
+only duplicate). It takes the same questions, with one-tap suggestions that
+ask immediately, and shows the same source line as the full page — which
+records were used and for which month or client, or which approved claim
+answered. The dock shows at most six facts; when an answer carried more
+(deep links, several parts, or a proposed action) it says so and offers the
+full workspace. When an ask fails, the dock says why: Clerk switched off
+by an operator, the month's allowance used up, or the server's own words —
+never a bare "could not answer".
 
 ### Clerk suggests & automation
 
@@ -1383,7 +1407,9 @@ contract the server validates against, and also reachable directly at
 ### Client import _(feature-flagged)_
 
 Bulk-import a client book from a practice-management export — a 200-client
-book lands in one session, with per-row results. If your export's columns
+book lands in one session, with per-row results — and a **Download** of
+those results as CSV (row, name, status, errors) so a large book's fixes can
+be handed to a colleague or worked through offline. If your export's columns
 don't match the template, **Draft with Clerk** proposes the column mapping —
 verified against the headers that actually exist — and the import still runs
 validate-then-commit.
@@ -1586,8 +1612,17 @@ The queue of supplier invoices awaiting your response. Open one and choose:
   re-request.
 - **Reject** — with the reason recorded.
 
-Every response records who confirmed and how, permanently. Confirming is in
-your own interest: your input-VAT claim rests on valid supplier invoices.
+Every response records who confirmed and how, permanently — the form says so
+before you submit, because a response cannot be changed afterwards (query
+instead if something needs correcting). Confirming is in your own interest:
+your input-VAT claim rests on valid supplier invoices.
+
+The queue names the state one way everywhere: an invoice waiting on you is
+**Awaiting response** on its row, on the filter chip and in the summary. On
+a phone or tablet, where the full stamp and eligibility badges are hidden,
+a row that carries a risk shows it inline ("No stamp", "Not eligible"); a
+healthy row stays one line. While you are searching, the filter chips drop
+their counts — those count the whole book, not the search.
 
 Working a big queue:
 
@@ -1612,7 +1647,13 @@ invoices to you — each with its stamp verdict and confirmation status — so
 ### Scoreboard
 
 Your suppliers ranked by compliance and confirmation status — exportable for
-procurement conversations.
+procurement conversations. Each supplier name opens that supplier's detail
+page, so a figure on the board is one click from the invoices behind it.
+
+### Notifications
+
+Confirmation alerts and supplier updates land in the bell and on the
+Notifications page; an alert about an invoice opens that invoice.
 
 ### Payment flags
 
