@@ -18,17 +18,21 @@ import type {
   ListOperatorCasesStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { PORTAL_URL } from "@/components/require-session";
-import { StatTile } from "@/components/stat-tile";
+import {
+  Metric,
+  MetricStrip,
+  SegmentedControl,
+  WorkspaceHeader,
+} from "@workspace/web-ui";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { isForbidden, serverErrorToast } from "@/lib/errors";
@@ -41,6 +45,7 @@ import {
   LifeBuoy,
   Inbox,
   Sparkles,
+  Sunrise,
 } from "lucide-react";
 
 function formatDuration(seconds?: number | null): string {
@@ -482,22 +487,24 @@ export function OperatorQueue() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1
-          className="text-2xl md:text-3xl font-bold"
-          data-testid="text-page-title"
-        >
-          Operator work queue
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Cross-tenant cases with playbook prompts and one-click resolutions.
-        </p>
-      </div>
+      <WorkspaceHeader
+        eyebrow="Compliance Desk"
+        title="Operator work queue"
+        titleTestId="text-page-title"
+        description="Cross-tenant cases with playbook prompts and one-click resolutions."
+      />
 
       {brief && (
         <Card data-testid="operator-brief">
-          <CardContent className="pt-6 space-y-1.5 text-sm">
-            <p className="font-semibold">This morning</p>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <span className="mi-card-icon">
+                <Sunrise aria-hidden="true" />
+              </span>
+              This morning
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
             {brief.openCases.oldestTitle && (
               <p
                 className="text-muted-foreground"
@@ -558,22 +565,21 @@ export function OperatorQueue() {
         </Card>
       )}
 
-      <Tabs
+      <SegmentedControl<ListOperatorCasesStatus>
+        items={[
+          { value: "open", label: "Open", count: stats?.openCount },
+          {
+            value: "in_progress",
+            label: "In progress",
+            count: stats?.inProgressCount,
+          },
+          { value: "resolved", label: "Resolved", count: stats?.resolvedCount },
+        ]}
         value={status}
-        onValueChange={(v) => setStatus(v as ListOperatorCasesStatus)}
-      >
-        <TabsList>
-          <TabsTrigger value="open" data-testid="tab-open">
-            Open
-          </TabsTrigger>
-          <TabsTrigger value="in_progress" data-testid="tab-in-progress">
-            In progress
-          </TabsTrigger>
-          <TabsTrigger value="resolved" data-testid="tab-resolved">
-            Resolved
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+        onChange={setStatus}
+        label="Case state"
+        testIdPrefix="tab"
+      />
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -617,38 +623,45 @@ export function OperatorQueue() {
             Throughput and service indicators for the current operator desk.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <StatTile
+        <MetricStrip label="Queue health">
+          <Metric
             label="Open"
-            value={String(stats?.openCount ?? "—")}
-            loading={statsLoading}
+            value={statsLoading ? "…" : String(stats?.openCount ?? "—")}
+            detail="Awaiting a claim"
+            tone={(stats?.openCount ?? 0) > 0 ? "warning" : "default"}
+            icon={<Inbox className="size-4" aria-hidden="true" />}
             testId="stat-open"
           />
-          <StatTile
+          <Metric
             label="In progress"
-            value={String(stats?.inProgressCount ?? "—")}
-            loading={statsLoading}
+            value={statsLoading ? "…" : String(stats?.inProgressCount ?? "—")}
+            detail="Claimed by an operator"
+            icon={<Clock className="size-4" aria-hidden="true" />}
             testId="stat-in-progress"
           />
-          <StatTile
+          <Metric
             label="Resolved"
-            value={String(stats?.resolvedCount ?? "—")}
-            loading={statsLoading}
+            value={statsLoading ? "…" : String(stats?.resolvedCount ?? "—")}
+            detail="Closed with a resolution code"
+            tone="positive"
+            icon={<ShieldCheck className="size-4" aria-hidden="true" />}
             testId="stat-resolved"
           />
-          <StatTile
+          <Metric
             label="Clients served"
-            value={String(stats?.clientsServed ?? "—")}
-            loading={statsLoading}
+            value={statsLoading ? "…" : String(stats?.clientsServed ?? "—")}
+            detail="Distinct businesses"
+            icon={<LifeBuoy className="size-4" aria-hidden="true" />}
             testId="stat-clients-served"
           />
-          <StatTile
+          <Metric
             label="Avg handle time"
-            value={formatDuration(stats?.avgHandleSeconds)}
-            loading={statsLoading}
+            value={statsLoading ? "…" : formatDuration(stats?.avgHandleSeconds)}
+            detail="Claim to resolution"
+            icon={<Clock className="size-4" aria-hidden="true" />}
             testId="stat-avg-handle"
           />
-        </div>
+        </MetricStrip>
       </section>
     </div>
   );
