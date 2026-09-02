@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.90.0
+ * OpenAPI spec version: 0.91.0
  */
 import * as zod from 'zod';
 
@@ -2403,13 +2403,15 @@ export const ListHealthAlertsResponse = zod.array(ListHealthAlertsResponseItem)
 
 
 /**
- * @summary Which env-lit rails are configured on this deployment (booleans only — never values)
+ * @summary Which env-lit rails are configured on this deployment (booleans and key ids only — never values)
  */
 export const GetRailConfigResponseItem = zod.object({
   "key": zod.string(),
   "label": zod.string(),
   "configured": zod.boolean(),
-  "note": zod.string()
+  "note": zod.string(),
+  "keyIds": zod.array(zod.string()).describe('Key IDS of the rail\'s ring (never a secret); `legacy` is the pre-key-ring single token.'),
+  "legacyTokenAccepted": zod.boolean().describe('Whether the plain x-op-token path is still accepted on this rail (OP_LEGACY_TOKENS).')
 })
 export const GetRailConfigResponse = zod.array(GetRailConfigResponseItem)
 

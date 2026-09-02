@@ -30,7 +30,7 @@ test("the confirmation webhook is public, and ONLY because it fails closed", () 
     "/billing/payments/confirm",
   );
   const darkAt = block.indexOf("PAYMENT_WEBHOOK_TOKEN");
-  const compareAt = block.indexOf("opTokenAllows");
+  const compareAt = block.indexOf("authenticateOpRequest");
   const settleAt = block.indexOf("confirmPaymentIntent(");
   assert.ok(
     darkAt >= 0 && block.includes("404"),
@@ -38,7 +38,7 @@ test("the confirmation webhook is public, and ONLY because it fails closed", () 
   );
   assert.ok(
     compareAt > darkAt,
-    "the constant-time token compare guards everything after the dark check",
+    "the key-ring authentication (signed or legacy, constant-time) guards everything after the dark check",
   );
   assert.ok(
     settleAt > compareAt,

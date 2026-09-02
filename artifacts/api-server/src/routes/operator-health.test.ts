@@ -140,6 +140,7 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
         "messaging_relay",
         "payment_provider",
         "payment_webhook",
+        "collection_webhook",
         "metrics_token",
         "sweep_token",
         "totp_required_roles",
@@ -147,6 +148,16 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
     );
     const byKey = new Map(body.map((e) => [e.key, e]));
     assert.equal(byKey.get("inbound_email")?.configured, true);
+    // Key IDS only (R100): the single legacy token reads as the `legacy` id;
+    // a ring lists its ids; a URL-style entry has none.
+    assert.deepEqual(
+      (byKey.get("inbound_email") as { keyIds?: string[] })?.keyIds,
+      ["legacy"],
+    );
+    assert.deepEqual(
+      (byKey.get("totp_required_roles") as { keyIds?: string[] })?.keyIds,
+      [],
+    );
     assert.equal(byKey.get("totp_required_roles")?.configured, true);
     assert.equal(byKey.get("metrics_token")?.configured, false);
     assert.ok(body.every((e) => e.label.length > 0 && e.note.length > 0));

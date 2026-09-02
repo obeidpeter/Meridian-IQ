@@ -104,7 +104,7 @@ review.
 - **Inbound email rail** (`modules/inbound/email.ts`,
   `POST /api/inbound/email`, machine webhook deliberately OFF the OpenAPI
   contract) — a client forwards a supplier invoice by email. FAIL-CLOSED
-  shared secret (`INBOUND_EMAIL_TOKEN` unset = rail dark, 404 — unlike the
+  key ring (`INBOUND_EMAIL_KEYS`, or the legacy `INBOUND_EMAIL_TOKEN`; both unset = rail dark, 404 — unlike the
   open-by-default metrics token, this rail creates tenant work and spends
   tokens); responses byte-identical for resolved and unresolved senders (202
   durable outbox commit before the 202 — no email-probe oracle); sender resolved

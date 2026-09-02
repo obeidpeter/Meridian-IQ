@@ -16,6 +16,7 @@ import {
   GetRailConfigResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { describeKeyRing, legacyTokenPathEnabled } from "../lib/op-token";
 import { assertCan } from "../modules/auth/rbac";
 import {
   listDeadLetters,
@@ -116,24 +117,30 @@ router.get("/operator/health-alerts", async (req, res): Promise<void> => {
 // Which env-lit rails this deployment has configured. PRESENCE BOOLEANS ONLY
 // — the endpoint must never echo a value (it would be a secrets oracle); each
 // note states the rail's unset semantics in one clause. Env is read per
-// request, matching how every gate reads it.
+// request, matching how every gate reads it. A token-governed rail (R100)
+// also reports its key IDS — never a secret — so the operator can see which
+// keys a provider may sign with and whether the pre-key-ring `legacy` single
+// token is still accepted.
 const RAIL_CONFIG_ENTRIES: {
   key: string;
   label: string;
   env: string;
   note: string;
+  keyRing?: boolean;
 }[] = [
   {
     key: "inbound_email",
     label: "Inbound email intake",
     env: "INBOUND_EMAIL_TOKEN",
     note: "Fail-closed: unset keeps the inbound email rail dark.",
+    keyRing: true,
   },
   {
     key: "inbound_whatsapp",
     label: "Inbound WhatsApp intake",
     env: "INBOUND_WHATSAPP_TOKEN",
     note: "Fail-closed: unset keeps the inbound WhatsApp rail dark.",
+    keyRing: true,
   },
   {
     key: "messaging_relay",
@@ -152,18 +159,28 @@ const RAIL_CONFIG_ENTRIES: {
     label: "Payment settlement webhook",
     env: "PAYMENT_WEBHOOK_TOKEN",
     note: "Fail-closed: unset means no settlement webhook exists at all.",
+    keyRing: true,
+  },
+  {
+    key: "collection_webhook",
+    label: "Collection settlement webhook",
+    env: "COLLECTION_WEBHOOK_TOKEN",
+    note: "Fail-closed: unset means the inbound collection webhook does not exist.",
+    keyRing: true,
   },
   {
     key: "metrics_token",
     label: "Metrics scrape token",
     env: "METRICS_TOKEN",
     note: "Open when unset: setting it closes /api/metrics behind the secret.",
+    keyRing: true,
   },
   {
     key: "sweep_token",
     label: "Sweep trigger token",
     env: "SWEEP_TOKEN",
-    note: "Fail-closed: /api/internal/sweep answers 404 until this is set; the scheduler must present it as x-op-token.",
+    note: "Fail-closed: /api/internal/sweep answers 404 until this is set; the scheduler must sign or present it as x-op-token.",
+    keyRing: true,
   },
   {
     key: "totp_required_roles",
@@ -177,12 +194,17 @@ router.get("/operator/rail-config", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
   res.json(
     GetRailConfigResponse.parse(
-      RAIL_CONFIG_ENTRIES.map((entry) => ({
-        key: entry.key,
-        label: entry.label,
-        configured: Boolean(process.env[entry.env]),
-        note: entry.note,
-      })),
+      RAIL_CONFIG_ENTRIES.map((entry) => {
+        const ring = entry.keyRing ? describeKeyRing(entry.env) : null;
+        return {
+          key: entry.key,
+          label: entry.label,
+          configured: ring ? ring.configured : Boolean(process.env[entry.env]),
+          note: entry.note,
+          keyIds: ring ? ring.keyIds : [],
+          legacyTokenAccepted: ring ? legacyTokenPathEnabled() : false,
+        };
+      }),
     ),
   );
 });

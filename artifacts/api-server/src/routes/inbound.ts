@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { opTokenAllows, presentedOpToken } from "../lib/op-token";
+import { authenticateOpRequest, railKeyRing } from "../lib/op-token";
 import {
   enqueueInboundEmail,
   enqueueInboundWhatsApp,
@@ -49,14 +49,13 @@ const InboundEmailBody = z.object({
 const router: IRouter = Router();
 
 router.post("/inbound/email", async (req, res): Promise<void> => {
-  const expected = process.env.INBOUND_EMAIL_TOKEN;
-  if (!expected) {
+  const ring = railKeyRing("INBOUND_EMAIL_TOKEN");
+  if (ring.length === 0) {
     // Rail is dark: indistinguishable from a route that does not exist.
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented = presentedOpToken(req);
-  if (!presented || !opTokenAllows(expected, presented)) {
+  if (!authenticateOpRequest(req, ring).ok) {
     res.status(401).json({ error: "Invalid or missing inbound token" });
     return;
   }
@@ -108,14 +107,13 @@ const InboundWhatsAppBody = z
   });
 
 router.post("/inbound/whatsapp", async (req, res): Promise<void> => {
-  const expected = process.env.INBOUND_WHATSAPP_TOKEN;
-  if (!expected) {
+  const ring = railKeyRing("INBOUND_WHATSAPP_TOKEN");
+  if (ring.length === 0) {
     // Rail is dark: indistinguishable from a route that does not exist.
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented = presentedOpToken(req);
-  if (!presented || !opTokenAllows(expected, presented)) {
+  if (!authenticateOpRequest(req, ring).ok) {
     res.status(401).json({ error: "Invalid or missing inbound token" });
     return;
   }

@@ -10,6 +10,7 @@ import {
   apiLogout,
   createDraftInvoice,
   pollUntil,
+  signOpRequest,
 } from "./shared.mjs";
 
 // ---------- Governance: maker-checker submission approval --------------------
@@ -119,10 +120,13 @@ async function journeyGovernance(page, BASE, check) {
 
 // ---------- Collection accounts: provision + the inbound settlement rail -----
 // Provision a collection account (firm-staff plumbing, statement.write) and
-// prove the fail-closed inbound webhook (run.mjs sets COLLECTION_WEBHOOK_TOKEN
-// on the api-server env and threads the same value in here as hookToken;
-// unset would 404 the whole rail) settles the matched receivable via an
-// append-only collection_account settlement event.
+// prove the fail-closed inbound webhook (run.mjs sets COLLECTION_WEBHOOK_KEYS
+// on the api-server env and threads the same key in here as hookKey; an
+// empty ring would 404 the whole rail) settles the matched receivable via an
+// append-only collection_account settlement event. The settlement rides the
+// SIGNED path (R100): key id + timestamp + body HMAC — the credential a real
+// provider ships — and the negative probes cover a wrong token, a stale
+// timestamp and a tampered body.
 //
 // TARGET CHOICE — the settlement must move a SEEDED, STAMPED invoice to
 // `settled` without disturbing any later journey. INV-1003 is out: it is the
@@ -136,7 +140,7 @@ async function journeyGovernance(page, BASE, check) {
 // evidence. A rerun on a kept database still passes: the settled invoice no
 // longer binds (the webhook silently records nothing), but the first run's
 // settlement event and status satisfy both polls.
-async function journeyCollections(page, BASE, check, hookToken) {
+async function journeyCollections(page, BASE, check, hookKey) {
   const BUILD_CLIENT = "cb000004-0000-4000-8000-0000000000b4"; // Lagos BuildRight
 
   await apiLogin(page, BASE, "demo.admin@meridianiq.example");
@@ -182,15 +186,51 @@ async function journeyCollections(page, BASE, check, hookToken) {
     `status ${badToken.status}`,
   );
 
+  const settlementBody = JSON.stringify({
+    accountReference: account?.accountReference ?? "CA-MISSING",
+    amount: target?.grandTotal ?? "0.00",
+    invoiceNumber: "LBR-4002",
+    reference: "E2E-COLLECT-1",
+  });
+  const signed = (overrides = {}) =>
+    signOpRequest(hookKey, {
+      method: "POST",
+      path: "/api/collections/inbound",
+      body: settlementBody,
+      ...overrides,
+    });
+
+  // Stale timestamp: outside the replay window, 401 before anything settles.
+  const stale = await fetch(BASE + "/api/collections/inbound", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...signed({ timestamp: Math.floor(Date.now() / 1000) - 3600 }),
+    },
+    body: settlementBody,
+  });
+  check(
+    "signed collection rail refuses a stale timestamp (401)",
+    stale.status === 401,
+    `status ${stale.status}`,
+  );
+  // Tampered body: the signature covers the exact bytes, so a changed amount
+  // under a valid signature is refused.
+  const tampered = await fetch(BASE + "/api/collections/inbound", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...signed() },
+    body: settlementBody.replace("E2E-COLLECT-1", "E2E-COLLECT-X"),
+  });
+  check(
+    "signed collection rail refuses a tampered body (401)",
+    tampered.status === 401,
+    `status ${tampered.status}`,
+  );
+
   const inbound = await fetch(BASE + "/api/collections/inbound", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-op-token": hookToken },
-    body: JSON.stringify({
-      accountReference: account?.accountReference ?? "CA-MISSING",
-      amount: target?.grandTotal ?? "0.00",
-      invoiceNumber: "LBR-4002",
-      reference: "E2E-COLLECT-1",
-    }),
+    headers: { "content-type": "application/json", ...signed() },
+    body: settlementBody,
   });
   // The event + CAS commit BEFORE the 202 answers; the short poll is only
   // insurance, not a required drain.
@@ -207,9 +247,23 @@ async function journeyCollections(page, BASE, check, hookToken) {
       { tries: 5, delayMs: 500, page },
     ));
   check(
-    "inbound payment (202) records a collection_account settlement event",
+    "signed inbound payment (202) records a collection_account settlement event",
     eventSeen,
     `inbound status ${inbound.status}`,
+  );
+
+  // Dual path (R100): the ring key's secret is still admitted as a plain
+  // x-op-token until OP_LEGACY_TOKENS=off — a provider migrates on its own
+  // schedule. 202 either way by design (the settled invoice no longer binds).
+  const legacyPath = await fetch(BASE + "/api/collections/inbound", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-op-token": hookKey.secret },
+    body: settlementBody,
+  });
+  check(
+    "legacy x-op-token path still admits the ring secret (202)",
+    legacyPath.status === 202,
+    `status ${legacyPath.status}`,
   );
 
   const invRes = await page.request.get(BASE + `/api/invoices/${target?.id}`);

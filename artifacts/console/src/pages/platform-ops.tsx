@@ -86,6 +86,21 @@ export function railConfiguredBadgeClasses(configured: boolean): string {
   return pillClasses(configured ? "emerald" : "slate");
 }
 
+// Key IDS only (R100) — the endpoint never returns a secret. `legacy` is the
+// pre-key-ring single token; naming it keeps a migration visible.
+export function railKeyIdsLine(entry: {
+  keyIds?: string[];
+  legacyTokenAccepted?: boolean;
+}): string | null {
+  const ids = entry.keyIds ?? [];
+  if (ids.length === 0) return null;
+  const ring = ids.map((id) => (id === "legacy" ? "legacy (single token)" : id));
+  const plain = entry.legacyTokenAccepted
+    ? "plain x-op-token accepted"
+    : "signed requests only";
+  return `Keys: ${ring.join(", ")} — ${plain}`;
+}
+
 function RailsSection() {
   const { data, isLoading, error, refetch } = useListRailStates();
 
@@ -233,6 +248,14 @@ function RailConfigSection() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{entry.label}</p>
                   <p className="text-xs text-muted-foreground">{entry.note}</p>
+                  {railKeyIdsLine(entry) && (
+                    <p
+                      className="text-xs text-muted-foreground font-mono mt-0.5"
+                      data-testid={`rail-config-keys-${entry.key}`}
+                    >
+                      {railKeyIdsLine(entry)}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={`${railConfiguredBadgeClasses(entry.configured)} shrink-0`}

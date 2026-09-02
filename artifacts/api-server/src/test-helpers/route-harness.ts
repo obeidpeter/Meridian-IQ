@@ -1,5 +1,6 @@
 import type { AddressInfo } from "node:net";
 import express from "express";
+import { jsonBodyParser } from "../lib/body.ts";
 import { errorHandler } from "../middleware/error.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 
@@ -12,7 +13,7 @@ export const JSON_HEADERS = { "content-type": "application/json" };
 
 export function appFor(principal: Principal, router: express.Router) {
   const app = express();
-  app.use(express.json());
+  app.use(jsonBodyParser());
   app.use((req, _res, next) => {
     req.principal = principal;
     req.log = {

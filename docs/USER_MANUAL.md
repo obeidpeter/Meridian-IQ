@@ -1981,19 +1981,35 @@ unreachable (404), not broken:
 | Variable                                                        | Lights                                                                                                                                                     |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TOTP_REQUIRED_ROLES`                                           | Comma-separated roles that must have 2FA to sign in (e.g. `operator,firm_admin`). Unset = optional for everyone.                                           |
-| `INBOUND_EMAIL_TOKEN` / `INBOUND_WHATSAPP_TOKEN`                | The Clerk email / WhatsApp intake rails (each independently). `INBOUND_EMAIL_DAILY_CAP` / `INBOUND_WHATSAPP_DAILY_CAP` bound per-firm daily volume.        |
+| `INBOUND_EMAIL_TOKEN` / `INBOUND_WHATSAPP_TOKEN`                | The Clerk email / WhatsApp intake rails (each independently). Since R100 each rail takes a **key ring** — `INBOUND_EMAIL_KEYS` / `INBOUND_WHATSAPP_KEYS` as `id:secret,…` (see "Machine-rail credentials" below); the single `_TOKEN` still works as the `legacy` key. `INBOUND_EMAIL_DAILY_CAP` / `INBOUND_WHATSAPP_DAILY_CAP` bound per-firm daily volume. |
 | `MESSAGING_WEBHOOK_URL` (+ `MESSAGING_WEBHOOK_TOKEN`)           | Real outbound message delivery; unset = in-process simulator (messaging ships dark anyway behind `messaging_notifications`).                               |
 | `PAYMENT_PROVIDER_URL` (+ `PAYMENT_PROVIDER_TOKEN`)             | The hosted-checkout payment provider; unset = simulator (payment intents record, no checkout page).                                                        |
-| `PAYMENT_WEBHOOK_TOKEN`                                         | The payment-confirmation webhook; unset = 404.                                                                                                             |
+| `PAYMENT_WEBHOOK_TOKEN`                                         | The payment-confirmation webhook; unset (no `PAYMENT_WEBHOOK_KEYS` ring and no token) = 404. |
 | `COLLECTION_PROVIDER_URL` (+ `COLLECTION_PROVIDER_TOKEN`)       | The collection-account provisioning relay (real virtual accounts at a bank/PSP); unset = simulator (references are minted but no real account exists).     |
-| `COLLECTION_WEBHOOK_TOKEN`                                      | The inbound collection-payment webhook that settles invoices; unset = the rail 404s (fail-closed — nothing can mark invoices settled without it).          |
+| `COLLECTION_WEBHOOK_TOKEN`                                      | The inbound collection-payment webhook that settles invoices; an empty ring (`COLLECTION_WEBHOOK_KEYS` / the legacy token) = the rail 404s (fail-closed — nothing can mark invoices settled without it). |
 | `MESSAGES_RETENTION_DAYS`                                       | Message-ledger retention sweep (default 180 days; malformed values disable the sweep).                                                                     |
 | `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN`       | Per-principal rate limits (defaults 600 / 60; `0` disables a class).                                                                                       |
 | `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance.                                                       |
-| `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Optional metrics secret and required sweep secret. Send either only in the `x-op-token` header; the sweep endpoint is unavailable when its token is unset. |
+| `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Optional metrics secret and required sweep secret (`METRICS_KEYS` / `SWEEP_KEYS` rings, or the single tokens). Signed requests or the `x-op-token` header only — never a URL; the sweep endpoint is unavailable while its ring is empty. |
 | `CLERK_SECRET_KEY` (+ `CLERK_AUTHORIZED_PARTIES`)               | The hosted identity provider (unrelated to the AI assistant). In production the key without authorized parties (or `REPLIT_DOMAINS`) disables it.          |
 | `FRAME_ANCESTORS`                                               | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                       |
 | `ENABLE_DEV_AUTH`                                               | The `x-mock-*` dev identity shim — a full auth bypass, honoured only outside production.                                                                   |
+
+**Machine-rail credentials (R100).** Every machine rail — the two intake
+rails, the payment and collection webhooks, `/api/internal/sweep` and
+`/api/metrics` — is governed by a per-rail key ring: `X_KEYS` is
+`id:secret,id:secret,…` (ids `A-Za-z0-9_-`, secrets 32+ characters, ids
+unique), and the pre-key-ring single `X_TOKEN` still works as the key id
+`legacy`, so a provider migrates on its own schedule. A provider proves a key
+one of two ways: the **signed path** — `x-op-key-id`, `x-op-timestamp`
+(unix seconds, within `OP_SIGNATURE_WINDOW_SECONDS`, default 300) and
+`x-op-signature: v1=<hex HMAC-SHA256(secret, "ts.METHOD.path.sha256(body)")>`
+— which binds the request to its rail and its exact bytes and cannot be
+replayed outside the window; or the **legacy path**, the secret verbatim in
+`x-op-token`, accepted until `OP_LEGACY_TOKENS=off`. The Compliance Desk's
+rail-configuration card shows each rail's key **ids** (never a secret) and
+whether the plain token path is still open. To rotate a key: add the new
+`id:secret` to the ring, move the provider to it, then drop the old entry.
 
 Security and capacity knobs (not feature switches): `SESSION_SIGNING_KEYS`
 (`id:secret,…` key-ring; or a single `SESSION_SECRET`) signs session cookies

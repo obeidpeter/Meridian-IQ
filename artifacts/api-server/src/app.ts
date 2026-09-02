@@ -4,6 +4,7 @@ import express, {
   type Response,
   type NextFunction,
 } from "express";
+import { jsonBodyParser } from "./lib/body";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
@@ -478,11 +479,9 @@ app.use(
     credentials: true,
   }),
 );
-// 5,000-row imports (NFR-03) and full bank-statement uploads (INT-05) arrive
-// as JSON bodies well beyond the 100kb express default. Only JSON is parsed:
-// urlencoded parsing is deliberately NOT enabled so a cross-site HTML <form>
-// (a no-preflight "simple request") cannot deliver a parseable body (SEC-02).
-app.use(express.json({ limit: "8mb" }));
+// JSON only, 8mb, raw bytes retained for signed machine rails — see
+// lib/body.ts for why (NFR-03, INT-05, SEC-02, R100).
+app.use(jsonBodyParser());
 // Session cookie (modules/auth/session.ts) is read by the principal middleware.
 app.use(cookieParser());
 // CSRF guard: every browser-facing state-changing route requires the explicit

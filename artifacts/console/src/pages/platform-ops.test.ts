@@ -7,6 +7,7 @@ import {
   healthAlertEntityRef,
   railConfiguredLabel,
   railConfiguredBadgeClasses,
+  railKeyIdsLine,
 } from "./platform-ops";
 
 // Helpers behind the two operator observability cards. The action-label map
@@ -53,6 +54,16 @@ describe("rail configuration pills", () => {
     expect(railConfiguredBadgeClasses(true)).toContain("emerald");
     expect(railConfiguredLabel(false)).toBe("Dark");
     expect(railConfiguredBadgeClasses(false)).toContain("slate");
+  });
+
+  test("key ids are named, the legacy single token is called out, secrets never appear", () => {
+    expect(railKeyIdsLine({ keyIds: [], legacyTokenAccepted: true })).toBeNull();
+    expect(railKeyIdsLine({ keyIds: ["legacy"], legacyTokenAccepted: true })).toBe(
+      "Keys: legacy (single token) — plain x-op-token accepted",
+    );
+    expect(railKeyIdsLine({ keyIds: ["k1", "k2"], legacyTokenAccepted: false })).toBe(
+      "Keys: k1, k2 — signed requests only",
+    );
   });
 });
 

@@ -384,3 +384,20 @@ Consequences: the console shows who is in a pilot and why; an activation
 decision is reconstructible from the ledger; the R1 badge is reachable by
 lighting the six R1 capabilities that exist; a retired key can never be
 re-seeded by accident.
+
+### D18 — Machine rails authenticate with signed, rotatable key rings
+
+Context: each machine rail (D10) was governed by one static shared secret
+presented verbatim in a header — unrotatable without downtime, replayable
+against any rail that shared it, and invisible to the operator except as a
+presence boolean.
+Decision: every rail reads a per-rail key ring (`X_KEYS` = `id:secret,…`,
+the session-signing shape) with the old single token as the `legacy` key;
+callers sign requests (key id, timestamp inside a replay window, HMAC over
+method, path and the exact body bytes) or, until `OP_LEGACY_TOKENS=off`,
+present a secret verbatim; the rail-config surface shows key ids only; the
+e2e collections journey rides the signed path.
+Consequences: keys rotate by adding then removing ring entries; a captured
+credential is bound to one rail, one payload and a few minutes; providers
+migrate on their own schedule; the fail-closed posture of D10 is unchanged
+(an empty ring is a dark rail).

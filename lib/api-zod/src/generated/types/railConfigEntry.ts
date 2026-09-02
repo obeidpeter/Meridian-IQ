@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.90.0
+ * OpenAPI spec version: 0.91.0
  */
 
 export interface RailConfigEntry {
@@ -11,4 +11,8 @@ export interface RailConfigEntry {
   label: string;
   configured: boolean;
   note: string;
+  /** Key IDS of the rail's ring (never a secret); `legacy` is the pre-key-ring single token. */
+  keyIds: string[];
+  /** Whether the plain x-op-token path is still accepted on this rail (OP_LEGACY_TOKENS). */
+  legacyTokenAccepted: boolean;
 }

@@ -57,7 +57,7 @@ export async function runJourneys(
   page,
   BASE,
   check,
-  { hookReceiver, paymentWebhookToken, collectionWebhookToken, sweepToken } = {},
+  { hookReceiver, paymentWebhookToken, collectionWebhookKey, sweepToken } = {},
 ) {
   await journeyPortalAuth(page, BASE, check);
   await journeyOperatorDesk(page, BASE, check);
@@ -73,7 +73,7 @@ export async function runJourneys(
   await journeyVatPositionAndPack(page, BASE, check);
   await journeyBulkImport(page, BASE, check);
   await journeyGovernance(page, BASE, check);
-  await journeyCollections(page, BASE, check, collectionWebhookToken);
+  await journeyCollections(page, BASE, check, collectionWebhookKey);
   // Runs BEFORE the credit-note journey on purpose: AUTO-9001 stamps in the
   // background but createdAt ordering keeps INV-1003 the oldest stamped
   // demo-client invoice — see journeyAutomation's placement comment.
