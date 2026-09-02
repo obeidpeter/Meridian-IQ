@@ -84,7 +84,7 @@ import {
 const FILTERS = [
   { key: "all", label: "All" },
   { key: "none", label: "Not requested" },
-  { key: "requested", label: "Requested" },
+  { key: "requested", label: confirmationLabel("requested") },
   { key: "confirmed", label: "Confirmed" },
   { key: "queried", label: "Queried" },
   { key: "rejected", label: "Rejected" },
@@ -478,7 +478,7 @@ export function Confirmations() {
 
       <MetricStrip label="Confirmation summary">
         <Metric
-          label="Needs response"
+          label={confirmationLabel("requested")}
           value={String(awaitingCount)}
           detail={formatNaira(awaitingTotal)}
           icon={<ReceiptText className="size-4" aria-hidden="true" />}

@@ -64,6 +64,7 @@ import {
   noteValidationError,
   responseRecordedCopy,
   type ResponseState,
+  RESPONSE_FINALITY,
 } from "@/lib/respond";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
@@ -533,6 +534,15 @@ export function InvoiceRespond() {
                   Confirming without set-off makes this invoice financeable.
                 </p>
               </div>
+            )}
+
+            {response !== null && (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="text-response-finality"
+              >
+                {RESPONSE_FINALITY}
+              </p>
             )}
 
             <Button
