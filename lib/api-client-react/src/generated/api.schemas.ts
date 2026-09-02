@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.83.0
+ * OpenAPI spec version: 0.84.0
  */
 export interface HealthStatus {
   status: string;
@@ -14,6 +14,17 @@ export interface HealthStatus {
 export interface Error {
   error: string;
 }
+
+export type MeReleaseTag = typeof MeReleaseTag[keyof typeof MeReleaseTag];
+
+
+export const MeReleaseTag = {
+  R0: 'R0',
+  R1: 'R1',
+  R2: 'R2',
+  R3: 'R3',
+  R4: 'R4',
+} as const;
 
 export interface Me {
   userId: string;
@@ -30,6 +41,9 @@ export interface Me {
   buyerPartyId?: string | null;
   capabilities: string[];
   features: string[];
+  releaseTag?: MeReleaseTag;
+  /** @nullable */
+  workspaceName?: string | null;
   /** @nullable */
   token?: string | null;
   mfaRequired?: boolean;

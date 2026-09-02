@@ -127,7 +127,7 @@ export function ControlCentre({ section }: { section: ControlCentreSection }) {
                 }`}
               >
                 <span
-                  className={`grid size-7 shrink-0 place-items-center rounded-md ${selected ? "bg-lime-300 text-[#082f31]" : "bg-slate-100 text-slate-500"}`}
+                  className={`grid size-7 shrink-0 place-items-center rounded-md ${selected ? "bg-[#c9a227] text-[#0e2f2a]" : "bg-slate-100 text-slate-500"}`}
                 >
                   <Icon className="size-4" aria-hidden="true" />
                 </span>

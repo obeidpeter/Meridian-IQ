@@ -274,3 +274,27 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     devDefault: false,
   },
 ];
+
+export type ReleaseTag = ReleaseFlag["releaseTag"];
+
+const RELEASE_ORDER: ReleaseTag[] = ["R0", "R1", "R2", "R3", "R4"];
+
+/**
+ * The activation stage a set of lit flag keys amounts to: the highest
+ * release whose EVERY manifest flag (at that tag and below) is lit. A
+ * partially activated release does not count — the badge the apps render
+ * from this must move only on a deliberate, complete activation, never on a
+ * single pilot override. R0 is the floor even when the core is incomplete.
+ */
+export function activationReleaseTag(litKeys: Iterable<string>): ReleaseTag {
+  const lit = new Set(litKeys);
+  let stage: ReleaseTag = "R0";
+  for (const tag of RELEASE_ORDER) {
+    const complete = RELEASE_FLAGS.filter((f) => f.releaseTag === tag).every(
+      (f) => lit.has(f.key),
+    );
+    if (!complete) break;
+    stage = tag;
+  }
+  return stage;
+}

@@ -78,7 +78,7 @@ export function ClerkAssuranceWorkspace() {
       </MetricStrip>
 
       <section className="grid gap-5 rounded-lg border border-emerald-800 bg-emerald-900 px-5 py-5 text-white lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
-        <span className="grid size-11 place-items-center rounded-md bg-lime-300 text-emerald-950">
+        <span className="grid size-11 place-items-center rounded-md bg-[#c9a227] text-[#0e2f2a]">
           <ShieldCheck className="size-5" aria-hidden="true" />
         </span>
         <div>
@@ -92,7 +92,7 @@ export function ClerkAssuranceWorkspace() {
         </div>
         <Button
           asChild
-          className="bg-lime-300 text-emerald-950 hover:bg-lime-200"
+          className="bg-[#c9a227] text-[#0e2f2a] hover:bg-[#d9b543]"
         >
           <Link href="/clerk">Open review queue</Link>
         </Button>

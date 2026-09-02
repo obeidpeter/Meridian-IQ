@@ -82,3 +82,10 @@ export {
   type SearchableHelpTopic,
   type HelpSurface,
 } from "./help-centre";
+export {
+  ReleaseBadge,
+  WorkspaceChip,
+  releaseBadgeLabel,
+  releaseBadgeTitle,
+  type ReleaseTag,
+} from "./app-shell";

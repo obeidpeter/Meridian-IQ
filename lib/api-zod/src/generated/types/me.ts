@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.83.0
+ * OpenAPI spec version: 0.84.0
  */
+import type { MeReleaseTag } from './meReleaseTag';
 
 export interface Me {
   userId: string;
@@ -21,6 +22,9 @@ export interface Me {
   buyerPartyId?: string | null;
   capabilities: string[];
   features: string[];
+  releaseTag?: MeReleaseTag;
+  /** @nullable */
+  workspaceName?: string | null;
   /** @nullable */
   token?: string | null;
   mfaRequired?: boolean;
