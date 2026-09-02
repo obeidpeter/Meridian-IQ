@@ -94,7 +94,7 @@ export function LineItemRow({
           </Button>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div>
           <Label htmlFor={`line-${i}-quantity`} className="text-xs">
             Qty
@@ -141,7 +141,7 @@ export function LineItemRow({
             </FieldError>
           )}
         </div>
-        <div>
+        <div className="col-span-2 sm:col-span-1">
           <Label htmlFor={`line-${i}-vat`} className="text-xs">
             VAT rate
           </Label>

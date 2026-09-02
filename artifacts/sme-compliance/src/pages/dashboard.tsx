@@ -52,6 +52,7 @@ import type {
   ReceivablesSummary,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { lagosDayDiff } from "@workspace/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -198,8 +199,11 @@ export function ReceivablesCard({
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2">
-          <Wallet className="w-5 h-5" aria-hidden="true" /> Receivables
+        <CardTitle className="flex items-center gap-2.5">
+          <span className="mi-card-icon">
+            <Wallet aria-hidden="true" />
+          </span>
+          Receivables
         </CardTitle>
         {!!clientPartyId && !!primary && (
           <Button
@@ -734,9 +738,14 @@ export function MonthEndCloseCard({
   return (
     <Card data-testid="month-end-close">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CalendarCheck className="w-5 h-5" aria-hidden="true" /> Month-end
-          close
+        <CardTitle className="flex items-center gap-2.5">
+          <span
+            className="mi-card-icon"
+            data-tone={close.attentionCount > 0 ? "warning" : "positive"}
+          >
+            <CalendarCheck aria-hidden="true" />
+          </span>
+          Month-end close
           {close.attentionCount > 0 ? (
             <span
               className={`ml-auto ${summaryPillClasses("amber")}`}
@@ -1517,8 +1526,14 @@ function NextDeadlineCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="w-5 h-5" aria-hidden="true" /> Next deadline
+        <CardTitle className="flex items-center gap-2.5">
+          <span
+            className="mi-card-icon"
+            data-tone={deadline?.severity === "critical" ? "critical" : undefined}
+          >
+            <Clock aria-hidden="true" />
+          </span>
+          Next deadline
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -1708,6 +1723,29 @@ export function Dashboard() {
   // failed summary keeps the normal queue rather than guessing).
   const firstRun = showFirstInvoiceCta(summary?.totalInvoices);
 
+  // The header says what today amounts to (R70): the queue length and the
+  // next statutory day, both from the same summary the cards below render,
+  // so the sentence can never disagree with the page.
+  const deadlineDays = lagosDayDiff(summary?.nextDeadline?.dueDate);
+  const plural = (n: number, word: string) =>
+    `${n} ${word}${n === 1 ? "" : "s"}`;
+  const todaySummary = summary
+    ? [
+        workItems.length === 0
+          ? "Nothing needs your attention right now"
+          : `${plural(workItems.length, "item")} need${workItems.length === 1 ? "s" : ""} your attention`,
+        deadlineDays === null
+          ? null
+          : deadlineDays < 0
+            ? `a statutory deadline passed ${plural(-deadlineDays, "day")} ago`
+            : deadlineDays === 0
+              ? "a statutory deadline is due today"
+              : `the next statutory deadline is in ${plural(deadlineDays, "day")}`,
+      ]
+        .filter(Boolean)
+        .join("; ") + "."
+    : "Your compliance work, in one place: what needs attention, money in motion and filing readiness.";
+
   const dashboardViews: Array<{
     value: DashboardView;
     label: string;
@@ -1730,7 +1768,7 @@ export function Dashboard() {
       <WorkspaceHeader
         eyebrow="Business workspace"
         title="Today"
-        description="Your compliance work, in one place: what needs attention, money in motion and filing readiness."
+        description={todaySummary}
         actions={
           <Button asChild>
             <Link href="/invoices/new">New invoice</Link>
@@ -1832,8 +1870,10 @@ export function Dashboard() {
               {view === "today" && !firstRun && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Activity className="w-5 h-5" aria-hidden="true" />{" "}
+                    <CardTitle className="flex items-center gap-2.5">
+                      <span className="mi-card-icon">
+                        <Activity aria-hidden="true" />
+                      </span>
                       Recent activity
                     </CardTitle>
                   </CardHeader>

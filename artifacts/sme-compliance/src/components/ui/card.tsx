@@ -9,7 +9,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border border-card-border bg-card text-card-foreground shadow-sm",
+      "rounded-[var(--mi-radius)] border border-card-border bg-card text-card-foreground shadow-sm",
       className,
     )}
     {...props}
@@ -37,7 +37,7 @@ const CardTitle = React.forwardRef<
   // apps, so h3 made every card-led page skip a heading level (WCAG 1.3.1).
   <h2
     ref={ref}
-    className={cn("font-semibold leading-snug", className)}
+    className={cn("text-[0.9375rem] font-bold leading-snug text-foreground", className)}
     {...props}
   />
 ));

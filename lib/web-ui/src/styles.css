@@ -1550,3 +1550,139 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Guided readiness list (R70): the sticky "is this ready?" rail beside a
+   multi-part form. States are data attributes so a page can drive them from
+   its own validation without touching these styles.
+   ------------------------------------------------------------------------ */
+
+.mi-readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.mi-readiness__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--mi-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mi-readiness__bar {
+  flex: 1;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mi-line);
+}
+.mi-readiness__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--mi-teal);
+  transition: width 0.2s;
+}
+.mi-readiness__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mi-readiness__step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.625rem;
+  align-items: start;
+  padding: 0.375rem 0;
+}
+.mi-readiness__mark {
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  border: 1.5px solid var(--mi-line);
+  border-radius: 999px;
+  color: var(--mi-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.mi-readiness__step[data-state="done"] .mi-readiness__mark {
+  border-color: transparent;
+  background: var(--mi-positive-soft);
+  color: var(--mi-positive);
+}
+.mi-readiness__step[data-state="attention"] .mi-readiness__mark {
+  border-color: transparent;
+  background: var(--mi-warning-soft);
+  color: var(--mi-warning);
+}
+.mi-readiness__copy {
+  min-width: 0;
+  padding-top: 0.125rem;
+}
+.mi-readiness__label {
+  color: var(--mi-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-decoration: none;
+}
+a.mi-readiness__label:hover {
+  text-decoration: underline;
+}
+a.mi-readiness__label:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid var(--mi-teal);
+  outline-offset: 2px;
+}
+.mi-readiness__step[data-state="todo"] .mi-readiness__label {
+  color: var(--mi-muted);
+  font-weight: 500;
+}
+.mi-readiness__detail {
+  display: block;
+  margin-top: 0.125rem;
+  color: var(--mi-muted);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* Card-title icon chip: the tinted circle the metric tiles use, at card
+   scale, so section headers share one signature. */
+.mi-card-icon {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--mi-teal-soft);
+  color: var(--mi-teal);
+}
+.mi-card-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+.mi-card-icon[data-tone="warning"] {
+  background: var(--mi-warning-soft);
+  color: var(--mi-warning);
+}
+.mi-card-icon[data-tone="critical"] {
+  background: var(--mi-critical-soft);
+  color: var(--mi-critical);
+}
+.mi-card-icon[data-tone="positive"] {
+  background: var(--mi-positive-soft);
+  color: var(--mi-positive);
+}
+.mi-card-icon[data-tone="info"] {
+  background: var(--mi-info-soft);
+  color: var(--mi-info);
+}

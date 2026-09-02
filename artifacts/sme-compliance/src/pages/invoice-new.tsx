@@ -13,7 +13,13 @@ import {
   type LineItemSuggestion,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -30,6 +36,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { PageHeader } from "@/components/page-header";
+import { ReadinessList, type ReadinessStep } from "@workspace/web-ui";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { AddCustomerDialog } from "@/components/add-customer-dialog";
 import { BuyerSelectOptions } from "@/components/buyer-select-options";
@@ -49,8 +56,6 @@ import {
 } from "@/lib/invoice-lines";
 import {
   Plus,
-  CheckCircle2,
-  Circle,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -399,21 +404,56 @@ export function InvoiceNew() {
     }
   };
 
-  const checklist = [
-    { ok: !!draft.invoiceNumber.trim(), label: "Invoice number" },
-    { ok: !!draft.buyerPartyId, label: "Customer selected" },
-    { ok: !!selectedBuyer?.tin, label: "Customer has a TIN" },
+  // The guided rail (R70): each step names its form section, links to it,
+  // and says what is still missing. The TIN row is "attention", never
+  // blocking — a draft without a buyer TIN is lawful; stamping is not.
+  const linesComplete = draft.lines.every(
+    (l) => l.description.trim() && Number(l.quantity) > 0,
+  );
+  const vatLawful = draft.lines.every(
+    (l) => Number(l.vatRate) === 0.075 || Number(l.vatRate) === 0,
+  );
+  const checklist: ReadinessStep[] = [
     {
-      ok: draft.lines.every(
-        (l) => l.description.trim() && Number(l.quantity) > 0,
-      ),
-      label: "Line items complete",
+      id: "invoice-number",
+      label: "Invoice number",
+      state: draft.invoiceNumber.trim() ? "done" : "todo",
+      href: "#invoice-details",
     },
     {
-      ok: draft.lines.every(
-        (l) => Number(l.vatRate) === 0.075 || Number(l.vatRate) === 0,
-      ),
+      id: "customer",
+      label: "Customer selected",
+      state: draft.buyerPartyId ? "done" : "todo",
+      href: "#invoice-details",
+    },
+    {
+      id: "customer-tin",
+      label: "Customer has a TIN",
+      state: selectedBuyer?.tin
+        ? "done"
+        : draft.buyerPartyId
+          ? "attention"
+          : "todo",
+      href: "#invoice-details",
+      detail:
+        draft.buyerPartyId && !selectedBuyer?.tin
+          ? "Needed before stamping; a draft can still be saved."
+          : undefined,
+    },
+    {
+      id: "line-items",
+      label: "Line items complete",
+      state: linesComplete ? "done" : "todo",
+      href: "#invoice-lines",
+      detail: linesComplete
+        ? undefined
+        : "Every line needs a description and a quantity above zero.",
+    },
+    {
+      id: "vat",
       label: "VAT at 7.5% (or exempt)",
+      state: vatLawful ? "done" : "attention",
+      href: "#invoice-lines",
     },
   ];
 
@@ -501,7 +541,7 @@ export function InvoiceNew() {
               </Card>
             )}
 
-            <Card>
+            <Card id="invoice-details" className="scroll-mt-24">
               <CardHeader>
                 <CardTitle>Details</CardTitle>
               </CardHeader>
@@ -554,8 +594,11 @@ export function InvoiceNew() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-start gap-2">
+                      {/* basis-56 lets the button drop below the picker on a
+                          phone: side by side, the two cannot shrink under
+                          362px and the page scrolled sideways (WCAG 1.4.10). */}
+                      <div className="min-w-0 flex-1 basis-56">
                         <Select
                           value={draft.buyerPartyId || undefined}
                           onValueChange={(v) =>
@@ -611,7 +654,7 @@ export function InvoiceNew() {
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="issue-date">Issue date</Label>
                     <Input
@@ -647,7 +690,7 @@ export function InvoiceNew() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="currency-select">Currency</Label>
                     <select
@@ -730,7 +773,7 @@ export function InvoiceNew() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card id="invoice-lines" className="scroll-mt-24">
               <CardHeader className="flex-row items-center justify-between space-y-0">
                 <CardTitle>Line items</CardTitle>
                 <Button
@@ -806,36 +849,18 @@ export function InvoiceNew() {
           <div className="space-y-6">
             <Card className="lg:sticky lg:top-4">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ShieldCheck
-                    className="w-4 h-4 text-primary"
-                    aria-hidden="true"
-                  />{" "}
-                  Compliance check
+                <CardTitle className="flex items-center gap-2.5 text-base">
+                  <span className="mi-card-icon">
+                    <ShieldCheck aria-hidden="true" />
+                  </span>
+                  Ready to create?
                 </CardTitle>
+                <CardDescription>
+                  Checked against FIRS rules as you type.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {checklist.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    {c.ok ? (
-                      <CheckCircle2
-                        className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Circle
-                        className="w-4 h-4 text-muted-foreground shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <span className={c.ok ? "" : "text-muted-foreground"}>
-                      {c.label}
-                      <span className="sr-only">
-                        {c.ok ? " — complete" : " — not yet"}
-                      </span>
-                    </span>
-                  </div>
-                ))}
+                <ReadinessList steps={checklist} />
                 <div className="border-t pt-3 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Net</span>
