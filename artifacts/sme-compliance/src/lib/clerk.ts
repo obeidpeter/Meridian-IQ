@@ -298,3 +298,23 @@ export async function fileToBase64(file: File): Promise<string> {
   }
   return btoa(binary);
 }
+
+/**
+ * The one sentence a client sees under a submission whose status the row
+ * badge names but the detail never explained: escalation (the system's own
+ * uncertainty signal) and a rejection recorded without a reason. Every other
+ * status has its own explanation in the detail; this returns null for them.
+ */
+export function captureStatusExplanation(
+  status: string,
+  decisionReason?: string | null,
+): string | null {
+  if (status === "escalated") {
+    return "Your accountant has escalated this for a closer look. Nothing is needed from you yet; they may contact you.";
+  }
+  if (status === "rejected" && !decisionReason) {
+    return "Your accountant decided not to create an invoice from this submission. Send a corrected copy or ask them why.";
+  }
+  return null;
+}
+
