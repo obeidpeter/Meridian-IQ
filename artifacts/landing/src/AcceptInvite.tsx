@@ -251,7 +251,11 @@ export function AcceptInvite() {
             <h1 className="text-lg font-semibold">Your account is ready</h1>
           </div>
           <p role="status" className="mt-2 text-sm text-muted-foreground">
-            Your password is set. Sign in to open your workspace.
+            Your password is set. Sign in with{" "}
+            <span className="font-medium text-foreground" data-testid="text-invite-signin-email">
+              {preview.data?.email ?? "the email address this invitation was sent to"}
+            </span>{" "}
+            and the password you just chose.
           </p>
           <Button asChild className="mt-4 w-full">
             <a href="/login" data-testid="link-continue-sign-in">

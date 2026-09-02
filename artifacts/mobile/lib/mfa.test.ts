@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { MFA_TOKEN_TTL_MS, mfaChallengeDisposition } from "./mfa.ts";
+import {
+  MFA_TOKEN_TTL_MS,
+  mfaChallengeDisposition,
+  mfaExpiryHint,
+  mfaMinutesLeft,
+} from "./mfa.ts";
 
 // The server answers a UNIFORM 401 for a wrong code and an expired mfa
 // token (no oracle), so only the client's clock can tell "retry the code"
@@ -99,3 +104,24 @@ test("the code is byte-identical to the landing portal's mfa.ts (comments aside)
     "mobile lib/mfa.ts and landing src/lib/mfa.ts have drifted — the two clients must classify a failed challenge identically, so land the change in BOTH files",
   );
 });
+
+test("minutes left counts down in whole minutes, rounding up, never below zero", () => {
+  assert.equal(mfaMinutesLeft(issuedAt, issuedAt), 5);
+  assert.equal(mfaMinutesLeft(issuedAt, issuedAt + 61_000), 4);
+  assert.equal(mfaMinutesLeft(issuedAt, issuedAt + MFA_TOKEN_TTL_MS - 1), 1);
+  assert.equal(mfaMinutesLeft(issuedAt, issuedAt + MFA_TOKEN_TTL_MS), 0);
+  assert.equal(mfaMinutesLeft(issuedAt, issuedAt + MFA_TOKEN_TTL_MS * 3), 0);
+});
+
+test("the expiry hint phrases the remainder for the help text", () => {
+  assert.equal(mfaExpiryHint(issuedAt, issuedAt), "about 5 minutes left");
+  assert.equal(
+    mfaExpiryHint(issuedAt, issuedAt + MFA_TOKEN_TTL_MS - 30_000),
+    "about a minute left",
+  );
+  assert.equal(
+    mfaExpiryHint(issuedAt, issuedAt + MFA_TOKEN_TTL_MS),
+    "this step has expired",
+  );
+});
+

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { MFA_TOKEN_TTL_MS, mfaChallengeDisposition } from "./mfa";
+import {
+  MFA_TOKEN_TTL_MS,
+  mfaChallengeDisposition,
+  mfaExpiryHint,
+  mfaMinutesLeft,
+} from "./mfa";
 
 // The server answers a UNIFORM 401 for a wrong code and an expired mfa
 // token (no oracle), so only the client's clock can tell "retry the code"
@@ -58,3 +63,29 @@ describe("mfaChallengeDisposition", () => {
     ).toBe("network-error");
   });
 });
+
+describe("mfaMinutesLeft / mfaExpiryHint", () => {
+  const issuedAt = 1_753_000_000_000;
+
+  test("counts down in whole minutes, rounding up", () => {
+    expect(mfaMinutesLeft(issuedAt, issuedAt)).toBe(5);
+    expect(mfaMinutesLeft(issuedAt, issuedAt + 61_000)).toBe(4);
+    expect(mfaMinutesLeft(issuedAt, issuedAt + MFA_TOKEN_TTL_MS - 1)).toBe(1);
+  });
+
+  test("never goes below zero once the token has lapsed", () => {
+    expect(mfaMinutesLeft(issuedAt, issuedAt + MFA_TOKEN_TTL_MS)).toBe(0);
+    expect(mfaMinutesLeft(issuedAt, issuedAt + MFA_TOKEN_TTL_MS * 3)).toBe(0);
+  });
+
+  test("phrases the remainder for the help text", () => {
+    expect(mfaExpiryHint(issuedAt, issuedAt)).toBe("about 5 minutes left");
+    expect(mfaExpiryHint(issuedAt, issuedAt + MFA_TOKEN_TTL_MS - 30_000)).toBe(
+      "about a minute left",
+    );
+    expect(mfaExpiryHint(issuedAt, issuedAt + MFA_TOKEN_TTL_MS)).toBe(
+      "this step has expired",
+    );
+  });
+});
+
