@@ -29,6 +29,7 @@ import { AuditEvidence } from "@/pages/audit-evidence";
 import { ControlCentre } from "@/pages/control-centre";
 import { Parties } from "@/pages/parties";
 import { Invitations } from "@/pages/invitations";
+import { AccessReview } from "@/pages/access-review";
 import { ClerkClaims } from "@/pages/clerk-claims";
 import { ClerkWorkspace } from "@/pages/clerk";
 import { ClerkAskPage } from "@/pages/clerk-ask";
@@ -186,6 +187,11 @@ function ConsoleRoutes() {
         <Route path="/invitations">
           <CapabilityGate capability="invitation.write">
             <Invitations />
+          </CapabilityGate>
+        </Route>
+        <Route path="/access-review">
+          <CapabilityGate capability="access.review">
+            <AccessReview />
           </CapabilityGate>
         </Route>
         <Route path="/integrations">

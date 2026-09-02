@@ -57,6 +57,11 @@ const PAGES = [
   ],
   ["console-advisory", "/console/advisory", "demo.admin@meridianiq.example"],
   [
+    "console-access-review",
+    "/console/access-review",
+    "demo.admin@meridianiq.example",
+  ],
+  [
     "console-notifications",
     "/console/notifications",
     "demo.admin@meridianiq.example",
@@ -128,6 +133,10 @@ try {
     for (const [viewportName, viewport] of VIEWPORTS) {
       await page.setViewportSize(viewport);
       await page.goto(BASE + url, { waitUntil: "networkidle" });
+      // Data pages render a skeleton first; give the heading a moment so a
+      // slow first load (a CI box under parallel load) is not measured as
+      // "no visible h1". Pages without an h1 simply fall through.
+      await page.waitForSelector("h1", { timeout: 8000 }).catch(() => {});
       // Settle render-on-success cards before measuring.
       await page.waitForTimeout(750);
       const issues = await collectAccessibilityIssues(page);

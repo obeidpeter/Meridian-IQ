@@ -24,6 +24,7 @@ import {
   BookMarked,
   Bot,
   UserPlus,
+  UserCheck,
   ChevronDown,
   CircleUserRound,
   Compass,
@@ -151,6 +152,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Invitations",
         icon: UserPlus,
         capability: "invitation.write",
+      },
+      {
+        href: "/access-review",
+        label: "Access review",
+        icon: UserCheck,
+        capability: "access.review",
       },
       {
         href: "/integrations",

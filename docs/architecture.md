@@ -315,6 +315,11 @@ report assignments too.
 Consequences: one identity path to test and rate-limit; MFA enforcement stays
 environment-driven; the review round is reporting and attestation only, and
 must not grow an identity-provider dependency.
+Status: shipped in R73 — `GET /console/access-register` (+ CSV) lists every
+member with role, since-when, last sign-in (from the `auth.login` audit
+events), MFA state and client assignments; `POST
+/console/access-register/attest` records a firm admin's attestation on the
+audit chain against the register's hash (stale hash → 409).
 
 ### D15 — Consent capture gates the first landing; Consent stays in the nav
 

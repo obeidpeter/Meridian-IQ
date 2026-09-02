@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.86.0
+ * OpenAPI spec version: 0.87.0
  */
 
 export type PhrasingEvalOutcomeCanarySurface = typeof PhrasingEvalOutcomeCanarySurface[keyof typeof PhrasingEvalOutcomeCanarySurface];

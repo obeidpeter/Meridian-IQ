@@ -51,6 +51,8 @@ const ALL = [
   // Per-staff client assignment (D12): who looks after which client. A firm-
   // admin write; the register narrows default views, never access.
   "client.assign",
+  // Lightweight access review (D14): read the access register and attest it.
+  "access.review",
   "billing.read",
   "billing.write",
   // Platform-global pricing (billing_tiers). Operator-only: the tier table has
@@ -136,6 +138,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "console.portfolio.read",
     "pipeline.write",
     "client.assign",
+    "access.review",
     "billing.read",
     "billing.write",
     "consent.read",

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.86.0
+ * OpenAPI spec version: 0.87.0
  */
 import * as zod from 'zod';
 
@@ -4096,6 +4096,56 @@ export const ReplaceClientAssignmentsResponse = zod.object({
   "role": zod.string(),
   "assignedAt": zod.coerce.date()
 }))
+})
+
+
+/**
+ * @summary Who holds access to this firm (D14) — role, since when, last sign-in, MFA, client assignments — with the last attestation
+ */
+export const GetAccessRegisterResponse = zod.object({
+  "firmId": zod.string(),
+  "generatedAt": zod.coerce.date(),
+  "hash": zod.string(),
+  "members": zod.array(zod.object({
+  "userId": zod.string(),
+  "fullName": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "role": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "since": zod.coerce.date(),
+  "lastSignInAt": zod.coerce.date().nullish(),
+  "mfaEnabled": zod.boolean(),
+  "assignedClients": zod.array(zod.string())
+})),
+  "lastAttestation": zod.union([zod.object({
+  "attestedAt": zod.coerce.date(),
+  "byUserId": zod.string(),
+  "byName": zod.string().nullish(),
+  "memberCount": zod.number(),
+  "hash": zod.string()
+}),zod.null()])
+})
+
+
+/**
+ * @summary The same register as a spreadsheet, one row per member
+ */
+export const ExportAccessRegisterCsvResponse = zod.unknown()
+
+
+/**
+ * @summary A firm admin attests the register as reviewed — recorded on the audit chain with the register's hash; a stale hash is refused
+ */
+export const AttestAccessRegisterBody = zod.object({
+  "hash": zod.string()
+})
+
+export const AttestAccessRegisterResponse = zod.object({
+  "attestedAt": zod.coerce.date(),
+  "byUserId": zod.string(),
+  "byName": zod.string().nullish(),
+  "memberCount": zod.number(),
+  "hash": zod.string()
 })
 
 

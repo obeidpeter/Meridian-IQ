@@ -457,6 +457,63 @@ async function journeyClientAssignment(page, BASE, check) {
   await signOutFromApp(page, BASE);
 }
 
+// ---------- firm admin: lightweight access review (D14) ----------
+// Runs after the assignment journey so the register shows Kano Textiles
+// against demo staff. The admin sees every member with role, since-when,
+// last sign-in and MFA state, attests the register (an audit-chain event),
+// and a stale hash is refused.
+async function journeyAccessReview(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-demo.admin", "**/console/**");
+  await page.getByTestId("nav-access-review").first().click();
+  await page.waitForSelector('[data-testid="card-access-register"]', {
+    timeout: 15000,
+  });
+  await checkPageAccessibility(page, check, "access review");
+  const register = await (
+    await page.request.get(BASE + "/api/console/access-register")
+  ).json();
+  const staff = register.members.find(
+    (m) => m.email === "demo.staff@meridianiq.example",
+  );
+  const admin = register.members.find(
+    (m) => m.email === "demo.admin@meridianiq.example",
+  );
+  check(
+    "access register lists the firm's members with roles",
+    !!staff && staff.role === "firm_staff" && !!admin && admin.role === "firm_admin",
+  );
+  check(
+    "access register shows the admin's sign-in and the staff assignment",
+    !!admin.lastSignInAt &&
+      (await page.getByTestId(`text-member-clients-${staff.userId}`).innerText()).includes(
+        "Kano Textiles",
+      ),
+  );
+  const stale = await page.request.post(
+    BASE + "/api/console/access-register/attest",
+    { data: { hash: "not-the-register" }, headers: CSRF },
+  );
+  check("attesting a stale register hash is refused — status 409", stale.status() === 409);
+  const attestButton = page.getByTestId("button-attest-access");
+  check("attest button is armed before the first review", await attestButton.isEnabled());
+  await attestButton.click();
+  await page.waitForSelector("text=Attested — nothing changed", { timeout: 10000 });
+  const after = await (
+    await page.request.get(BASE + "/api/console/access-register")
+  ).json();
+  check(
+    "attestation is recorded against the current hash by the admin",
+    after.lastAttestation?.hash === after.hash &&
+      after.lastAttestation?.byUserId === admin.userId,
+  );
+  const csv = await page.request.get(BASE + "/api/console/access-register/csv");
+  check(
+    "access register downloads as CSV",
+    csv.status() === 200 && (await csv.text()).includes("demo.staff@meridianiq.example"),
+  );
+  await signOutFromApp(page, BASE);
+}
+
 // ---------- buyer finance: TOTP enrolment lifecycle ----------
 // Enrol → challenge sign-in → disable, computing live RFC 6238 codes in the
 // harness from the base32 secret the enrolment card shows on screen. Uses
@@ -595,6 +652,7 @@ async function journeyTotp(page, BASE, check) {
 export {
   journeyFirstLandingConsent,
   journeyClientAssignment,
+  journeyAccessReview,
   journeyPortalAuth,
   journeyOperatorDesk,
   journeyFirmAdminAdvisory,
