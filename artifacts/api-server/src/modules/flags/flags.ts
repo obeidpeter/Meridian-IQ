@@ -112,13 +112,20 @@ export async function getFlag(key: string): Promise<FeatureFlag> {
   return flag;
 }
 
-// Flip a platform flag. A key that was never seeded (dark-by-absence) is a
-// 404, never a silent no-op: an operator who flips a flag must know it landed.
+// Flip a platform flag. Returns null when the key was never seeded
+// (dark-by-absence) so internal callers keep their no-op semantics; the
+// route turns that null into a 404, never a silent 204 — an operator who
+// flips a flag must know it landed.
 export async function setFlag(
   key: string,
   enabled: boolean,
-): Promise<{ before: FeatureFlag; after: FeatureFlag }> {
-  const before = await getFlag(key);
+): Promise<{ before: FeatureFlag; after: FeatureFlag } | null> {
+  const [before] = await getDb()
+    .select()
+    .from(featureFlagsTable)
+    .where(eq(featureFlagsTable.key, key))
+    .limit(1);
+  if (!before) return null;
   const [after] = await getDb()
     .update(featureFlagsTable)
     .set({ enabled, updatedAt: new Date() })

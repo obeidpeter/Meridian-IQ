@@ -41,7 +41,15 @@ router.patch("/feature-flags/:key", async (req, res): Promise<void> => {
   assertCan(req.principal, "flags.write");
   const params = parseOrThrow(UpdateFeatureFlagParams, req.params);
   const parsed = parseOrThrow(UpdateFeatureFlagBody, req.body);
-  const { before, after } = await setFlag(params.key, parsed.enabled);
+  const flipped = await setFlag(params.key, parsed.enabled);
+  if (!flipped) {
+    throw new DomainError(
+      "FLAG_NOT_FOUND",
+      `Unknown feature flag: ${params.key}`,
+      404,
+    );
+  }
+  const { before, after } = flipped;
   await appendAudit({
     actorId: req.principal.userId,
     actorRole: req.principal.role,
