@@ -1,9 +1,14 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
+  getClerkCase,
+  getGetClerkCaseQueryKey,
+  getListClerkCasesQueryKey,
   useAskClerk,
   useCreatePlanRun,
   useExecuteAction,
   useGetPlanRun,
+  useListClerkCases,
   getGetPlanRunQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -17,6 +22,7 @@ import {
   actionOutcomeSummary,
   actionTruncatedNote,
 } from "@workspace/format/action-copy";
+import { formatDate, recentQuestionRows } from "@workspace/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -232,9 +238,12 @@ function SectionActionApproval({
 export function AnswerCard({
   answer,
   caseId,
+  onOpenMemory,
 }: {
   answer: ClerkAnswer;
   caseId?: string | null;
+  /** Reopens a remembered question's stored answer (Ask history). */
+  onOpenMemory?: (caseId: string) => void;
 }) {
   if (!answer.answered) {
     return (
@@ -370,21 +379,38 @@ export function AnswerCard({
             <p className="text-xs font-medium text-muted-foreground">
               {answer.memory.title}
             </p>
-            {answer.memory.items.map((m) => (
-              <p
-                key={m.caseId}
-                className="text-xs text-muted-foreground"
-                data-testid={`text-memory-${m.caseId}`}
-              >
-                “{m.question}” ·{" "}
-                {new Date(m.askedAt).toLocaleDateString("en-NG", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-                {m.kind === "advisory_brief" && " · from the advisory brief"}
-              </p>
-            ))}
+            {answer.memory.items.map((m) => {
+              const line = (
+                <>
+                  “{m.question}” ·{" "}
+                  {new Date(m.askedAt).toLocaleDateString("en-NG", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                  {m.kind === "advisory_brief" && " · from the advisory brief"}
+                </>
+              );
+              return onOpenMemory ? (
+                <button
+                  key={m.caseId}
+                  type="button"
+                  onClick={() => onOpenMemory(m.caseId)}
+                  className="block text-left text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  data-testid={`text-memory-${m.caseId}`}
+                >
+                  {line}
+                </button>
+              ) : (
+                <p
+                  key={m.caseId}
+                  className="text-xs text-muted-foreground"
+                  data-testid={`text-memory-${m.caseId}`}
+                >
+                  {line}
+                </p>
+              );
+            })}
           </div>
         )}
       </CardContent>
@@ -479,6 +505,31 @@ export function ClerkAskPage() {
   // The held answer's own case id — the whole-plan approval needs it.
   const [answerCaseId, setAnswerCaseId] = useState<string | null>(null);
   const [disabledBanner, setDisabledBanner] = useState(false);
+  const queryClient = useQueryClient();
+  // Ask history: yesterday's answers are stored on their question cases, so
+  // reopening one costs no tokens — it is a read, not a re-ask.
+  const historyParams = { kind: "question" as const, limit: 20 };
+  const history = useListClerkCases(historyParams, {
+    query: { queryKey: getListClerkCasesQueryKey(historyParams), retry: false },
+  });
+  const openStoredAnswer = async (caseId: string) => {
+    try {
+      const kase = await queryClient.fetchQuery({
+        queryKey: getGetClerkCaseQueryKey(caseId),
+        queryFn: () => getClerkCase(caseId),
+      });
+      if (!kase.answer) return;
+      const stored = kase.answer;
+      setAnswer((prev) => heldAnswer(prev, { type: "success", answer: stored }));
+      setAnswerCaseId(kase.id);
+      if (kase.question) setQuestion(kase.question);
+    } catch (error) {
+      serverErrorToast(toast, error, {
+        title: "Could not reopen that answer",
+        fallback: "Try again in a moment.",
+      });
+    }
+  };
   return (
     <div className="space-y-6">
       <ClerkPageHeader
@@ -516,6 +567,9 @@ export function ClerkAskPage() {
                 if (holdsFollowupCase(row.answer)) {
                   setPreviousCaseId(row.id);
                 }
+                queryClient.invalidateQueries({
+                  queryKey: getListClerkCasesQueryKey(historyParams),
+                });
               },
               // A failed follow-up keeps the previous answer on screen — it
               // is still the newest truth the operator was given.
@@ -547,8 +601,57 @@ export function ClerkAskPage() {
         // answer stays on screen.
         followupPins={previousCaseId ? followupPinsLine(answer) : ""}
         onClearFollowup={() => setPreviousCaseId(null)}
+        onOpenMemory={openStoredAnswer}
+      />
+      <RecentQuestions
+        rows={recentQuestionRows(history.data ?? [])}
+        activeCaseId={answerCaseId}
+        onOpen={openStoredAnswer}
       />
     </div>
+  );
+}
+
+/** Ask history: the last few answered questions, reopened without a re-ask. */
+export function RecentQuestions({
+  rows,
+  activeCaseId,
+  onOpen,
+}: {
+  rows: { id: string; question?: string | null; createdAt: string }[];
+  activeCaseId: string | null;
+  onOpen: (caseId: string) => void;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <Card data-testid="card-recent-questions">
+      <CardHeader>
+        <CardTitle className="text-base">Recent questions</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Stored answers — reopening one does not spend the monthly allowance.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(row.id)}
+                aria-current={row.id === activeCaseId ? "true" : undefined}
+                className="flex w-full items-center justify-between gap-3 py-2 text-left text-sm hover:text-primary"
+                data-testid={`button-recent-question-${row.id}`}
+              >
+                <span className="min-w-0 truncate">“{row.question}”</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {formatDate(row.createdAt)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -562,6 +665,7 @@ export function AskPanel({
   answerCaseId,
   followupPins,
   onClearFollowup,
+  onOpenMemory,
 }: {
   question: string;
   onQuestionChange: (question: string) => void;
@@ -573,6 +677,7 @@ export function AskPanel({
   /** Non-empty ⇒ show what a threaded follow-up will keep (Ask 2.0 pins). */
   followupPins?: string;
   onClearFollowup?: () => void;
+  onOpenMemory?: (caseId: string) => void;
 }) {
   return (
     <div className="max-w-2xl space-y-4">
@@ -630,7 +735,11 @@ export function AskPanel({
       {/* Persistent polite live region: the answer arrives asynchronously
           after "Ask", so screen readers hear it without hunting for it. */}
       <div aria-live="polite">
-        {answer && <AnswerCard answer={answer} caseId={answerCaseId} />}
+        {answer && <AnswerCard
+          answer={answer}
+          caseId={answerCaseId}
+          onOpenMemory={onOpenMemory}
+        />}
       </div>
     </div>
   );

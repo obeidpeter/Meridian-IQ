@@ -28,6 +28,11 @@ const harness = vi.hoisted(() => ({
     lastOptions: null as null | { onError?: (err: unknown) => void },
     isPending: false,
   },
+  // Ask history (R92): the stored question cases the page lists, and the
+  // case a "reopen" fetches through the query client — neither needs a
+  // QueryClientProvider here.
+  history: [] as unknown[],
+  storedCases: new Map<string, unknown>(),
   reset() {
     this.state.data = undefined;
     this.state.isPending = false;
@@ -36,8 +41,22 @@ const harness = vi.hoisted(() => ({
     this.feedback.calls = [];
     this.feedback.lastOptions = null;
     this.feedback.isPending = false;
+    this.history = [];
+    this.storedCases = new Map();
   },
 }));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      fetchQuery: async ({ queryFn }: { queryFn: () => Promise<unknown> }) =>
+        queryFn(),
+      invalidateQueries: () => Promise.resolve(),
+    }),
+  };
+});
 
 vi.mock("@workspace/api-client-react", async (importOriginal) => {
   const actual =
@@ -61,6 +80,12 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
           harness.state.isPending = true;
         },
       };
+    },
+    useListClerkCases: () => ({ data: harness.history }),
+    getClerkCase: async (id: string) => {
+      const kase = harness.storedCases.get(id);
+      if (!kase) throw new Error(`no stored case ${id}`);
+      return kase;
     },
     useSubmitClerkFeedback: () => ({
       isPending: harness.feedback.isPending,
@@ -457,3 +482,39 @@ describe("Ask 2.0 sections, plan, and follow-up pins", () => {
     });
   });
 });
+
+describe("Ask history (R92)", () => {
+  beforeEach(() => harness.reset());
+  afterEach(cleanup);
+
+  test("recent questions reopen a stored answer without spending a re-ask", async () => {
+    const stored = dataAnswer("Three invoices went out in July.");
+    harness.history = [
+      {
+        id: "case-9",
+        kind: "question",
+        question: "What did we submit in July?",
+        answer: stored,
+        createdAt: "2026-08-30T10:00:00Z",
+      },
+    ];
+    harness.storedCases.set("case-9", {
+      id: "case-9",
+      question: "What did we submit in July?",
+      answer: stored,
+    });
+    render(<AskContent />);
+    expect(screen.getByTestId("card-recent-questions")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("button-recent-question-case-9"));
+    });
+    expect(screen.getByText("Three invoices went out in July.")).toBeTruthy();
+    expect(harness.mutateCalls).toHaveLength(0);
+  });
+
+  test("no stored questions means no history card", () => {
+    render(<AskContent />);
+    expect(screen.queryByTestId("card-recent-questions")).toBeNull();
+  });
+});
+

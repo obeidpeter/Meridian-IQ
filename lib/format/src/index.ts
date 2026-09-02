@@ -461,3 +461,31 @@ export function roleHomeHref(
     }[role ?? ""] ?? null
   );
 }
+
+// ---- Ask history ------------------------------------------------------------
+
+/** The shape of a stored question case the Ask pages list as history. */
+export interface QuestionCaseLike {
+  id: string;
+  kind: string;
+  question?: string | null;
+  answer?: unknown;
+  createdAt: string;
+}
+
+/**
+ * The rows an Ask page lists under "Recent questions": answered question
+ * cases only (an unanswered or refused case has nothing to reopen), newest
+ * first, capped so the list stays a shortlist. Pure so both apps share one
+ * ordering and cap.
+ */
+export function recentQuestionRows<T extends QuestionCaseLike>(
+  cases: readonly T[],
+  limit = 5,
+): T[] {
+  return cases
+    .filter((c) => c.kind === "question" && !!c.answer && !!c.question)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit);
+}
+

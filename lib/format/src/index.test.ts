@@ -27,6 +27,7 @@ import {
   summaryPillClasses,
   roleLabel,
   roleHomeHref,
+  recentQuestionRows
 } from "./index";
 
 describe("formatNaira", () => {
@@ -365,3 +366,35 @@ describe("roleHomeHref", () => {
     expect(roleHomeHref(undefined)).toBeNull();
   });
 });
+
+describe("recentQuestionRows", () => {
+  const row = (id: string, createdAt: string, over: Record<string, unknown> = {}) => ({
+    id,
+    kind: "question",
+    question: `Q ${id}`,
+    answer: { answered: true },
+    createdAt,
+    ...over,
+  });
+
+  test("answered question cases only, newest first", () => {
+    const rows = recentQuestionRows([
+      row("old", "2026-08-01T10:00:00Z"),
+      row("new", "2026-08-03T10:00:00Z"),
+      row("unanswered", "2026-08-04T10:00:00Z", { answer: null }),
+      row("blank", "2026-08-05T10:00:00Z", { question: "" }),
+      row("extraction", "2026-08-06T10:00:00Z", { kind: "extraction" }),
+    ]);
+    expect(rows.map((r) => r.id)).toEqual(["new", "old"]);
+  });
+
+  test("caps the shortlist", () => {
+    const rows = recentQuestionRows(
+      Array.from({ length: 9 }, (_, i) => row(`q${i}`, `2026-08-0${i + 1}T10:00:00Z`)),
+      3,
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows[0].id).toBe("q8");
+  });
+});
+
