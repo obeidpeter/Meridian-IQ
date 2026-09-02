@@ -32,12 +32,21 @@ import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import {
   beginOperation,
+  Metric,
+  MetricStrip,
   updateOperation,
   useFilePicker,
 } from "@workspace/web-ui";
-import { RowStatusIcon } from "@/components/row-status-icon";
+import { pillClasses } from "@workspace/format";
 import { errorStatus, serverErrorMessage } from "@/lib/errors";
-import { Download, FileSpreadsheet, Upload } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardCheck,
+  Download,
+  FileSpreadsheet,
+  Upload,
+  XCircle,
+} from "lucide-react";
 import { csvCell } from "@workspace/web-ui/csv";
 import {
   COLUMNS,
@@ -103,6 +112,27 @@ async function parseWorkbook(file: Blob): Promise<InvoiceImportRow[]> {
   const grid = await readSheet(file);
   return mapGridRows(grid);
 }
+
+// Numbered step chip shared by the three cards (the readiness mark at card
+// scale), so the import reads as one guided flow: add rows → validate →
+// review what happened.
+function StepMark({ n, done }: { n: number; done?: boolean }) {
+  return (
+    <span
+      className={`mi-card-icon text-xs font-bold ${done ? "" : "!bg-muted !text-muted-foreground"}`}
+      data-tone={done ? "positive" : undefined}
+      aria-hidden="true"
+    >
+      {done ? <CheckCircle2 /> : n}
+    </span>
+  );
+}
+
+const ROW_STATUS: Record<string, { label: string; tone: "emerald" | "red" | "slate" }> = {
+  valid: { label: "Valid", tone: "emerald" },
+  created: { label: "Created", tone: "emerald" },
+  invalid: { label: "Invalid", tone: "red" },
+};
 
 export function Import() {
   usePageTitle("Bulk import");
@@ -314,7 +344,10 @@ export function Import() {
       <RequireClientScope thing="bulk import">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">1. Add your rows</CardTitle>
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <StepMark n={1} done={rows.length > 0 && !overCap} />
+              Add your rows
+            </CardTitle>
           </CardHeader>
           <CardContent
             {...filePicker.dropProps}
@@ -425,8 +458,9 @@ export function Import() {
         </Card>
 
         <div className="space-y-3">
-          <h2 className="text-base font-semibold leading-snug">
-            2. Validate and import
+          <h2 className="flex items-center gap-2.5 text-base font-bold leading-snug">
+            <StepMark n={2} done={!!result} />
+            Validate and import
           </h2>
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -505,8 +539,9 @@ export function Import() {
         {result && (
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">
-                3. {result.committed ? "Import results" : "Validation preview"}
+              <CardTitle className="flex items-center gap-2.5 text-base">
+                <StepMark n={3} done={result.committed} />
+                {result.committed ? "Import results" : "Validation preview"}
               </CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 {result.invalidCount > 0 && (
@@ -542,61 +577,114 @@ export function Import() {
                   Invoices page.
                 </p>
               )}
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span data-testid="text-total-count">
-                  Total: {result.total}
-                </span>
-                <span
-                  className="text-emerald-700 dark:text-emerald-400"
-                  data-testid="text-valid-count"
-                >
-                  Valid: {result.validCount}
-                </span>
-                <span
-                  className="text-destructive"
-                  data-testid="text-invalid-count"
-                >
-                  Invalid: {result.invalidCount}
-                </span>
+              {/* The tiles show the numbers; the visually-hidden spans keep the
+                  "Label: N" wording the journeys and screen readers read. */}
+              <MetricStrip label="Import summary">
+                <Metric
+                  label="Rows"
+                  value={
+                    <>
+                      <span aria-hidden="true">{result.total}</span>
+                      <span className="sr-only" data-testid="text-total-count">
+                        Total: {result.total}
+                      </span>
+                    </>
+                  }
+                  detail="In this file"
+                  icon={<FileSpreadsheet className="size-4" aria-hidden="true" />}
+                />
+                <Metric
+                  label="Valid"
+                  value={
+                    <>
+                      <span aria-hidden="true">{result.validCount}</span>
+                      <span className="sr-only" data-testid="text-valid-count">
+                        Valid: {result.validCount}
+                      </span>
+                    </>
+                  }
+                  detail={result.committed ? "Passed every check" : "Ready to import"}
+                  tone="positive"
+                  icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
+                />
+                <Metric
+                  label="Invalid"
+                  value={
+                    <>
+                      <span aria-hidden="true">{result.invalidCount}</span>
+                      <span className="sr-only" data-testid="text-invalid-count">
+                        Invalid: {result.invalidCount}
+                      </span>
+                    </>
+                  }
+                  detail={result.invalidCount > 0 ? "Fix and re-import" : "Nothing to fix"}
+                  tone={result.invalidCount > 0 ? "critical" : "default"}
+                  icon={<XCircle className="size-4" aria-hidden="true" />}
+                />
                 {result.committed && (
-                  <span data-testid="text-created-count">
-                    Created: {result.createdCount}
-                  </span>
-                )}
-              </div>
-              <div className="space-y-2">
-                {result.rows.map((r) => (
-                  <div
-                    key={r.rowNumber}
-                    className="flex items-start gap-2 text-sm border rounded-md px-3 py-2"
-                  >
-                    <RowStatusIcon invalid={r.status === "invalid"} />
-                    <div className="min-w-0">
-                      <p className="font-medium">
-                        Row {r.rowNumber}
-                        {r.invoiceNumber ? ` · ${r.invoiceNumber}` : ""}{" "}
-                        <span className="text-muted-foreground font-normal">
-                          (
-                          {r.status === "invalid"
-                            ? "Invalid"
-                            : r.status === "created"
-                              ? "Created"
-                              : "Valid"}
-                          )
+                  <Metric
+                    label="Created"
+                    value={
+                      <>
+                        <span aria-hidden="true">{result.createdCount}</span>
+                        <span className="sr-only" data-testid="text-created-count">
+                          Created: {result.createdCount}
                         </span>
-                      </p>
-                      {r.errors.length > 0 && (
-                        <ul className="text-xs text-destructive mt-1 space-y-0.5">
-                          {r.errors.map((e, i) => (
-                            <li key={i}>
-                              {e.field}: {e.message}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                      </>
+                    }
+                    detail="Saved as drafts"
+                    tone="info"
+                    icon={<ClipboardCheck className="size-4" aria-hidden="true" />}
+                  />
+                )}
+              </MetricStrip>
+              <div className="overflow-x-auto rounded-[var(--mi-radius)] border border-border">
+                <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
+                  <thead className="bg-muted/50 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">Row</th>
+                      <th className="px-3 py-2">Invoice number</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">What to fix</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {result.rows.map((r) => {
+                      const status = ROW_STATUS[r.status] ?? {
+                        label: r.status,
+                        tone: "slate" as const,
+                      };
+                      return (
+                        <tr key={r.rowNumber} data-testid={`row-import-${r.rowNumber}`}>
+                          <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                            {r.rowNumber}
+                          </td>
+                          <td className="px-3 py-2 font-medium">
+                            {r.invoiceNumber || "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={pillClasses(status.tone)}>
+                              {status.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {r.errors.length > 0 ? (
+                              <ul className="space-y-0.5 text-xs text-destructive">
+                                {r.errors.map((e, i) => (
+                                  <li key={i}>
+                                    <span className="font-semibold">{e.field}</span>: {e.message}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
