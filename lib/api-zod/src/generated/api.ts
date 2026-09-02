@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.85.0
+ * OpenAPI spec version: 0.86.0
  */
 import * as zod from 'zod';
 
@@ -3990,7 +3990,8 @@ export const GetPortfolioResponse = zod.object({
   "severity": zod.enum(['info', 'warning', 'critical']),
   "invoiceId": zod.string().nullish()
 }),zod.null()]).optional(),
-  "failingInvoiceIds": zod.array(zod.string())
+  "failingInvoiceIds": zod.array(zod.string()),
+  "assignedUserIds": zod.array(zod.string()).optional()
 }))
 })
 
@@ -4025,7 +4026,8 @@ export const GetClientPortfolioResponse = zod.object({
   "severity": zod.enum(['info', 'warning', 'critical']),
   "invoiceId": zod.string().nullish()
 }),zod.null()]).optional(),
-  "failingInvoiceIds": zod.array(zod.string())
+  "failingInvoiceIds": zod.array(zod.string()),
+  "assignedUserIds": zod.array(zod.string()).optional()
 }),
   "invoices": zod.array(zod.object({
   "id": zod.string(),
@@ -4047,6 +4049,52 @@ export const GetClientPortfolioResponse = zod.object({
   "status": zod.enum(['upcoming', 'due_soon', 'overdue', 'met']),
   "severity": zod.enum(['info', 'warning', 'critical']),
   "invoiceId": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Firm users this client is assigned to (D12) — a default-view partition, never a boundary
+ */
+export const GetClientAssignmentsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetClientAssignmentsResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "assignees": zod.array(zod.object({
+  "userId": zod.string(),
+  "fullName": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "role": zod.string(),
+  "assignedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Replace the client's assignee set (firm admin) — every add and removal is an audit event
+ */
+export const ReplaceClientAssignmentsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const replaceClientAssignmentsBodyUserIdsMax = 50;
+
+
+
+export const ReplaceClientAssignmentsBody = zod.object({
+  "userIds": zod.array(zod.string()).max(replaceClientAssignmentsBodyUserIdsMax)
+})
+
+export const ReplaceClientAssignmentsResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "assignees": zod.array(zod.object({
+  "userId": zod.string(),
+  "fullName": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "role": zod.string(),
+  "assignedAt": zod.coerce.date()
 }))
 })
 

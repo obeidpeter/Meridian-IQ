@@ -1705,6 +1705,37 @@ const PORTFOLIO_VIEWS = [
 type PortfolioView = (typeof PORTFOLIO_VIEWS)[number];
 type ClientRiskFilter = "all" | "high" | "medium" | "low";
 type ClientSort = "risk" | "name" | "unsubmitted" | "deadline";
+// Per-staff client assignment (architecture.md D12): "mine" is the clients
+// assigned to me PLUS every unassigned client (default-open); "all" is the
+// whole book. A partition of the default view, never of access.
+type ClientScope = "mine" | "all";
+const CLIENT_SCOPES: readonly ClientScope[] = ["mine", "all"];
+
+export function scopeClients<T extends { assignedUserIds?: string[] }>(
+  clients: T[],
+  scope: ClientScope,
+  userId: string | undefined,
+): T[] {
+  if (scope === "all" || !userId) return clients;
+  return clients.filter((c) => {
+    const assigned = c.assignedUserIds ?? [];
+    return assigned.length === 0 || assigned.includes(userId);
+  });
+}
+
+// Staff with at least one assignment land on "mine"; everyone else (admins,
+// staff nobody has assigned yet) sees the whole book, because "mine" would
+// then equal "all" and the toggle would only confuse.
+export function defaultClientScope(
+  role: string | undefined,
+  clients: { assignedUserIds?: string[] }[],
+  userId: string | undefined,
+): ClientScope {
+  if (role !== "firm_staff" || !userId) return "all";
+  return clients.some((c) => (c.assignedUserIds ?? []).includes(userId))
+    ? "mine"
+    : "all";
+}
 // URL-persisted (recognition over recall): back-navigation from a client
 // returns to the exact filtered view, and a filtered book is shareable.
 const CLIENT_RISK_FILTERS: readonly ClientRiskFilter[] = [
@@ -1842,6 +1873,9 @@ function ClientWorkbenchTable({
   onSortChange,
   toolbar,
   compact = false,
+  scope,
+  onScopeChange,
+  scopeCounts,
 }: {
   clients: ClientRisk[];
   totalClients: number;
@@ -1853,6 +1887,9 @@ function ClientWorkbenchTable({
   onSortChange: (value: ClientSort) => void;
   toolbar?: ReactNode;
   compact?: boolean;
+  scope: ClientScope;
+  onScopeChange: (value: ClientScope) => void;
+  scopeCounts: { mine: number; all: number };
 }) {
   const zeroResultReported = useRef(false);
 
@@ -1879,6 +1916,36 @@ function ClientWorkbenchTable({
           <p className="mt-1 text-xs text-slate-500">
             Showing {clients.length} of {totalClients} clients
           </p>
+          <div
+            className="mt-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5"
+            role="group"
+            aria-label="Client scope"
+          >
+            {(
+              [
+                ["mine", "My clients"],
+                ["all", "All clients"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => onScopeChange(value)}
+                className={`rounded px-2.5 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  scope === value
+                    ? "bg-white text-slate-950 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+                data-testid={`button-client-scope-${value}`}
+              >
+                {label}
+                <span className="ml-1 tabular-nums text-[10px] font-semibold text-slate-400">
+                  {scopeCounts[value]}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
         {!compact && (
           <div className="grid gap-2 sm:grid-cols-[minmax(14rem,1fr)_10rem_11rem]">
@@ -2094,6 +2161,25 @@ export function Portfolio() {
     me ? `meridianiq:saved-view-portfolio:${me.userId}` : null,
   );
   const { data, isLoading, error, refetch } = useGetPortfolio();
+  const [clientScope, setClientScope] = useUrlTab<ClientScope>(
+    "scope",
+    "all",
+    CLIENT_SCOPES,
+  );
+  // useUrlTab latches its fallback on first render, and the data-driven
+  // default ("mine" for staff with assignments) is only knowable once the
+  // portfolio and /me have loaded — so apply it once, and only when the URL
+  // carries no explicit scope, so a deliberate switch back to "all" sticks.
+  const scopeDefaulted = useRef(false);
+  useEffect(() => {
+    if (scopeDefaulted.current || !data || !me) return;
+    scopeDefaulted.current = true;
+    const explicit = new URLSearchParams(window.location.search).get("scope");
+    if (explicit) return;
+    if (defaultClientScope(me.role, data.clients, me.userId) === "mine") {
+      setClientScope("mine");
+    }
+  }, [data, me, setClientScope]);
   const canImport = canImportClients(me);
 
   const applySavedView = (saved: SavedView) => {
@@ -2268,7 +2354,12 @@ export function Portfolio() {
   });
 
   const clientNeedle = clientSearch.trim().toLowerCase();
-  const visibleClients = clients
+  const scopedClients = scopeClients(clients, clientScope, me?.userId);
+  const scopeCounts = {
+    mine: scopeClients(clients, "mine", me?.userId).length,
+    all: clients.length,
+  };
+  const visibleClients = scopedClients
     .filter(
       (client) =>
         (clientRisk === "all" || client.penaltyRisk === clientRisk) &&
@@ -2288,7 +2379,7 @@ export function Portfolio() {
       const order = { high: 0, medium: 1, low: 2 } as const;
       return order[a.penaltyRisk] - order[b.penaltyRisk];
     });
-  const attentionClients = clients
+  const attentionClients = scopedClients
     .filter((client) => client.penaltyRisk !== "low")
     .slice(0, 6);
   const workItems: WorkQueueItem[] = [];
@@ -2518,6 +2609,9 @@ export function Portfolio() {
             <ClientWorkbenchTable
               clients={attentionClients}
               totalClients={data.clientCount}
+              scope={clientScope}
+              onScopeChange={setClientScope}
+              scopeCounts={scopeCounts}
               search={clientSearch}
               onSearchChange={setClientSearch}
               risk={clientRisk}
@@ -2550,6 +2644,9 @@ export function Portfolio() {
               }
               clients={visibleClients}
               totalClients={data.clientCount}
+              scope={clientScope}
+              onScopeChange={setClientScope}
+              scopeCounts={scopeCounts}
               search={clientSearch}
               onSearchChange={setClientSearch}
               risk={clientRisk}

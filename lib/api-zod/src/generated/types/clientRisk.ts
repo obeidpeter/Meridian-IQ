@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.85.0
+ * OpenAPI spec version: 0.86.0
  */
 import type { ClientRiskPenaltyRisk } from './clientRiskPenaltyRisk';
 import type { ComplianceDeadline } from './complianceDeadline';
@@ -21,4 +21,5 @@ export interface ClientRisk {
   penaltyRisk: ClientRiskPenaltyRisk;
   nextDeadline?: ComplianceDeadline | null;
   failingInvoiceIds: string[];
+  assignedUserIds?: string[];
 }

@@ -448,6 +448,11 @@ const LADDER: LadderStep[] = [
     atTop: [index("password_resets_one_pending_per_user_uq")],
     afterRollback: [not(index("password_resets_one_pending_per_user_uq"))],
   },
+  {
+    version: 45, // per-staff client assignment register (D12)
+    atTop: [pol("client_assignments")],
+    afterRollback: [not(pol("client_assignments"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.85.0
+ * OpenAPI spec version: 0.86.0
  */
 import {
   useMutation,
@@ -98,6 +98,8 @@ import type {
   ClerkPlanPolicy,
   ClerkTierReport,
   ClerkUsage,
+  ClientAssignments,
+  ClientAssignmentsInput,
   ClientExportBundle,
   ClientImportDraft,
   ClientImportInput,
@@ -13106,6 +13108,154 @@ export function useGetClientPortfolio<TData = Awaited<ReturnType<typeof getClien
 
 
 
+
+export const getGetClientAssignmentsUrl = (id: string,) => {
+
+
+
+
+  return `/api/console/clients/${id}/assignments`
+}
+
+/**
+ * @summary Firm users this client is assigned to (D12) — a default-view partition, never a boundary
+ */
+export const getClientAssignments = async (id: string, options?: RequestInit): Promise<ClientAssignments> => {
+
+  return customFetch<ClientAssignments>(getGetClientAssignmentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientAssignmentsQueryKey = (id: string,) => {
+    return [
+    `/api/console/clients/${id}/assignments`
+    ] as const;
+    }
+
+
+export const getGetClientAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof getClientAssignments>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientAssignmentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientAssignments>>> = ({ signal }) => getClientAssignments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientAssignments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClientAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof getClientAssignments>>>
+export type GetClientAssignmentsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Firm users this client is assigned to (D12) — a default-view partition, never a boundary
+ */
+
+export function useGetClientAssignments<TData = Awaited<ReturnType<typeof getClientAssignments>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClientAssignmentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReplaceClientAssignmentsUrl = (id: string,) => {
+
+
+
+
+  return `/api/console/clients/${id}/assignments`
+}
+
+/**
+ * @summary Replace the client's assignee set (firm admin) — every add and removal is an audit event
+ */
+export const replaceClientAssignments = async (id: string,
+    clientAssignmentsInput: ClientAssignmentsInput, options?: RequestInit): Promise<ClientAssignments> => {
+
+  return customFetch<ClientAssignments>(getReplaceClientAssignmentsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientAssignmentsInput)
+  }
+);}
+
+
+
+
+export const getReplaceClientAssignmentsMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceClientAssignments>>, TError,{id: string;data: BodyType<ClientAssignmentsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof replaceClientAssignments>>, TError,{id: string;data: BodyType<ClientAssignmentsInput>}, TContext> => {
+
+const mutationKey = ['replaceClientAssignments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof replaceClientAssignments>>, {id: string;data: BodyType<ClientAssignmentsInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  replaceClientAssignments(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReplaceClientAssignmentsMutationResult = NonNullable<Awaited<ReturnType<typeof replaceClientAssignments>>>
+    export type ReplaceClientAssignmentsMutationBody = BodyType<ClientAssignmentsInput>
+    export type ReplaceClientAssignmentsMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Replace the client's assignee set (firm admin) — every add and removal is an audit event
+ */
+export const useReplaceClientAssignments = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceClientAssignments>>, TError,{id: string;data: BodyType<ClientAssignmentsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof replaceClientAssignments>>,
+        TError,
+        {id: string;data: BodyType<ClientAssignmentsInput>},
+        TContext
+      > => {
+      return useMutation(getReplaceClientAssignmentsMutationOptions(options));
+    }
 
 export const getListFirmTeamUrl = () => {
 

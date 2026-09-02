@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.85.0
+ * OpenAPI spec version: 0.86.0
  */
 export interface HealthStatus {
   status: string;
@@ -2535,6 +2535,7 @@ export interface ClientRisk {
   penaltyRisk: ClientRiskPenaltyRisk;
   nextDeadline?: ComplianceDeadline | null;
   failingInvoiceIds: string[];
+  assignedUserIds?: string[];
 }
 
 export interface PortfolioSummary {
@@ -2563,6 +2564,26 @@ export interface ClientPortfolioDetail {
   client: ClientRisk;
   invoices: ConsoleInvoice[];
   deadlines: ComplianceDeadline[];
+}
+
+export interface ClientAssignee {
+  userId: string;
+  /** @nullable */
+  fullName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  role: string;
+  assignedAt: string;
+}
+
+export interface ClientAssignments {
+  clientPartyId: string;
+  assignees: ClientAssignee[];
+}
+
+export interface ClientAssignmentsInput {
+  /** @maxItems 50 */
+  userIds: string[];
 }
 
 export interface FirmMember {

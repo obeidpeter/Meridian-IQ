@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -8,12 +8,18 @@ import {
   usersTable,
   membershipsTable,
   onboardingProspectsTable,
+  clientAssignmentsTable,
   type Invoice,
 } from "@workspace/db";
 import {
   GetPortfolioResponse,
   GetClientPortfolioParams,
   GetClientPortfolioResponse,
+  GetClientAssignmentsParams,
+  GetClientAssignmentsResponse,
+  ReplaceClientAssignmentsParams,
+  ReplaceClientAssignmentsBody,
+  ReplaceClientAssignmentsResponse,
   ListFirmTeamResponse,
   ListPipelineResponse,
   CreateProspectBody,
@@ -81,6 +87,8 @@ type ClientRisk = {
     invoiceId: string | null;
   } | null;
   failingInvoiceIds: string[];
+  // D12: filled by the portfolio list only.
+  assignedUserIds?: string[];
 };
 
 // The one "overdue submission" nextDeadline literal, shared by the JS fold
@@ -191,6 +199,198 @@ async function loadFirmClients(
     .where(eq(engagementsTable.firmId, firmId));
   return rows;
 }
+
+// Per-staff client assignment (D12): userIds per client for one firm, one
+// query. The register narrows default views only — never access.
+async function loadFirmAssignments(
+  firmId: string,
+): Promise<Map<string, string[]>> {
+  const rows = await getDb()
+    .select({
+      clientPartyId: clientAssignmentsTable.clientPartyId,
+      userId: clientAssignmentsTable.userId,
+    })
+    .from(clientAssignmentsTable)
+    .where(eq(clientAssignmentsTable.firmId, firmId));
+  const byClient = new Map<string, string[]>();
+  for (const r of rows) {
+    const list = byClient.get(r.clientPartyId) ?? [];
+    list.push(r.userId);
+    byClient.set(r.clientPartyId, list);
+  }
+  return byClient;
+}
+
+async function assertFirmEngagesClient(
+  firmId: string,
+  clientPartyId: string,
+): Promise<void> {
+  const [row] = await getDb()
+    .select({ id: engagementsTable.id })
+    .from(engagementsTable)
+    .where(
+      and(
+        eq(engagementsTable.firmId, firmId),
+        eq(engagementsTable.clientPartyId, clientPartyId),
+      ),
+    )
+    .limit(1);
+  if (!row) {
+    throw new DomainError("NOT_FOUND", "Client not found in your firm", 404);
+  }
+}
+
+async function clientAssignees(firmId: string, clientPartyId: string) {
+  const rows = await getDb()
+    .select({
+      userId: clientAssignmentsTable.userId,
+      assignedAt: clientAssignmentsTable.createdAt,
+      fullName: usersTable.fullName,
+      email: usersTable.email,
+      role: membershipsTable.role,
+    })
+    .from(clientAssignmentsTable)
+    .innerJoin(usersTable, eq(clientAssignmentsTable.userId, usersTable.id))
+    .innerJoin(
+      membershipsTable,
+      and(
+        eq(membershipsTable.userId, clientAssignmentsTable.userId),
+        eq(membershipsTable.firmId, clientAssignmentsTable.firmId),
+      ),
+    )
+    .where(
+      and(
+        eq(clientAssignmentsTable.firmId, firmId),
+        eq(clientAssignmentsTable.clientPartyId, clientPartyId),
+      ),
+    )
+    .orderBy(clientAssignmentsTable.createdAt);
+  return {
+    clientPartyId,
+    assignees: rows.map((r) => ({
+      userId: r.userId,
+      fullName: r.fullName,
+      email: r.email,
+      role: r.role,
+      assignedAt: r.assignedAt,
+    })),
+  };
+}
+
+router.get(
+  "/console/clients/:id/assignments",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "console.portfolio.read");
+    const params = parseOrThrow(GetClientAssignmentsParams, req.params);
+    const firmId = firmScope(req.principal);
+    await assertFirmEngagesClient(firmId, params.id);
+    res.json(
+      GetClientAssignmentsResponse.parse(
+        await clientAssignees(firmId, params.id),
+      ),
+    );
+  },
+);
+
+// Replace the assignee set. Firm-admin only (client.assign); every id must be
+// a firm admin or staff member of THIS firm; each add and removal is its own
+// audit event so the register's history is on the chain.
+router.put(
+  "/console/clients/:id/assignments",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "client.assign");
+    const params = parseOrThrow(ReplaceClientAssignmentsParams, req.params);
+    const body = parseOrThrow(ReplaceClientAssignmentsBody, req.body);
+    const firmId = firmScope(req.principal);
+    await assertFirmEngagesClient(firmId, params.id);
+    const wanted = [...new Set(body.userIds)];
+    if (wanted.length > 0) {
+      const members = await getDb()
+        .select({ userId: membershipsTable.userId })
+        .from(membershipsTable)
+        .where(
+          and(
+            eq(membershipsTable.firmId, firmId),
+            inArray(membershipsTable.userId, wanted),
+            inArray(membershipsTable.role, ["firm_admin", "firm_staff"]),
+          ),
+        );
+      const memberIds = new Set(members.map((m) => m.userId));
+      const stranger = wanted.find((id) => !memberIds.has(id));
+      if (stranger) {
+        throw new DomainError(
+          "INVALID_ASSIGNEE",
+          "Every assignee must be a firm admin or staff member of your firm",
+          400,
+        );
+      }
+    }
+    const current = new Set(
+      (await getDb()
+        .select({ userId: clientAssignmentsTable.userId })
+        .from(clientAssignmentsTable)
+        .where(
+          and(
+            eq(clientAssignmentsTable.firmId, firmId),
+            eq(clientAssignmentsTable.clientPartyId, params.id),
+          ),
+        )).map((r) => r.userId),
+    );
+    const toAdd = wanted.filter((id) => !current.has(id));
+    const toRemove = [...current].filter((id) => !wanted.includes(id));
+    if (toAdd.length > 0) {
+      await getDb()
+        .insert(clientAssignmentsTable)
+        .values(
+          toAdd.map((userId) => ({
+            firmId,
+            clientPartyId: params.id,
+            userId,
+            assignedBy: req.principal.userId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    if (toRemove.length > 0) {
+      await getDb()
+        .delete(clientAssignmentsTable)
+        .where(
+          and(
+            eq(clientAssignmentsTable.firmId, firmId),
+            eq(clientAssignmentsTable.clientPartyId, params.id),
+            inArray(clientAssignmentsTable.userId, toRemove),
+          ),
+        );
+    }
+    for (const userId of toAdd) {
+      await appendAudit({
+        actorId: req.principal.userId,
+        actorRole: req.principal.role,
+        firmId,
+        action: "client.assign",
+        entityType: "client_assignment",
+        entityId: params.id,
+        after: { clientPartyId: params.id, userId },
+      });
+    }
+    for (const userId of toRemove) {
+      await appendAudit({
+        actorId: req.principal.userId,
+        actorRole: req.principal.role,
+        firmId,
+        action: "client.unassign",
+        entityType: "client_assignment",
+        entityId: params.id,
+        before: { clientPartyId: params.id, userId },
+      });
+    }
+    res.json(
+      ReplaceClientAssignmentsResponse.parse(
+        await clientAssignees(firmId, params.id),
+      ),
+    );
+  },
+);
 
 // Receivables across the firm's whole book: who is owed (per client) and who
 // owes (top debtors) — the advisor's chasing worklist, worst first.
@@ -340,9 +540,12 @@ router.get("/console/portfolio", async (req, res): Promise<void> => {
   const firmId = firmScope(req.principal);
   const clients = await loadFirmClients(firmId);
   const aggregates = await loadClientRiskAggregates(firmId);
-  const risks: ClientRisk[] = clients.map((client) =>
-    riskFromAggregate(client.id, client.legalName, aggregates.get(client.id)),
-  );
+  const assignments = await loadFirmAssignments(firmId);
+  const risks: ClientRisk[] = clients.map((client) => ({
+    ...riskFromAggregate(client.id, client.legalName, aggregates.get(client.id)),
+    // D12: who looks after this client; empty = unassigned (visible to all).
+    assignedUserIds: assignments.get(client.id) ?? [],
+  }));
 
   // Riskiest clients first so the partner triages top-down.
   risks.sort((a, b) => PRIORITY_RANK[a.penaltyRisk] - PRIORITY_RANK[b.penaltyRisk]);

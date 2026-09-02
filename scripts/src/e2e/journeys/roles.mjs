@@ -2,7 +2,14 @@
 // firm-admin advisory tooling, the auditor's read-only boundary, the SME
 // owner's consent round trip, and the buyer TOTP enrolment lifecycle.
 import { totpStep, totpCodeAtStep } from "../totp.mjs";
-import { CSRF, DEMO_PASSWORD, signIn, signOutFromApp } from "./shared.mjs";
+import {
+  CSRF,
+  DEMO_PASSWORD,
+  apiLogin,
+  apiLogout,
+  signIn,
+  signOutFromApp,
+} from "./shared.mjs";
 import { checkPageAccessibility } from "../accessibility.mjs";
 
 // ---------- public landing + portal ----------
@@ -387,6 +394,69 @@ async function journeyFirstLandingConsent(page, BASE, check) {
   await signOutFromApp(page, BASE);
 }
 
+// ---------- firm: per-staff client assignment (D12) ----------
+// The admin assigns Kano Textiles to demo staff and Niger Delta Pharma to
+// herself; staff then land on "My clients" (assigned + unassigned) with
+// Pharma hidden, and "All clients" restores the whole book. Assignment
+// never changes access: staff still opens Pharma's page by URL.
+const KANO = "cb000002-0000-4000-8000-0000000000b2";
+const PHARMA = "cb000003-0000-4000-8000-0000000000b3";
+async function journeyClientAssignment(page, BASE, check) {
+  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  const team = await (await page.request.get(BASE + "/api/console/team")).json();
+  const staff = team.find((m) => m.email === "demo.staff@meridianiq.example");
+  const admin = team.find((m) => m.email === "demo.admin@meridianiq.example");
+  check("firm team lists the demo admin and staff", !!staff && !!admin);
+  const assign = async (clientId, userIds) =>
+    page.request.put(BASE + `/api/console/clients/${clientId}/assignments`, {
+      data: { userIds },
+      headers: CSRF,
+    });
+  const kano = await assign(KANO, [staff.userId]);
+  const pharma = await assign(PHARMA, [admin.userId]);
+  check(
+    "firm admin assigns clients — status 200",
+    kano.status() === 200 && pharma.status() === 200,
+  );
+  const outsider = await assign(KANO, [staff.userId, "00000000-0000-4000-8000-000000000000"]);
+  check("an assignee outside the firm is refused — status 400", outsider.status() === 400);
+  // Staff may read the register but not write it.
+  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+  const staffWrite = await assign(KANO, []);
+  check("staff cannot rewrite assignments — status 403", staffWrite.status() === 403);
+  await apiLogout(page, BASE);
+
+  await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
+  await page.goto(BASE + "/console", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="button-client-scope-mine"]', {
+    timeout: 15000,
+  });
+  check(
+    "assigned staff land on My clients by default",
+    (await page.getByTestId("button-client-scope-mine").first().getAttribute("aria-pressed")) === "true",
+  );
+  await page.getByTestId("nav-portfolio").first().click();
+  await page.goto(BASE + "/console?view=clients", { waitUntil: "networkidle" });
+  await page.waitForSelector(`[data-testid="row-client-${KANO}"]`, { timeout: 15000 });
+  check(
+    "My clients hides a client assigned only to someone else",
+    (await page.locator(`[data-testid="row-client-${PHARMA}"]`).count()) === 0,
+  );
+  await checkPageAccessibility(page, check, "portfolio, My clients");
+  await page.getByTestId("button-client-scope-all").last().click();
+  await page.waitForSelector(`[data-testid="row-client-${PHARMA}"]`, { timeout: 10000 });
+  check("All clients restores the whole book", true);
+  // Access is unchanged: the hidden client still opens by URL, and shows its team.
+  await page.goto(BASE + `/console/clients/${PHARMA}`, { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="card-client-team"]', { timeout: 15000 });
+  check(
+    "assignment never narrows access: staff opens an unassigned-to-them client",
+    (await page.getByTestId("text-client-name").innerText()).includes("Niger Delta Pharma") &&
+      (await page.locator(`[data-testid="text-assignee-${admin.userId}"]`).count()) === 1,
+  );
+  await signOutFromApp(page, BASE);
+}
+
 // ---------- buyer finance: TOTP enrolment lifecycle ----------
 // Enrol → challenge sign-in → disable, computing live RFC 6238 codes in the
 // harness from the base32 secret the enrolment card shows on screen. Uses
@@ -524,6 +594,7 @@ async function journeyTotp(page, BASE, check) {
 
 export {
   journeyFirstLandingConsent,
+  journeyClientAssignment,
   journeyPortalAuth,
   journeyOperatorDesk,
   journeyFirmAdminAdvisory,
