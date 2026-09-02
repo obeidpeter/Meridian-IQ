@@ -1566,7 +1566,7 @@ const DASHBOARD_VIEWS = ["today", "money", "compliance", "clerk"] as const;
 type DashboardView = (typeof DASHBOARD_VIEWS)[number];
 
 export function Dashboard() {
-  usePageTitle("Dashboard");
+  usePageTitle("Today");
   const [view, setView] = useUrlTab<DashboardView>(
     "view",
     "today",
@@ -1728,9 +1728,9 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <WorkspaceHeader
-        eyebrow="Business command centre"
-        title="Compliance overview"
-        description="Prioritized work, money movement and filing readiness for this business."
+        eyebrow="Business workspace"
+        title="Today"
+        description="Your compliance work, in one place: what needs attention, money in motion and filing readiness."
         actions={
           <Button asChild>
             <Link href="/invoices/new">New invoice</Link>

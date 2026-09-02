@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.83.0
+ * OpenAPI spec version: 0.84.0
  */
 import * as zod from 'zod';
 
@@ -32,6 +32,8 @@ export const GetMeResponse = zod.object({
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
   "features": zod.array(zod.string()),
+  "releaseTag": zod.enum(['R0', 'R1', 'R2', 'R3', 'R4']).optional(),
+  "workspaceName": zod.string().nullish(),
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()
@@ -62,6 +64,8 @@ export const LoginResponse = zod.object({
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
   "features": zod.array(zod.string()),
+  "releaseTag": zod.enum(['R0', 'R1', 'R2', 'R3', 'R4']).optional(),
+  "workspaceName": zod.string().nullish(),
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()
@@ -97,6 +101,8 @@ export const TotpChallengeResponse = zod.object({
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
   "features": zod.array(zod.string()),
+  "releaseTag": zod.enum(['R0', 'R1', 'R2', 'R3', 'R4']).optional(),
+  "workspaceName": zod.string().nullish(),
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()

@@ -71,6 +71,9 @@ overrides:
   'undici@<6.28.0': '>=6.28.0 <7.0.0'
   'esbuild@>=0.27.3 <0.28.1': '>=0.28.1'
   'nanoid@<3.3.18': '>=3.3.18 <4.0.0'
+  # browserslist <=4.28.6: unbounded cache growth + prototype write (Aug 2026
+  # advisories, reached only through the Expo CLI chain).
+  'browserslist@<4.28.7': '>=4.28.7'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'

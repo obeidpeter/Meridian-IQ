@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { getDb, firmsTable, usersTable, membershipsTable } from "@workspace/db";
+import {
+  getDb,
+  firmsTable,
+  partiesTable,
+  usersTable,
+  membershipsTable,
+} from "@workspace/db";
 import {
   GetMeResponse,
   ListFirmsResponse,
@@ -25,11 +31,48 @@ import {
 } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
 import { litFeatureKeys } from "../modules/flags/flags";
+import { activationReleaseTag } from "../modules/flags/releases";
 import { createPasswordReset } from "../modules/auth/password-reset";
 import { normalizeEmail } from "../modules/auth/session";
 
 const router: IRouter = Router();
 
+
+// What the shell calls the workspace: the business (client party) for client
+// users, the buyer organisation for buyer users, the firm for firm roles.
+// Cross-tenant staff carry no firm, and a dev-header principal may name rows
+// that do not exist — both resolve to null and the shell falls back to the
+// role label.
+async function workspaceNameFor(p: {
+  role: string;
+  firmId: string | null;
+  clientPartyId: string | null;
+  buyerPartyId: string | null;
+}): Promise<string | null> {
+  const partyId =
+    p.role === "client_user"
+      ? p.clientPartyId
+      : p.role === "buyer_user"
+        ? p.buyerPartyId
+        : null;
+  if (partyId && isUuid(partyId)) {
+    const [party] = await getDb()
+      .select({ legalName: partiesTable.legalName })
+      .from(partiesTable)
+      .where(eq(partiesTable.id, partyId))
+      .limit(1);
+    if (party?.legalName) return party.legalName;
+  }
+  if (p.firmId && isUuid(p.firmId)) {
+    const [firm] = await getDb()
+      .select({ name: firmsTable.name })
+      .from(firmsTable)
+      .where(eq(firmsTable.id, p.firmId))
+      .limit(1);
+    return firm?.name ?? null;
+  }
+  return null;
+}
 
 router.get("/me", async (req, res): Promise<void> => {
   const p = req.principal;
@@ -42,17 +85,25 @@ router.get("/me", async (req, res): Promise<void> => {
         .where(eq(usersTable.id, p.userId))
         .limit(1)
     : [];
+  const me = {
+    userId: p.userId,
+    role: p.role,
+    email: user?.email ?? null,
+    fullName: user?.fullName ?? null,
+    firmId: p.firmId,
+    clientPartyId: p.clientPartyId,
+    buyerPartyId: p.buyerPartyId,
+    capabilities: ROLE_CAPABILITIES[p.role] ?? [],
+    features: await litFeatureKeys(p.firmId),
+  };
   res.json(
     GetMeResponse.parse({
-      userId: p.userId,
-      role: p.role,
-      email: user?.email ?? null,
-      fullName: user?.fullName ?? null,
-      firmId: p.firmId,
-      clientPartyId: p.clientPartyId,
-      buyerPartyId: p.buyerPartyId,
-      capabilities: ROLE_CAPABILITIES[p.role] ?? [],
-      features: await litFeatureKeys(p.firmId),
+      ...me,
+      // The shell's activation badge and workspace chip (PL-02 + the R69
+      // shell): both computed here so every app names the same stage and
+      // the same workspace without a second round trip.
+      releaseTag: activationReleaseTag(me.features),
+      workspaceName: await workspaceNameFor(p),
     }),
   );
 });

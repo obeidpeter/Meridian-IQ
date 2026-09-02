@@ -21,12 +21,12 @@ import {
   Gauge,
   ShieldCheck,
   GitMerge,
-  FileCheck2,
   BookMarked,
   Bot,
   UserPlus,
+  ChevronDown,
   CircleUserRound,
-  LockKeyhole,
+  Compass,
   KeyRound,
   Inbox,
   CalendarCheck2,
@@ -37,6 +37,11 @@ import {
   Search,
   Pin,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sheet,
   SheetContent,
@@ -54,10 +59,12 @@ import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
   readRecentItems,
+  ReleaseBadge,
   ShortcutsDialog,
   type ShortcutRow,
   usePinnedItems,
   useGlobalShortcuts,
+  WorkspaceChip,
   type CommandItem,
 } from "@workspace/web-ui";
 import { HELP_TOPICS } from "@/pages/help";
@@ -168,11 +175,6 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Activity",
         icon: Activity,
       },
-      {
-        href: "/help",
-        label: "Help",
-        icon: CircleHelp,
-      },
     ],
   },
   {
@@ -240,6 +242,9 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Activity,
         capability: "operator.queue.read",
       },
+      // The Control centre stays in the operator nav (architecture.md design
+      // direction): activation evidence is operator work, not a hidden admin
+      // page.
       {
         href: "/control-centre",
         label: "Control centre",
@@ -279,10 +284,9 @@ const NAV_GROUPS: NavGroup[] = [
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
-const ROLE_CONTEXT: Record<
-  string,
-  { title: string; description: string; badge: string }
-> = {
+type RoleContext = { title: string; description: string; badge: string };
+
+const ROLE_CONTEXT: Record<string, RoleContext> = {
   firm_admin: {
     title: "Practice command centre",
     description: "Portfolio, revenue and firm controls",
@@ -301,7 +305,7 @@ const ROLE_CONTEXT: Record<
   auditor: {
     title: "Audit workspace",
     description: "Read-only evidence and platform controls",
-    badge: "Read only",
+    badge: "Read-only auditor",
   },
 };
 
@@ -317,21 +321,22 @@ function accountInitials(
     .join("");
 }
 
-function BrandMark() {
+function BrandMark({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="grid size-9 place-items-center rounded-md bg-lime-300 text-[#071a1c]">
-        <FileCheck2 className="h-5 w-5" aria-hidden="true" />
+    <Link
+      href="/"
+      onClick={onNavigate}
+      className="mi-brand"
+      aria-label="MeridianIQ — go to the console home"
+    >
+      <span className="mi-brand__mark">
+        <Compass aria-hidden="true" />
       </span>
       <span>
-        <span className="block text-base font-extrabold leading-none text-white">
-          MeridianIQ
-        </span>
-        <span className="mt-1 block text-xs font-semibold text-white/75">
-          Accountant Console
-        </span>
+        <span className="mi-brand__name">MeridianIQ</span>
+        <span className="mi-brand__caption">Accountant Console</span>
       </span>
-    </span>
+    </Link>
   );
 }
 
@@ -364,100 +369,187 @@ function NavLinks({
   groups: NavGroup[];
   location: string;
   me: Me | undefined;
-  roleContext: { title: string; description: string; badge: string };
+  roleContext: RoleContext;
   onNavigate?: () => void;
   onSignOut: () => void;
   signingOut: boolean;
 }) {
   return (
-    <nav className="flex h-full min-h-0 flex-col bg-[#071a1c] px-3 py-5 text-white">
-      <div className="mb-6 px-2">
-        <BrandMark />
-        <div className="mt-5 border-l-2 border-lime-300 pl-3">
-          <p className="text-xs font-bold text-white">
-            {me ? roleContext.title : "Loading workspace"}
-          </p>
-          <p className="mt-1 text-xs leading-4 text-white/75">
-            {roleContext.description}
-          </p>
+    <nav className="mi-sidebar" aria-label="Console">
+      <BrandMark onNavigate={onNavigate} />
+      <div className="mi-nav">
+        <div className="mi-nav__scroll">
+          {groups.map((group) => (
+            <div key={group.title} className="mi-nav__group">
+              <p className="mi-nav__title">{group.title}</p>
+              {group.links.map((link) => {
+                const Icon = link.icon;
+                const isActive = isLinkActive(location, link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={onNavigate}
+                    data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    className="mi-nav__link"
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span title={link.label}>{link.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
-      <div className="console-nav-scroll min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
-        {groups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-1">
-            <p className="px-3 pb-1.5 text-xs font-bold uppercase text-white/70">
-              {group.title}
-            </p>
-            {group.links.map((link) => {
-              const Icon = link.icon;
-              const isActive = isLinkActive(location, link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={onNavigate}
-                  data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
-                  className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] ${
-                    isActive
-                      ? "bg-lime-300 font-bold text-[#071a1c]"
-                      : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
-                  }`}
-                >
-                  <Icon className="size-[1.1rem] shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 truncate" title={link.label}>
-                    {link.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </div>
 
-      <div className="mt-auto space-y-1 border-t border-white/10 pt-4">
+      <div className="mi-nav__footer">
         {me && (
-          <div
-            className="mb-3 flex items-center gap-3 px-2"
-            data-testid="text-account"
-          >
-            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-white/10 text-xs font-extrabold text-lime-200">
+          <div className="mi-nav__account" data-testid="text-account">
+            <span className="mi-avatar mi-avatar--inverse">
               {accountInitials(me.fullName, me.email)}
             </span>
             <div className="min-w-0">
               <p
-                className="truncate text-sm font-bold text-white"
+                className="mi-nav__account-name"
                 title={me.fullName ?? me.email ?? "Signed in"}
               >
                 {me.fullName ?? me.email ?? "Signed in"}
               </p>
-              <p
-                className="mt-0.5 truncate text-xs text-white/75"
-                title={roleContext.badge}
-              >
+              <p className="mi-nav__account-role" title={roleContext.badge}>
                 {roleContext.badge}
               </p>
             </div>
           </div>
         )}
-        <a
-          href={PORTAL_URL}
-          className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
-          data-testid="link-all-apps"
+        <Link
+          href="/help"
+          onClick={onNavigate}
+          className="mi-nav__link"
+          aria-current={isLinkActive(location, "/help") ? "page" : undefined}
+          data-testid="nav-help"
         >
-          <Grid2x2 className="size-[1.1rem]" aria-hidden="true" />
-          All apps
+          <CircleHelp aria-hidden="true" />
+          <span>Help</span>
+        </Link>
+        <a href={PORTAL_URL} className="mi-nav__link" data-testid="link-all-apps">
+          <Grid2x2 aria-hidden="true" />
+          <span>All apps</span>
         </a>
         <button
+          type="button"
           onClick={onSignOut}
           disabled={signingOut}
-          className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c] disabled:opacity-50"
+          className="mi-nav__link"
           data-testid="button-sign-out"
         >
-          <LogOut className="size-[1.1rem]" aria-hidden="true" />
-          {signingOut ? "Signing out..." : "Sign out"}
+          <LogOut aria-hidden="true" />
+          <span>{signingOut ? "Signing out..." : "Sign out"}</span>
         </button>
       </div>
     </nav>
+  );
+}
+
+function AccountMenu({
+  me,
+  roleContext,
+  onOpenShortcuts,
+  onSignOut,
+  signingOut,
+}: {
+  me: Me | undefined;
+  roleContext: RoleContext;
+  onOpenShortcuts: () => void;
+  onSignOut: () => void;
+  signingOut: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const name = me?.fullName ?? me?.email ?? "Signed in";
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mi-avatar-button"
+          aria-label={`Account menu for ${name}`}
+          data-testid="button-account-menu"
+        >
+          <span className="mi-avatar">
+            {me ? (
+              accountInitials(me.fullName, me.email)
+            ) : (
+              <CircleUserRound aria-hidden="true" />
+            )}
+          </span>
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="mi-account-menu p-3">
+        <div className="mi-account-menu__identity">
+          <span className="mi-avatar">
+            {me ? (
+              accountInitials(me.fullName, me.email)
+            ) : (
+              <CircleUserRound aria-hidden="true" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <p className="mi-account-menu__name" title={name}>
+              {name}
+            </p>
+            <p className="mi-account-menu__meta">
+              {me?.email && me.fullName ? `${me.email} · ` : ""}
+              {roleContext.badge}
+            </p>
+          </div>
+        </div>
+        <ul className="mi-account-menu__list">
+          <li>
+            <Link
+              href="/help"
+              onClick={() => setOpen(false)}
+              className="mi-account-menu__item"
+            >
+              <CircleHelp aria-hidden="true" />
+              Help centre
+            </Link>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="mi-account-menu__item"
+              onClick={() => {
+                setOpen(false);
+                onOpenShortcuts();
+              }}
+            >
+              <Keyboard aria-hidden="true" />
+              Keyboard shortcuts
+            </button>
+          </li>
+          <li>
+            <a href={PORTAL_URL} className="mi-account-menu__item">
+              <Grid2x2 aria-hidden="true" />
+              All apps
+            </a>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="mi-account-menu__item"
+              onClick={onSignOut}
+              disabled={signingOut}
+              data-testid="button-sign-out-menu"
+            >
+              <LogOut aria-hidden="true" />
+              {signingOut ? "Signing out..." : "Sign out"}
+            </button>
+          </li>
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -527,17 +619,22 @@ export function Layout({ children }: { children: ReactNode }) {
         (l.feature === undefined || features.has(l.feature)),
     ),
   })).filter((g) => g.links.length > 0);
-  const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
+  const roleContext: RoleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
     title: "Accountant Console",
     description: "Role-scoped workspace",
     badge: me ? roleLabel(me.role) : "Loading",
   };
+  // The workspace chip names the firm this session belongs to; platform
+  // principals (operator, auditor) have no firm, so the role title stands in.
+  const workspaceName = me?.workspaceName ?? roleContext.title;
 
   const activeLink = groups
     .flatMap((group) => group.links)
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
-  const pageTitle = activeLink?.label ?? roleContext.title;
+  const pageTitle =
+    activeLink?.label ??
+    (isLinkActive(location, "/help") ? "Help" : roleContext.title);
   const pinnedClients = usePinnedItems(
     me ? `meridianiq:pinned-clients:${me.userId}` : null,
   );
@@ -625,6 +722,15 @@ export function Layout({ children }: { children: ReactNode }) {
         };
       }),
     ),
+    {
+      id: "console-command-help-centre",
+      label: "Help",
+      description: "Open the help centre.",
+      group: "Help",
+      icon: <CircleHelp className="size-4" aria-hidden="true" />,
+      keywords: ["help", "guide", "support"],
+      onSelect: () => navigate("/help"),
+    },
     ...helpItems,
     {
       id: "console-command-shortcuts",
@@ -648,7 +754,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen overflow-x-clip bg-[var(--mi-canvas)] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -663,15 +769,15 @@ export function Layout({ children }: { children: ReactNode }) {
       />
       <a
         href="#main-content"
-        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-[#071a1c] ${FOCUS_RING}`}
+        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--mi-gold-bright)] focus:px-4 focus:py-2 focus:font-bold focus:text-[var(--mi-ink)] ${FOCUS_RING}`}
         data-testid="link-skip-to-content"
       >
         Skip to content
       </a>
 
-      <div className="sticky top-0 z-30 flex items-center justify-between bg-[#071a1c] px-4 py-3 md:hidden">
+      <div className="mi-mobilebar">
         <BrandMark />
-        <div className="flex items-center gap-1">
+        <div className="mi-mobilebar__actions">
           <Button
             variant="ghost"
             size="icon"
@@ -695,7 +801,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent
               side="left"
-              className="w-[17rem] border-r-0 bg-[#071a1c] p-0 text-white [&>button]:text-white"
+              className="w-[17rem] border-r-0 bg-[var(--mi-sidebar)] p-0 text-white [&>button]:text-white"
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <NavLinks {...navProps} onNavigate={() => setSheetOpen(false)} />
@@ -703,13 +809,9 @@ export function Layout({ children }: { children: ReactNode }) {
           </Sheet>
         </div>
       </div>
-      <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
-        <p className="text-[11px] font-bold text-teal-700">
-          {roleContext.title}
-        </p>
-        <p className="mt-0.5 truncate text-sm font-extrabold text-slate-950">
-          {pageTitle}
-        </p>
+      <div className="mi-mobilebar__context">
+        <p>{workspaceName}</p>
+        <p>{pageTitle}</p>
       </div>
 
       <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
@@ -717,59 +819,44 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white/95 px-8 backdrop-blur md:flex lg:px-10">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold text-teal-700">
-              {roleContext.title}
-            </p>
-            <p className="mt-0.5 truncate text-sm font-extrabold text-slate-950">
-              {pageTitle}
-            </p>
+        <header className="mi-topbar">
+          <div className="mi-topbar__lead">
+            <WorkspaceChip name={workspaceName} />
+            <span className="mi-topbar__role" data-testid="text-role-context">
+              {roleContext.badge}
+            </span>
           </div>
-          <div className="flex shrink-0 items-center gap-4">
-            {/* Recent-notification inbox — render-on-success, so a server
-                without the feed endpoint shows no bell at all. */}
-            <Button
-              variant="outline"
-              className="h-9 w-56 justify-between border-slate-200 bg-slate-50 px-3 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          <div className="mi-topbar__actions">
+            <button
+              type="button"
+              className="mi-topbar__action"
               onClick={() => setCommandOpen(true)}
               data-testid="button-command-menu"
             >
-              <span className="flex min-w-0 items-center gap-2">
-                <Search className="size-4" aria-hidden="true" />
-                <span className="truncate text-xs font-semibold">
-                  Search workspaces
-                </span>
-              </span>
-              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
-                Ctrl K
-              </kbd>
-            </Button>
+              <Search aria-hidden="true" />
+              <span>Search</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+            <Link
+              href="/help"
+              className="mi-topbar__action"
+              data-testid="link-help-header"
+            >
+              <CircleHelp aria-hidden="true" />
+              <span>Help</span>
+            </Link>
+            {/* Recent-notification inbox — render-on-success, so a server
+                without the feed endpoint shows no bell at all. */}
             <NotificationBell />
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
-              <LockKeyhole
-                className="size-3.5 text-teal-700"
-                aria-hidden="true"
-              />
-              {roleContext.badge}
-            </span>
-            <div className="flex items-center gap-2.5">
-              <span className="grid size-8 place-items-center rounded-md bg-[#0b6463] text-[11px] font-extrabold text-white">
-                {me ? (
-                  accountInitials(me.fullName, me.email)
-                ) : (
-                  <CircleUserRound className="size-4" aria-hidden="true" />
-                )}
-              </span>
-              <div className="hidden max-w-48 xl:block">
-                <p className="truncate text-xs font-bold text-slate-900">
-                  {me?.fullName ?? me?.email ?? "Signed in"}
-                </p>
-                <p className="mt-0.5 truncate text-[10px] text-slate-500">
-                  {me?.email ?? roleLabel(me?.role)}
-                </p>
-              </div>
-            </div>
+            <span className="mi-topbar__divider" aria-hidden="true" />
+            <ReleaseBadge tag={me?.releaseTag} />
+            <AccountMenu
+              me={me}
+              roleContext={roleContext}
+              onOpenShortcuts={() => setShortcutsOpen(true)}
+              onSignOut={signOut}
+              signingOut={logout.isPending}
+            />
           </div>
         </header>
 

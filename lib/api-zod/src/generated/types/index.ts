@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.83.0
+ * OpenAPI spec version: 0.84.0
  */
 
 export * from './acceptInvitationInput';
@@ -559,6 +559,7 @@ export * from './me';
 export * from './membership';
 export * from './membershipInput';
 export * from './membershipInputRole';
+export * from './meReleaseTag';
 export * from './mergeImpact';
 export * from './message';
 export * from './messageChannel';

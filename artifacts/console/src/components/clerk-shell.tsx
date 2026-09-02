@@ -19,7 +19,7 @@ import { StaleBuildBanner } from "@/components/stale-build-banner";
 // dark-on-teal in BOTH color schemes; content inherits the app theme.
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e4c45]";
 
 const NAV = [
   { href: "/clerk", label: "Intake queue", icon: ListChecks },
@@ -49,7 +49,7 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
           data-testid={`clerk-nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
           className={`flex min-h-10 snap-start items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${FOCUS_RING} ${
             isActive(href)
-              ? "bg-lime-300 font-bold text-[#071a1c]"
+              ? "bg-[#c9a227] font-bold text-[#0e2f2a]"
               : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
           }`}
         >
@@ -64,7 +64,7 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
 function Brand() {
   return (
     <div className="flex items-center gap-2.5 px-2">
-      <span className="grid size-9 place-items-center rounded-md bg-lime-300 text-[#071a1c]">
+      <span className="grid size-9 place-items-center rounded-md bg-[#c9a227] text-[#0e2f2a]">
         <FileCheck2 className="size-5" aria-hidden="true" />
       </span>
       <span>
@@ -90,7 +90,7 @@ export function ClerkShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Mobile: compact top bar with horizontal nav. */}
-      <div className="bg-[#071a1c] md:hidden">
+      <div className="bg-[#0e4c45] md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <Brand />
           <Link
@@ -107,10 +107,10 @@ export function ClerkShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* Desktop rail. */}
-      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col bg-[#071a1c] px-3 py-5 md:flex">
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col bg-[#0e4c45] px-3 py-5 md:flex">
         <div>
           <Brand />
-          <div className="mt-5 border-l-2 border-lime-300 pl-3">
+          <div className="mt-5 border-l-2 border-[#c9a227] pl-3">
             <p className="text-xs font-bold text-white">
               AI operations workspace
             </p>
@@ -123,7 +123,7 @@ export function ClerkShell({ children }: { children: ReactNode }) {
           <NavLinks orientation="column" />
         </div>
         <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
-          <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-lime-200">
+          <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-[#e9cf78]">
             <ShieldCheck className="size-4" aria-hidden="true" />
             Human review on
           </div>

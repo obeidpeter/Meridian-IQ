@@ -6,6 +6,54 @@ import { CSRF, DEMO_PASSWORD, signIn, signOutFromApp } from "./shared.mjs";
 import { checkPageAccessibility } from "../accessibility.mjs";
 
 // ---------- public landing + portal ----------
+// ---------- app shell (R69): workspace chip + flag-derived release badge ----------
+// The header names the workspace the session is scoped to and shows the
+// activation stage the server derived from the lit flags. Both are read
+// from /me, so the check compares the rendered badge against the API's
+// releaseTag rather than pinning a number the seed could change.
+async function checkShell(
+  page,
+  BASE,
+  check,
+  { label, roleText, workspaceText, homeTestId },
+) {
+  const me = await (await page.request.get(BASE + "/api/me")).json();
+  const badge = page.getByTestId("text-release-badge");
+  const badgeText = (await badge.count()) ? await badge.innerText() : "";
+  check(
+    `${label}: release badge mirrors /me releaseTag (${me.releaseTag})`,
+    /^R[0-4]$/.test(me.releaseTag ?? "") &&
+      badgeText === `Release ${String(me.releaseTag).slice(1)}`,
+  );
+  const chip = page.getByTestId("text-workspace-chip");
+  const chipText = (await chip.count()) ? await chip.innerText() : "";
+  check(
+    `${label}: workspace chip names the session's workspace`,
+    chipText.length > 0 &&
+      (workspaceText ? chipText.includes(workspaceText) : true) &&
+      (me.workspaceName ? chipText.includes(me.workspaceName) : true),
+  );
+  // textContent, not innerText: the role text collapses below 80rem (the
+  // default Playwright viewport is 1280px wide), and the check is about the
+  // label the shell carries, not whether this viewport shows it.
+  check(
+    `${label}: header role reads "${roleText}"`,
+    ((await page.getByTestId("text-role-context").textContent()) ?? "").trim() ===
+      roleText,
+  );
+  if (homeTestId) {
+    check(
+      `${label}: sidebar home entry is ${homeTestId}`,
+      (await page.getByTestId(homeTestId).count()) > 0,
+    );
+  }
+  check(
+    `${label}: header help link and account menu present`,
+    (await page.getByTestId("link-help-header").count()) > 0 &&
+      (await page.getByTestId("button-account-menu").count()) > 0,
+  );
+}
+
 async function journeyPortalAuth(page, BASE, check) {
   const health = await page.request.get(BASE + "/api/healthz");
   const healthBody = await health.json();
@@ -219,6 +267,10 @@ async function journeyAuditorReadOnly(page, BASE, check) {
   await page.waitForSelector('[data-testid="card-chain-valid"]', {
     timeout: 15000,
   });
+  await checkShell(page, BASE, check, {
+    label: "console auditor",
+    roleText: "Read-only auditor",
+  });
   await page.getByTestId("nav-operator-queue").first().click();
   await page.waitForSelector('[data-testid^="card-case-"]', { timeout: 10000 });
   check(
@@ -248,6 +300,12 @@ async function journeyOwnerConsent(page, BASE, check) {
     timeout: 10000,
   });
   await checkPageAccessibility(page, check, "client consent");
+  await checkShell(page, BASE, check, {
+    label: "sme owner",
+    roleText: "Business owner",
+    workspaceText: "Adaeze Foods Ltd",
+    homeTestId: "nav-today",
+  });
   check(
     "consent page: layer 3 dormant",
     (

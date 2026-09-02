@@ -248,7 +248,7 @@ export function ActivationWorkspace() {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-[#082f31] px-5 py-5 text-white">
-          <p className="text-xs font-bold uppercase text-lime-300">
+          <p className="text-xs font-bold uppercase text-[#e9cf78]">
             Activation funnel
           </p>
           <dl className="mt-5 space-y-4">

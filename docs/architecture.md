@@ -267,3 +267,90 @@ computed in SQL against the Lagos calendar, and every derived figure the UI
 shows states its basis.
 Consequences: one source of truth for "what day is it"; UI code formats but
 never re-derives statutory state; tests pin the boundary behaviour.
+
+### D12 — Per-staff client assignment narrows the view, never the boundary
+
+Context: the console shows every firm user the whole portfolio. The staff
+workspace design (September 2026 mockups) assumes "my clients"; firms with
+more than a few staff want that partition, but the launch-profile firms are
+small and RLS is keyed on the firm, not the person.
+Decision: add a firm-scoped assignment table (staff user ↔ client party) in
+its own round. Unassigned clients stay visible to everyone (default-open);
+assignment drives the default "My clients" filter and the work queue, and
+firm admins always see everything. It is a convenience partition, not a
+security boundary — RLS (D2) and SEC-03 remain the only isolation.
+Consequences: no change to RBAC capabilities or RLS policies beyond the new
+tenant table's own policy migration; assignment changes are audited like
+any other firm action; the staff workspace gains a "My clients / All
+clients" switch rather than a second portfolio page.
+
+### D13 — One session is one workspace; the header chip is a label
+
+Context: the SME mockups show a business switcher in the header. A
+`client_user` is scoped to one `clientPartyId` at sign-in (the SEC-03 scope
+is a property of the principal, not of a UI selection), and firm users reach
+a client through the console.
+Decision: no multi-business switcher. The header chip names the workspace
+(`Me.workspaceName`: the client business, else the firm) and does not
+switch it. An owner of several businesses gets one invitation per business.
+Consequences: SEC-03 stays a one-line predicate; the SPA cannot serve one
+client's cached queries under another; if a switcher is ever built it is a
+re-authentication (a new session), never a client-side filter.
+
+### D14 — No SSO in the launch window; access review as reporting, later
+
+Context: the team-and-access mockup shows SSO and periodic access reviews.
+Launch firms are Nigerian SME practices whose identity posture is the local
+password plus TOTP (`TOTP_REQUIRED_ROLES`), and the platform has a single
+auth code path.
+Decision: no SAML/OIDC federation before the credit-perimeter releases. An
+access review is a small later round built on what exists — an exportable
+"who has access, since when, last sign-in" register plus a firm-admin
+attestation recorded on the audit chain — scheduled after D12 so it can
+report assignments too.
+Consequences: one identity path to test and rate-limit; MFA enforcement stays
+environment-driven; the review round is reporting and attestation only, and
+must not grow an identity-provider dependency.
+
+### D15 — Consent capture gates the first landing; Consent stays in the nav
+
+Context: CORE-03 makes recorded consent the basis for anything the platform
+sends, but the consent ledger is a page an owner may never open. The
+onboarding mockup captures consent at first login. Layer 3 (data sharing)
+has no live rail until the R2 releases.
+Decision: after activation, the first landing shows a one-time, resumable
+consent step before the workspace — layers 1 and 2 as explicit choices,
+layer 3 visible but dormant ("not yet available") so it is never a silent
+default. Declining is allowed and recorded. The Consent page keeps its
+first-class nav entry so decisions can be revisited. Built as its own round
+(a contract change to expose "consent captured" and the landing
+interstitial).
+Consequences: outbound rails find a consent record from day one; the
+interstitial can never block a returning user (one-time by design); layer 3
+copy must not promise a rail that is dark.
+
+### D16 — The design system is a refresh of the existing shell, not new apps
+
+Context: ten screen mockups (September 2026) proposed a new visual language
+for the SME, console, operator, auditor and onboarding surfaces. Verifying
+them against the code showed most of their structure already exists; what
+differed was palette, typography, the shell, and a handful of navigation
+calls.
+Decision: adopt the mockups as tokens plus shell. `@workspace/web-ui` owns
+the `--mi-*` palette, the metric tiles and the `.mi-sidebar` / `.mi-topbar`
+classes; sme-compliance and console render their sidebars and headers on
+those classes and retone their theme variables to match. Buyer portal keeps
+its own blue. Page bodies are restyled incrementally, one round at a time,
+against screenshots and the accessibility check. Navigation calls made with
+the shell: the SME home is "Today" (not "Dashboard"); Help sits in the
+header and the sidebar footer; the stamped-invoice vault is the Invoices
+list filtered to Stamped, not a separate entry; the Control centre stays in
+the operator nav; the auditor badge reads "Read-only auditor"; the Release
+badge is derived from `Me.releaseTag` — the highest release whose every flag
+at that tag and below is lit (R0 floor), computed by
+`activationReleaseTag` from the flag manifest — never hard-coded.
+Consequences: a palette change lands in every app at once; the release badge
+cannot drift from the activation posture (D9); remaining page-level
+differences from the mockups are tracked in the UX backlog rather than
+rebuilt wholesale; D12–D15 are the product decisions those screens forced,
+each with its own round.

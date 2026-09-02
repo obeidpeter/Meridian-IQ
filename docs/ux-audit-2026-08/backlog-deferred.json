@@ -951,5 +951,102 @@
   "fix": "Add a preview lookup for the token that returns the invited email and workspace name, and show both on the card.",
   "effort": "M",
   "source": "cognitive-walkthrough-2026-08"
+ },
+ {
+  "area": "Console / staff workspace",
+  "effort": "L",
+  "evidence": "UI mockup review 2026-09 (staff client-work workspace); docs/architecture.md D12.",
+  "files": [
+   "lib/db/src/schema.ts",
+   "lib/db/src/migrations",
+   "lib/api-spec/openapi.yaml",
+   "artifacts/console/src/pages/portfolio.tsx"
+  ],
+  "fix": "Add a firm-scoped staff-to-client assignment table (own policy migration), an assignment endpoint, and a 'My clients / All clients' default filter on the portfolio and work queue. Unassigned clients stay visible to all; firm admins always see everything.",
+  "launchActive": true,
+  "nng": [
+   "match-real-world",
+   "flexibility-efficiency"
+  ],
+  "problem": "Every firm staff member sees the whole portfolio; there is no 'my clients' view, so a growing practice cannot partition daily work by person.",
+  "severity": "medium",
+  "source": "ui-mockups-2026-09",
+  "title": "Per-staff client assignment (D12)",
+  "userGroups": [
+   "firm"
+  ]
+ },
+ {
+  "area": "Landing portal / first landing after activation",
+  "effort": "M",
+  "evidence": "UI mockup review 2026-09 (authentication, MFA and consent onboarding); docs/architecture.md D15.",
+  "files": [
+   "lib/api-spec/openapi.yaml",
+   "artifacts/api-server/src/routes/consent.ts",
+   "artifacts/sme-compliance/src/App.tsx",
+   "artifacts/sme-compliance/src/pages/consent.tsx"
+  ],
+  "fix": "Expose 'consent captured' on Me, and show a one-time, resumable consent interstitial on the first landing: layers 1 and 2 as explicit choices, layer 3 visible but dormant until an R2 rail is live. Declining is allowed and recorded. Keep the Consent nav entry.",
+  "launchActive": true,
+  "nng": [
+   "visibility",
+   "user-control"
+  ],
+  "problem": "Consent is a page an owner may never open, so outbound rails can find no consent record for a brand-new business.",
+  "severity": "medium",
+  "source": "ui-mockups-2026-09",
+  "title": "Consent capture on first landing (D15)",
+  "userGroups": [
+   "sme"
+  ]
+ },
+ {
+  "area": "Console / team, roles and access",
+  "effort": "M",
+  "evidence": "UI mockup review 2026-09 (firm admin team, roles and access management); docs/architecture.md D14.",
+  "files": [
+   "lib/api-spec/openapi.yaml",
+   "artifacts/api-server/src/routes/identity.ts",
+   "artifacts/console/src/pages/invitations.tsx"
+  ],
+  "fix": "Add an exportable access register (who has access, role, since when, last sign-in, assignments) and a firm-admin attestation recorded on the audit chain. Reporting and attestation only; no SSO.",
+  "launchActive": false,
+  "nng": [
+   "visibility",
+   "help-recognize-diagnose"
+  ],
+  "problem": "A firm admin cannot review who holds access to the firm's workspaces without reading the invitation list and the audit log side by side.",
+  "severity": "low",
+  "source": "ui-mockups-2026-09",
+  "title": "Lightweight quarterly access review (D14)",
+  "userGroups": [
+   "firm"
+  ]
+ },
+ {
+  "area": "SME + console page bodies",
+  "effort": "L",
+  "evidence": "UI mockup review 2026-09 (all ten screens); docs/architecture.md D16. R69 shipped the tokens and the shell.",
+  "files": [
+   "lib/web-ui/src/styles.css",
+   "artifacts/sme-compliance/src/pages",
+   "artifacts/console/src/pages"
+  ],
+  "fix": "Restyle page bodies onto the design-system tokens one surface per round (Today, guided invoice, import validation, vault, portfolio, operator queue, staff workspace, team/access, auditor evidence, onboarding), each gated by the ux-snapshot screenshots and the accessibility check.",
+  "launchActive": true,
+  "nng": [
+   "consistency",
+   "aesthetic-minimalist"
+  ],
+  "problem": "After the shell refresh the page bodies still carry the previous card styling and spacing, so the two visual languages sit side by side.",
+  "severity": "low",
+  "source": "ui-mockups-2026-09",
+  "title": "Page-body restyle onto the design system (D16 follow-through)",
+  "userGroups": [
+   "sme",
+   "firm",
+   "operator",
+   "auditor"
+  ]
  }
 ]

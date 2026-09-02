@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.83.0
+  version: 0.84.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -6632,6 +6632,20 @@ components:
           type: array
           items:
             type: string
+        # The activation stage the lit flags amount to (PL-02): the highest
+        # roadmap release whose EVERY manifest flag is lit for this principal,
+        # so the badge the apps show moves only on deliberate activation
+        # decisions, never on a partial roll-out. R0 when even the core is
+        # incomplete.
+        releaseTag:
+          type: string
+          enum: [R0, R1, R2, R3, R4]
+        # What the shell names as the workspace: the firm for firm roles, the
+        # business (client party) for client users, the buyer organisation for
+        # buyer users; null for cross-tenant staff (operator, auditor) and for
+        # principals with no resolvable row.
+        workspaceName:
+          type: ["string", "null"]
         # Bearer session token, returned ONLY by /auth/login for native mobile
         # clients that cannot rely on the HttpOnly cookie (Expo). Same signed
         # token as the cookie; sent as `Authorization: Bearer <token>`.
