@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.90.0
+ * OpenAPI spec version: 0.91.0
  */
 import {
   useMutation,
@@ -8158,7 +8158,7 @@ export const getGetRailConfigUrl = () => {
 }
 
 /**
- * @summary Which env-lit rails are configured on this deployment (booleans only — never values)
+ * @summary Which env-lit rails are configured on this deployment (booleans and key ids only — never values)
  */
 export const getRailConfig = async ( options?: RequestInit): Promise<RailConfigEntry[]> => {
 
@@ -8205,7 +8205,7 @@ export type GetRailConfigQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Which env-lit rails are configured on this deployment (booleans only — never values)
+ * @summary Which env-lit rails are configured on this deployment (booleans and key ids only — never values)
  */
 
 export function useGetRailConfig<TData = Awaited<ReturnType<typeof getRailConfig>>, TError = ErrorType<unknown>>(

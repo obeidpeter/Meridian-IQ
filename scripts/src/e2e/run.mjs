@@ -31,10 +31,18 @@ const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 8091);
 const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 8093);
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
 
-// Machine-rail tokens, defined once: set on the api-server env below AND
-// threaded into runJourneys, so the server and the journeys cannot drift.
+// Machine-rail credentials, defined once: set on the api-server env below
+// AND threaded into runJourneys, so the server and the journeys cannot
+// drift. The collections rail runs on a KEY RING (R100: the provider signs
+// each request with a key id, timestamp and body HMAC); the payment webhook
+// and the sweep trigger keep the pre-key-ring single token, so both halves
+// of the dual path are exercised.
 const PAYMENT_WEBHOOK_TOKEN = "e2e-pay-hook";
-const COLLECTION_WEBHOOK_TOKEN = "e2e-collect-hook";
+const COLLECTION_WEBHOOK_KEY = {
+  id: "e2e-k1",
+  secret: "e2e-collect-hook-signing-secret-0123456789",
+};
+const COLLECTION_WEBHOOK_KEYS = `${COLLECTION_WEBHOOK_KEY.id}:${COLLECTION_WEBHOOK_KEY.secret}`;
 const SWEEP_TOKEN = "e2e-sweep-trigger";
 
 const REQUIRED = [
@@ -116,9 +124,11 @@ const api = spawn(
       // presents this token as x-op-token to settle its payment intent.
       PAYMENT_WEBHOOK_TOKEN,
       // Lights the inbound collection webhook (same fail-closed posture: the
-      // rail 404s while unset). The collections journey presents this token as
-      // x-op-token to settle a receivable through a collection account.
-      COLLECTION_WEBHOOK_TOKEN,
+      // rail 404s while its ring is empty). The collections journey SIGNS its
+      // settlement with this key (x-op-key-id / x-op-timestamp /
+      // x-op-signature) and also proves the legacy x-op-token path still
+      // admits the ring's secret.
+      COLLECTION_WEBHOOK_KEYS,
       // Lights /api/internal/sweep (fail-closed: 404 while unset). The
       // integration journey polls the sweep to drain the pipeline + webhook
       // outbox synchronously, presenting this token as x-op-token.
@@ -151,7 +161,7 @@ try {
   await runJourneys(page, BASE, check, {
     hookReceiver,
     paymentWebhookToken: PAYMENT_WEBHOOK_TOKEN,
-    collectionWebhookToken: COLLECTION_WEBHOOK_TOKEN,
+    collectionWebhookKey: COLLECTION_WEBHOOK_KEY,
     sweepToken: SWEEP_TOKEN,
   });
 

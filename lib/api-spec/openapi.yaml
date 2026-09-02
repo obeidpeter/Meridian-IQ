@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.90.0
+  version: 0.91.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2026,7 +2026,7 @@ paths:
     get:
       operationId: getRailConfig
       tags: [operator]
-      summary: Which env-lit rails are configured on this deployment (booleans only — never values)
+      summary: Which env-lit rails are configured on this deployment (booleans and key ids only — never values)
       responses:
         "200":
           description: Per-rail configuration state
@@ -16603,7 +16603,7 @@ components:
           additionalProperties: true
     RailConfigEntry:
       type: object
-      required: [key, label, configured, note]
+      required: [key, label, configured, note, keyIds, legacyTokenAccepted]
       properties:
         key:
           type: string
@@ -16614,6 +16614,14 @@ components:
           type: boolean
         note:
           type: string
+        keyIds:
+          type: array
+          description: Key IDS of the rail's ring (never a secret); `legacy` is the pre-key-ring single token.
+          items:
+            type: string
+        legacyTokenAccepted:
+          type: boolean
+          description: Whether the plain x-op-token path is still accepted on this rail (OP_LEGACY_TOKENS).
     BulkConfirmationsInput:
       type: object
       required: [invoiceIds, method]

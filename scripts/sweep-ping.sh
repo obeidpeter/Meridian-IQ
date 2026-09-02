@@ -14,6 +14,12 @@
 # Usage:
 #   SWEEP_TOKEN=... ./scripts/sweep-ping.sh
 #   SWEEP_URL=https://example.com/api/internal/sweep SWEEP_TOKEN=... ./scripts/sweep-ping.sh
+#
+# SWEEP_TOKEN may be the legacy single token or any secret from the SWEEP_KEYS
+# ring (R100): this pinger uses the plain x-op-token path, which stays open
+# until the deployment sets OP_LEGACY_TOKENS=off — at which point the
+# scheduler must sign its requests (see docs/platform.md, "Machine-rail
+# credentials").
 set -eu
 
 SWEEP_URL="${SWEEP_URL:-https://meridian-iq.replit.app/api/internal/sweep}"

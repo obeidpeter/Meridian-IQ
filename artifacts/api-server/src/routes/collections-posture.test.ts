@@ -30,7 +30,7 @@ test("the inbound webhook is public, and ONLY because it fails closed", () => {
     "/collections/inbound",
   );
   const darkAt = block.indexOf("COLLECTION_WEBHOOK_TOKEN");
-  const compareAt = block.indexOf("opTokenAllows");
+  const compareAt = block.indexOf("authenticateOpRequest");
   const settleAt = block.indexOf("recordInboundCollection(");
   assert.ok(
     darkAt >= 0 && block.includes("404"),
@@ -38,7 +38,7 @@ test("the inbound webhook is public, and ONLY because it fails closed", () => {
   );
   assert.ok(
     compareAt > darkAt,
-    "the constant-time token compare guards everything after the dark check",
+    "the key-ring authentication (signed or legacy, constant-time) guards everything after the dark check",
   );
   assert.ok(
     settleAt > compareAt,

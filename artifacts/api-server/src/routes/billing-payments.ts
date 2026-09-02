@@ -6,7 +6,7 @@ import {
   ListPaymentIntentsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { opTokenAllows, presentedOpToken } from "../lib/op-token";
+import { authenticateOpRequest, railKeyRing } from "../lib/op-token";
 import { assertCan, requireFirmScope } from "../modules/auth/rbac";
 import {
   confirmPaymentIntent,
@@ -70,14 +70,13 @@ const ConfirmPaymentBody = z.object({
 });
 
 router.post("/billing/payments/confirm", async (req, res): Promise<void> => {
-  const expected = process.env.PAYMENT_WEBHOOK_TOKEN;
-  if (!expected) {
+  const ring = railKeyRing("PAYMENT_WEBHOOK_TOKEN");
+  if (ring.length === 0) {
     // Rail is dark: indistinguishable from a route that does not exist.
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented = presentedOpToken(req);
-  if (!presented || !opTokenAllows(expected, presented)) {
+  if (!authenticateOpRequest(req, ring).ok) {
     res.status(401).json({ error: "Invalid or missing payment webhook token" });
     return;
   }

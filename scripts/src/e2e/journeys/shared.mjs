@@ -1,3 +1,4 @@
+import { createHash, createHmac } from "node:crypto";
 // Shared spine of the e2e journeys: the demo credentials, the CSRF marker,
 // the seeded demo-client ids, and the sign-in/api-session/poll helpers every
 // journey group composes. Journey code lives in the sibling group files;
@@ -99,6 +100,23 @@ export async function createDraftInvoice(
 
 // Poll a probe until it reports true. The delay runs BEFORE each attempt —
 // the search probes rely on it for the debounced input to settle.
+// Sign a machine-rail request the way lib/op-token.ts verifies it (R100):
+// `v1=` + hex HMAC-SHA256(secret, `${ts}.${METHOD}.${path}.${sha256hex(body)}`),
+// with the key id and timestamp as headers. `path` is the full request path
+// the server sees (e.g. /api/collections/inbound).
+export function signOpRequest(key, { method, path, body = "", timestamp }) {
+  const ts = timestamp ?? Math.floor(Date.now() / 1000);
+  const bodyHash = createHash("sha256").update(body).digest("hex");
+  const digest = createHmac("sha256", key.secret)
+    .update(`${ts}.${method.toUpperCase()}.${path}.${bodyHash}`)
+    .digest("hex");
+  return {
+    "x-op-key-id": key.id,
+    "x-op-timestamp": String(ts),
+    "x-op-signature": `v1=${digest}`,
+  };
+}
+
 export async function pollUntil(fn, { tries = 10, delayMs = 700, page }) {
   let ok = false;
   for (let i = 0; i < tries && !ok; i++) {

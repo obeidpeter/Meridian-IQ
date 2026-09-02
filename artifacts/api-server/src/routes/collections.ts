@@ -16,7 +16,7 @@ import {
   GetUnmatchedCollectionsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { opTokenAllows, presentedOpToken } from "../lib/op-token";
+import { authenticateOpRequest, railKeyRing } from "../lib/op-token";
 import {
   assertCan,
   assertPartyAccess,
@@ -155,14 +155,13 @@ const InboundCollectionBody = z.object({
 // (dark while COLLECTION_WEBHOOK_TOKEN is unset) — a firm-flag 404 here
 // would bounce a pilot firm's live provider mid-stream.
 router.post("/collections/inbound", async (req, res): Promise<void> => {
-  const expected = process.env.COLLECTION_WEBHOOK_TOKEN;
-  if (!expected) {
+  const ring = railKeyRing("COLLECTION_WEBHOOK_TOKEN");
+  if (ring.length === 0) {
     // Rail is dark: indistinguishable from a route that does not exist.
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented = presentedOpToken(req);
-  if (!presented || !opTokenAllows(expected, presented)) {
+  if (!authenticateOpRequest(req, ring).ok) {
     res
       .status(401)
       .json({ error: "Invalid or missing collection webhook token" });
