@@ -1,5 +1,9 @@
 import { test, expect, describe } from "vitest";
-import { eligibleBadge, stampBadge } from "./format";
+import {
+  eligibleBadge,
+  stampBadge,
+  stampRiskLabel,
+} from "./format";
 
 // The shared formatters are tested once, in @workspace/format; this file
 // covers only the buyer-portal-specific boolean pill vocabulary.
@@ -25,3 +29,22 @@ describe("eligibleBadge", () => {
     }
   });
 });
+
+describe("stampRiskLabel", () => {
+  test("a healthy row has no risk token", () => {
+    expect(stampRiskLabel({ stampValid: true, eligible: true })).toBeNull();
+  });
+
+  test("names only the risk states, stamp first", () => {
+    expect(stampRiskLabel({ stampValid: false, eligible: true })).toBe(
+      stampBadge(false).label,
+    );
+    expect(stampRiskLabel({ stampValid: true, eligible: false })).toBe(
+      eligibleBadge(false).label,
+    );
+    expect(stampRiskLabel({ stampValid: false, eligible: false })).toBe(
+      `${stampBadge(false).label} · ${eligibleBadge(false).label}`,
+    );
+  });
+});
+

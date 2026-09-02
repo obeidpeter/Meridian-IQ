@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   getListNotificationsQueryKey,
   useListNotifications,
@@ -24,6 +25,15 @@ import {
 } from "@/lib/notifications";
 
 const PARAMS = { limit: 100 };
+
+
+/** A confirmation alert opens the invoice it is about; anything else stays a row. */
+function entityHref(item: { entityType?: string | null; entityId?: string | null }) {
+  if (item.entityType === "invoice" && item.entityId) {
+    return `/invoices/${item.entityId}`;
+  }
+  return null;
+}
 
 export function Notifications() {
   usePageTitle("Notifications");
@@ -103,7 +113,7 @@ export function Notifications() {
         <Metric
           label="Delivered"
           value={String(delivered)}
-          detail="Provider accepted"
+          detail="Sent to you"
           icon={<MailCheck className="size-4" aria-hidden="true" />}
           tone="positive"
         />
@@ -119,10 +129,21 @@ export function Notifications() {
           timeLabel: relativeTime(item.createdAt),
           timeTitle: formatDateTime(item.createdAt),
           status: item.status,
+          href: entityHref(item),
         }))}
         emptyTitle="No notifications yet"
         emptyHint="Confirmation alerts and supplier updates will appear here."
         unreadDotClass="bg-cyan-600"
+        renderLink={(href, children, key) => (
+          <Link
+            key={key}
+            href={href}
+            className="flex items-start gap-3 px-5 py-4 transition-colors hover:bg-muted/50"
+            data-testid={`link-notification-${key}`}
+          >
+            {children}
+          </Link>
+        )}
       />
     </div>
   );

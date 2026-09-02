@@ -26,3 +26,20 @@ export function eligibleBadge(eligible: boolean | null | undefined): {
     ? { label: "VAT eligible", classes: pillClasses("emerald") }
     : { label: "Not eligible", classes: pillClasses("amber") };
 }
+
+/**
+ * The compact risk token a list row shows below the lg breakpoint, where the
+ * full stamp/eligibility badges are hidden: only the RISK states are named
+ * (an invalid stamp, input VAT at risk) so a healthy row stays one line.
+ * Returns null when there is nothing to warn about.
+ */
+export function stampRiskLabel(invoice: {
+  stampValid?: boolean | null;
+  eligible?: boolean | null;
+}): string | null {
+  const parts: string[] = [];
+  if (!invoice.stampValid) parts.push(stampBadge(false).label);
+  if (!invoice.eligible) parts.push(eligibleBadge(false).label);
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+

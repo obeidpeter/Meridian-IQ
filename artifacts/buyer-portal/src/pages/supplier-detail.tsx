@@ -91,6 +91,15 @@ function DetailInvoiceRow({ invoice }: { invoice: BuyerInvoice }) {
             {" · "}
             {formatNaira(invoice.grandTotal)}
           </span>
+          {!invoice.stampValid && (
+            <span
+              className="lg:hidden font-medium text-amber-700 dark:text-amber-400"
+              data-testid={`text-stamp-risk-${invoice.id}`}
+            >
+              {" · "}
+              {stamp.label}
+            </span>
+          )}
         </p>
       </div>
       <span
