@@ -77,6 +77,11 @@ export const stampRecordsTable = pgTable(
     qrPayload: text("qr_payload").notNull(),
     signedArtifactRef: text("signed_artifact_ref").notNull(),
     rail: railEnum("rail").notNull(),
+    // Provenance (R97): which transport issued the stamp and in which
+    // environment, so sandbox stamps issued before accreditation can never be
+    // mistaken for live ones after cutover. Defaults name today's simulator.
+    provider: text("provider").notNull().default("simulator"),
+    environment: text("environment").notNull().default("sandbox"),
     createdAt: createdAt(),
     // One canonical stamp per invoice: enforces idempotency so a crash/retry
     // between the stamp insert and the outbox row being marked done cannot write

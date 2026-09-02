@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.87.0
+ * OpenAPI spec version: 0.88.0
  */
 
 export type ConsentRecordAction = typeof ConsentRecordAction[keyof typeof ConsentRecordAction];
