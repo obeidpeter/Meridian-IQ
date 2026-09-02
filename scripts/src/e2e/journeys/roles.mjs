@@ -33,9 +33,12 @@ async function checkShell(
       (workspaceText ? chipText.includes(workspaceText) : true) &&
       (me.workspaceName ? chipText.includes(me.workspaceName) : true),
   );
+  // textContent, not innerText: the role text collapses below 80rem (the
+  // default Playwright viewport is 1280px wide), and the check is about the
+  // label the shell carries, not whether this viewport shows it.
   check(
     `${label}: header role reads "${roleText}"`,
-    (await page.getByTestId("text-role-context").innerText()).trim() ===
+    ((await page.getByTestId("text-role-context").textContent()) ?? "").trim() ===
       roleText,
   );
   if (homeTestId) {

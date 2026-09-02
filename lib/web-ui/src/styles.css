@@ -127,6 +127,9 @@
      strips with three or five metrics still get one column per metric. */
   grid-template-columns: repeat(var(--mi-metric-count, 4), minmax(0, 1fr));
   gap: 1rem;
+  /* A value wider than its tile must never widen the page (WCAG 1.4.10
+     reflow at 200%): wrap first (below), clip as the last resort. */
+  overflow: hidden;
 }
 
 /* A tile: tinted circular icon on the left, the numeral and its label on
@@ -208,6 +211,8 @@
 .mi-metric__value {
   grid-area: value;
   align-self: end;
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin: 0;
   color: var(--mi-ink);
   font-size: 1.75rem;
@@ -1000,7 +1005,10 @@
   font-size: 0.6875rem;
 }
 
-@media (min-width: 641px) and (max-width: 900px) {
+/* Two columns through the tablet range and 200%-zoomed laptops (a 1920px
+   screen at 200% is a 960px layout): four separate tiles need ~1100px
+   before a currency value or a date sits comfortably beside its icon. */
+@media (min-width: 641px) and (max-width: 1100px) {
   .mi-metric-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

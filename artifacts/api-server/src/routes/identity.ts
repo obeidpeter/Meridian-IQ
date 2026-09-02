@@ -85,22 +85,24 @@ router.get("/me", async (req, res): Promise<void> => {
         .where(eq(usersTable.id, p.userId))
         .limit(1)
     : [];
-  const features = await litFeatureKeys(p.firmId);
+  const me = {
+    userId: p.userId,
+    role: p.role,
+    email: user?.email ?? null,
+    fullName: user?.fullName ?? null,
+    firmId: p.firmId,
+    clientPartyId: p.clientPartyId,
+    buyerPartyId: p.buyerPartyId,
+    capabilities: ROLE_CAPABILITIES[p.role] ?? [],
+    features: await litFeatureKeys(p.firmId),
+  };
   res.json(
     GetMeResponse.parse({
-      userId: p.userId,
-      role: p.role,
-      email: user?.email ?? null,
-      fullName: user?.fullName ?? null,
-      firmId: p.firmId,
-      clientPartyId: p.clientPartyId,
-      buyerPartyId: p.buyerPartyId,
-      capabilities: ROLE_CAPABILITIES[p.role] ?? [],
-      features,
+      ...me,
       // The shell's activation badge and workspace chip (PL-02 + the R69
       // shell): both computed here so every app names the same stage and
       // the same workspace without a second round trip.
-      releaseTag: activationReleaseTag(features),
+      releaseTag: activationReleaseTag(me.features),
       workspaceName: await workspaceNameFor(p),
     }),
   );
