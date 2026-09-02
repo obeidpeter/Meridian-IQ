@@ -16,18 +16,28 @@ export type ClerkDockAnswer = {
   refusalReason?: string | null;
   proposition?: string | null;
   facts: ClerkDockFact[];
+  /** Where the answer came from, phrased by the app exactly as its full Ask
+   *  page does (citation, resolved scope, claim key/version). Falls back to
+   *  the app's static grounding note when absent. */
+  sourceLine?: string | null;
+  /** True when the dock view dropped something — facts past its cap, deep
+   *  links, section titles or proposed actions — so it can point at the
+   *  full workspace instead of implying this is everything. */
+  hasMore?: boolean;
 };
 
 function DockAnswer({
   answer,
   groundingNote,
+  onMore,
 }: {
   answer: ClerkDockAnswer;
   groundingNote: string;
+  onMore: () => void;
 }) {
   if (!answer.answered) {
     return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
         <p className="font-semibold">Clerk declined to answer</p>
         <p className="mt-1 text-xs leading-5">{answer.refusalReason}</p>
       </div>
@@ -35,17 +45,17 @@ function DockAnswer({
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-      <p className="text-sm leading-6 text-slate-900">{answer.proposition}</p>
+    <div className="space-y-3 rounded-md border border-border bg-muted p-3">
+      <p className="text-sm leading-6 text-foreground">{answer.proposition}</p>
       {answer.facts.length > 0 && (
-        <dl className="divide-y divide-slate-200 border-y border-slate-200">
+        <dl className="divide-y divide-border border-y border-border">
           {answer.facts.map((fact) => (
             <div
               key={fact.key}
               className="flex items-center justify-between gap-4 py-2 text-xs"
             >
-              <dt className="text-slate-600">{fact.label}</dt>
-              <dd className="font-bold tabular-nums text-slate-950">
+              <dt className="text-muted-foreground">{fact.label}</dt>
+              <dd className="font-bold tabular-nums text-foreground">
                 {fact.value}
                 {fact.unit ? ` ${fact.unit}` : ""}
               </dd>
@@ -53,10 +63,23 @@ function DockAnswer({
           ))}
         </dl>
       )}
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold text-teal-800">
+      <p
+        className="flex items-center gap-1.5 text-[11px] font-semibold text-teal-800 dark:text-teal-300"
+        data-testid="text-dock-source"
+      >
         <ShieldCheck className="size-3.5" aria-hidden="true" />
-        {groundingNote}
+        {answer.sourceLine ?? groundingNote}
       </p>
+      {answer.hasMore && (
+        <button
+          type="button"
+          onClick={onMore}
+          className="text-left text-xs font-semibold text-primary underline-offset-4 hover:underline"
+          data-testid="button-dock-more"
+        >
+          More detail and proposed actions in the full workspace
+        </button>
+      )}
     </div>
   );
 }
@@ -76,6 +99,7 @@ export function ClerkDock({
   answer,
   pending,
   error,
+  errorMessage,
   onAsk,
   onOpenFull,
 }: {
@@ -86,6 +110,10 @@ export function ClerkDock({
   answer: ClerkDockAnswer | null;
   pending: boolean;
   error: boolean;
+  /** Why the last ask failed, in the app's words (kill switch, monthly
+   *  allowance, the server's own message). The generic line is the
+   *  fallback when the app passes nothing. */
+  errorMessage?: string | null;
   onAsk: (question: string) => void;
   onOpenFull: () => void;
 }) {
@@ -120,7 +148,7 @@ export function ClerkDock({
             <span className="sr-only">Close</span>
           </Dialog.Close>
 
-          <div className="flex flex-col space-y-2 border-b border-slate-200 px-5 py-5 pr-12 text-left">
+          <div className="flex flex-col space-y-2 border-b border-border px-5 py-5 pr-12 text-left">
             <div className="flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-md bg-[#0b6463] text-white">
                 <Bot className="size-5" aria-hidden="true" />
@@ -142,24 +170,42 @@ export function ClerkDock({
                 <button
                   key={suggestion}
                   type="button"
-                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-slate-700 hover:border-teal-300 hover:bg-teal-50"
-                  onClick={() => setQuestion(suggestion)}
+                  disabled={pending}
+                  className="rounded-md border border-border bg-background px-2.5 py-1.5 text-left text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+                  onClick={() => {
+                    setQuestion(suggestion);
+                    onAsk(suggestion);
+                  }}
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
-            {answer && (
-              <DockAnswer answer={answer} groundingNote={groundingNote} />
-            )}
-            {error && (
-              <p className="text-sm text-destructive" role="alert">
-                Clerk could not answer that question. Nothing was changed.
-              </p>
-            )}
+            <div aria-live="polite" className="space-y-4">
+              {answer && (
+                <DockAnswer
+                  answer={answer}
+                  groundingNote={groundingNote}
+                  onMore={() => {
+                    setOpen(false);
+                    onOpenFull();
+                  }}
+                />
+              )}
+              {(error || errorMessage) && (
+                <p
+                  className="text-sm text-destructive"
+                  role="alert"
+                  data-testid="text-dock-error"
+                >
+                  {errorMessage ??
+                    "Clerk could not answer that question. Nothing was changed."}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-3 border-t border-slate-200 bg-white p-5">
+          <div className="space-y-3 border-t border-border bg-background p-5">
             <textarea
               value={question}
               onChange={(event) => setQuestion(event.target.value)}

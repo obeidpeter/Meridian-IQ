@@ -794,6 +794,7 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <Search aria-hidden="true" />
           </Button>
+          <NotificationBell />
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button

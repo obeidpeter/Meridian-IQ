@@ -599,7 +599,11 @@ export function ClerkAskPage() {
         // pinned a display scope, say what a follow-up will keep — and offer
         // a way off the thread. Clearing drops previousCaseId only; the
         // answer stays on screen.
-        followupPins={previousCaseId ? followupPinsLine(answer) : ""}
+        followupPins={
+          previousCaseId
+            ? followupPinsLine(answer) || "Follow-ups continue this question"
+            : ""
+        }
         onClearFollowup={() => setPreviousCaseId(null)}
         onOpenMemory={openStoredAnswer}
       />
