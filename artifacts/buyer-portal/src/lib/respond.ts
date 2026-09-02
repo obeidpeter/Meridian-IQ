@@ -21,6 +21,11 @@ export const RESPONSE_DESCRIPTIONS: Record<ResponseState, string> = {
     "Declines the invoice. The supplier is notified with your reason and must reissue it if they still intend to bill you.",
 };
 
+// Said before submit, not only in the 409 and "already responded" states:
+// a response is one-shot, whichever action is picked.
+export const RESPONSE_FINALITY =
+  "Once submitted, your response is recorded permanently and cannot be changed here.";
+
 export const SUBMIT_LABELS: Record<ResponseState, string> = {
   confirmed: "Confirm invoice",
   queried: "Send query",

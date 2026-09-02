@@ -7,6 +7,7 @@ import {
   noteValidationError,
   responseRecordedCopy,
   type ResponseState,
+  RESPONSE_FINALITY,
 } from "./respond";
 
 const STATES: ResponseState[] = ["confirmed", "queried", "rejected"];
@@ -100,3 +101,11 @@ describe("errorDescription", () => {
     );
   });
 });
+
+describe("RESPONSE_FINALITY", () => {
+  test("says the response is one-shot before the buyer submits", () => {
+    expect(RESPONSE_FINALITY).toContain("permanently");
+    expect(RESPONSE_FINALITY).toContain("cannot be changed");
+  });
+});
+
