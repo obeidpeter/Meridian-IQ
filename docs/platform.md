@@ -80,7 +80,7 @@ every add and removal is an audit event.
   inviter's firm; a `client_user` invite must name a client party the firm
   engages. Operators bootstrap a NEW firm through the same rail: provision
   the firm (`POST /firms`), then send its first `firm_admin` invite naming
-  that `firmId` (console → Team invitations shows operators a target-firm
+  that `firmId` (console → Invitations shows operators a target-firm
   picker + inline provisioning); the admin self-serves the rest. Platform
   roles (operator, auditor, bank/buyer) deliberately stay on
   `identity.write`, never the invite flow.
@@ -889,7 +889,7 @@ failed` transition, idempotent on replay, pointer-only audit. Subscription
 
 - **Console IA** (`console/src/components/layout.tsx`): the sidebar renders
   three capability-gated groups — **Practice** (Portfolio, Onboarding,
-  Client import, Advisory, Team invitations, Integrations), **Growth &
+  Client import, Advisory, Invitations, Integrations), **Growth &
   revenue** (Plans & billing, Statements, Unearned income, White-label,
   Certification) and **Platform** (Operator queue, Party integrity, Error
   catalogue, Platform ops, Gate metrics, Feature flags, Audit & evidence,

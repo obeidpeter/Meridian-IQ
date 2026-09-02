@@ -22,6 +22,11 @@ accessibility issues + full-page screenshots). Screenshots are not committed;
 re-run the harness to regenerate them.
 
 65 findings were adversarially verified into implementation specs and applied
-in R64 (three implementation waves plus a heading-level fix). The 37 R64
-findings remain deferred; the three later R67 entries are retained in the
-snapshot for traceability and are now resolved.
+in R64 (three implementation waves plus a heading-level fix). Of the 41
+entries the deferred backlog then carried (37 from R64, three from the R67
+cognitive walkthrough, one D16 follow-through), the 20 on launch-active
+surfaces were closed by R69–R87 — the shell and page-body restyle, then the
+four launch-active rounds R84–R87 — and removed from
+`backlog-deferred.json`. The 21 that remain all sit on launch-dark surfaces
+(filing desk, Ask/Clerk dock, batch capture, buyer portal) and are the next
+candidates once those flags light.
