@@ -43,6 +43,7 @@ import { BuyerSelectOptions } from "@/components/buyer-select-options";
 import { FieldError, invalidClass } from "@/components/field-error";
 import { LineItemRow } from "@/components/line-item-row";
 import { formatAmount, formatNaira } from "@/lib/format";
+import { serverErrorMessage } from "@/lib/errors";
 import { handleClerkGatewayError } from "@/lib/clerk";
 import {
   type LineDraft,
@@ -395,10 +396,7 @@ export function InvoiceNew() {
     } catch (e) {
       toast({
         title: "Could not create invoice",
-        description:
-          e instanceof Error
-            ? e.message
-            : "Please check the fields and try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }

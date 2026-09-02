@@ -23,7 +23,7 @@ import { QueryError } from "@/components/query-error";
 import { MonthEndCloseCard } from "@/pages/dashboard";
 import { vatMonthLabel } from "@/pages/vat";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { formatLagosDate } from "@/lib/format";
+import { formatLagosDate, pillClasses } from "@/lib/format";
 
 // Exact key -> destination over the month-end contract's item keys
 // (api-server modules/invoice/month-end-close.ts). Keys this build doesn't
@@ -162,11 +162,11 @@ export function MonthEnd() {
         }
         status={
           close.attentionCount > 0 ? (
-            <span className="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+            <span className={pillClasses("amber")}>
               Review required
             </span>
           ) : (
-            <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+            <span className={pillClasses("emerald")}>
               All checks clear
             </span>
           )

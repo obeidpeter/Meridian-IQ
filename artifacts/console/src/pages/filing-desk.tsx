@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { FilingMatrixCard } from "@/components/filing-matrix-card";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { pillClasses } from "@/lib/format";
 
 export function FilingDesk() {
   usePageTitle("Filing desk");
@@ -81,11 +82,11 @@ export function FilingDesk() {
         description={`${matrix.periodLabel} return status across the client book, ordered for partner action.`}
         status={
           matrix.totals.overdue > 0 ? (
-            <span className="rounded-md bg-red-100 px-2.5 py-1 text-xs font-bold text-red-900">
+            <span className={pillClasses("red")}>
               {matrix.totals.overdue} overdue
             </span>
           ) : (
-            <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+            <span className={pillClasses("emerald")}>
               No overdue returns
             </span>
           )

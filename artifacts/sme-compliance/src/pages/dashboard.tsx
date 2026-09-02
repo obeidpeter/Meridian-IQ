@@ -107,6 +107,7 @@ import {
   severityBadgeClasses,
   summaryPillClasses,
 } from "@/lib/format";
+import { closeAttentionCount, visibleCloseItems } from "@/lib/close-items";
 
 function AgingBucketRow({
   label,
@@ -735,23 +736,27 @@ export function MonthEndCloseCard({
   const createRun = useCreatePlanRun();
   const [runId, setRunId] = useState<string | null>(null);
   if (!isSuccess || !close) return null;
+  // Lanes for desks this account cannot reach are dropped, and the header
+  // count is re-derived so the pill never disagrees with the list below.
+  const items = visibleCloseItems(close.items, me?.features ?? []);
+  const attentionCount = closeAttentionCount(items);
   return (
     <Card data-testid="month-end-close">
       <CardHeader>
         <CardTitle className="flex items-center gap-2.5">
           <span
             className="mi-card-icon"
-            data-tone={close.attentionCount > 0 ? "warning" : "positive"}
+            data-tone={attentionCount > 0 ? "warning" : "positive"}
           >
             <CalendarCheck aria-hidden="true" />
           </span>
           Month-end close
-          {close.attentionCount > 0 ? (
+          {attentionCount > 0 ? (
             <span
               className={`ml-auto ${summaryPillClasses("amber")}`}
               data-testid="text-close-attention-count"
             >
-              {close.attentionCount} to review
+              {attentionCount} to review
             </span>
           ) : (
             <span
@@ -765,7 +770,7 @@ export function MonthEndCloseCard({
       </CardHeader>
       <CardContent className="space-y-3">
         <ul className="space-y-2">
-          {close.items.map((item) => (
+          {items.map((item) => (
             <li
               key={item.key}
               className="flex items-start gap-2.5 text-sm"
