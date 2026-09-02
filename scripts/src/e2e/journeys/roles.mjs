@@ -579,6 +579,13 @@ async function journeyTotp(page, BASE, check) {
     "security card shows two-factor off for a fresh account",
     await page.getByTestId("button-totp-enable").isVisible(),
   );
+  // The signed-in portal's footer offers "Switch account", which lands on the
+  // sign-out button instead of the old no-op "Sign in".
+  await page.getByTestId("button-footer-switch-account").click();
+  check(
+    "signed-in portal footer switches account by focusing sign-out",
+    (await page.evaluate(() => globalThis.document?.activeElement?.id)) === "sign-out",
+  );
 
   // Enable: secret, otpauth URI and the 8 recovery codes are shown once.
   await page.getByTestId("button-totp-enable").click();
@@ -630,6 +637,13 @@ async function journeyTotp(page, BASE, check) {
     timeout: 10000,
   });
   check("enrolled sign-in demands the second factor", true);
+  check(
+    "challenge step says it expires and how much time is left",
+    (await page.locator("#totp-help").innerText()).includes("five minutes") &&
+      /about (\d+ minutes|a minute) left/.test(
+        await page.getByTestId("text-totp-expiry").innerText(),
+      ),
+  );
 
   // A wrong code shows the uniform error and allows retry. Pick a code that
   // is provably invalid across the server's whole ±1-step window.

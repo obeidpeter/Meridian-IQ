@@ -60,7 +60,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
-import { mfaChallengeDisposition } from "@/lib/mfa";
+import {
+  mfaChallengeDisposition,
+  mfaExpiryHint,
+} from "@/lib/mfa";
 import { TOTP_CARD_INITIAL, totpCardTransition } from "@/lib/totp-card";
 import {
   defaultWorkspaceFor,
@@ -438,6 +441,16 @@ function SignInPanel() {
     }
   };
 
+  // The pending token lives MFA_TOKEN_TTL_MS; the help text says how much
+  // of that is left, refreshed on a coarse 30 s tick while the step is up.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!mfa) return;
+    setNow(Date.now());
+    const tick = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(tick);
+  }, [mfa]);
+
   const restartSignIn = () => {
     setMfa(null);
     setTotpCode("");
@@ -496,7 +509,12 @@ function SignInPanel() {
             />
             <p id="totp-help" className="text-xs text-slate-500">
               Your app shows a new code every 30 seconds. A recovery code also
-              works here.
+              works here. For security this step expires five minutes after
+              you entered your password (
+              <span data-testid="text-totp-expiry">
+                {mfaExpiryHint(mfa.issuedAt, now)}
+              </span>
+              ) — start over if you need more time.
             </p>
           </div>
           {totpError && (
@@ -1465,6 +1483,7 @@ function SignedInPanel({ me }: { me: Me }) {
         <Button
           variant="secondary"
           className="w-full"
+          id="sign-out"
           onClick={signOut}
           disabled={signingOut}
           data-testid="button-sign-out"
@@ -1507,6 +1526,15 @@ function SessionSkeleton() {
 
 function focusEmailField() {
   const el = document.getElementById("email");
+  if (!el) return;
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.focus({ preventScroll: true });
+}
+
+// The signed-in portal has no email field; "switch account" is the sign-out
+// button in the signed-in panel.
+function focusSignOutButton() {
+  const el = document.getElementById("sign-out");
   if (!el) return;
   el.scrollIntoView({ block: "center", behavior: "smooth" });
   el.focus({ preventScroll: true });
@@ -1830,11 +1858,11 @@ function Portal() {
             </a>
             <button
               type="button"
-              onClick={focusEmailField}
+              onClick={focusSignOutButton}
               className="font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-              data-testid="button-footer-sign-in"
+              data-testid="button-footer-switch-account"
             >
-              Sign in
+              Switch account
             </button>
           </nav>
         </footer>
