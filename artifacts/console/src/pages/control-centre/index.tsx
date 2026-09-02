@@ -111,7 +111,7 @@ export function ControlCentre({ section }: { section: ControlCentreSection }) {
         className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1"
         aria-label="Control centre workspaces"
       >
-        <div className="grid min-w-[54rem] grid-cols-6 gap-1">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:min-w-[54rem] lg:grid-cols-6">
           {SECTIONS.map((item, index) => {
             const Icon = item.icon;
             const selected = item.key === active.key;

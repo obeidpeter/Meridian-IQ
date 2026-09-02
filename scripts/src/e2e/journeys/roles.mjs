@@ -544,6 +544,43 @@ async function journeyAccessReview(page, BASE, check) {
   await signOutFromApp(page, BASE);
 }
 
+// ---------- firm admin: onboarding pipeline ----------
+// A won prospect is not a dead end: cards carry the contact email captured
+// at creation, and moving one to Active opens the client-book dialog
+// prefilled with its name (the Active card keeps an "Add to client book"
+// button for later).
+async function journeyPipeline(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-demo.admin", "**/console/**");
+  await page.goto(BASE + "/console/pipeline", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid^="card-prospect-"]', { timeout: 15000 });
+  const card = page
+    .locator('[data-testid^="card-prospect-"]', { hasText: "Port Harcourt Oil Services" })
+    .first();
+  const id = (await card.getAttribute("data-testid")).replace("card-prospect-", "");
+  check(
+    "pipeline cards show the prospect's contact email",
+    (await page.getByTestId(`text-prospect-email-${id}`).innerText()).includes(
+      "ops@phoilservices.example",
+    ),
+  );
+  await page.getByTestId(`select-stage-${id}`).click();
+  await page.getByRole("option", { name: "Active" }).click();
+  await page.waitForSelector('[data-testid="input-add-client-name"]', { timeout: 15000 });
+  check(
+    "moving a prospect to Active opens the client-book dialog prefilled with its name",
+    (await page.getByTestId("input-add-client-name").inputValue()) ===
+      "Port Harcourt Oil Services",
+  );
+  await page.keyboard.press("Escape");
+  await page.waitForSelector('[data-testid="input-add-client-name"]', {
+    state: "detached",
+    timeout: 10000,
+  });
+  await page.waitForSelector(`[data-testid="button-add-to-clients-${id}"]`, { timeout: 15000 });
+  check("an Active prospect card offers Add to client book", true);
+  await signOutFromApp(page, BASE);
+}
+
 // ---------- buyer finance: TOTP enrolment lifecycle ----------
 // Enrol → challenge sign-in → disable, computing live RFC 6238 codes in the
 // harness from the base32 secret the enrolment card shows on screen. Uses
@@ -697,6 +734,7 @@ export {
   journeyFirstLandingConsent,
   journeyClientAssignment,
   journeyAccessReview,
+  journeyPipeline,
   journeyPortalAuth,
   journeyOperatorDesk,
   journeyFirmAdminAdvisory,

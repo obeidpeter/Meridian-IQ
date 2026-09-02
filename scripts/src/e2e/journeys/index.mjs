@@ -30,6 +30,7 @@ import {
   journeyFirstLandingConsent,
   journeyClientAssignment,
   journeyAccessReview,
+  journeyPipeline,
   journeyTotp,
 } from "./roles.mjs";
 import {
@@ -66,6 +67,7 @@ export async function runJourneys(
   await journeyFirstLandingConsent(page, BASE, check);
   await journeyClientAssignment(page, BASE, check);
   await journeyAccessReview(page, BASE, check);
+  await journeyPipeline(page, BASE, check);
   await journeyTotp(page, BASE, check);
   await journeyPayables(page, BASE, check);
   await journeyVatPositionAndPack(page, BASE, check);
