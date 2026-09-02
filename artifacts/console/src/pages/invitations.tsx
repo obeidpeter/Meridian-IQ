@@ -20,6 +20,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { WorkspaceHeader } from "@workspace/web-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -364,24 +365,23 @@ export function Invitations() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1
-          className="text-2xl md:text-3xl font-bold"
-          data-testid="text-page-title"
-        >
-          Invitations
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          {isOperator
+      <WorkspaceHeader
+        eyebrow="Team & access"
+        title="Invitations"
+        titleTestId="text-page-title"
+        description={
+          isOperator
             ? "Onboard a firm: provision it, then invite its first firm admin — every invite issues a one-time link you share yourself (nothing is emailed). The admin self-serves teammates and clients from there."
-            : "Invite a teammate or client into your firm. Each invite issues a one-time link to set a password and join — you share the link yourself; pending invites can be revoked before they are accepted."}
-        </p>
-      </div>
+            : "Invite a teammate or client into your firm. Each invite issues a one-time link to set a password and join — you share the link yourself; pending invites can be revoked before they are accepted."
+        }
+      />
 
       <Card data-testid="card-invite-form">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-primary" aria-hidden="true" />
+          <CardTitle className="flex items-center gap-2.5 text-base">
+            <span className="mi-card-icon">
+              <UserPlus aria-hidden="true" />
+            </span>
             Create access link
           </CardTitle>
         </CardHeader>
@@ -785,7 +785,7 @@ export function Invitations() {
             />
           ) : (
             <ScrollRegion label="Invitations table">
-              <table className="w-full text-sm" data-testid="table-invitations">
+              <table className="w-full border-collapse text-sm" data-testid="table-invitations">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th scope="col" className="py-2 pr-3 font-medium">
