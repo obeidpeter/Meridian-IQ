@@ -34,6 +34,8 @@ export const PRODUCTION_DEMO_EMAILS = [
   "accounts@saharalogistics.example",
   "audit@meridianiq.example",
   "claims.approver@meridianiq.example",
+  // First-landing consent capture persona (D15): seeded with no consent event.
+  "owner@tundeprints.example",
 ] as const;
 const PRODUCTION_DEMO_EMAIL_SET = new Set<string>(PRODUCTION_DEMO_EMAILS);
 

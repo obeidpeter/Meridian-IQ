@@ -49,6 +49,7 @@ import {
   throttlePublicRequest,
 } from "../modules/auth/throttle";
 import { litFeatureKeys } from "../modules/flags/flags";
+import { hasConsentDecision } from "../modules/consent/consent";
 import {
   acceptInvitation,
   previewInvitation,
@@ -166,6 +167,12 @@ async function accountPayload(
     // firm here still composes Clerk's platform entitlement correctly and
     // avoids a transient runtime-only feature result during sign-in.
     features: await litFeatureKeys(membership.firmId),
+    // CORE-03 first-landing capture (D15) — mirrors /me so the app can gate
+    // the very first landing from the sign-in payload alone.
+    consentCaptured:
+      membership.role === "client_user" && membership.clientPartyId
+        ? await hasConsentDecision(membership.clientPartyId, 1)
+        : null,
   };
 }
 

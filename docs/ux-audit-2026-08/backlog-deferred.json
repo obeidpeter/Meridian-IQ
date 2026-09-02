@@ -977,30 +977,6 @@
   ]
  },
  {
-  "area": "Landing portal / first landing after activation",
-  "effort": "M",
-  "evidence": "UI mockup review 2026-09 (authentication, MFA and consent onboarding); docs/architecture.md D15.",
-  "files": [
-   "lib/api-spec/openapi.yaml",
-   "artifacts/api-server/src/routes/consent.ts",
-   "artifacts/sme-compliance/src/App.tsx",
-   "artifacts/sme-compliance/src/pages/consent.tsx"
-  ],
-  "fix": "Expose 'consent captured' on Me, and show a one-time, resumable consent interstitial on the first landing: layers 1 and 2 as explicit choices, layer 3 visible but dormant until an R2 rail is live. Declining is allowed and recorded. Keep the Consent nav entry.",
-  "launchActive": true,
-  "nng": [
-   "visibility",
-   "user-control"
-  ],
-  "problem": "Consent is a page an owner may never open, so outbound rails can find no consent record for a brand-new business.",
-  "severity": "medium",
-  "source": "ui-mockups-2026-09",
-  "title": "Consent capture on first landing (D15)",
-  "userGroups": [
-   "sme"
-  ]
- },
- {
   "area": "Console / team, roles and access",
   "effort": "M",
   "evidence": "UI mockup review 2026-09 (firm admin team, roles and access management); docs/architecture.md D14.",

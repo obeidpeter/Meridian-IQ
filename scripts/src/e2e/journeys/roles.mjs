@@ -327,6 +327,66 @@ async function journeyOwnerConsent(page, BASE, check) {
   await signOutFromApp(page, BASE);
 }
 
+// ---------- SME owner, first landing: consent capture (D15) ----------
+// Tunde Prints is seeded with NO consent event, so its owner's very first
+// landing is the consent step, not the workspace. Both layers answered (allow
+// 1, decline 2), the gate lifts, /me flips to captured, and the ledger shows
+// the decline as a first-landing decision. On a reused database the decision
+// already exists, so the journey checks the captured state only.
+async function journeyFirstLandingConsent(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-tunde", "**/app/**");
+  const before = await (await page.request.get(BASE + "/api/me")).json();
+  if (before.consentCaptured === false) {
+    await page.waitForSelector('[data-testid="consent-capture"]', {
+      timeout: 15000,
+    });
+    check(
+      "first landing shows the consent step instead of the workspace",
+      (await page.getByTestId("nav-today").count()) === 0,
+    );
+    await checkPageAccessibility(page, check, "first-landing consent");
+    check(
+      "consent step: layer 3 is visible but offers no choice",
+      (await page
+        .getByTestId("consent-capture-layer-3")
+        .locator("button")
+        .count()) === 0,
+    );
+    const cont = page.getByTestId("button-consent-continue");
+    check("consent step: Continue waits for both answers", await cont.isDisabled());
+    await page.getByTestId("button-consent-allow-1").click();
+    await page.getByTestId("button-consent-decline-2").click();
+    check("consent step: Continue enables once both are answered", await cont.isEnabled());
+    await cont.click();
+    await page.waitForSelector('[data-testid="nav-today"]', { timeout: 15000 });
+  }
+  const after = await (await page.request.get(BASE + "/api/me")).json();
+  check("consent captured: /me reports the decision", after.consentCaptured === true);
+  const records = await (
+    await page.request.get(BASE + `/api/parties/${after.clientPartyId}/consent`)
+  ).json();
+  const firstLanding = records.filter((r) => r.channel === "first_landing");
+  check(
+    "consent ledger holds one first_landing event per layer (grant 1, decline 2)",
+    firstLanding.some((r) => r.layer === 1 && r.action === "grant") &&
+      firstLanding.some((r) => r.layer === 2 && r.action === "revoke" && r.basis === "declined"),
+  );
+  await page.goto(BASE + "/app/consent", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="consent-layer-2"]', { timeout: 10000 });
+  check(
+    "consent page reads the first-landing decline as Declined, not Revoked",
+    (await page.locator('[data-testid="consent-layer-2"]').innerText()).includes("Declined"),
+  );
+  // Reloading the workspace must not re-prompt: the decision is on the ledger.
+  await page.goto(BASE + "/app", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="nav-today"]', { timeout: 15000 });
+  check(
+    "a decided business never sees the step again",
+    (await page.getByTestId("consent-capture").count()) === 0,
+  );
+  await signOutFromApp(page, BASE);
+}
+
 // ---------- buyer finance: TOTP enrolment lifecycle ----------
 // Enrol → challenge sign-in → disable, computing live RFC 6238 codes in the
 // harness from the base32 secret the enrolment card shows on screen. Uses
@@ -463,6 +523,7 @@ async function journeyTotp(page, BASE, check) {
 }
 
 export {
+  journeyFirstLandingConsent,
   journeyPortalAuth,
   journeyOperatorDesk,
   journeyFirmAdminAdvisory,
