@@ -52,6 +52,7 @@ import {
   ReceiptText,
   ScanLine,
   UsersRound,
+  Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -514,7 +515,7 @@ function SignInPanel() {
           )}
           <Button
             type="submit"
-            className="min-h-12 w-full bg-[#0b6463] text-base font-bold text-white shadow-sm hover:bg-[#084d4d]"
+            className="min-h-12 w-full bg-[#0f5c52] text-base font-bold text-white shadow-sm hover:bg-[#0e4c45]"
             disabled={pending !== null || totpCode.trim().length < 6}
             data-testid="button-totp-verify"
           >
@@ -531,7 +532,7 @@ function SignInPanel() {
         <button
           type="button"
           onClick={restartSignIn}
-          className="mt-5 inline-flex items-center gap-1.5 rounded-sm text-sm font-bold text-[#0b6463] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+          className="mt-5 inline-flex items-center gap-1.5 rounded-sm text-sm font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
           data-testid="button-totp-restart"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
@@ -600,7 +601,7 @@ function SignInPanel() {
             </Label>
             <a
               href="/reset-password"
-              className="text-xs font-bold text-[#0b6463] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              className="text-xs font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               data-testid="link-forgot-password"
             >
               Forgot your password?
@@ -651,7 +652,7 @@ function SignInPanel() {
         )}
         <Button
           type="submit"
-          className="min-h-12 w-full bg-[#0b6463] text-base font-bold text-white shadow-sm hover:bg-[#084d4d]"
+          className="min-h-12 w-full bg-[#0f5c52] text-base font-bold text-white shadow-sm hover:bg-[#0e4c45]"
           disabled={pending !== null || !email.trim() || !password}
           data-testid="button-sign-in"
         >
@@ -932,7 +933,7 @@ function TotpSecurityCard() {
       width: 192,
       margin: 1,
       errorCorrectionLevel: "M",
-      color: { dark: "#071a1c", light: "#ffffff" },
+      color: { dark: "#0e4c45", light: "#ffffff" },
     })
       .then((url) => {
         if (active) setQrDataUrl(url);
@@ -1516,37 +1517,37 @@ const ACCESS_PATHS = [
     title: "Business owners",
     detail: "Create invoices, submit and get paid",
     icon: ReceiptText,
-    tone: "bg-lime-300 text-[#071a1c]",
+    tone: "bg-white/10 text-[#e9cf78]",
   },
   {
     title: "Accounting firms",
     detail: "Manage every client's compliance",
     icon: UsersRound,
-    tone: "bg-cyan-200 text-[#071a1c]",
+    tone: "bg-cyan-200 text-[#0e4c45]",
   },
   {
     title: "MeridianIQ staff",
     detail: "Support, checks and reviews",
     icon: Headphones,
-    tone: "bg-amber-200 text-[#071a1c]",
+    tone: "bg-amber-200 text-[#0e4c45]",
   },
 ];
 
 function AccessStory() {
   return (
-    <section className="relative hidden min-h-screen overflow-hidden bg-[#071a1c] text-white lg:flex lg:flex-col">
+    <section className="relative hidden min-h-screen overflow-hidden bg-[#0e4c45] text-white lg:flex lg:flex-col">
       <div
-        className="absolute inset-y-0 right-0 w-px bg-lime-300/50"
+        className="absolute inset-y-0 right-0 w-px bg-[#c9a227]/60"
         aria-hidden="true"
       />
       <div className="flex items-center justify-between px-10 py-8 xl:px-14">
         <a
           href="/"
-          className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-4 focus-visible:ring-offset-[#071a1c]"
+          className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78] focus-visible:ring-offset-4 focus-visible:ring-offset-[#0e4c45]"
           aria-label="MeridianIQ home"
         >
-          <span className="grid size-10 place-items-center rounded-md bg-lime-300 text-[#071a1c]">
-            <FileCheck2 className="size-5" aria-hidden="true" />
+          <span className="grid size-10 place-items-center rounded-md bg-white/10 text-[#e9cf78]">
+            <Compass className="size-5" aria-hidden="true" />
           </span>
           <span>
             <span className="block text-lg font-extrabold leading-none">
@@ -1559,7 +1560,7 @@ function AccessStory() {
         </a>
         <a
           href="/"
-          className="inline-flex items-center gap-2 rounded-md border border-white/30 px-3.5 py-2 text-sm font-bold text-white/90 transition-colors hover:border-lime-300 hover:bg-white/5 hover:text-lime-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+          className="inline-flex items-center gap-2 rounded-md border border-white/30 px-3.5 py-2 text-sm font-bold text-white/90 transition-colors hover:border-[#e9cf78] hover:bg-white/5 hover:text-[#e9cf78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78]"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           Back to website
@@ -1568,7 +1569,7 @@ function AccessStory() {
 
       <div className="flex flex-1 flex-col justify-center px-10 py-10 xl:px-14">
         <div className="max-w-xl">
-          <p className="text-xs font-extrabold uppercase text-lime-300">
+          <p className="text-xs font-extrabold uppercase text-[#e9cf78]">
             One sign-in for everything
           </p>
           <h2 className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl">
@@ -1606,7 +1607,7 @@ function AccessStory() {
 
         <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/55">
           <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="size-4 text-lime-300" aria-hidden="true" />
+            <ShieldCheck className="size-4 text-[#e9cf78]" aria-hidden="true" />
             Access by role
           </span>
           <span className="inline-flex items-center gap-2">
@@ -1641,10 +1642,10 @@ function AccessPortal({
   onRetry: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-[#f4f8f7] lg:grid lg:grid-cols-[minmax(25rem,0.85fr)_minmax(39rem,1.15fr)]">
+    <div className="min-h-screen bg-[#f3f6f5] lg:grid lg:grid-cols-[minmax(25rem,0.85fr)_minmax(39rem,1.15fr)]">
       <a
         href="#login-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#071a1c]"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[#e9cf78] focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#0e4c45]"
       >
         Skip to sign in
       </a>
@@ -1657,8 +1658,8 @@ function AccessPortal({
             className="inline-flex items-center gap-2.5"
             aria-label="MeridianIQ home"
           >
-            <span className="grid size-9 place-items-center rounded-md bg-[#0b6463] text-white">
-              <FileCheck2 className="size-4" aria-hidden="true" />
+            <span className="grid size-9 place-items-center rounded-md bg-[#0f5c52] text-white">
+              <Compass className="size-4" aria-hidden="true" />
             </span>
             <span className="text-base font-extrabold text-slate-950">
               MeridianIQ
@@ -1666,7 +1667,7 @@ function AccessPortal({
           </a>
           <a
             href="/"
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:border-slate-950 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b6463]"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:border-slate-950 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f5c52]"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
             Back to website
@@ -1750,7 +1751,7 @@ function Portal() {
         });
 
   return (
-    <div className="min-h-screen bg-[#f4f8f7]">
+    <div className="min-h-screen bg-[#f3f6f5]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
