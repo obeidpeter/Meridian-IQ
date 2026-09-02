@@ -14,7 +14,11 @@ import {
 import { appendAudit } from "../audit/audit";
 import { buildCanonical } from "../invoice/service";
 import { canTransition, recordTransition } from "../invoice/lifecycle";
-import { submitWithFailover } from "../rails/adapter";
+import {
+  recoverExistingStamp,
+  submitWithFailover,
+  type StampResult,
+} from "../rails/adapter";
 import { openInvoiceCase } from "../desk/cases";
 import { isRetriable } from "../errors";
 import { logger } from "../../lib/logger";
@@ -72,6 +76,71 @@ async function markInvoiceFailed(
   });
 }
 
+type InvoiceRow = typeof invoicesTable.$inferSelect;
+
+/**
+ * Persist an accepted stamp and move the invoice to `stamped` (R97 factored
+ * this out of the submit handler so duplicate recovery and reconcile share
+ * one write path). Idempotent stamp write (INT-09): the unique(invoiceId)
+ * constraint plus onConflictDoNothing guarantees a retried/double-processed
+ * event can never create a second stamp, without deleting an append-only
+ * lifecycle record. `recovered` marks a stamp the rail had already issued and
+ * we only fetched back, which the audit trail records as its own action.
+ */
+async function persistStamp(
+  invoice: InvoiceRow,
+  result: StampResult,
+  recovered: boolean,
+): Promise<void> {
+  const invoiceId = invoice.id;
+  await getDb()
+    .insert(stampRecordsTable)
+    .values({
+      invoiceId,
+      irn: result.irn!,
+      csid: result.csid!,
+      qrPayload: result.qrPayload!,
+      signedArtifactRef: result.signedArtifactRef!,
+      rail: result.rail,
+      provider: result.provider ?? "simulator",
+      environment: result.environment ?? "sandbox",
+    })
+    .onConflictDoNothing({ target: stampRecordsTable.invoiceId });
+  await getDb()
+    .update(invoicesTable)
+    .set({ status: "stamped" })
+    .where(eq(invoicesTable.id, invoiceId));
+  await recordTransition({
+    invoiceId,
+    firmId: invoice.firmId,
+    fromStatus: invoice.status,
+    toStatus: "stamped",
+    actorRole: "system",
+    reason: recovered ? `rail:${result.rail}:recovered` : `rail:${result.rail}`,
+  });
+  await appendAudit({
+    firmId: invoice.firmId,
+    action: recovered ? "invoice.stamp_recovered" : "invoice.stamped",
+    entityType: "invoice",
+    entityId: invoiceId,
+    after: {
+      irn: result.irn,
+      rail: result.rail,
+      provider: result.provider ?? "simulator",
+      environment: result.environment ?? "sandbox",
+    },
+  });
+  // CORE-09: a stamped credit note / correction credits its original in the
+  // same transaction, and downstream projections (reconciliation proposals,
+  // stamp-verification cache, exposure) react via the lifecycle-changed event.
+  if (
+    (invoice.kind === "credit_note" || invoice.kind === "correction") &&
+    invoice.relatedInvoiceId
+  ) {
+    await creditOriginal(invoice.relatedInvoiceId, invoiceId);
+  }
+}
+
 async function handleInvoiceSubmit(
   event: OutboxEvent,
 ): Promise<HandlerOutcome> {
@@ -90,6 +159,9 @@ async function handleInvoiceSubmit(
   const attemptNo = event.attempts + 1;
   const { result } = await submitWithFailover(canonical, idempotencyKey);
 
+  // One row per rail per try, with the request actually sent and the response
+  // actually received (CORE-02) — the record a dispute or an accreditation
+  // review reads, so the invoice number alone was never enough.
   await getDb()
     .insert(submissionAttemptsTable)
     .values({
@@ -103,55 +175,53 @@ async function handleInvoiceSubmit(
           : result.status === "rejected"
             ? "rejected"
             : "error",
-      requestPayload: { invoiceNumber: invoice.invoiceNumber },
+      requestPayload: {
+        invoiceNumber: invoice.invoiceNumber,
+        idempotencyKey,
+        canonical: canonical as unknown as Record<string, unknown>,
+      },
       responsePayload: result.raw,
       errorCode: result.errorCode ?? null,
     });
 
   if (result.status === "accepted") {
-    // Idempotent stamp write (INT-09): the unique(invoiceId) constraint plus
-    // onConflictDoNothing guarantees a retried/double-processed event can never
-    // create a second stamp, without deleting an append-only lifecycle record.
-    await getDb()
-      .insert(stampRecordsTable)
-      .values({
-        invoiceId,
-        irn: result.irn!,
-        csid: result.csid!,
-        qrPayload: result.qrPayload!,
-        signedArtifactRef: result.signedArtifactRef!,
-        rail: result.rail,
-      })
-      .onConflictDoNothing({ target: stampRecordsTable.invoiceId });
-    await getDb()
-      .update(invoicesTable)
-      .set({ status: "stamped" })
-      .where(eq(invoicesTable.id, invoiceId));
-    await recordTransition({
-      invoiceId,
-      firmId: invoice.firmId,
-      fromStatus: invoice.status,
-      toStatus: "stamped",
-      actorRole: "system",
-      reason: `rail:${result.rail}`,
-    });
+    await persistStamp(invoice, result, false);
+    return { kind: "done" };
+  }
+
+  if (result.status === "rejected" && result.errorCode === "MBS_DUPLICATE") {
+    // The rail already holds a stamp for this submission — an earlier try
+    // was accepted but its result never reached us. Recover it instead of
+    // failing an invoice the authority has stamped (R97).
+    const recovered = await recoverExistingStamp(
+      canonical,
+      idempotencyKey,
+      result.rail,
+    );
+    if (recovered) {
+      await getDb()
+        .insert(submissionAttemptsTable)
+        .values({
+          invoiceId,
+          rail: recovered.rail,
+          attemptNo,
+          idempotencyKey,
+          status: "accepted",
+          requestPayload: { lookup: true, idempotencyKey },
+          responsePayload: { ...recovered.raw, recovered: true },
+          errorCode: null,
+        });
+      await persistStamp(invoice, recovered, true);
+      return { kind: "done" };
+    }
+    // No rail knows the submission: keep the terminal rejection, but say so.
     await appendAudit({
       firmId: invoice.firmId,
-      action: "invoice.stamped",
+      action: "invoice.stamp_recovery_failed",
       entityType: "invoice",
       entityId: invoiceId,
-      after: { irn: result.irn, rail: result.rail },
+      after: { errorCode: result.errorCode, rail: result.rail },
     });
-    // CORE-09: a stamped credit note / correction credits its original in the
-    // same transaction, and downstream projections (reconciliation proposals,
-    // stamp-verification cache, exposure) react via the lifecycle-changed event.
-    if (
-      (invoice.kind === "credit_note" || invoice.kind === "correction") &&
-      invoice.relatedInvoiceId
-    ) {
-      await creditOriginal(invoice.relatedInvoiceId, invoiceId);
-    }
-    return { kind: "done" };
   }
 
   if (result.status === "rejected") {
@@ -479,19 +549,26 @@ export async function drain(max = 50): Promise<number> {
 }
 
 // Reconciliation (INT-09): re-enqueue invoices stuck in `submitted` with no
-// stamp and no live outbox row (e.g. a crash mid-flight).
+// stamp and no live outbox row (e.g. a crash mid-flight). Before resubmitting,
+// ask the rail whether it already issued a stamp for that submission (R97): a
+// crash between the rail's acceptance and our stamp write is exactly the case
+// where a blind re-send would come back MBS_DUPLICATE against a live rail. A
+// recovered stamp is persisted in place; only an unknown submission is
+// re-queued. Returns the number of invoices re-queued (the operator counter);
+// recoveries are logged.
 export async function reconcile(): Promise<number> {
   return runInBypassContext(async () => {
     const stuck = await getDb()
-      .select({ id: invoicesTable.id })
+      .select()
       .from(invoicesTable)
       .where(eq(invoicesTable.status, "submitted"));
     let requeued = 0;
-    for (const row of stuck) {
+    let recovered = 0;
+    for (const invoice of stuck) {
       const [stamp] = await getDb()
         .select({ id: stampRecordsTable.id })
         .from(stampRecordsTable)
-        .where(eq(stampRecordsTable.invoiceId, row.id))
+        .where(eq(stampRecordsTable.invoiceId, invoice.id))
         .limit(1);
       if (stamp) continue;
       const [live] = await getDb()
@@ -499,22 +576,55 @@ export async function reconcile(): Promise<number> {
         .from(outboxTable)
         .where(
           and(
-            eq(outboxTable.aggregateId, row.id),
+            eq(outboxTable.aggregateId, invoice.id),
             ne(outboxTable.status, "done"),
             ne(outboxTable.status, "dead"),
           ),
         )
         .limit(1);
       if (live) continue;
+      const idempotencyKey = `${invoice.id}:${invoice.invoiceNumber}`;
+      // Fail soft: an invoice whose canonical form no longer builds (or a rail
+      // lookup that throws) is re-queued so the submit handler records the
+      // failure with its reason, rather than aborting the whole pass.
+      const existing = await buildCanonical(invoice.id)
+        .then((canonical) => recoverExistingStamp(canonical, idempotencyKey))
+        .catch((err: unknown) => {
+          logger.warn(
+            { invoiceId: invoice.id, err },
+            "reconcile could not ask the rail for an existing stamp; re-queuing",
+          );
+          return null;
+        });
+      if (existing) {
+        await getDb()
+          .insert(submissionAttemptsTable)
+          .values({
+            invoiceId: invoice.id,
+            rail: existing.rail,
+            attemptNo: 0,
+            idempotencyKey,
+            status: "accepted",
+            requestPayload: { lookup: true, idempotencyKey, source: "reconcile" },
+            responsePayload: { ...existing.raw, recovered: true },
+            errorCode: null,
+          });
+        await persistStamp(invoice, existing, true);
+        recovered++;
+        continue;
+      }
       await getDb()
         .insert(outboxTable)
         .values({
           aggregateType: "invoice",
-          aggregateId: row.id,
+          aggregateId: invoice.id,
           type: "invoice.submit",
-          payload: { invoiceId: row.id },
+          payload: { invoiceId: invoice.id },
         });
       requeued++;
+    }
+    if (recovered > 0) {
+      logger.info({ recovered }, "reconcile recovered stamps the rail already held");
     }
     return requeued;
   });

@@ -29,6 +29,31 @@ export interface StampResult {
   signedArtifactRef?: string;
   errorCode?: string;
   raw: Record<string, unknown>;
+  // Provenance (R97): which transport answered and in which environment. The
+  // pipeline copies both onto the stamp record so a sandbox stamp can never be
+  // mistaken for a live one after accreditation.
+  provider?: string;
+  environment?: string;
+}
+
+/**
+ * The transport seam (R97). Everything that actually talks to an access point
+ * lives behind this interface; the pipeline and the recovery paths only ever
+ * see StampResults. Today the one implementation is the simulator below; the
+ * accreditation round binds real HTTP transports here without touching the
+ * callers. `lookup` answers "did this rail already issue a stamp for this
+ * submission?" — the operation a duplicate recovery needs and a resubmission
+ * must consult before sending again.
+ */
+export interface RailTransport {
+  readonly name: string;
+  readonly environment: string;
+  submit(rail: Rail, inv: CanonicalInvoice, idempotencyKey: string): Promise<StampResult>;
+  lookup(
+    rail: Rail,
+    inv: CanonicalInvoice,
+    idempotencyKey: string,
+  ): Promise<StampResult | null>;
 }
 
 const RAIL_SECRET: Record<Rail, string> = {
@@ -65,7 +90,43 @@ function callRail(
     qrPayload,
     signedArtifactRef,
     raw: { accepted: true },
+    provider: SIMULATOR.name,
+    environment: SIMULATOR.environment,
   };
+}
+
+// The simulator: deterministic, always accepts, keeps no history — so its
+// lookup answers null. A duplicate against a real rail is an
+// accepted-but-unrecorded submission; the simulator cannot produce one, which
+// is exactly why the recovery paths are exercised through an injected
+// transport in the pipeline tests.
+const SIMULATOR: RailTransport = {
+  name: "simulator",
+  environment: "sandbox",
+  async submit(rail, inv, idempotencyKey) {
+    return callRail(rail, inv, idempotencyKey);
+  },
+  async lookup() {
+    return null;
+  },
+};
+
+let transport: RailTransport = SIMULATOR;
+
+/** The transport in use (the simulator unless one has been bound). */
+export function currentRailTransport(): RailTransport {
+  return transport;
+}
+
+/**
+ * Bind a transport (null restores the simulator). Returns the previous one so a
+ * test can restore it. This is the seam the accreditation round will drive
+ * from environment configuration.
+ */
+export function setRailTransport(next: RailTransport | null): RailTransport {
+  const previous = transport;
+  transport = next ?? SIMULATOR;
+  return previous;
 }
 
 // ---- Circuit breaker (persisted per rail) ----
@@ -142,7 +203,7 @@ export async function submitWithFailover(
       });
       continue;
     }
-    const result = callRail(rail, inv, idempotencyKey);
+    const result = await transport.submit(rail, inv, idempotencyKey);
     tried.push(result);
     if (result.status === "accepted") {
       await recordSuccess(rail);
@@ -168,6 +229,35 @@ export async function submitWithFailover(
     },
     tried,
   };
+}
+
+/**
+ * Recover a stamp the rail says it already issued (R97). Called when a
+ * submission comes back MBS_DUPLICATE — the rail accepted an earlier try whose
+ * result never reached us (a crash between the call and the stamp write, a
+ * reconcile re-send, an operator replay) — and by reconcile() before it
+ * resubmits a stuck invoice. Asks the rail that reported the duplicate first,
+ * then the other; an open breaker is honoured because a lookup is still a call.
+ * Returns null when no rail knows the submission, in which case the caller
+ * keeps the terminal rejection.
+ */
+export async function recoverExistingStamp(
+  inv: CanonicalInvoice,
+  idempotencyKey: string,
+  preferred?: Rail,
+): Promise<StampResult | null> {
+  const order = preferred
+    ? [preferred, ...RAILS.filter((r) => r !== preferred)]
+    : RAILS;
+  for (const rail of order) {
+    if (!(await railAvailable(rail))) continue;
+    const found = await transport.lookup(rail, inv, idempotencyKey);
+    if (found && found.status === "accepted" && found.irn && found.csid) {
+      await recordSuccess(rail);
+      return found;
+    }
+  }
+  return null;
 }
 
 // ---- Stamp verification with a freshness cache (CORE-04) ----

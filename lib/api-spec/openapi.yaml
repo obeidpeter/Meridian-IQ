@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.87.0
+  version: 0.88.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -7713,6 +7713,12 @@ components:
         rail:
           type: string
           enum: [rail_primary, rail_secondary]
+        provider:
+          type: string
+          description: Which transport issued the stamp ("simulator" until accreditation).
+        environment:
+          type: string
+          description: The rail environment the stamp was issued in ("sandbox" or "live").
         createdAt:
           type: string
           format: date-time

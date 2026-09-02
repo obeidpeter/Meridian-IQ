@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.87.0
+ * OpenAPI spec version: 0.88.0
  */
 import * as zod from 'zod';
 
@@ -1887,6 +1887,8 @@ export const GetInvoiceStampResponse = zod.object({
   "qrPayload": zod.string(),
   "signedArtifactRef": zod.string(),
   "rail": zod.enum(['rail_primary', 'rail_secondary']),
+  "provider": zod.string().optional().describe('Which transport issued the stamp (\"simulator\" until accreditation).'),
+  "environment": zod.string().optional().describe('The rail environment the stamp was issued in (\"sandbox\" or \"live\").'),
   "createdAt": zod.coerce.date()
 })
 

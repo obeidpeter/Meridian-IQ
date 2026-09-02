@@ -136,6 +136,22 @@ VAT due dates, "overdue today" — use the LAGOS calendar via
 `lib/lagos-time.ts` (SQL: `AT TIME ZONE 'Africa/Lagos'`); never derive a
 business "today" from `toISOString().slice(0, 10)` or `current_date`.
 
+**Resubmission safety (R97).** Everything that talks to an access point sits
+behind the `RailTransport` seam in `modules/rails/adapter.ts` (`submit` and
+`lookup`; the simulator is bound unless `setRailTransport` binds another —
+the accreditation round drives that from configuration). A submission that
+comes back `MBS_DUPLICATE` is an earlier try the rail accepted whose result
+never reached us, so the pipeline asks the rail for the stamp it holds
+(`recoverExistingStamp`) and persists it as `invoice.stamp_recovered`
+instead of failing a stamped invoice; only when no rail knows the
+submission does the terminal rejection stand (`invoice.stamp_recovery_failed`
+on the audit chain). `reconcile()` makes the same lookup before it re-queues
+a stuck `submitted` invoice. Every `submission_attempts` row now retains the
+canonical request that was sent and the response received, and every
+`stamp_records` row carries `provider` and `environment` (`simulator` /
+`sandbox` today), so sandbox stamps issued before accreditation can never be
+read as live ones after cutover.
+
 **Multi-instance safety.** The loops are reentrancy-guarded per process, and
 every sweep is **idempotent** by construction (advisory locks, dedup
 ledgers, compare-and-set on `nextRunDate`, `FOR UPDATE SKIP LOCKED`), so

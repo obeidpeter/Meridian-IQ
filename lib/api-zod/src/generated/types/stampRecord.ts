@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.87.0
+ * OpenAPI spec version: 0.88.0
  */
 import type { StampRecordRail } from './stampRecordRail';
 
@@ -15,5 +15,9 @@ export interface StampRecord {
   qrPayload: string;
   signedArtifactRef: string;
   rail: StampRecordRail;
+  /** Which transport issued the stamp ("simulator" until accreditation). */
+  provider?: string;
+  /** The rail environment the stamp was issued in ("sandbox" or "live"). */
+  environment?: string;
   createdAt: Date;
 }
