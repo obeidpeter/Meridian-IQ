@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { useUrlTab } from "@workspace/web-ui";
 import { PillToggle } from "@/components/pill-toggle";
 import { QueryError } from "@/components/query-error";
 import { SkeletonList } from "@/components/skeleton-list";
@@ -70,6 +71,7 @@ export const FILTERS = [
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
+const FILTER_KEYS: readonly FilterKey[] = FILTERS.map((f) => f.key);
 
 // Which tab a row belongs to. Off-contract "unknown" tones match only All.
 // Exported for the unit tests.
@@ -460,7 +462,14 @@ export function Invoices() {
     rows: BulkSubmitRowResult[];
     remaining: number;
   } | null>(null);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  // URL-persisted (recognition over recall): a bookmark or the Today tile's
+  // "Open vault" link lands on the Stamped view directly, and back-navigation
+  // from an invoice returns to the same shelf of the vault (D16).
+  const [filter, setFilter] = useUrlTab<FilterKey>(
+    "filter",
+    "all",
+    FILTER_KEYS,
+  );
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
