@@ -39,6 +39,15 @@ The AI-assistant side lives in `docs/clerk-ai.md`.
   `DATABASE_URL`); the boot-time guardrail verifier logs exactly which
   tables are uncovered until then.
 
+**Per-staff client assignment (D12).** `client_assignments` (firm ↔ client
+party ↔ user; policy migration 0045) is a firm-scoped convenience register:
+it drives the console's default "My clients" scope (assigned to me OR
+unassigned) and nothing else. It is deliberately NOT consulted by RLS,
+`assertPartyAccess` or SEC-03 — an unassigned client is visible to the whole
+firm, and an assigned one still opens for everyone. Firm admins replace the
+set through `PUT /console/clients/{id}/assignments` (`client.assign`);
+every add and removal is an audit event.
+
 ## Auth & sessions
 
 - Production identity is Clerk (the identity provider — unrelated to the AI
@@ -98,6 +107,15 @@ The AI-assistant side lives in `docs/clerk-ai.md`.
   / `PASSWORD_KDF_MAX_QUEUE`, 503 on overflow) so a login flood cannot
   exhaust CPU; `/api/internal/sweep` carries its own per-IP limiter
   (`SWEEP_RATE_LIMIT_PER_MIN`).
+
+**Access review (D14).** `GET /console/access-register` (firm admin,
+`access.review`) computes the register from what already exists —
+memberships, the `auth.login` audit events (last sign-in), `totp_enabled_at`
+(MFA) and the assignment register — and hashes identity, role, scope, MFA
+and assignments (not last sign-in). `POST …/attest` records
+`access.review.attested` on the audit chain against that hash and refuses a
+stale one (409), so an attestation can never vouch for a register nobody
+looked at. Reporting and attestation only: no identity federation.
 
 ## Background work (the pipeline worker)
 
