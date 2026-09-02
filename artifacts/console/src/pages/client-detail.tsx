@@ -61,6 +61,7 @@ import {
   ShieldCheck,
   UserPlus,
   Pin,
+  Sparkles,
 } from "lucide-react";
 import {
   formatNaira,
@@ -238,7 +239,12 @@ function CompliancePackCard({ clientPartyId }: { clientPartyId: string }) {
   return (
     <Card data-testid="card-compliance-pack">
       <CardHeader>
-        <CardTitle className="text-base">Monthly compliance pack</CardTitle>
+        <CardTitle className="flex items-center gap-2.5 text-base">
+          <span className="mi-card-icon">
+            <FileText aria-hidden="true" />
+          </span>
+          Monthly compliance pack
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
@@ -333,7 +339,12 @@ function AdvisoryBriefCard({ clientPartyId }: { clientPartyId: string }) {
   return (
     <Card data-testid="card-advisory-brief">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Advisory brief</CardTitle>
+        <CardTitle className="flex items-center gap-2.5 text-base">
+          <span className="mi-card-icon">
+            <Sparkles aria-hidden="true" />
+          </span>
+          Advisory brief
+        </CardTitle>
         <Button
           size="sm"
           onClick={() => generate.mutate({ data: { clientPartyId } })}
@@ -486,9 +497,11 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
   return (
     <Card data-testid="card-collection-accounts">
       <CardHeader className="flex-row items-center justify-between space-y-0 gap-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Landmark className="w-4 h-4" aria-hidden="true" /> Collection
-          accounts
+        <CardTitle className="flex items-center gap-2.5 text-base">
+          <span className="mi-card-icon">
+            <Landmark aria-hidden="true" />
+          </span>
+          Collection accounts
         </CardTitle>
         <Button
           size="sm"
@@ -943,59 +956,77 @@ export function ClientDetail() {
         {(activeView === "today" || activeView === "invoices") && (
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Invoices</CardTitle>
+              <CardTitle className="flex items-center gap-2.5">
+                <span className="mi-card-icon">
+                  <FileText aria-hidden="true" />
+                </span>
+                Invoices
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0 sm:px-6">
               {invoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="px-6 text-sm text-muted-foreground sm:px-0">
                   No invoices yet.
                 </p>
               ) : (
-                <div className="divide-y">
-                  {invoices.map((inv) => {
-                    const failing = inv.failing || failingIds.has(inv.id);
-                    return (
-                      <div
-                        key={inv.id}
-                        data-testid={`row-invoice-${inv.id}`}
-                        className={`flex items-center gap-3 py-3 -mx-2 px-2 rounded-md ${
-                          failing ? "bg-red-50 dark:bg-red-950/40" : ""
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
-                            {inv.invoiceNumber}
-                            {failing && (
-                              <span
-                                className="ml-2 text-xs text-red-700 dark:text-red-400 font-semibold"
-                                data-testid={`flag-failing-${inv.id}`}
-                              >
-                                NEEDS ACTION
+                <div className="overflow-x-auto sm:rounded-[var(--mi-radius)] sm:border sm:border-border">
+                  <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+                    <thead className="bg-muted/50 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Invoice</th>
+                        <th className="px-3 py-2">Buyer</th>
+                        <th className="px-3 py-2 text-right">Amount</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">
+                          <span className="sr-only">Rail status</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {invoices.map((inv) => {
+                        const failing = inv.failing || failingIds.has(inv.id);
+                        return (
+                          <tr
+                            key={inv.id}
+                            data-testid={`row-invoice-${inv.id}`}
+                            className={failing ? "bg-destructive/5" : ""}
+                          >
+                            <td className="px-3 py-2.5">
+                              <p className="font-medium">{inv.invoiceNumber}</p>
+                              {failing && (
+                                <span
+                                  className="text-[11px] font-bold text-destructive"
+                                  data-testid={`flag-failing-${inv.id}`}
+                                >
+                                  NEEDS ACTION
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <p className="max-w-56 truncate">{inv.buyerName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {inv.category} · {formatDate(inv.issueDate)}
+                              </p>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                              {formatNaira(inv.grandTotal)}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className={badgeClasses(inv.status)}>
+                                {statusLabel(inv.status)}
                               </span>
-                            )}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {inv.buyerName} · {inv.category} ·{" "}
-                            {formatDate(inv.issueDate)}
-                            <span className="sm:hidden tabular-nums">
-                              {" "}
-                              · {formatNaira(inv.grandTotal)}
-                            </span>
-                          </p>
-                        </div>
-                        <p className="text-sm font-medium hidden sm:block tabular-nums">
-                          {formatNaira(inv.grandTotal)}
-                        </p>
-                        <span className={badgeClasses(inv.status)}>
-                          {statusLabel(inv.status)}
-                        </span>
-                        <InvoiceStatusLight
-                          invoiceId={inv.id}
-                          showWhy={failing}
-                        />
-                      </div>
-                    );
-                  })}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <InvoiceStatusLight
+                                invoiceId={inv.id}
+                                showWhy={failing}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </CardContent>
@@ -1005,7 +1036,12 @@ export function ClientDetail() {
         {activeView === "today" && (
           <Card>
             <CardHeader>
-              <CardTitle>Deadlines</CardTitle>
+              <CardTitle className="flex items-center gap-2.5">
+                <span className="mi-card-icon">
+                  <CalendarClock aria-hidden="true" />
+                </span>
+                Deadlines
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {deadlines.length === 0 ? (
