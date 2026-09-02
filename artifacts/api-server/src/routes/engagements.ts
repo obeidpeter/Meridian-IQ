@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb, engagementsTable } from "@workspace/db";
 import {
+  ListEngagementsQueryParams,
   ListEngagementsResponse,
   CreateEngagementBody,
   CreateEngagementResponse,
@@ -12,6 +13,7 @@ import {
   UpdateEngagementResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { pageBounds } from "../lib/page";
 import {
   assertCan,
   assertClientPartyScope,
@@ -36,10 +38,19 @@ router.get("/engagements", async (req, res): Promise<void> => {
   const conditions = [];
   if (tenant) conditions.push(eq(engagementsTable.firmId, tenant));
   if (scope) conditions.push(eq(engagementsTable.clientPartyId, scope));
+  // Bounded reads (R98): newest first, `id` as the tiebreak, default page
+  // on a bare request. The SEC-03 predicate above is part of the same
+  // query, so every page is scoped identically.
+  const { limit, offset } = pageBounds(
+    parseOrThrow(ListEngagementsQueryParams, req.query),
+  );
   const rows = await getDb()
     .select()
     .from(engagementsTable)
-    .where(conditions.length ? and(...conditions) : undefined);
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(engagementsTable.createdAt), desc(engagementsTable.id))
+    .limit(limit)
+    .offset(offset);
   res.json(ListEngagementsResponse.parse(rows));
 });
 

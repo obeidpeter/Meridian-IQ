@@ -116,12 +116,20 @@ async function journeyIntegrationLayer(
   // submit (409 NOT_SUBMITTABLE). No un-scoped fallback: a seed without a
   // demo-client invoice is broken, so fail loudly here instead of limping
   // into misleading downstream failures.
-  const book = await (await page.request.get(BASE + "/api/invoices")).json();
-  const pattern = book.find(
-    (i) =>
-      i.kind === "invoice" &&
-      i.supplierPartyId?.startsWith(DEMO_CLIENT_PARTY_PREFIX),
-  );
+  // Bounded reads (R98): one newest-first page of at most 200 rows (the
+  // seeded book plus every journey's additions is far smaller), sorted
+  // oldest-first here so the pattern stays the boot-seeded INV-1001.
+  const book = await (
+    await page.request.get(BASE + "/api/invoices?limit=200")
+  ).json();
+  const pattern = book
+    .slice()
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .find(
+      (i) =>
+        i.kind === "invoice" &&
+        i.supplierPartyId?.startsWith(DEMO_CLIENT_PARTY_PREFIX),
+    );
   if (!pattern) {
     throw new Error(
       "integration journey: no demo-client invoice (supplier 22222222…) in " +

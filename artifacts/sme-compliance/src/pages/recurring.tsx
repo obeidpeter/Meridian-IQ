@@ -334,7 +334,9 @@ export function Recurring() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
-  const { data: parties } = useListParties();
+  // Bounded reads (R98): buyers only (the template dialog's picker and the
+  // buyer-name map both want exactly that set), at the reference ceiling.
+  const { data: parties } = useListParties({ type: "buyer", limit: 500 });
   const {
     data: templates,
     isLoading,

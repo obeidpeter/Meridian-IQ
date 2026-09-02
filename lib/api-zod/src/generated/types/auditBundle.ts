@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
 import type { AuditEvent } from './auditEvent';
 import type { AuditVerification } from './auditVerification';
@@ -12,4 +12,11 @@ export interface AuditBundle {
   events: AuditEvent[];
   verification: AuditVerification;
   exportedAt: Date;
+  /**
+     * The last event in this window — the `afterSeq` for the next.
+     * @nullable
+     */
+  lastSeq?: number | null;
+  /** True when the ledger ends inside this window. */
+  complete: boolean;
 }

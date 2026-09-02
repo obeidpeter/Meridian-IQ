@@ -1,12 +1,20 @@
 import { Router, type IRouter } from "express";
 import {
+  VerifyAuditQueryParams,
   VerifyAuditResponse,
+  ExportAuditQueryParams,
   ExportAuditResponse,
+  ExportAuditCsvQueryParams,
   ExportFirmDataParams,
   ExportFirmDataResponse,
 } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
-import { appendAudit, verifyChain, exportAuditBundle } from "../modules/audit/audit";
+import {
+  appendAudit,
+  verifyChain,
+  exportAuditBundle,
+  exportAuditLedger,
+} from "../modules/audit/audit";
 import { exportFirmData } from "../modules/audit/firm-export";
 import { DomainError } from "../modules/errors";
 import { parseOrThrow } from "../lib/parse";
@@ -14,14 +22,19 @@ import { sendCsvAttachment, toCsv } from "../lib/csv";
 
 const router: IRouter = Router();
 
+// Bounded reads (R98): the ledger is walked in windows. A bare verify still
+// answers for the whole chain (batched server-side); export and the CSV
+// ledger hand back one window plus the cursor for the next.
 router.get("/audit/verify", async (req, res): Promise<void> => {
   assertCan(req.principal, "audit.read");
-  res.json(VerifyAuditResponse.parse(await verifyChain()));
+  const query = parseOrThrow(VerifyAuditQueryParams, req.query);
+  res.json(VerifyAuditResponse.parse(await verifyChain(query)));
 });
 
 router.get("/audit/export", async (req, res): Promise<void> => {
   assertCan(req.principal, "audit.export");
-  res.json(ExportAuditResponse.parse(await exportAuditBundle()));
+  const query = parseOrThrow(ExportAuditQueryParams, req.query);
+  res.json(ExportAuditResponse.parse(await exportAuditBundle(query)));
 });
 
 // Spreadsheet-friendly companion to the JSON bundle: the same ledger, one row
@@ -29,7 +42,9 @@ router.get("/audit/export", async (req, res): Promise<void> => {
 // verifiable bundle. Auditors who live in Excel start here.
 router.get("/audit/export/csv", async (req, res): Promise<void> => {
   assertCan(req.principal, "audit.export");
-  const { events, verification } = await exportAuditBundle();
+  const query = parseOrThrow(ExportAuditCsvQueryParams, req.query);
+  const { rows: events, verification, lastSeq, complete } =
+    await exportAuditLedger(query.afterSeq);
   const csv = toCsv(
     [
       "seq",
@@ -56,9 +71,12 @@ router.get("/audit/export/csv", async (req, res): Promise<void> => {
       e.hash,
     ]),
   );
-  // Chain state rides along as a response header, not a CSV row, so the file
-  // stays strictly tabular.
+  // Chain state rides along as response headers, not CSV rows, so the file
+  // stays strictly tabular; X-Audit-Last-Seq is the afterSeq for the next
+  // file when the ledger did not end inside this one.
   res.setHeader("X-Audit-Chain-Valid", String(verification.valid));
+  res.setHeader("X-Audit-Export-Complete", String(complete));
+  res.setHeader("X-Audit-Last-Seq", lastSeq === null ? "" : String(lastSeq));
   sendCsvAttachment(
     res,
     `meridianiq-audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`,

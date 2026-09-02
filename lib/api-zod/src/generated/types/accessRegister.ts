@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
 import type { AccessAttestation } from './accessAttestation';
 import type { AccessRegisterMember } from './accessRegisterMember';

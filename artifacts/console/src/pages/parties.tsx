@@ -52,6 +52,8 @@ import {
 // via mergedIntoId + the audit log). Without clean parties the fraud layer has
 // no reliable raw material — this is the operator's dedupe workbench.
 
+const PARTY_PAGE = 500;
+
 const TYPE_LABELS: Record<Party["type"], string> = {
   client_business: "Client business",
   buyer: "Buyer",
@@ -183,7 +185,11 @@ export function Parties() {
     return () => clearTimeout(handle);
   }, [search]);
 
-  const params: ListPartiesParams = q ? { q } : {};
+  // Bounded reads (R98): the workbench reads the reference-list ceiling; a
+  // full page means the sphere is larger than one read and the tiles below
+  // describe the first PARTY_PAGE parties — the notice says so, and search
+  // narrows the set.
+  const params: ListPartiesParams = q ? { q, limit: PARTY_PAGE } : { limit: PARTY_PAGE };
   const {
     data: parties,
     isLoading,
@@ -358,6 +364,16 @@ export function Parties() {
         </p>
       ) : (
         <>
+          {(parties?.length ?? 0) >= PARTY_PAGE && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-party-page-truncated"
+            >
+              Showing the first {PARTY_PAGE} parties by legal name — the tiles
+              and duplicate groups below cover this page only. Search by name
+              or TIN to narrow the set.
+            </p>
+          )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatTile
               label="Live parties"

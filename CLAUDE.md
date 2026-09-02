@@ -44,7 +44,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.88.0`).
+contract change (it is currently `0.89.0`).
 
 ## Clerk AI — the principles (details: docs/clerk-ai.md)
 
@@ -80,6 +80,10 @@ you must not learn the hard way:
   a client route must ALSO call `assertClientPartyScope` / filter by
   `clientPartyScope` — RLS is not a backstop for sibling-client isolation.
   Copy the pattern in `routes/invoices/` (shared.ts loadForTenant) / `routes/engagements.ts`.
+- **Bounded reads.** Every list route applies `pageBounds` from
+  `lib/page.ts` (a bare request is the default page, never the whole book;
+  bad paging input is a 400) and whole-population questions are SQL
+  aggregates, never a list folded in JS. New list route → new bound.
 - **The 4xx rollback rule.** `tenantContext` buffers the response and commits
   on `status < 400`, rolls back on `status >= 400`. Anything that must
   persist even when the handler errors (login throttle counters, the

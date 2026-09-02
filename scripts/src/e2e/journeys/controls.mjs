@@ -157,7 +157,11 @@ async function journeyCollections(page, BASE, check, hookToken) {
     `status ${createdRes.status()}`,
   );
 
-  const book = await (await page.request.get(BASE + "/api/invoices")).json();
+  // Bounded reads (R98): GET /api/invoices is a page, never the whole book,
+  // so the target is found by search rather than by scanning a full list.
+  const book = await (
+    await page.request.get(BASE + "/api/invoices?q=LBR-4002")
+  ).json();
   const target = book.find((i) => i.invoiceNumber === "LBR-4002");
 
   // Machine-rail probes ride plain fetch (cookie-free — the shared token is
@@ -233,14 +237,16 @@ async function journeyCollections(page, BASE, check, hookToken) {
 //    BILL-2001, KAN/NDP/LBR-*, CN-*, E2E-*, GOV-9001).
 //  - AUTO-9001 leaves this journey `submitted` and stamps in the background,
 //    exactly like GOV-9001: the credit-note journey targets the OLDEST
-//    stamped demo-client invoice (bare GET /api/invoices is createdAt ASC),
-//    and the boot-seeded INV-1003 always precedes an invoice created here.
+//    stamped demo-client invoice (it reads one bounded page — GET
+//    /api/invoices is newest-first since R98 — and sorts it createdAt ASC
+//    itself), and the boot-seeded INV-1003 always precedes an invoice
+//    created here.
 //  - No later journey counts pending drafts: the lifecycle journey's
 //    bulk-submit check only opens and cancels the dialog (no count
 //    assertion), and the integration journey patterns party ids off the
-//    FIRST demo-client invoice in the asc book (INV-1001, untouched — this
-//    journey executes ONLY its own AUTO-9001, never the proposal's other
-//    targets).
+//    OLDEST demo-client invoice in its bounded page (INV-1001, untouched —
+//    this journey executes ONLY its own AUTO-9001, never the proposal's
+//    other targets).
 //  - No other journey reads or asserts clerk_actions/clerk_action_policies
 //    (the operator-desk journey toggles `reconciliation`, via the UI).
 //  - The action-policy sweep is atMostHourly and consumed its first tick at

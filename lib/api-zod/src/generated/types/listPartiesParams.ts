@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
+import type { ListPartiesType } from './listPartiesType';
 
 export type ListPartiesParams = {
 /**
@@ -12,4 +13,17 @@ export type ListPartiesParams = {
  * @maxLength 120
  */
 q?: string;
+/**
+ * Only parties of this kind.
+ */
+type?: ListPartiesType;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };

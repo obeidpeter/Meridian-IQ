@@ -26,6 +26,16 @@ export const SUBMISSION_WINDOW_DAYS = 7;
 // Not yet on the rails: the states a submit action can still act on.
 export const UNSUBMITTED_STATE = sql`i.status IN ('draft', 'validated')`;
 
+// On the rails and beyond: the SQL twin of isStamped() below.
+export const STAMPED_STATE = sql`i.status IN ('stamped', 'confirmed', 'settled')`;
+
+// The submit-by INSTANT as SQL — the twin of submissionDeadline() below:
+// Lagos midnight after the window elapses, as a timestamptz, so an aggregate
+// can count overdue / due-soon invoices with the very comparison the JS
+// deadline list makes (overdue once the instant has passed; due soon inside
+// the next four days).
+export const SUBMIT_BY_INSTANT = sql`((i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int)::timestamp AT TIME ZONE 'Africa/Lagos')`;
+
 // The deadline is Lagos midnight STARTING day issue+window, so an invoice is
 // overdue ON that day (<=) — the boundary every consumer shares.
 export function pastSubmissionDeadline(today: SQL): SQL {

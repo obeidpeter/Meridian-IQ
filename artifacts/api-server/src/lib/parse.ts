@@ -4,8 +4,9 @@ import { decimalToMinorUnits, isPositiveMoney } from "./money";
 // Strict request parsing: a schema failure becomes a 400 through the central
 // error boundary (middleware/error.ts), byte-identical to the previous inline
 // res.status(400).json({ error: parsed.error.message }) blocks.
-// Deliberately-lenient query parses (list endpoints that fall back to
-// defaults on failure) must NOT use this.
+// List endpoints use it too (bounded reads, R98): an out-of-range limit or an
+// over-long search term is a 400, never a silent fall-through to the
+// unbounded query it used to be.
 export function parseOrThrow<Out>(
   schema: {
     safeParse(

@@ -136,7 +136,9 @@ export function InvoiceNew() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
-  const { data: parties } = useListParties();
+  // Bounded reads (R98): the customer picker wants buyers only, at the
+  // reference-list ceiling, so one read covers the whole working set.
+  const { data: parties } = useListParties({ type: "buyer", limit: 500 });
   const { data: catalogue } = useListErrorCatalogue();
   const create = useCreateInvoice();
 

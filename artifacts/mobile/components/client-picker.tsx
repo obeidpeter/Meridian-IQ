@@ -25,7 +25,9 @@ import { useSession } from "@/lib/session";
 export function ClientPicker() {
   const colors = useColors();
   const { selectClient, signOut } = useSession();
-  const parties = useListParties();
+  // Bounded reads (R98): client businesses only, at the reference-list
+  // ceiling, so the auto-select below sees the whole set.
+  const parties = useListParties({ type: PartyType.client_business, limit: 500 });
 
   // Memoized so the auto-select effect below has a stable dependency (a fresh
   // filter() each render would otherwise re-run the effect every render).

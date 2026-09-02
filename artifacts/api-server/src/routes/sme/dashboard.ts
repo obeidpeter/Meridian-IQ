@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -58,6 +58,9 @@ import {
   isUnsubmitted,
   penaltyRisk as computePenaltyRisk,
   submissionDeadline,
+  STAMPED_STATE,
+  SUBMIT_BY_INSTANT,
+  UNSUBMITTED_STATE,
 } from "../../modules/invoice/compliance-window";
 
 const router: IRouter = Router();
@@ -83,9 +86,14 @@ type Deadline = {
 // filing calendar — there is no deadlines table (SME-05). B2C clocks come from
 // the live report batches when the R2 module is on (SME-08); while it is dark,
 // the legacy consolidated-monthly placeholder row stands in.
+type UnsubmittedRow = Pick<
+  Invoice,
+  "id" | "invoiceNumber" | "issueDate" | "status"
+>;
+
 function computeDeadlines(
   clientPartyId: string,
-  invoices: Invoice[],
+  invoices: UnsubmittedRow[],
   b2cBatches: B2cReportBatch[] | null,
   bills: BillDeadlineRow[] = [],
 ): Deadline[] {
@@ -206,36 +214,121 @@ function computeDeadlines(
   return deadlines.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
-async function loadClientInvoices(
+// Bounded reads (R98): the client's invoice book is never loaded into JS.
+// The counts and totals are ONE aggregate (the SQL twins of isUnsubmitted /
+// isStamped / submissionDeadline keep the numbers identical to the deadline
+// list's), the activity feed is the newest eight rows, and the per-invoice
+// deadline list is the unsubmitted subset only — oldest issue date first, so
+// the most overdue come first — capped like the bills list it sits beside.
+// The exact overdue / due-soon counts come from the aggregate, so a client
+// past the cap still sees honest headline numbers.
+const UNSUBMITTED_DEADLINE_CAP = 500;
+
+type BookSummary = {
+  total: number;
+  unsubmittedCount: number;
+  pendingCount: number;
+  stampedCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  unsubmittedValue: string;
+  stampedValue: string;
+  overdueSubmissions: number;
+  dueSoonSubmissions: number;
+};
+
+async function loadBookSummary(
   clientPartyId: string,
   tenant: string | null,
-): Promise<Invoice[]> {
-  const conditions = [eq(invoicesTable.supplierPartyId, clientPartyId)];
+): Promise<BookSummary> {
+  const tenantClause = tenant ? sql`AND i.firm_id = ${tenant}` : sql``;
+  const [row] = (
+    await getDb().execute(sql`
+      SELECT
+        count(*)::int AS total,
+        count(*) FILTER (WHERE ${UNSUBMITTED_STATE})::int AS unsubmitted_count,
+        count(*) FILTER (WHERE i.status = 'submitted')::int AS pending_count,
+        count(*) FILTER (WHERE ${STAMPED_STATE})::int AS stamped_count,
+        count(*) FILTER (WHERE i.status = 'failed')::int AS failed_count,
+        count(*) FILTER (WHERE i.status = 'cancelled')::int AS cancelled_count,
+        round(coalesce(sum(i.grand_total) FILTER (WHERE ${UNSUBMITTED_STATE}), 0), 2)::text
+          AS unsubmitted_value,
+        round(coalesce(sum(i.grand_total) FILTER (WHERE ${STAMPED_STATE}), 0), 2)::text
+          AS stamped_value,
+        count(*) FILTER (WHERE ${UNSUBMITTED_STATE} AND ${SUBMIT_BY_INSTANT} < now())::int
+          AS overdue_submissions,
+        count(*) FILTER (
+          WHERE ${UNSUBMITTED_STATE}
+            AND ${SUBMIT_BY_INSTANT} >= now()
+            AND ${SUBMIT_BY_INSTANT} < now() + interval '4 days'
+        )::int AS due_soon_submissions
+      FROM invoices i
+      WHERE i.supplier_party_id = ${clientPartyId} ${tenantClause}
+    `)
+  ).rows as {
+    total: number;
+    unsubmitted_count: number;
+    pending_count: number;
+    stamped_count: number;
+    failed_count: number;
+    cancelled_count: number;
+    unsubmitted_value: string;
+    stamped_value: string;
+    overdue_submissions: number;
+    due_soon_submissions: number;
+  }[];
+  return {
+    total: row?.total ?? 0,
+    unsubmittedCount: row?.unsubmitted_count ?? 0,
+    pendingCount: row?.pending_count ?? 0,
+    stampedCount: row?.stamped_count ?? 0,
+    failedCount: row?.failed_count ?? 0,
+    cancelledCount: row?.cancelled_count ?? 0,
+    unsubmittedValue: row?.unsubmitted_value ?? "0.00",
+    stampedValue: row?.stamped_value ?? "0.00",
+    overdueSubmissions: row?.overdue_submissions ?? 0,
+    dueSoonSubmissions: row?.due_soon_submissions ?? 0,
+  };
+}
+
+async function loadUnsubmittedInvoices(
+  clientPartyId: string,
+  tenant: string | null,
+): Promise<UnsubmittedRow[]> {
+  const conditions = [
+    eq(invoicesTable.supplierPartyId, clientPartyId),
+    inArray(invoicesTable.status, ["draft", "validated"]),
+  ];
   if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
   return getDb()
-    .select()
+    .select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      issueDate: invoicesTable.issueDate,
+      status: invoicesTable.status,
+    })
     .from(invoicesTable)
     .where(and(...conditions))
-    .orderBy(desc(invoicesTable.createdAt));
+    .orderBy(asc(invoicesTable.issueDate), asc(invoicesTable.id))
+    .limit(UNSUBMITTED_DEADLINE_CAP);
 }
 
 // The shared fetch behind the two deadline surfaces (dashboard summary and
-// compliance calendar): the client's invoice book, the live B2C batch clocks
-// when the R2 module is on (null while it is dark — computeDeadlines then
-// emits the legacy placeholder), and the due-date-bearing bills, folded
-// through computeDeadlines.
-async function loadInvoicesAndDeadlines(
+// compliance calendar): the client's unsubmitted invoices, the live B2C
+// batch clocks when the R2 module is on (null while it is dark —
+// computeDeadlines then emits the legacy placeholder), and the
+// due-date-bearing bills, folded through computeDeadlines.
+async function loadDeadlines(
   clientPartyId: string,
   tenant: string | null,
   firmId: string | null,
-): Promise<{ invoices: Invoice[]; deadlines: Deadline[] }> {
-  const invoices = await loadClientInvoices(clientPartyId, tenant);
+): Promise<Deadline[]> {
+  const unsubmitted = await loadUnsubmittedInvoices(clientPartyId, tenant);
   const b2cBatches = (await isFeatureEnabled("b2c_reporting", firmId))
     ? await openBatchesFor(clientPartyId, tenant)
     : null;
   const bills = await listBillDeadlines(clientPartyId, tenant);
-  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches, bills);
-  return { invoices, deadlines };
+  return computeDeadlines(clientPartyId, unsubmitted, b2cBatches, bills);
 }
 
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
@@ -244,41 +337,27 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const clientPartyId = query.clientPartyId;
   await assertPartyAccess(req.principal, clientPartyId);
   const tenant = tenantFirmId(req.principal);
-  const { invoices, deadlines } = await loadInvoicesAndDeadlines(
+  const book = await loadBookSummary(clientPartyId, tenant);
+  const deadlines = await loadDeadlines(
     clientPartyId,
     tenant,
     req.principal.firmId,
   );
+  const { failedCount } = book;
 
-  let draftCount = 0;
-  let pendingCount = 0;
-  let stampedCount = 0;
-  let failedCount = 0;
-  let cancelledCount = 0;
-  let unsubmittedValue = 0;
-  let stampedValue = 0;
-  for (const inv of invoices) {
-    if (isUnsubmitted(inv.status)) {
-      draftCount += 1;
-      unsubmittedValue += Number(inv.grandTotal);
-    } else if (inv.status === "submitted") {
-      pendingCount += 1;
-    } else if (isStamped(inv.status)) {
-      stampedCount += 1;
-      stampedValue += Number(inv.grandTotal);
-    } else if (inv.status === "failed") {
-      failedCount += 1;
-    } else if (inv.status === "cancelled") {
-      cancelledCount += 1;
-    }
-  }
-
-  const overdue = deadlines.filter((d) => d.status === "overdue");
-  const upcoming = deadlines.filter((d) => d.status !== "met");
-  const nextDeadline = upcoming[0] ?? null;
-  const atRiskCount = overdue.length + failedCount;
-  const dueSoon = deadlines.some((d) => d.status === "due_soon");
-  const penaltyRisk = computePenaltyRisk(overdue.length, failedCount, dueSoon);
+  // Deadline headline numbers: the per-invoice share comes from the
+  // aggregate (exact past the deadline-list cap), the rest from the
+  // non-invoice deadlines (VAT, B2C clocks, bills) the list carries.
+  const other = deadlines.filter((d) => d.kind !== "invoice_submission" && d.kind !== "penalty_watch");
+  const overdueCount =
+    book.overdueSubmissions + other.filter((d) => d.status === "overdue").length;
+  const upcomingCount =
+    book.unsubmittedCount + other.filter((d) => d.status !== "met").length;
+  const nextDeadline = deadlines.find((d) => d.status !== "met") ?? null;
+  const atRiskCount = overdueCount + failedCount;
+  const dueSoon =
+    book.dueSoonSubmissions > 0 || other.some((d) => d.status === "due_soon");
+  const penaltyRisk = computePenaltyRisk(overdueCount, failedCount, dueSoon);
 
   const activityKind = (s: Invoice["status"]) =>
     isUnsubmitted(s)
@@ -291,7 +370,20 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
             ? "failed"
             : "cancelled";
 
-  const invoiceActivity = invoices.slice(0, 8).map((inv) => ({
+  const recentConditions = [eq(invoicesTable.supplierPartyId, clientPartyId)];
+  if (tenant) recentConditions.push(eq(invoicesTable.firmId, tenant));
+  const recent = await getDb()
+    .select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      status: invoicesTable.status,
+      updatedAt: invoicesTable.updatedAt,
+    })
+    .from(invoicesTable)
+    .where(and(...recentConditions))
+    .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id))
+    .limit(8);
+  const invoiceActivity = recent.map((inv) => ({
     id: `inv-${inv.id}`,
     invoiceId: inv.id,
     invoiceNumber: inv.invoiceNumber,
@@ -332,17 +424,17 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 
   const summary = {
     clientPartyId,
-    totalInvoices: invoices.length,
-    draftCount,
-    pendingCount,
-    stampedCount,
+    totalInvoices: book.total,
+    draftCount: book.unsubmittedCount,
+    pendingCount: book.pendingCount,
+    stampedCount: book.stampedCount,
     failedCount,
-    cancelledCount,
-    unsubmittedCount: draftCount,
-    unsubmittedValue: unsubmittedValue.toFixed(2),
-    stampedValue: stampedValue.toFixed(2),
+    cancelledCount: book.cancelledCount,
+    unsubmittedCount: book.unsubmittedCount,
+    unsubmittedValue: book.unsubmittedValue,
+    stampedValue: book.stampedValue,
     atRiskCount,
-    upcomingDeadlineCount: upcoming.length,
+    upcomingDeadlineCount: upcomingCount,
     nextDeadline,
     penaltyRisk,
     recentActivity,
@@ -454,7 +546,7 @@ router.get("/compliance/calendar", async (req, res): Promise<void> => {
   const clientPartyId = query.clientPartyId;
   await assertPartyAccess(req.principal, clientPartyId);
   const tenant = tenantFirmId(req.principal);
-  const { deadlines } = await loadInvoicesAndDeadlines(
+  const deadlines = await loadDeadlines(
     clientPartyId,
     tenant,
     req.principal.firmId,

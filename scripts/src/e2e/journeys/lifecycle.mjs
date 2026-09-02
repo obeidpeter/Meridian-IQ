@@ -16,14 +16,19 @@ import {
 async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   // ---------- SME staff: credit note credits its original ----------
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
+  // Bounded reads (R98): the stamped list is one newest-first page; sort it
+  // oldest-first so the target stays the boot-seeded INV-1003 (see the
+  // placement notes in controls.mjs).
   const invoicesResp = await page.request.get(
-    BASE + "/api/invoices?status=stamped",
+    BASE + "/api/invoices?status=stamped&limit=200",
   );
-  const stamped = (await invoicesResp.json()).filter(
-    (i) =>
-      i.supplierPartyId.startsWith(DEMO_CLIENT_PARTY_PREFIX) &&
-      i.kind === "invoice",
-  );
+  const stamped = (await invoicesResp.json())
+    .filter(
+      (i) =>
+        i.supplierPartyId.startsWith(DEMO_CLIENT_PARTY_PREFIX) &&
+        i.kind === "invoice",
+    )
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   check("a stamped, consented invoice exists to credit", stamped.length > 0);
   if (stamped.length > 0) {
     const target = stamped[0];

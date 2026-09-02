@@ -10,6 +10,7 @@
 // digest, the month-end close, the compliance pack and the Ask intent —
 // composes, so no two surfaces can disagree about the same firm's chase.
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { pageBounds } from "../../lib/page";
 import {
   getDb,
   invoicesTable,
@@ -310,8 +311,6 @@ export interface ListWhtCreditsFilter {
   offset?: number;
 }
 
-const LIST_DEFAULT_LIMIT = 100;
-const LIST_MAX_LIMIT = 200;
 
 // The ledger, most recent deduction first (id as the stable tiebreak), with
 // the chase totals. Totals cover the whole (firm, client) scope regardless
@@ -329,7 +328,7 @@ export async function listWhtCredits(
   if (filter.status) {
     conditions.push(eq(whtCreditsTable.status, filter.status));
   }
-  const limit = Math.min(filter.limit ?? LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT);
+  const { limit } = pageBounds(filter);
   const credits = await getDb()
     .select(viewColumns)
     .from(whtCreditsTable)

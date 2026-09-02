@@ -19,7 +19,8 @@ import {
   ValidateCacResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { and, sql, type SQL } from "drizzle-orm";
+import { pageBounds, REFERENCE_LIST_MAX_LIMIT } from "../lib/page";
+import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 import { getDb, partiesTable } from "@workspace/db";
 import { likePattern } from "../lib/sql";
 import {
@@ -45,8 +46,8 @@ const router: IRouter = Router();
 
 router.get("/parties", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
-  const query = ListPartiesQueryParams.safeParse(req.query);
-  const q = query.success ? query.data.q?.trim() : undefined;
+  const query = parseOrThrow(ListPartiesQueryParams, req.query);
+  const q = query.q?.trim();
   // Search matches the legal name or TIN; wildcards in the query are literal.
   let search: SQL | undefined;
   if (q) {
@@ -54,18 +55,30 @@ router.get("/parties", async (req, res): Promise<void> => {
     search = sql`(${partiesTable.legalName} ILIKE ${pattern}
         OR ${partiesTable.tin} ILIKE ${pattern})`;
   }
+  // `type` narrows a picker to the kind it wants (buyers for an invoice form,
+  // client businesses for the mobile client picker) so the default bound
+  // covers the whole working set.
+  const kind = query.type ? eq(partiesTable.type, query.type) : undefined;
   // Visibility is the firm's SPHERE, not just its engagement subjects —
   // buyers are rarely engagement clients, yet the invoice form must list
   // them. Null = cross-tenant staff (operator, auditor) see the whole spine.
   // The condition itself lives in modules/party/party.ts so every surface
   // that lists or suggests parties scopes identically.
   const sphere = partySphereCondition(req.principal);
-  const conditions = [sphere, search].filter((c): c is SQL => !!c);
+  const conditions = [sphere, search, kind].filter((c): c is SQL => !!c);
+  // Bounded reads (R98): a reference list, so the ceiling is the higher
+  // REFERENCE_LIST_MAX_LIMIT; alphabetical with `id` as the tiebreak so a
+  // picker reads naturally and offset pages never repeat a row.
+  const { limit, offset } = pageBounds(query, {
+    maxLimit: REFERENCE_LIST_MAX_LIMIT,
+  });
   const rows = await getDb()
     .select()
     .from(partiesTable)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(partiesTable.createdAt);
+    .orderBy(asc(partiesTable.legalName), asc(partiesTable.id))
+    .limit(limit)
+    .offset(offset);
   res.json(ListPartiesResponse.parse(rows));
 });
 

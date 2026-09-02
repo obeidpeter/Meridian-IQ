@@ -448,7 +448,10 @@ function AdvancedFiltersCard({
 export function Invoices() {
   usePageTitle("Invoices");
   const { data: me } = useGetMe();
-  const { data: parties } = useListParties();
+  // Bounded reads (R98): the buyer-name map beside the paged vault reads the
+  // reference-list ceiling; a row whose buyer falls outside it shows the
+  // "Unknown customer" fallback rather than a whole-spine read.
+  const { data: parties } = useListParties({ limit: 500 });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const bulkSubmit = useBulkSubmitInvoices();
