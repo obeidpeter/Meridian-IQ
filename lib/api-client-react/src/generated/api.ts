@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.86.0
+ * OpenAPI spec version: 0.87.0
  */
 import {
   useMutation,
@@ -21,6 +21,9 @@ import type {
 
 import type {
   AcceptInvitationInput,
+  AccessAttestation,
+  AccessAttestationInput,
+  AccessRegister,
   ActionDecisionList,
   ActionEffectivenessReport,
   ActionPolicyList,
@@ -13255,6 +13258,230 @@ export const useReplaceClientAssignments = <TError = ErrorType<BadRequestRespons
         TContext
       > => {
       return useMutation(getReplaceClientAssignmentsMutationOptions(options));
+    }
+
+export const getGetAccessRegisterUrl = () => {
+
+
+
+
+  return `/api/console/access-register`
+}
+
+/**
+ * @summary Who holds access to this firm (D14) — role, since when, last sign-in, MFA, client assignments — with the last attestation
+ */
+export const getAccessRegister = async ( options?: RequestInit): Promise<AccessRegister> => {
+
+  return customFetch<AccessRegister>(getGetAccessRegisterUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAccessRegisterQueryKey = () => {
+    return [
+    `/api/console/access-register`
+    ] as const;
+    }
+
+
+export const getGetAccessRegisterQueryOptions = <TData = Awaited<ReturnType<typeof getAccessRegister>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccessRegister>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAccessRegisterQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccessRegister>>> = ({ signal }) => getAccessRegister({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAccessRegister>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAccessRegisterQueryResult = NonNullable<Awaited<ReturnType<typeof getAccessRegister>>>
+export type GetAccessRegisterQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Who holds access to this firm (D14) — role, since when, last sign-in, MFA, client assignments — with the last attestation
+ */
+
+export function useGetAccessRegister<TData = Awaited<ReturnType<typeof getAccessRegister>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccessRegister>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAccessRegisterQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportAccessRegisterCsvUrl = () => {
+
+
+
+
+  return `/api/console/access-register/csv`
+}
+
+/**
+ * @summary The same register as a spreadsheet, one row per member
+ */
+export const exportAccessRegisterCsv = async ( options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportAccessRegisterCsvUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAccessRegisterCsvQueryKey = () => {
+    return [
+    `/api/console/access-register/csv`
+    ] as const;
+    }
+
+
+export const getExportAccessRegisterCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportAccessRegisterCsv>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAccessRegisterCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAccessRegisterCsvQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAccessRegisterCsv>>> = ({ signal }) => exportAccessRegisterCsv({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAccessRegisterCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAccessRegisterCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportAccessRegisterCsv>>>
+export type ExportAccessRegisterCsvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The same register as a spreadsheet, one row per member
+ */
+
+export function useExportAccessRegisterCsv<TData = Awaited<ReturnType<typeof exportAccessRegisterCsv>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAccessRegisterCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAccessRegisterCsvQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAttestAccessRegisterUrl = () => {
+
+
+
+
+  return `/api/console/access-register/attest`
+}
+
+/**
+ * @summary A firm admin attests the register as reviewed — recorded on the audit chain with the register's hash; a stale hash is refused
+ */
+export const attestAccessRegister = async (accessAttestationInput: AccessAttestationInput, options?: RequestInit): Promise<AccessAttestation> => {
+
+  return customFetch<AccessAttestation>(getAttestAccessRegisterUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessAttestationInput)
+  }
+);}
+
+
+
+
+export const getAttestAccessRegisterMutationOptions = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attestAccessRegister>>, TError,{data: BodyType<AccessAttestationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof attestAccessRegister>>, TError,{data: BodyType<AccessAttestationInput>}, TContext> => {
+
+const mutationKey = ['attestAccessRegister'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof attestAccessRegister>>, {data: BodyType<AccessAttestationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  attestAccessRegister(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AttestAccessRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof attestAccessRegister>>>
+    export type AttestAccessRegisterMutationBody = BodyType<AccessAttestationInput>
+    export type AttestAccessRegisterMutationError = ErrorType<ConflictResponse>
+
+    /**
+ * @summary A firm admin attests the register as reviewed — recorded on the audit chain with the register's hash; a stale hash is refused
+ */
+export const useAttestAccessRegister = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof attestAccessRegister>>, TError,{data: BodyType<AccessAttestationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof attestAccessRegister>>,
+        TError,
+        {data: BodyType<AccessAttestationInput>},
+        TContext
+      > => {
+      return useMutation(getAttestAccessRegisterMutationOptions(options));
     }
 
 export const getListFirmTeamUrl = () => {

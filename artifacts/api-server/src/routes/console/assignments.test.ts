@@ -43,9 +43,9 @@ before(async () => {
     { id: otherFirmId, name: `Other Firm ${SALT}` },
   ]);
   await db.insert(usersTable).values([
-    { id: adminId, email: `admin-${SALT}@example.test`, fullName: "Ada Admin" },
-    { id: staffId, email: `staff-${SALT}@example.test`, fullName: "Sam Staff" },
-    { id: outsiderId, email: `out-${SALT}@example.test`, fullName: "Olu Other" },
+    { id: adminId, email: `admin-${SALT}@test.local`, fullName: "Ada Admin" },
+    { id: staffId, email: `staff-${SALT}@test.local`, fullName: "Sam Staff" },
+    { id: outsiderId, email: `out-${SALT}@test.local`, fullName: "Olu Other" },
   ]);
   await db.insert(membershipsTable).values([
     { userId: adminId, firmId, role: "firm_admin", clientPartyId: null },

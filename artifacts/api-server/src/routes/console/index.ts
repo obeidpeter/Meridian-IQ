@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import portfolioRouter from "./portfolio";
 import billingRouter from "./billing";
 import operatorQueueRouter from "./operator-queue";
+import accessRegisterRouter from "./access-register";
 
 // The firm console, its billing surfaces, and the operator desk, split by
 // concern (the routes/invoices pattern). Groups are the contiguous section
@@ -23,5 +24,7 @@ const router: IRouter = Router();
 router.use(portfolioRouter);
 router.use(billingRouter);
 router.use(operatorQueueRouter);
+// access-register.ts  the lightweight access review (D14): register + attest
+router.use(accessRegisterRouter);
 
 export default router;

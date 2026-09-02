@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.86.0
+  version: 0.87.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -3144,6 +3144,51 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /console/access-register:
+    get:
+      operationId: getAccessRegister
+      tags: [console]
+      summary: Who holds access to this firm (D14) — role, since when, last sign-in, MFA, client assignments — with the last attestation
+      responses:
+        "200":
+          description: Access register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessRegister"
+  /console/access-register/csv:
+    get:
+      operationId: exportAccessRegisterCsv
+      tags: [console]
+      summary: The same register as a spreadsheet, one row per member
+      responses:
+        "200":
+          description: CSV attachment
+          content:
+            text/csv:
+              schema:
+                type: string
+  /console/access-register/attest:
+    post:
+      operationId: attestAccessRegister
+      tags: [console]
+      summary: A firm admin attests the register as reviewed — recorded on the audit chain with the register's hash; a stale hash is refused
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAttestationInput"
+      responses:
+        "201":
+          description: Attestation recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessAttestation"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /console/team:
     get:
@@ -10569,6 +10614,78 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ComplianceDeadline"
+    AccessRegisterMember:
+      type: object
+      required: [userId, role, since, mfaEnabled, assignedClients]
+      properties:
+        userId:
+          type: string
+        fullName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        role:
+          type: string
+        # Client scope for client users; null for firm roles.
+        clientPartyId:
+          type: ["string", "null"]
+        # When the membership was created.
+        since:
+          type: string
+          format: date-time
+        # Latest auth.login audit event for this account; null if never.
+        lastSignInAt:
+          type: ["string", "null"]
+          format: date-time
+        mfaEnabled:
+          type: boolean
+        # Names of the clients assigned to this member (D12).
+        assignedClients:
+          type: array
+          items:
+            type: string
+    AccessAttestation:
+      type: object
+      required: [attestedAt, byUserId, memberCount, hash]
+      properties:
+        attestedAt:
+          type: string
+          format: date-time
+        byUserId:
+          type: string
+        byName:
+          type: ["string", "null"]
+        memberCount:
+          type: integer
+        hash:
+          type: string
+    AccessRegister:
+      type: object
+      required: [firmId, generatedAt, hash, members, lastAttestation]
+      properties:
+        firmId:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        # sha256 over the member rows (identity, role, scope, MFA,
+        # assignments) — the thing an attestation vouches for.
+        hash:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessRegisterMember"
+        lastAttestation:
+          oneOf:
+            - $ref: "#/components/schemas/AccessAttestation"
+            - type: "null"
+    AccessAttestationInput:
+      type: object
+      required: [hash]
+      properties:
+        hash:
+          type: string
     ClientAssignee:
       type: object
       required: [userId, role, assignedAt]

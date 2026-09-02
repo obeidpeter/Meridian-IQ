@@ -953,29 +953,6 @@
   "source": "cognitive-walkthrough-2026-08"
  },
  {
-  "area": "Console / team, roles and access",
-  "effort": "M",
-  "evidence": "UI mockup review 2026-09 (firm admin team, roles and access management); docs/architecture.md D14.",
-  "files": [
-   "lib/api-spec/openapi.yaml",
-   "artifacts/api-server/src/routes/identity.ts",
-   "artifacts/console/src/pages/invitations.tsx"
-  ],
-  "fix": "Add an exportable access register (who has access, role, since when, last sign-in, assignments) and a firm-admin attestation recorded on the audit chain. Reporting and attestation only; no SSO.",
-  "launchActive": false,
-  "nng": [
-   "visibility",
-   "help-recognize-diagnose"
-  ],
-  "problem": "A firm admin cannot review who holds access to the firm's workspaces without reading the invitation list and the audit log side by side.",
-  "severity": "low",
-  "source": "ui-mockups-2026-09",
-  "title": "Lightweight quarterly access review (D14)",
-  "userGroups": [
-   "firm"
-  ]
- },
- {
   "area": "SME + console page bodies",
   "effort": "L",
   "evidence": "UI mockup review 2026-09 (all ten screens); docs/architecture.md D16. R69 shipped the tokens and the shell.",
