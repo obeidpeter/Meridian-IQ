@@ -466,6 +466,25 @@ async function journeyClientAssignment(page, BASE, check) {
       (await page.locator(`[data-testid="text-assignee-${admin.userId}"]`).count()) === 1,
   );
   await signOutFromApp(page, BASE);
+
+  // The admin's route to "get my client a login" starts on the client page:
+  // the Team card links straight into the invitation form with the client
+  // role and this party preselected (cognitive walkthrough W-1).
+  await signIn(page, BASE, "button-demo-demo.admin", "**/console/**");
+  await page.goto(BASE + `/console/clients/${PHARMA}`, { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="link-invite-client-login"]', { timeout: 15000 });
+  const inviteHref = await page.getByTestId("link-invite-client-login").getAttribute("href");
+  check(
+    "client page offers an invite-a-client-login link scoped to that client",
+    (inviteHref ?? "").endsWith(`/invitations?role=client_user&clientPartyId=${PHARMA}`),
+  );
+  await page.getByTestId("link-invite-client-login").click();
+  await page.waitForSelector('[data-testid="select-client"]', { timeout: 15000 });
+  check(
+    "invitation form opens on the client role with that client preselected",
+    (await page.getByTestId("select-client").innerText()).includes("Niger Delta Pharma"),
+  );
+  await signOutFromApp(page, BASE);
 }
 
 // ---------- firm admin: lightweight access review (D14) ----------

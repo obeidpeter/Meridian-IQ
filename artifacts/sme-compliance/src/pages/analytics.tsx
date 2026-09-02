@@ -97,7 +97,7 @@ export function Analytics() {
       <div className="space-y-6">
         <WorkspaceHeader
           eyebrow="Performance"
-          title="Decision analytics"
+          title="Analytics"
           description="Track operating outcomes from the records already in MeridianIQ."
         />
         <QueryError
@@ -170,7 +170,7 @@ export function Analytics() {
     <div className="space-y-6">
       <WorkspaceHeader
         eyebrow="Performance"
-        title="Decision analytics"
+        title="Analytics"
         description="Submission quality, money exposure and the next actions that can improve both."
       />
 

@@ -519,8 +519,8 @@ export function Advisory() {
           Advisory toolkit
         </h1>
         <p className="text-muted-foreground mt-1">
-          The field kit behind paid engagements — findings land in the spine as
-          engagement data.
+          The field kit behind paid engagements — findings are recorded on the
+          client's engagement.
         </p>
       </div>
       <Tabs defaultValue="assessment">

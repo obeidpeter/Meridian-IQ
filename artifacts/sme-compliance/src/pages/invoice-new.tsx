@@ -143,7 +143,7 @@ export function InvoiceNew() {
     const entry = (catalogue || []).find((c) => c.code === "MBS_INVALID_TIN");
     return (
       entry?.fix ??
-      "Add the customer's Tax Identification Number before submitting — FIRS rejects B2B invoices without a valid buyer TIN."
+      "Add the customer's Tax Identification Number before submitting — FIRS rejects B2B invoices without a valid customer TIN."
     );
   }, [catalogue]);
 
@@ -766,8 +766,8 @@ export function InvoiceNew() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    If your buyer withholds tax on this invoice, pick the
-                    deduction type — the buyer owes you a credit note for it.
+                    If your customer withholds tax on this invoice, pick the
+                    deduction type — the customer owes you a credit note for it.
                   </p>
                 </div>
               </CardContent>

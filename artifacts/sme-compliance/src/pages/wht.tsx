@@ -90,7 +90,7 @@ function WhtContent() {
     <div className="space-y-6">
       <PageHeader
         title="WHT credits"
-        description="When a buyer withholds tax on one of your invoices, the deduction becomes a credit you can claim — once the buyer's credit note is in hand. Your firm records each deduction and note as the evidence arrives; the platform never claims or remits anything itself."
+        description="When a customer withholds tax on one of your invoices, the deduction becomes a credit you can claim — once the customer's credit note is in hand. Your firm records each deduction and note as the evidence arrives; the platform never claims or remits anything itself."
       />
 
       {isLoading ? (

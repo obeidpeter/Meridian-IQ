@@ -56,6 +56,7 @@ import {
   invitationStatusTone,
   invitationStatusLabel,
   effectiveInvitationStatus,
+  readInvitationPrefill,
 } from "@/lib/invitations";
 import {
   UserPlus,
@@ -113,15 +114,11 @@ export function Invitations() {
   const createReset = useCreatePasswordReset();
 
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<CreateInvitationInputRole>(() =>
-    new URLSearchParams(window.location.search).get("role") === "client_user"
-      ? "client_user"
-      : "firm_staff",
+  const [prefill] = useState(() =>
+    readInvitationPrefill(window.location.search),
   );
-  const [clientPartyId, setClientPartyId] = useState(
-    () =>
-      new URLSearchParams(window.location.search).get("clientPartyId") ?? "",
-  );
+  const [role, setRole] = useState<CreateInvitationInputRole>(prefill.role);
+  const [clientPartyId, setClientPartyId] = useState(prefill.clientPartyId);
   const [firmId, setFirmId] = useState("");
   const [newFirmName, setNewFirmName] = useState("");
   const [resetEmail, setResetEmail] = useState("");

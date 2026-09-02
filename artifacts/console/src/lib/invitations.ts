@@ -71,3 +71,30 @@ export function effectiveInvitationStatus(
   }
   return inv.status;
 }
+
+/**
+ * Where the console sends an admin who wants a client user invited for the
+ * client they are already looking at. The invitations page reads both
+ * params back through readInvitationPrefill, so the form opens on the
+ * client_user role with that party preselected.
+ */
+export function inviteClientLoginHref(clientPartyId: string): string {
+  return `/invitations?role=client_user&clientPartyId=${encodeURIComponent(clientPartyId)}`;
+}
+
+/**
+ * The invitations form's prefill, read from the page's query string: a
+ * client_user role is honoured, anything else falls back to firm_staff; the
+ * party id is passed through untouched (the server validates it against an
+ * engagement on submit).
+ */
+export function readInvitationPrefill(search: string): {
+  role: "client_user" | "firm_staff";
+  clientPartyId: string;
+} {
+  const params = new URLSearchParams(search);
+  return {
+    role: params.get("role") === "client_user" ? "client_user" : "firm_staff",
+    clientPartyId: params.get("clientPartyId") ?? "",
+  };
+}
