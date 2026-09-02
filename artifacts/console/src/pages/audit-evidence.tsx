@@ -6,6 +6,7 @@ import {
   getExportAuditQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { WorkspaceHeader } from "@workspace/web-ui";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
@@ -69,18 +70,12 @@ export function AuditEvidence() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1
-          className="text-2xl md:text-3xl font-bold"
-          data-testid="text-page-title"
-        >
-          Audit & evidence
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Tamper-evident, hash-chained log of every material event — verify it
-          live, export it whole.
-        </p>
-      </div>
+      <WorkspaceHeader
+        eyebrow="Evidence"
+        title="Audit & evidence"
+        titleTestId="text-page-title"
+        description="Tamper-evident, hash-chained log of every material event — verify it live, export it whole."
+      />
 
       {isLoading ? (
         <Skeleton className="h-36" />
@@ -94,9 +89,11 @@ export function AuditEvidence() {
           data-testid="card-chain-valid"
         >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-emerald-800 dark:text-emerald-300">
-              <ShieldCheck className="w-5 h-5" aria-hidden="true" /> Chain
-              verified
+            <CardTitle className="flex items-center gap-2.5 text-base text-emerald-800 dark:text-emerald-300">
+              <span className="mi-card-icon" data-tone="positive">
+                <ShieldCheck aria-hidden="true" />
+              </span>
+              Chain verified
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
@@ -118,9 +115,11 @@ export function AuditEvidence() {
           data-testid="card-chain-broken"
         >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-red-800 dark:text-red-300">
-              <ShieldAlert className="w-5 h-5" aria-hidden="true" /> Chain
-              verification failed
+            <CardTitle className="flex items-center gap-2.5 text-base text-red-800 dark:text-red-300">
+              <span className="mi-card-icon" data-tone="critical">
+                <ShieldAlert aria-hidden="true" />
+              </span>
+              Chain verification failed
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm">
@@ -138,8 +137,11 @@ export function AuditEvidence() {
 
       <Card data-testid="card-export">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileJson className="w-4 h-4 text-primary" aria-hidden="true" /> Verifiable export
+          <CardTitle className="flex items-center gap-2.5 text-base">
+            <span className="mi-card-icon">
+              <FileJson aria-hidden="true" />
+            </span>
+            Verifiable export
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
