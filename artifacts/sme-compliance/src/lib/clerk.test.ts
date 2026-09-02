@@ -15,6 +15,7 @@ import {
   usageBreakdown,
   usagePct,
   fieldLabel,
+  captureStatusExplanation,
 } from "./clerk";
 
 describe("invoiceLinks", () => {
@@ -425,3 +426,23 @@ describe("handleClerkGatewayError", () => {
     ]);
   });
 });
+
+describe("captureStatusExplanation", () => {
+  test("escalation tells the client nothing is needed yet", () => {
+    expect(captureStatusExplanation("escalated")).toContain("escalated");
+    expect(captureStatusExplanation("escalated")).toContain("Nothing is needed from you");
+  });
+
+  test("a rejection without a recorded reason says what to do next", () => {
+    expect(captureStatusExplanation("rejected", null)).toContain("corrected copy");
+    expect(captureStatusExplanation("rejected", "")).toContain("corrected copy");
+  });
+
+  test("a rejection with a reason, and every other status, keep their own copy", () => {
+    expect(captureStatusExplanation("rejected", "Duplicate of INV-1")).toBeNull();
+    for (const s of ["pending", "extracted", "in_review", "approved", "failed"]) {
+      expect(captureStatusExplanation(s)).toBeNull();
+    }
+  });
+});
+

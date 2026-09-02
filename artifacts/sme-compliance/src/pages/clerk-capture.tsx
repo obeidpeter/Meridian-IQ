@@ -49,6 +49,7 @@ import {
   handleClerkGatewayError,
   MAX_VOICE_BYTES,
   usagePct,
+  captureStatusExplanation,
 } from "@/lib/clerk";
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { ClerkUsageBreakdown } from "@/components/clerk-usage-breakdown";
@@ -193,6 +194,15 @@ function CaseDetail({ caseId }: { caseId: string }) {
       {kase.status === "rejected" && kase.decisionReason && (
         <p className="text-sm text-muted-foreground">
           Reason: {kase.decisionReason}
+        </p>
+      )}
+
+      {captureStatusExplanation(kase.status, kase.decisionReason) && (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid={`text-case-explanation-${kase.status}`}
+        >
+          {captureStatusExplanation(kase.status, kase.decisionReason)}
         </p>
       )}
 

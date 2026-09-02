@@ -24,6 +24,17 @@ import { FilingMatrixCard } from "@/components/filing-matrix-card";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { pillClasses } from "@/lib/format";
 
+// The preparation queue is a shortlist; past this many clients the description
+// says so and points at the full grid, so the list never looks complete when
+// it is not.
+const QUEUE_LIMIT = 8;
+
+/** The queue description's truncation note, or null when everything fits. */
+export function queueOverflowNote(shown: number, total: number): string | null {
+  if (total <= shown) return null;
+  return `Showing ${shown} of ${total} clients — the full grid is in the cockpit below.`;
+}
+
 export function FilingDesk() {
   usePageTitle("Filing desk");
   const query = useGetFilingMatrix({
@@ -49,11 +60,11 @@ export function FilingDesk() {
   }
 
   const matrix = query.data;
-  const workItems: WorkQueueItem[] = matrix.rows
-    .filter((row) =>
-      [row.vat, row.paye, row.wht].some((status) => status === "upcoming"),
-    )
-    .slice(0, 8)
+  const pendingRows = matrix.rows.filter((row) =>
+    [row.vat, row.paye, row.wht].some((status) => status === "upcoming"),
+  );
+  const workItems: WorkQueueItem[] = pendingRows
+    .slice(0, QUEUE_LIMIT)
     .map((row) => {
       const pending = [
         row.vat === "upcoming" ? "VAT" : null,
@@ -125,7 +136,12 @@ export function FilingDesk() {
 
       <WorkQueue
         title="Preparation queue"
-        description="Clients with at least one return still in upcoming status."
+        description={[
+          "Clients with at least one return still in upcoming status.",
+          queueOverflowNote(workItems.length, pendingRows.length),
+        ]
+          .filter(Boolean)
+          .join(" ")}
         items={workItems}
         emptyTitle="Every return is prepared or filed"
         emptyDescription="There are no unstarted returns in the current matrix."
