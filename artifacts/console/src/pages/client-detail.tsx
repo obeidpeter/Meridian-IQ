@@ -66,6 +66,7 @@ import {
 import {
   formatNaira,
   formatDate,
+  formatDateTime,
   badgeClasses,
   statusLabel,
   severityBadgeClasses,
@@ -408,7 +409,7 @@ function AdvisoryBriefCard({ clientPartyId }: { clientPartyId: string }) {
                 `${brief.monthStart.slice(0, 7)}-15`,
               ).toLocaleDateString("en-NG", { month: "long", year: "numeric" })}
               {brief.source === "clerk" && " · note written by Clerk"} · last
-              refreshed {new Date(brief.updatedAt).toLocaleString()}
+              refreshed {formatDateTime(brief.updatedAt)}
             </p>
           </div>
         )}
