@@ -121,7 +121,7 @@ Use **Forgot your password?** on the sign-in panel. Resets are issued as
 one-time links: ask your firm administrator — or MeridianIQ support — to send
 you one, then open it and choose a new password (at least 8 characters). The
 link works once, expires after 24 hours, and signs out every other session on
-your account. Operators issue reset links from **Console → Team invitations**.
+your account. Operators issue reset links from **Console → Invitations**.
 
 ### Two-factor authentication (2FA)
 
@@ -146,8 +146,9 @@ instructions to enrol first.
 
 **Signing in with 2FA** — after your password is accepted you see the
 **"Enter your code"** screen. Codes rotate every 30 seconds; a recovery code
-works here too. The code prompt is valid for 5 minutes — after that, start
-over with your password. Five failed code attempts within 15 minutes locks
+works here too. The code prompt is valid for 5 minutes — the help text under
+the code field shows roughly how long is left — after that, start over with
+your password. Five failed code attempts within 15 minutes locks
 the challenge until the window passes.
 
 **Turning it off** — the same card has **Turn off two-factor**; it demands
@@ -1021,7 +1022,7 @@ the `clerk_ai` feature flag; the product keeps working without it.
 
 Sign in as the firm admin and you land at `/console/` on the **Portfolio**.
 The sidebar is grouped: **Practice** (Portfolio, Onboarding, Client import,
-Advisory, Team invitations, Integrations, API & webhooks), **Growth &
+Advisory, Invitations, Access review, Integrations, API & webhooks), **Growth &
 revenue** (Plans & billing, Statements, Unearned income, White-label,
 Certification), and **Platform** (the operator/auditor pages, plus Feature
 flags and the Claims register, which firm accounts can read). A
@@ -1241,8 +1242,11 @@ Money / Compliance / Connections & delivery**:
 ### Onboarding pipeline
 
 A simple stage board for prospective clients: **lead → contacted → proposal →
-onboarding → active** (or lost). Each prospect records estimated monthly
-invoice volume, which powers the next view.
+onboarding → active** (or lost). Each card shows the prospect's contact
+email and estimated monthly invoice volume, which powers the next view.
+Moving a prospect to **Active** opens the **Add client** dialog with its name
+filled in, so a won lead lands in your client book without retyping; an
+Active card also keeps an **Add to client book** button for later.
 
 ### Unearned income
 
@@ -1256,7 +1260,8 @@ onboarding" screen.
 Two revenue-earning instruments, both writing their findings into the client
 record:
 
-- **Readiness assessment** — pick a client, answer the yes/no questionnaire
+- **Readiness assessment** — pick a client (a firm with no clients yet is
+  pointed back to the portfolio to add one first), answer the yes/no questionnaire
   (weighted questions across systems, records and process), and get a scored
   gap report (`ready / partial / at_risk`) with a prioritised remediation
   plan.
@@ -1269,13 +1274,16 @@ record:
 Both offer a Clerk-drafted **client letter** from the stored findings — you
 edit and send it yourself; nothing is stored or sent by the platform.
 
-### Team invitations
+### Invitations
 
-Firm admins invite their own team from **Team invitations**: enter an email
-and role (firm admin, firm staff, or a client user tied to a chosen client),
-and send. The invite link is **shown once** — copy it and pass it on; it
-expires after 7 days and works once. The invitee opens it, sets a password
-(8+ characters), and signs straight in. Pending invitations can be revoked.
+Firm admins invite their own team and their clients from **Invitations**:
+enter an email and role (firm admin, firm staff, or a client user tied to a
+chosen client), and send. From a client's own page, the **Team** card's
+**Invite a client login** link opens the same form with that client already
+selected. The invite link is **shown once** — copy it and pass it on; it
+expires after 7 days and works once. The invitee opens it, sees which email
+and workspace the link is for, sets a password (8+ characters), and signs
+straight in with that email. Pending invitations can be revoked.
 
 ### Assigning clients to your team
 
@@ -1523,9 +1531,9 @@ The tamper-evident audit log, live:
   (`GET /api/firms/{id}/export`); the export itself is recorded on the audit
   trail (row counts only — the audit never contains the content).
 
-### Team invitations (operator view)
+### Invitations (operator view)
 
-Operators use the same **Team invitations** page as firm admins, with two
+Operators use the same **Invitations** page as firm admins, with two
 extras: they pick (or provision) the **target firm** for each invite, and
 they issue **password-reset links** — single-use, 24-hour, shown once.
 
