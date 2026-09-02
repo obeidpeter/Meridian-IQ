@@ -46,7 +46,13 @@ router.get("/healthz", (_req, res) => {
 // /healthz cannot. Uses the raw pool (no tenant context needed).
 router.get("/readyz", async (_req, res): Promise<void> => {
   const readiness = getReadiness();
-  if (process.env.NODE_ENV === "production" && !readiness.ready) {
+  // The bootstrap gate is production-only (dev boots run migrations and seed
+  // inline), but a draining instance must answer 503 everywhere so a load
+  // balancer stops routing to it during a graceful shutdown (R101).
+  if (
+    readiness.reason === "shutting_down" ||
+    (process.env.NODE_ENV === "production" && !readiness.ready)
+  ) {
     res.status(503).json({
       status: "unavailable",
       reason: readiness.reason,

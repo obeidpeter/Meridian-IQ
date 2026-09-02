@@ -111,7 +111,7 @@ export function detectPhrasingQualityDrop(
   return drops.find((d) => d.metric === "resistance") ?? drops[0] ?? null;
 }
 
-registerSweep(async function sweepPhrasingAutoEval(): Promise<void> {
+registerSweep("clerk.phrasing_auto_eval", async function sweepPhrasingAutoEval(): Promise<void> {
   const runEval = await runInBypassContext(async () => {
     const locked = await tryAdvisoryXactLock(PHRASING_SWEEP_LOCK_ID);
     if (!locked) return false;
@@ -215,4 +215,4 @@ export async function sweepPhrasingWatch(
   });
 }
 
-registerSweep(atMostHourly(sweepPhrasingWatch));
+registerSweep("clerk.phrasing_watch", atMostHourly(sweepPhrasingWatch));

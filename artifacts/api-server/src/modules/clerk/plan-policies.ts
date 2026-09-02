@@ -765,4 +765,4 @@ export async function runPlanPolicySweep(): Promise<PlanPolicySweepResult> {
   return result;
 }
 
-registerSweep(atMostHourly(runPlanPolicySweep));
+registerSweep("clerk.plan_policies", atMostHourly(runPlanPolicySweep));

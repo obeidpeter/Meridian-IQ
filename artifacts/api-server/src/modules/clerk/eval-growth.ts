@@ -184,7 +184,7 @@ export async function growEvalFixtures(
   return grown;
 }
 
-registerSweep(async function sweepEvalGrowth(): Promise<void> {
+registerSweep("clerk.eval_growth", async function sweepEvalGrowth(): Promise<void> {
   // Fixture growth (free, DB-only) runs in a SHORT bypass transaction; the
   // nightly auto-eval — one model call per fixture, potentially minutes of
   // provider time — runs OUTSIDE it. Holding the transaction (and its

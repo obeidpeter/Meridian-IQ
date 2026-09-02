@@ -155,4 +155,4 @@ export async function sweepQualityWatch(
   });
 }
 
-registerSweep(atMostHourly(sweepQualityWatch));
+registerSweep("clerk.quality_watch", atMostHourly(sweepQualityWatch));

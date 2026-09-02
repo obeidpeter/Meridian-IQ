@@ -228,4 +228,4 @@ async function sweepExpiredLoginAttempts(): Promise<void> {
   );
 }
 
-registerSweep(sweepExpiredLoginAttempts);
+registerSweep("auth.login_attempts", sweepExpiredLoginAttempts);

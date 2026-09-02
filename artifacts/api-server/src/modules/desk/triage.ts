@@ -209,4 +209,4 @@ export async function sweepEscalationTriage(): Promise<void> {
   await runTriagePass(gateway);
 }
 
-registerSweep(sweepEscalationTriage);
+registerSweep("desk.escalation_triage", sweepEscalationTriage);

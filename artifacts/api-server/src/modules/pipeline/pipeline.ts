@@ -26,6 +26,8 @@ import {
   sweepRunsTotal,
   sweepErrorsTotal,
   sweepLastSuccess,
+  sweepLastSuccessBySweep,
+  sweepDurationSeconds,
   outboxClaimFailuresTotal,
 } from "../../lib/metrics";
 
@@ -711,11 +713,85 @@ const RECONCILE_INTERVAL_MS = 30_000;
 // 24-hour window (BR-01), so the frequent cadence costs nothing.
 const SWEEP_INTERVAL_MS = 60_000;
 
-// Registered by R2 modules at import time (b2c, buyer) so the worker core does
-// not import feature modules.
-const SWEEPS: (() => Promise<unknown>)[] = [];
-export function registerSweep(sweep: () => Promise<unknown>): void {
-  SWEEPS.push(sweep);
+// Registered by feature modules at import time so the worker core does not
+// import them. Sweep hygiene (R101): every sweep is NAMED — the name labels
+// its error counter, its last-success gauge and its duration histogram, and
+// is the word in the log line — and runs under a per-sweep timeout so one
+// hung sweep cannot pin the whole pass (and with it every later tick, which
+// the reentrancy guard would skip forever). A timed-out sweep's promise is
+// abandoned, not cancelled; the pass moves on and the counter says so.
+export interface RegisteredSweep {
+  name: string;
+  run: () => Promise<unknown>;
+  /** 0 = the deployment default (SWEEP_TIMEOUT_MS), read at run time. */
+  timeoutMs: number;
+}
+const SWEEPS: RegisteredSweep[] = [];
+const SWEEP_NAME = /^[a-z][a-z0-9_.-]{1,63}$/;
+const DEFAULT_SWEEP_TIMEOUT_MS = 120_000;
+
+export function defaultSweepTimeoutMs(): number {
+  const configured = Number(process.env.SWEEP_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_SWEEP_TIMEOUT_MS;
+}
+
+export function registerSweep(
+  name: string,
+  sweep: () => Promise<unknown>,
+  opts: { timeoutMs?: number } = {},
+): void {
+  if (!SWEEP_NAME.test(name)) {
+    throw new Error(`Sweep name "${name}" must match ${SWEEP_NAME}`);
+  }
+  if (SWEEPS.some((s) => s.name === name)) {
+    throw new Error(`Sweep "${name}" is already registered`);
+  }
+  SWEEPS.push({ name, run: sweep, timeoutMs: opts.timeoutMs ?? 0 });
+}
+
+/** Remove a sweep by name (tests register salted sweeps and take them out). */
+export function unregisterSweep(name: string): boolean {
+  const at = SWEEPS.findIndex((s) => s.name === name);
+  if (at === -1) return false;
+  SWEEPS.splice(at, 1);
+  return true;
+}
+
+export function listSweeps(): { name: string; timeoutMs: number }[] {
+  return SWEEPS.map((s) => ({
+    name: s.name,
+    timeoutMs: s.timeoutMs || defaultSweepTimeoutMs(),
+  }));
+}
+
+export class SweepTimeoutError extends Error {
+  constructor(
+    readonly sweep: string,
+    readonly timeoutMs: number,
+  ) {
+    super(`Sweep "${sweep}" exceeded ${timeoutMs}ms`);
+    this.name = "SweepTimeoutError";
+  }
+}
+
+function withSweepTimeout<T>(
+  name: string,
+  work: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new SweepTimeoutError(name, timeoutMs)),
+      timeoutMs,
+    );
+    timer.unref?.();
+  });
+  return Promise.race([work, deadline]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 // Retention for the pipeline's own tables (this module already owns both).
@@ -747,7 +823,7 @@ export async function sweepPipelineRetention(): Promise<void> {
   });
 }
 
-registerSweep(sweepPipelineRetention);
+registerSweep("pipeline.retention", sweepPipelineRetention);
 
 // Module-level reentrancy guards shared by the interval loops AND the external
 // wake-up trigger (see runScheduledWorkOnce): a run that exceeds its period —
@@ -756,6 +832,30 @@ registerSweep(sweepPipelineRetention);
 let draining = false;
 let reconciling = false;
 let sweeping = false;
+
+// In-flight passes, so a graceful shutdown (lib/shutdown.ts) can wait for
+// the pass that is running rather than cut it off mid-transaction.
+const inFlight = new Set<Promise<unknown>>();
+function track<T>(pass: Promise<T>): Promise<T> {
+  inFlight.add(pass);
+  void pass.finally(() => inFlight.delete(pass)).catch(() => {});
+  return pass;
+}
+
+/** Resolve true once every in-flight pass has settled, false on timeout. */
+export async function awaitWorkerIdle(timeoutMs: number): Promise<boolean> {
+  if (inFlight.size === 0) return true;
+  const settled = Promise.allSettled([...inFlight]).then(() => true);
+  const deadline = new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    timer.unref?.();
+  });
+  return Promise.race([settled, deadline]);
+}
+
+export function inFlightPasses(): number {
+  return inFlight.size;
+}
 
 async function withDistributedLock<T>(
   lockId: number,
@@ -807,26 +907,46 @@ async function withDistributedLock<T>(
 async function guardedSweepPass(): Promise<boolean> {
   if (sweeping) return false;
   sweeping = true;
-  try {
-    const result = await withDistributedLock(991_102, runSweepPass);
-    return result.acquired;
-  } finally {
-    sweeping = false;
-  }
+  return track(
+    (async () => {
+      try {
+        const result = await withDistributedLock(991_102, runSweepPass);
+        return result.acquired;
+      } catch (err) {
+        // The pass itself (lock acquisition / release) failed — the sweeps
+        // inside never throw past runSweepsOnce. Count it under its own
+        // label so an unhandled rejection never escapes the interval.
+        sweepErrorsTotal.inc({ sweep: "pass", kind: "error" });
+        logger.error({ err }, "compliance sweep pass failed");
+        return false;
+      } finally {
+        sweeping = false;
+      }
+    })(),
+  );
+}
+
+/** One guarded sweep pass on demand (the external trigger and tests). */
+export function runSweepPassOnce(): Promise<boolean> {
+  return guardedSweepPass();
 }
 
 async function guardedDrainPass(): Promise<{ ran: boolean; drained: number }> {
   if (draining) return { ran: false, drained: 0 };
   draining = true;
-  try {
-    const drained = await drain();
-    return { ran: true, drained };
-  } catch (err) {
-    logger.error({ err }, "outbox drain failed");
-    return { ran: false, drained: 0 };
-  } finally {
-    draining = false;
-  }
+  return track(
+    (async () => {
+      try {
+        const drained = await drain();
+        return { ran: true, drained };
+      } catch (err) {
+        logger.error({ err }, "outbox drain failed");
+        return { ran: false, drained: 0 };
+      } finally {
+        draining = false;
+      }
+    })(),
+  );
 }
 
 // Duplicate-stamp reconciliation hunts a condition the unique(invoiceId)
@@ -842,21 +962,28 @@ let lastDuplicateStampSweep = 0;
 async function guardedReconcilePass(): Promise<boolean> {
   if (reconciling) return false;
   reconciling = true;
-  try {
-    const result = await withDistributedLock(991_103, async () => {
-      await reconcile();
-      if (Date.now() - lastDuplicateStampSweep >= DUPLICATE_STAMP_INTERVAL_MS) {
-        lastDuplicateStampSweep = Date.now();
-        await reconcileDuplicateStamps();
+  return track(
+    (async () => {
+      try {
+        const result = await withDistributedLock(991_103, async () => {
+          await reconcile();
+          if (
+            Date.now() - lastDuplicateStampSweep >=
+            DUPLICATE_STAMP_INTERVAL_MS
+          ) {
+            lastDuplicateStampSweep = Date.now();
+            await reconcileDuplicateStamps();
+          }
+        });
+        return result.acquired;
+      } catch (err) {
+        logger.error({ err }, "pipeline reconcile sweep failed");
+        return false;
+      } finally {
+        reconciling = false;
       }
-    });
-    return result.acquired;
-  } catch (err) {
-    logger.error({ err }, "pipeline reconcile sweep failed");
-    return false;
-  } finally {
-    reconciling = false;
-  }
+    })(),
+  );
 }
 
 // One full pass of everything the in-process timers would run: outbox drain,
@@ -882,19 +1009,35 @@ export async function runScheduledWorkOnce(): Promise<{
 }
 
 // Run sweeps sequentially so one guard covers the whole pass and they don't
-// contend for pool connections; a failing sweep is logged, not silently
-// dropped, and does not abort its siblings.
-async function runSweepPass(): Promise<void> {
+// contend for pool connections; a failing or timed-out sweep is counted under
+// its NAME and logged, not silently dropped, and does not abort its siblings.
+// Exported over an explicit list so a test can drive it without touching the
+// registry.
+export async function runSweepsOnce(sweeps: RegisteredSweep[]): Promise<number> {
   let failures = 0;
-  for (const sweep of SWEEPS) {
+  for (const sweep of sweeps) {
+    const timeoutMs = sweep.timeoutMs || defaultSweepTimeoutMs();
+    const stop = sweepDurationSeconds.startTimer({ sweep: sweep.name });
     try {
-      await sweep();
+      await withSweepTimeout(sweep.name, sweep.run(), timeoutMs);
+      sweepLastSuccessBySweep.setToCurrentTime({ sweep: sweep.name });
+      stop({ outcome: "ok" });
     } catch (err) {
       failures += 1;
-      sweepErrorsTotal.inc();
-      logger.error({ err }, "compliance sweep failed");
+      const kind = err instanceof SweepTimeoutError ? "timeout" : "error";
+      sweepErrorsTotal.inc({ sweep: sweep.name, kind });
+      stop({ outcome: kind });
+      logger.error(
+        { err, sweep: sweep.name, timeoutMs },
+        "compliance sweep failed",
+      );
     }
   }
+  return failures;
+}
+
+async function runSweepPass(): Promise<void> {
+  const failures = await runSweepsOnce(SWEEPS);
   // Record pass health for scraping: the run counter advances every pass (the
   // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
   // frozen overnight, stops it — OBS-01), while last_success only advances

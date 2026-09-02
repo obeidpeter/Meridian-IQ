@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Counter, Gauge, Histogram, registry, routeLabel } from "./metrics.ts";
+import { Counter, Gauge, Histogram, registry, routeLabel, LabeledGauge } from "./metrics.ts";
 import type { Request, Response } from "express";
 
 // The hand-rolled Prometheus exposition primitives: cumulative histogram
@@ -107,4 +107,16 @@ test("routeLabel is bounded: pattern for matched, 'unmatched' for erroring paths
     status: 200,
   });
   assert.equal(routeLabel(staticReq, staticRes), "/assets/app.js");
+});
+
+test("a labelled gauge exposes one line per label set and nothing before the first set", () => {
+  const g = new LabeledGauge("test_by_name_seconds", "help");
+  assert.equal(g.expose(), "# HELP test_by_name_seconds help\n# TYPE test_by_name_seconds gauge");
+  g.set({ sweep: "a" }, 5);
+  g.set({ sweep: "b" }, 7);
+  g.set({ sweep: "a" }, 6);
+  assert.deepEqual(g.expose().split("\n").slice(2), [
+    'test_by_name_seconds{sweep="a"} 6',
+    'test_by_name_seconds{sweep="b"} 7',
+  ]);
 });

@@ -7,11 +7,12 @@ import {
   ensureAppRoleAssumable,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
-import { startWorker, stopWorker } from "./modules/pipeline/pipeline";
+import { awaitWorkerIdle, startWorker, stopWorker } from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
 import { disableProductionDemoIdentities } from "./bootstrap/security";
 import { assertSessionSigningConfigured } from "./modules/auth/session";
 import { markReady, markUnready } from "./lib/readiness";
+import { installGracefulShutdown } from "./lib/shutdown";
 
 const rawPort = process.env["PORT"];
 
@@ -263,13 +264,17 @@ async function main(): Promise<void> {
     logger.info({ port }, "Server listening");
   });
 
-  const shutdown = (signal: string) => {
-    logger.info({ signal }, "Shutting down");
-    stopWorker();
-    server.close(() => process.exit(0));
-  };
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  // Graceful shutdown (R101, lib/shutdown.ts): readiness off → worker timers
+  // stopped → server drained → in-flight pass awaited → pool closed → exit.
+  installGracefulShutdown({
+    server,
+    markUnready,
+    stopWorker,
+    awaitWorkerIdle,
+    closePool: () => pool.end(),
+    exit: (code) => process.exit(code),
+    log: logger,
+  });
 
   const isProduction = process.env.NODE_ENV === "production";
 

@@ -474,4 +474,4 @@ export async function sweepClientStatements(): Promise<void> {
   }
 }
 
-registerSweep(sweepClientStatements);
+registerSweep("clerk.client_statements", sweepClientStatements);

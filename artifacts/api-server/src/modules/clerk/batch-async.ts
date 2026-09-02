@@ -542,4 +542,4 @@ export async function sweepClerkBatches(): Promise<void> {
   await processBatch(candidate.id, gateway);
 }
 
-registerSweep(sweepClerkBatches);
+registerSweep("clerk.batches", sweepClerkBatches);

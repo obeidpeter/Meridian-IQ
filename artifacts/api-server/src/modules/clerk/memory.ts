@@ -488,4 +488,4 @@ async function sweepMemoryIndex(): Promise<void> {
   }
 }
 
-registerSweep(atMostHourly(() => sweepMemoryIndex()));
+registerSweep("clerk.memory_index", atMostHourly(() => sweepMemoryIndex()));

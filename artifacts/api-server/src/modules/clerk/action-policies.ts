@@ -1095,4 +1095,4 @@ export async function runActionPolicySweep(): Promise<ActionPolicySweepResult> {
 
 // The sweep loop ticks every minute; day-granularity work needs at most an
 // hourly look (and the CAS makes even that idempotent).
-registerSweep(atMostHourly(runActionPolicySweep));
+registerSweep("clerk.action_policies", atMostHourly(runActionPolicySweep));

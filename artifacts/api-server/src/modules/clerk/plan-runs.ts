@@ -879,7 +879,7 @@ async function sweepPlanRuns(): Promise<void> {
   }
 }
 
-registerSweep(sweepPlanRuns);
+registerSweep("clerk.plan_runs", sweepPlanRuns);
 
 // ---- Reads -----------------------------------------------------------------
 

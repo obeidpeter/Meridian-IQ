@@ -139,4 +139,4 @@ export async function sweepResistanceWatch(
   });
 }
 
-registerSweep(atMostHourly(sweepResistanceWatch));
+registerSweep("clerk.resistance_watch", atMostHourly(sweepResistanceWatch));

@@ -214,7 +214,7 @@ async function sweepB2c(): Promise<{
 }
 
 // Register with the worker at import time.
-registerSweep(sweepB2c);
+registerSweep("b2c.clocks", sweepB2c);
 
 // Mark a batch as reported. Reporting from `open` inside the window is the
 // compliant path; a breached batch may still be reported late (the breach

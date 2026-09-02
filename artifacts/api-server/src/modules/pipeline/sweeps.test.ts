@@ -1,0 +1,75 @@
+import { test, after } from "node:test";
+import assert from "node:assert/strict";
+import {
+  registerSweep,
+  unregisterSweep,
+  listSweeps,
+  runSweepsOnce,
+  awaitWorkerIdle,
+  inFlightPasses,
+  SweepTimeoutError,
+  type RegisteredSweep,
+} from "./pipeline.ts";
+import { registry } from "../../lib/metrics.ts";
+import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+
+// Sweep hygiene (R101): every sweep is named, runs under a timeout, and
+// reports under its own label. runSweepsOnce is driven over an explicit list
+// so the registry (and the 40 real sweeps) stay untouched.
+
+const SALT = makeRunSalt().toLowerCase();
+const registered: string[] = [];
+
+after(() => {
+  for (const name of registered) unregisterSweep(name);
+});
+
+test("registration needs a well-formed, unique name; unregister removes it", () => {
+  const name = `test.sweep_${SALT}`;
+  registerSweep(name, async () => {});
+  registered.push(name);
+  assert.ok(listSweeps().some((s) => s.name === name && s.timeoutMs > 0));
+  assert.throws(() => registerSweep(name, async () => {}), /already registered/);
+  assert.throws(() => registerSweep("Bad Name!", async () => {}), /must match/);
+  assert.equal(unregisterSweep(name), true);
+  assert.equal(unregisterSweep(name), false);
+  registered.pop();
+});
+
+test("a throwing sweep and a hung sweep are counted under their names and kinds; a good sweep records its last success", async () => {
+  const good = `test.good_${SALT}`;
+  const bad = `test.bad_${SALT}`;
+  const slow = `test.slow_${SALT}`;
+  const sweeps: RegisteredSweep[] = [
+    { name: good, run: async () => {}, timeoutMs: 1_000 },
+    {
+      name: bad,
+      run: async () => {
+        throw new Error("boom");
+      },
+      timeoutMs: 1_000,
+    },
+    { name: slow, run: () => new Promise(() => {}), timeoutMs: 30 },
+  ];
+  const failures = await runSweepsOnce(sweeps);
+  assert.equal(failures, 2, "the good sweep passed; the other two failed");
+  const text = await registry.metrics();
+  assert.match(text, new RegExp(`meridian_sweep_errors_total\\{sweep="${bad}",kind="error"\\} 1`));
+  assert.match(text, new RegExp(`meridian_sweep_errors_total\\{sweep="${slow}",kind="timeout"\\} 1`));
+  assert.match(
+    text,
+    new RegExp(`meridian_sweep_last_success_by_sweep_timestamp_seconds\\{sweep="${good}"\\} \\d`),
+  );
+  assert.doesNotMatch(
+    text,
+    new RegExp(`meridian_sweep_last_success_by_sweep_timestamp_seconds\\{sweep="${bad}"\\}`),
+    "a failed sweep never reads as succeeded",
+  );
+  assert.match(text, new RegExp(`meridian_sweep_duration_seconds_count\\{sweep="${slow}",outcome="timeout"\\} 1`));
+  assert.ok(new SweepTimeoutError("x", 1).message.includes("exceeded"));
+});
+
+test("awaitWorkerIdle answers true when nothing is in flight", async () => {
+  assert.equal(inFlightPasses(), 0);
+  assert.equal(await awaitWorkerIdle(10), true);
+});

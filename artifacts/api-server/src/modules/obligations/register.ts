@@ -6,4 +6,4 @@ import { sweepObligationReminders } from "./reminders";
 // scan plus the sent-ledger's NOT EXISTS — and kept out of reminders.ts so
 // that module stays importable by node --test without the pipeline worker's
 // dependency graph.
-registerSweep(() => sweepObligationReminders());
+registerSweep("obligations.reminders", () => sweepObligationReminders());

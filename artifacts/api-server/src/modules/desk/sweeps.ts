@@ -93,4 +93,4 @@ async function sweepUnmappedCodesInner(): Promise<void> {
   }
 }
 
-registerSweep(sweepUnmappedCodes);
+registerSweep("desk.unmapped_codes", sweepUnmappedCodes);

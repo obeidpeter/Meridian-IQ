@@ -6,5 +6,5 @@ import { sweepRecurringInvoices } from "./recurring";
 // cheap when nothing is due (indexed scans, idempotency ledgers/CAS make the
 // frequent cadence cost nothing) and kept out of their modules so those stay
 // importable by node --test without the pipeline worker's dependency graph.
-registerSweep(() => sweepDeadlineReminders());
-registerSweep(() => sweepRecurringInvoices());
+registerSweep("invoice.deadline_reminders", () => sweepDeadlineReminders());
+registerSweep("invoice.recurring", () => sweepRecurringInvoices());
