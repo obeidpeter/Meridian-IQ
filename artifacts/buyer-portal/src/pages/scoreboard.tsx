@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "wouter";
 import { useGetBuyerScoreboard } from "@workspace/api-client-react";
 import type { ScoreboardRow } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,6 +85,9 @@ function PageHeader({ actions }: { actions?: ReactNode }) {
     </div>
   );
 }
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export function Scoreboard() {
   usePageTitle("Supplier scoreboard");
@@ -209,7 +213,13 @@ export function Scoreboard() {
                           {r.rank}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {r.supplierName}
+                          <Link
+                            href={`/suppliers/${r.supplierPartyId}`}
+                            className={`text-primary hover:underline rounded-sm ${FOCUS_RING}`}
+                            data-testid={`link-scoreboard-supplier-${r.supplierPartyId}`}
+                          >
+                            {r.supplierName}
+                          </Link>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

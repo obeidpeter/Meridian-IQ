@@ -68,6 +68,7 @@ import {
   confirmationBadgeClasses,
   stampBadge,
   eligibleBadge,
+  stampRiskLabel,
 } from "@/lib/format";
 import { isFeatureDisabled } from "@/lib/errors";
 import { errorDescription } from "@/lib/respond";
@@ -142,6 +143,7 @@ function InvoiceRow({
     invoice.confirmationState === "requested"
       ? daysSince(invoice.issueDate)
       : undefined;
+  const stampRisk = stampRiskLabel(invoice);
   return (
     <div className="flex items-center gap-3">
       {showSelectionColumn &&
@@ -176,6 +178,15 @@ function InvoiceRow({
               {" · "}
               {formatNaira(invoice.grandTotal)}
             </span>
+            {stampRisk && (
+              <span
+                className="lg:hidden font-medium text-amber-700 dark:text-amber-400"
+                data-testid={`text-stamp-risk-${invoice.id}`}
+              >
+                {" · "}
+                {stampRisk}
+              </span>
+            )}
             {age !== undefined && (
               <span className="text-amber-700 dark:text-amber-400">
                 {" · "}issued {age === 0 ? "today" : `${age}d ago`}
@@ -638,7 +649,7 @@ export function Confirmations() {
                     : "bg-card text-foreground hover:bg-muted"
                 }`}
               >
-                {f.label} · {count}
+                {deferredSearch === "" ? `${f.label} · ${count}` : f.label}
               </button>
             );
           })}
