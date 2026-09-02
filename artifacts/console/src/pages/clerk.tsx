@@ -1167,7 +1167,10 @@ export function ClerkWorkspace() {
   }, [selected?.id, selected?.status]);
 
   const { data: firms } = useListFirms();
-  const { data: parties } = useListParties();
+  // Bounded reads (R98): the operator desk sees the whole party spine, so it
+  // asks for the reference-list ceiling; the suggestion endpoint below covers
+  // the common path and the dropdowns are the fallback.
+  const { data: parties } = useListParties({ limit: 500 });
 
   // Party-matching suggestions for the open approval form, fetched only
   // while the form is open for an extraction case. A failed fetch is silent:

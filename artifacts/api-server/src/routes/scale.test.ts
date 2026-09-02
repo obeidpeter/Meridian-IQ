@@ -14,6 +14,7 @@ import {
 import { API_CONTRACT_VERSION } from "@workspace/api-zod";
 import invoicesRouter from "./invoices/index.ts";
 import partiesRouter from "./parties.ts";
+import engagementsRouter from "./engagements.ts";
 import healthRouter from "./health.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { listCases } from "../modules/clerk/cases/index.ts";
@@ -110,7 +111,7 @@ before(async () => {
 // Invoice pagination + search
 // ---------------------------------------------------------------------------
 
-test("paged invoice requests are bounded and newest-first; bare requests keep legacy order", async () => {
+test("every invoice request is bounded and newest-first; a bare request is the default page", async () => {
   const base = await listen(appFor(staff, invoicesRouter as express.Router));
 
   const paged = (await (await fetch(`${base}/invoices?limit=3&q=${SALT}`)).json()) as {
@@ -134,12 +135,31 @@ test("paged invoice requests are bounded and newest-first; bare requests keep le
     assert.ok(!page1Nums.has(r.invoiceNumber), "pages do not overlap");
   }
 
-  // Bare request: full legacy list, oldest first, still contains everything.
+  // Bare request: the DEFAULT page (bounded reads, R98) — newest first and,
+  // for a book this small, still everything this run wrote.
   const all = (await (await fetch(`${base}/invoices`)).json()) as {
     invoiceNumber: string;
+    createdAt: string;
   }[];
   const mine = all.filter((r) => r.invoiceNumber.includes(SALT));
-  assert.equal(mine.length, 7, "bare request returns the whole tenant list");
+  assert.equal(mine.length, 7, "the default page holds this run's whole book");
+  for (let i = 1; i < mine.length; i++) {
+    assert.ok(
+      new Date(mine[i - 1].createdAt) >= new Date(mine[i].createdAt),
+      "a bare request is newest first too",
+    );
+  }
+
+  // A bare limit alone bounds the page (it used to take q/offset to leave the
+  // legacy full-list mode).
+  const two = (await (await fetch(`${base}/invoices?limit=2`)).json()) as unknown[];
+  assert.equal(two.length, 2, "limit alone bounds the page");
+
+  // Over the ceiling is a 400 — never a silent fall-through to the whole book.
+  const over = await fetch(`${base}/invoices?limit=500`);
+  assert.equal(over.status, 400, "a limit above the maximum is rejected");
+  const longQ = await fetch(`${base}/invoices?q=${"x".repeat(121)}`);
+  assert.equal(longQ.status, 400, "an over-long search term is rejected");
 });
 
 test("q matches invoice number and buyer legal name; wildcards are literal", async () => {
@@ -268,4 +288,73 @@ test("healthz reports the baked-in contract version", async () => {
   assert.equal(body.status, "ok");
   assert.equal(body.contractVersion, API_CONTRACT_VERSION);
   assert.match(body.contractVersion, /^\d+\.\d+\.\d+$/);
+});
+
+// ---------------------------------------------------------------------------
+// Bounded reads (R98): parties and engagements
+// ---------------------------------------------------------------------------
+
+test("parties are alphabetical, type-filtered and paged; the ceiling is enforced", async () => {
+  const base = await listen(appFor(staff, partiesRouter as express.Router));
+  const names = async (qs: string) =>
+    ((await (await fetch(`${base}/parties?${qs}`)).json()) as { legalName: string }[]).map(
+      (p) => p.legalName,
+    );
+
+  // The firm's sphere for this run: two engaged clients + two buyers seen on
+  // invoices, alphabetical by legal name.
+  assert.deepEqual(await names(`q=${SALT}`), [
+    `Scale Supplier Alpha ${SALT}`,
+    `Scale Supplier Beta ${SALT}`,
+    `Yak${SALT} Traders`,
+    `Zebra${SALT} Logistics`,
+  ]);
+  assert.deepEqual(await names(`q=${SALT}&type=buyer`), [
+    `Yak${SALT} Traders`,
+    `Zebra${SALT} Logistics`,
+  ]);
+  assert.deepEqual(await names(`q=${SALT}&limit=2`), [
+    `Scale Supplier Alpha ${SALT}`,
+    `Scale Supplier Beta ${SALT}`,
+  ]);
+  assert.deepEqual(await names(`q=${SALT}&limit=2&offset=2`), [
+    `Yak${SALT} Traders`,
+    `Zebra${SALT} Logistics`,
+  ]);
+  assert.equal((await fetch(`${base}/parties?limit=501`)).status, 400);
+  assert.equal((await fetch(`${base}/parties?type=robot`)).status, 400);
+});
+
+test("engagements are paged and every page stays SEC-03 scoped", async () => {
+  const staffBase = await listen(appFor(staff, engagementsRouter as express.Router));
+  const page1 = (await (await fetch(`${staffBase}/engagements?limit=1`)).json()) as {
+    id: string;
+    title: string;
+  }[];
+  const page2 = (await (
+    await fetch(`${staffBase}/engagements?limit=1&offset=1`)
+  ).json()) as { id: string; title: string }[];
+  assert.equal(page1.length, 1);
+  assert.equal(page2.length, 1);
+  assert.notEqual(page1[0].id, page2[0].id, "pages do not overlap");
+  assert.deepEqual(
+    [page1[0].title, page2[0].title].sort(),
+    ["scale A", "scale B"],
+    "the two pages are the firm's two engagements",
+  );
+  assert.equal((await fetch(`${staffBase}/engagements?limit=201`)).status, 400);
+
+  // A client_user's pages hold only its own engagement — the sibling never
+  // appears on a later page, because the scope predicate is in the same
+  // query as the bound.
+  const clientBase = await listen(appFor(clientUserA, engagementsRouter as express.Router));
+  const own = (await (await fetch(`${clientBase}/engagements?limit=10`)).json()) as {
+    clientPartyId: string;
+  }[];
+  assert.equal(own.length, 1);
+  assert.equal(own[0].clientPartyId, supplierA);
+  const beyond = (await (
+    await fetch(`${clientBase}/engagements?limit=1&offset=1`)
+  ).json()) as unknown[];
+  assert.equal(beyond.length, 0, "no sibling engagement leaks onto page 2");
 });

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  useVerifyAudit,
-  useExportAudit,
-  getVerifyAuditQueryKey,
-  getExportAuditQueryKey,
+  verifyAudit,
+  exportAudit,
+  type AuditEvent,
+  type AuditVerification,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WorkspaceHeader } from "@workspace/web-ui";
@@ -26,22 +26,110 @@ import {
 // CORE-05: the hash-chained audit log is the artifact a regulator, a bank or
 // an acquirer reads. This page proves the chain live and hands over the
 // verifiable bundle — evidence on demand, not on request-to-engineering.
+//
+// Bounded reads (R98): the ledger is verified and exported in WINDOWS. Each
+// call answers for at most VERIFY_WINDOW / EXPORT_WINDOW events and says
+// where the next window starts (`lastSeq`, `complete`), so a ledger of any
+// size is walked in bounded requests instead of one that grows with it.
+const VERIFY_WINDOW = 5000;
+const EXPORT_WINDOW = 5000;
+
+type ChainState =
+  | { phase: "loading"; count: number }
+  | { phase: "error"; error: unknown }
+  | {
+      phase: "done";
+      valid: boolean;
+      count: number;
+      brokenAtSeq: number | null;
+    };
+
+/** Walk the whole chain window by window; the count is the running total. */
+async function verifyWholeChain(
+  onProgress: (count: number) => void,
+): Promise<{ valid: boolean; count: number; brokenAtSeq: number | null }> {
+  let afterSeq: number | undefined;
+  let count = 0;
+  for (;;) {
+    const window: AuditVerification = await verifyAudit({
+      ...(afterSeq !== undefined ? { afterSeq } : {}),
+      limit: VERIFY_WINDOW,
+    });
+    count += window.count;
+    onProgress(count);
+    if (!window.valid) {
+      return { valid: false, count, brokenAtSeq: window.brokenAtSeq ?? null };
+    }
+    if (window.complete || window.lastSeq === null || window.lastSeq === undefined) {
+      return { valid: true, count, brokenAtSeq: null };
+    }
+    afterSeq = window.lastSeq;
+  }
+}
+
+function useChainVerification() {
+  const [state, setState] = useState<ChainState>({ phase: "loading", count: 0 });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setState({ phase: "loading", count: 0 });
+    verifyWholeChain((count) => {
+      if (!cancelled) setState({ phase: "loading", count });
+    })
+      .then((result) => {
+        if (!cancelled) setState({ phase: "done", ...result });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setState({ phase: "error", error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+  const refetch = useCallback(() => setAttempt((n) => n + 1), []);
+  return { state, refetch };
+}
 
 export function AuditEvidence() {
   usePageTitle("Audit & evidence");
-  const { data: verification, isLoading, error, refetch } = useVerifyAudit({
-    query: { queryKey: getVerifyAuditQueryKey() },
-  });
+  const { state: verification, refetch } = useChainVerification();
   const [exporting, setExporting] = useState(false);
-  const exportQuery = useExportAudit({
-    query: { queryKey: getExportAuditQueryKey(), enabled: false },
-  });
   const { toast } = useToast();
 
+  // The bundle is assembled from export windows and downloaded whole; the
+  // verification attached is the roll-up of every window's result.
   const downloadBundle = async () => {
     setExporting(true);
     try {
-      const { data: bundle } = await exportQuery.refetch({ throwOnError: true });
+      const events: AuditEvent[] = [];
+      let afterSeq: number | undefined;
+      let valid = true;
+      let brokenAtSeq: number | null = null;
+      let checked = 0;
+      let lastSeq: number | null = null;
+      for (;;) {
+        const window = await exportAudit({
+          ...(afterSeq !== undefined ? { afterSeq } : {}),
+          limit: EXPORT_WINDOW,
+        });
+        events.push(...window.events);
+        checked += window.verification.count;
+        if (!window.verification.valid) {
+          valid = false;
+          brokenAtSeq = window.verification.brokenAtSeq ?? null;
+          break;
+        }
+        lastSeq = window.lastSeq ?? lastSeq;
+        if (window.complete || window.lastSeq === null || window.lastSeq === undefined) break;
+        afterSeq = window.lastSeq;
+      }
+      const bundle = {
+        events,
+        verification: { valid, count: checked, brokenAtSeq, lastSeq, complete: valid },
+        exportedAt: new Date().toISOString(),
+        lastSeq,
+        complete: valid,
+      };
       downloadBlob(
         `meridianiq-audit-bundle-${new Date().toISOString().slice(0, 10)}.json`,
         JSON.stringify(bundle, null, 2),
@@ -49,7 +137,7 @@ export function AuditEvidence() {
       );
       toast({
         title: "Audit bundle downloaded",
-        description: `${bundle?.events.length ?? 0} events with chain verification attached.`,
+        description: `${events.length} events with chain verification attached.`,
       });
     } catch (e) {
       serverErrorToast(toast, e, {
@@ -63,7 +151,8 @@ export function AuditEvidence() {
 
   // CSV as a plain browser navigation (no react-query): the endpoint answers
   // with a Content-Disposition attachment and auth rides the session cookie,
-  // so the browser just downloads the file.
+  // so the browser just downloads the file (the first 50,000 rows; the
+  // X-Audit-Last-Seq header names the afterSeq for the next file).
   const downloadCsv = () => {
     window.location.assign("/api/audit/export/csv");
   };
@@ -77,12 +166,22 @@ export function AuditEvidence() {
         description="Tamper-evident, hash-chained log of every material event — verify it live, export it whole."
       />
 
-      {isLoading ? (
-        <Skeleton className="h-36" />
-      ) : error || !verification ? (
+      {verification.phase === "loading" ? (
+        <div className="space-y-2">
+          <Skeleton className="h-36" />
+          {verification.count > 0 && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-verify-progress"
+            >
+              Verified {verification.count} events so far…
+            </p>
+          )}
+        </div>
+      ) : verification.phase === "error" ? (
         // A failed fetch is not a broken chain — never raise the sev-zero
         // card on a network blip; offer a retry instead.
-        <QueryError thing="audit verification" onRetry={() => refetch()} />
+        <QueryError thing="audit verification" onRetry={refetch} />
       ) : verification.valid ? (
         <Card
           className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40"
@@ -128,7 +227,7 @@ export function AuditEvidence() {
               <span className="font-mono font-semibold">
                 {verification.brokenAtSeq ?? "?"}
               </span>{" "}
-              of {verification.count ?? "?"} events. Treat as a sev-zero
+              after {verification.count} verified events. Treat as a sev-zero
               incident (SEC-10) — records after the break cannot be trusted.
             </p>
           </CardContent>

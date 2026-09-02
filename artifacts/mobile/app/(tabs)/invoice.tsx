@@ -99,7 +99,8 @@ export default function InvoiceScreen() {
   const queryClient = useQueryClient();
   const { clientPartyId, me } = useSession();
 
-  const parties = useListParties();
+  // Bounded reads (R98): buyers only, at the reference-list ceiling.
+  const parties = useListParties({ type: PartyType.buyer, limit: 500 });
   const createInvoice = useCreateInvoice();
   const validateInvoice = useValidateInvoice();
   const submitInvoice = useSubmitInvoice();

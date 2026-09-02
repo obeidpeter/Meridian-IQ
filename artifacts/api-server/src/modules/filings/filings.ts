@@ -13,6 +13,7 @@
 // (each site captures lagosTodaySql(); see lib/lagos-time.ts for why
 // current_date is wrong).
 import { and, asc, eq, sql, type SQL } from "drizzle-orm";
+import { pageBounds } from "../../lib/page";
 import {
   getDb,
   engagementsTable,
@@ -189,8 +190,6 @@ export interface ListFilingsFilter {
   offset?: number;
 }
 
-const LIST_DEFAULT_LIMIT = 100;
-const LIST_MAX_LIMIT = 200;
 
 // Soonest deadline first (the register is a worklist — the next clock to
 // beat leads), id as the stable tiebreak.
@@ -208,7 +207,7 @@ export async function listFilings(
   if (filter.taxType) {
     conditions.push(eq(filingReturnsTable.taxType, filter.taxType));
   }
-  const limit = Math.min(filter.limit ?? LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT);
+  const { limit } = pageBounds(filter);
   return getDb()
     .select()
     .from(filingReturnsTable)

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
 export interface HealthStatus {
   status: string;
@@ -1931,15 +1931,30 @@ export interface AuditEvent {
 
 export interface AuditVerification {
   valid: boolean;
+  /** Events verified by this call. */
   count: number;
   /** @nullable */
   brokenAtSeq?: number | null;
+  /**
+     * The last verified sequence — the `afterSeq` for the next window.
+     * @nullable
+     */
+  lastSeq?: number | null;
+  /** True when no events remain after lastSeq. */
+  complete: boolean;
 }
 
 export interface AuditBundle {
   events: AuditEvent[];
   verification: AuditVerification;
   exportedAt: string;
+  /**
+     * The last event in this window — the `afterSeq` for the next.
+     * @nullable
+     */
+  lastSeq?: number | null;
+  /** True when the ledger ends inside this window. */
+  complete: boolean;
 }
 
 export type ActivityItemKind = typeof ActivityItemKind[keyof typeof ActivityItemKind];
@@ -3637,6 +3652,8 @@ export interface B2cReportItem {
   id: string;
   batchId: string;
   invoiceId: string;
+  /** @nullable */
+  invoiceNumber: string | null;
   amount: string;
   createdAt: string;
 }
@@ -7148,11 +7165,46 @@ export type ListPartiesParams = {
  * @maxLength 120
  */
 q?: string;
+/**
+ * Only parties of this kind.
+ */
+type?: ListPartiesType;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
+
+export type ListPartiesType = typeof ListPartiesType[keyof typeof ListPartiesType];
+
+
+export const ListPartiesType = {
+  client_business: 'client_business',
+  buyer: 'buyer',
+  firm: 'firm',
+  bank: 'bank',
+} as const;
 
 export type GetMergeImpactParams = {
 survivorId: string;
 duplicateId: string;
+};
+
+export type ListEngagementsParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
 
 export type ListInvoicesParams = {
@@ -7293,6 +7345,39 @@ export type GetMonthEndCloseParams = {
  * Required for firm principals; a client_user is pinned to its own party.
  */
 clientPartyId?: string;
+};
+
+export type VerifyAuditParams = {
+/**
+ * Verify events after this sequence (its hash anchors the window).
+ * @minimum 0
+ */
+afterSeq?: number;
+/**
+ * Verify at most this many events.
+ * @minimum 1
+ * @maximum 10000
+ */
+limit?: number;
+};
+
+export type ExportAuditParams = {
+/**
+ * @minimum 0
+ */
+afterSeq?: number;
+/**
+ * @minimum 1
+ * @maximum 5000
+ */
+limit?: number;
+};
+
+export type ExportAuditCsvParams = {
+/**
+ * @minimum 0
+ */
+afterSeq?: number;
 };
 
 export type ListRecurringSuggestionsParams = {

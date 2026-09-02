@@ -3,13 +3,15 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
 
 export interface B2cReportItem {
   id: string;
   batchId: string;
   invoiceId: string;
+  /** @nullable */
+  invoiceNumber: string | null;
   amount: string;
   createdAt: Date;
 }

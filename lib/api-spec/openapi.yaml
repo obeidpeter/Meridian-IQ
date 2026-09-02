@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.88.0
+  version: 0.89.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -525,6 +525,10 @@ paths:
     get:
       operationId: listParties
       tags: [parties]
+      description: >-
+        Bounded read: the caller's party sphere alphabetically by legal name,
+        one page per request (default 100, at most 500 — a reference list).
+        Pickers pass `type` so the page covers their whole working set.
       parameters:
         - name: q
           in: query
@@ -533,6 +537,27 @@ paths:
           schema:
             type: string
             maxLength: 120
+        - name: type
+          in: query
+          required: false
+          description: Only parties of this kind.
+          schema:
+            type: string
+            enum: [client_business, buyer, firm, bank]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: Parties
@@ -743,6 +768,24 @@ paths:
     get:
       operationId: listEngagements
       tags: [engagements]
+      description: >-
+        Bounded read: the caller's engagements newest first, one page per
+        request (default 100, at most 200).
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: Engagements
@@ -807,10 +850,11 @@ paths:
       operationId: listInvoices
       tags: [invoices]
       description: >-
-        Without limit/offset/q the full tenant-scoped list is returned oldest
-        first (legacy behaviour, kept for existing clients). When any of the
-        paging/search parameters are present the list is returned NEWEST first
-        and bounded (limit defaults to 50).
+        Bounded read: the tenant-scoped list NEWEST first, one page per
+        request. A bare request is the default page (limit 100); a limit
+        above the maximum or an over-long search term is a 400. Whole-book
+        questions (counts, totals) are answered by the dashboard summary and
+        the CSV export, never by walking pages.
       parameters:
         - name: status
           in: query
@@ -824,6 +868,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 200
+            default: 100
         - name: offset
           in: query
           required: false
@@ -2064,6 +2109,28 @@ paths:
     get:
       operationId: verifyAudit
       tags: [audit]
+      description: >-
+        Re-hash the ledger and confirm no row was altered or removed. Without
+        parameters the whole chain is walked (in bounded batches); with
+        `afterSeq`/`limit` one window is verified and `lastSeq`/`complete`
+        say where the next window starts, so a client can verify a large
+        ledger incrementally.
+      parameters:
+        - name: afterSeq
+          in: query
+          required: false
+          description: Verify events after this sequence (its hash anchors the window).
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: Verify at most this many events.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
       responses:
         "200":
           description: Chain verification
@@ -2075,6 +2142,25 @@ paths:
     get:
       operationId: exportAudit
       tags: [audit]
+      description: >-
+        One window of the verifiable bundle (default 1000 events, at most
+        5000) with the chain verification of that window; page with
+        `afterSeq = lastSeq` until `complete`.
+      parameters:
+        - name: afterSeq
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 1000
       responses:
         "200":
           description: Verifiable audit bundle
@@ -2087,6 +2173,17 @@ paths:
       operationId: exportAuditCsv
       tags: [audit]
       summary: Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)
+      description: >-
+        At most 50,000 rows per file, hash columns included but no payloads.
+        `X-Audit-Export-Complete` says whether the ledger ended inside this
+        file and `X-Audit-Last-Seq` is the `afterSeq` for the next one.
+      parameters:
+        - name: afterSeq
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: CSV file (Content-Disposition attachment)
@@ -9596,17 +9693,24 @@ components:
           format: date-time
     AuditVerification:
       type: object
-      required: [valid, count]
+      required: [valid, count, complete]
       properties:
         valid:
           type: boolean
         count:
           type: integer
+          description: Events verified by this call.
         brokenAtSeq:
           type: ["integer", "null"]
+        lastSeq:
+          type: ["integer", "null"]
+          description: The last verified sequence — the `afterSeq` for the next window.
+        complete:
+          type: boolean
+          description: True when no events remain after lastSeq.
     AuditBundle:
       type: object
-      required: [events, verification, exportedAt]
+      required: [events, verification, exportedAt, complete]
       properties:
         events:
           type: array
@@ -9617,6 +9721,12 @@ components:
         exportedAt:
           type: string
           format: date-time
+        lastSeq:
+          type: ["integer", "null"]
+          description: The last event in this window — the `afterSeq` for the next.
+        complete:
+          type: boolean
+          description: True when the ledger ends inside this window.
 
     ActivityItem:
       type: object
@@ -12223,7 +12333,7 @@ components:
           format: date-time
     B2cReportItem:
       type: object
-      required: [id, batchId, invoiceId, amount, createdAt]
+      required: [id, batchId, invoiceId, invoiceNumber, amount, createdAt]
       properties:
         id:
           type: string
@@ -12231,6 +12341,8 @@ components:
           type: string
         invoiceId:
           type: string
+        invoiceNumber:
+          type: ["string", "null"]
         amount:
           type: string
         createdAt:

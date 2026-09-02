@@ -99,7 +99,9 @@ const adminToken = await login(ADMIN_EMAIL);
 
 // Hot GET routes only; two principals split the rate-limit budget.
 const ROUTES = [
-  { name: "GET /api/invoices", path: "/api/invoices", token: staffToken },
+  // Explicit page size so the probe keeps measuring a fixed unit of work
+  // now that a bare request is the default page (bounded reads, R98).
+  { name: "GET /api/invoices", path: "/api/invoices?limit=100", token: staffToken },
   {
     name: "GET /api/dashboard/summary",
     path: `/api/dashboard/summary?clientPartyId=${CLIENT_PARTY_ID}`,

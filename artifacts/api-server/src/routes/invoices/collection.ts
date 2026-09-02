@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { getDb, invoicesTable } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
@@ -9,6 +9,7 @@ import {
   ExportInvoicesCsvQueryParams,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
+import { pageBounds } from "../../lib/page";
 import {
   assertCan,
   clientPartyScope,
@@ -61,26 +62,24 @@ function invoiceListConditions(
 
 router.get("/invoices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const query = ListInvoicesQueryParams.safeParse(req.query);
-  const status = query.success ? query.data.status : undefined;
-  const limit = query.success ? query.data.limit : undefined;
-  const offset = query.success ? query.data.offset : undefined;
-  const q = query.success ? query.data.q?.trim() : undefined;
-  const conditions = invoiceListConditions(req.principal, { status, q });
-
-  // Paged/search requests are newest-first and bounded; a bare request keeps
-  // the legacy full-list oldest-first behaviour for existing clients (mobile).
-  const paged = limit !== undefined || offset !== undefined || !!q;
-  let builder = getDb()
+  const query = parseOrThrow(ListInvoicesQueryParams, req.query);
+  const q = query.q?.trim();
+  const conditions = invoiceListConditions(req.principal, {
+    status: query.status,
+    q,
+  });
+  // Bounded reads (R98, lib/page.ts): every request is newest-first and
+  // bounded — a bare request is the default page, not the whole tenant book
+  // the legacy full-list mode used to return. `id` breaks created_at ties so
+  // offset paging never repeats or skips a row.
+  const { limit, offset } = pageBounds(query);
+  const rows = await getDb()
     .select()
     .from(invoicesTable)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(
-      paged ? desc(invoicesTable.createdAt) : asc(invoicesTable.createdAt),
-    )
-    .$dynamic();
-  if (paged) builder = builder.limit(limit ?? 50).offset(offset ?? 0);
-  const rows = await builder;
+    .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id))
+    .limit(limit)
+    .offset(offset);
   res.json(ListInvoicesResponse.parse(rows));
 });
 
@@ -100,15 +99,15 @@ router.post("/invoices", async (req, res): Promise<void> => {
 // can open. Newest first, bounded far above any realistic book.
 router.get("/invoices/export", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const query = ExportInvoicesCsvQueryParams.safeParse(req.query);
-  const status = query.success ? query.data.status : undefined;
-  const q = query.success ? query.data.q?.trim() : undefined;
+  const query = parseOrThrow(ExportInvoicesCsvQueryParams, req.query);
+  const status = query.status;
+  const q = query.q?.trim();
   const conditions = invoiceListConditions(req.principal, { status, q });
   const rows = await getDb()
     .select()
     .from(invoicesTable)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(invoicesTable.createdAt))
+    .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id))
     .limit(50_000);
 
   const names = await partyNamesById(

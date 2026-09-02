@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { getDb, b2cReportBatchesTable, b2cReportItemsTable } from "@workspace/db";
+import { getDb, b2cReportBatchesTable, b2cReportItemsTable, invoicesTable } from "@workspace/db";
 import {
   ListB2cReportsQueryParams,
   ListB2cReportsResponse,
@@ -76,9 +76,19 @@ router.get("/b2c/reports/:id/items", requireFlag("b2c_reporting"), async (req, r
   assertCan(req.principal, "b2c.read");
   const params = parseOrThrow(ListB2cReportItemsParams, req.params);
   await loadBatchForTenant(req, params.id);
+  // The invoice number rides on the item (R98) so the batch view never has
+  // to read the whole invoice book to label a row.
   const rows = await getDb()
-    .select()
+    .select({
+      id: b2cReportItemsTable.id,
+      batchId: b2cReportItemsTable.batchId,
+      invoiceId: b2cReportItemsTable.invoiceId,
+      amount: b2cReportItemsTable.amount,
+      createdAt: b2cReportItemsTable.createdAt,
+      invoiceNumber: invoicesTable.invoiceNumber,
+    })
     .from(b2cReportItemsTable)
+    .leftJoin(invoicesTable, eq(invoicesTable.id, b2cReportItemsTable.invoiceId))
     .where(eq(b2cReportItemsTable.batchId, params.id))
     .orderBy(asc(b2cReportItemsTable.createdAt));
   res.json(ListB2cReportItemsResponse.parse(rows));

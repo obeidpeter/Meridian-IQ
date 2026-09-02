@@ -768,6 +768,30 @@ as a consent oracle; the ask itself is audited pointer-only
   (`GET /dashboard/receivables/export`), audit trail (`GET /audit/export` +
   `/audit/export/csv`).
 
+**Bounded reads (R98).** Every list route is bounded by construction, because
+the whole response is buffered inside the per-request transaction until
+COMMIT under the 30 s cap — an unbounded list multiplies straight into memory
+and timeouts as a firm's book grows. `lib/page.ts` is the one home for the
+bounds (`pageBounds`: default 100 rows, at most 200; reference lists such as
+`/parties` may ask for 500), a bare request is the DEFAULT page rather than
+the whole book, and an out-of-range `limit` or over-long search term is a
+400 (`parseOrThrow`), never a silent fall-through to an unbounded query.
+Ordering is deterministic (`created_at` then `id`) so offset pages never
+repeat or skip a row, and the SEC-03 scope predicate sits in the same query
+as the bound, so every page is scoped identically. Whole-population
+questions — counts, totals, "is anything overdue" — are SQL aggregates
+(`/dashboard/summary` folds the client's book in one `FILTER` aggregate; the
+deadline list is the unsubmitted subset, capped like the bills list beside
+it), never a list folded in JS. The audit ledger follows the same rule: a
+bare `/audit/verify` still answers for the whole chain, but walks it in
+1,000-row batches carrying only the running hash, `afterSeq`/`limit` verify
+one window, and `/audit/export` (JSON, at most 5,000 events) and
+`/audit/export/csv` (50,000 hash-bearing rows, no payloads) hand back one
+window plus the cursor for the next. Pickers pass `type` to `/parties` so one
+page covers their working set; a page that comes back full is disclosed in
+the UI (the party-integrity workbench) rather than silently treated as the
+whole.
+
 ## Client lifecycle (NDPA)
 
 The data-subject lifecycle for one client party (`routes/clients.ts`),

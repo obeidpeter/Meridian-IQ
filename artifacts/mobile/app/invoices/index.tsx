@@ -76,7 +76,9 @@ export default function InvoiceListScreen() {
   const queryClient = useQueryClient();
   const { clientPartyId } = useSession();
 
-  const parties = useListParties();
+  // Bounded reads (R98): the name map beside the paged list reads the
+  // reference-list ceiling.
+  const parties = useListParties({ limit: 500 });
 
   // Debounced server-side search plus paging cursor, kept in one state object
   // so a new search term resets to the first page in the same update.

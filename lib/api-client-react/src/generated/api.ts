@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
 import {
   useMutation,
@@ -174,6 +174,8 @@ import type {
   ExecuteActionInput,
   ExecuteActionResult,
   ExplainFailureInput,
+  ExportAuditCsvParams,
+  ExportAuditParams,
   ExportBillingStatementCsvParams,
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
@@ -270,6 +272,7 @@ import type {
   ListClerkEvalRunsParams,
   ListClientStatementsParams,
   ListCollectionAccountsParams,
+  ListEngagementsParams,
   ListErpConnectionsParams,
   ListFilingsParams,
   ListInvoicesParams,
@@ -418,6 +421,7 @@ import type {
   VatRiskInput,
   VatRiskReport,
   VatSettlementCheck,
+  VerifyAuditParams,
   WhtCredit,
   WhtCreditCreateInput,
   WhtCreditList,
@@ -2447,6 +2451,9 @@ export const getListPartiesUrl = (params?: ListPartiesParams,) => {
   return stringifiedParams.length > 0 ? `/api/parties?${stringifiedParams}` : `/api/parties`
 }
 
+/**
+ * Bounded read: the caller's party sphere alphabetically by legal name, one page per request (default 100, at most 500 — a reference list). Pickers pass `type` so the page covers their whole working set.
+ */
 export const listParties = async (params?: ListPartiesParams, options?: RequestInit): Promise<Party[]> => {
 
   return customFetch<Party[]>(getListPartiesUrl(params),
@@ -3262,17 +3269,27 @@ export function useCheckConsent<TData = Awaited<ReturnType<typeof checkConsent>>
 
 
 
-export const getListEngagementsUrl = () => {
+export const getListEngagementsUrl = (params?: ListEngagementsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/engagements`
+  return stringifiedParams.length > 0 ? `/api/engagements?${stringifiedParams}` : `/api/engagements`
 }
 
-export const listEngagements = async ( options?: RequestInit): Promise<Engagement[]> => {
+/**
+ * Bounded read: the caller's engagements newest first, one page per request (default 100, at most 200).
+ */
+export const listEngagements = async (params?: ListEngagementsParams, options?: RequestInit): Promise<Engagement[]> => {
 
-  return customFetch<Engagement[]>(getListEngagementsUrl(),
+  return customFetch<Engagement[]>(getListEngagementsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3285,23 +3302,23 @@ export const listEngagements = async ( options?: RequestInit): Promise<Engagemen
 
 
 
-export const getListEngagementsQueryKey = () => {
+export const getListEngagementsQueryKey = (params?: ListEngagementsParams,) => {
     return [
-    `/api/engagements`
+    `/api/engagements`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListEngagementsQueryOptions = <TData = Awaited<ReturnType<typeof listEngagements>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEngagements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListEngagementsQueryOptions = <TData = Awaited<ReturnType<typeof listEngagements>>, TError = ErrorType<unknown>>(params?: ListEngagementsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEngagements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListEngagementsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListEngagementsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEngagements>>> = ({ signal }) => listEngagements({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEngagements>>> = ({ signal }) => listEngagements(params, { signal, ...requestOptions });
 
 
 
@@ -3316,11 +3333,11 @@ export type ListEngagementsQueryError = ErrorType<unknown>
 
 
 export function useListEngagements<TData = Awaited<ReturnType<typeof listEngagements>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEngagements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListEngagementsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEngagements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListEngagementsQueryOptions(options)
+  const queryOptions = getListEngagementsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -3549,7 +3566,7 @@ export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {
 }
 
 /**
- * Without limit/offset/q the full tenant-scoped list is returned oldest first (legacy behaviour, kept for existing clients). When any of the paging/search parameters are present the list is returned NEWEST first and bounded (limit defaults to 50).
+ * Bounded read: the tenant-scoped list NEWEST first, one page per request. A bare request is the default page (limit 100); a limit above the maximum or an over-long search term is a 400. Whole-book questions (counts, totals) are answered by the dashboard summary and the CSV export, never by walking pages.
  */
 export const listInvoices = async (params?: ListInvoicesParams, options?: RequestInit): Promise<Invoice[]> => {
 
@@ -8791,17 +8808,27 @@ export function useListRailStates<TData = Awaited<ReturnType<typeof listRailStat
 
 
 
-export const getVerifyAuditUrl = () => {
+export const getVerifyAuditUrl = (params?: VerifyAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/audit/verify`
+  return stringifiedParams.length > 0 ? `/api/audit/verify?${stringifiedParams}` : `/api/audit/verify`
 }
 
-export const verifyAudit = async ( options?: RequestInit): Promise<AuditVerification> => {
+/**
+ * Re-hash the ledger and confirm no row was altered or removed. Without parameters the whole chain is walked (in bounded batches); with `afterSeq`/`limit` one window is verified and `lastSeq`/`complete` say where the next window starts, so a client can verify a large ledger incrementally.
+ */
+export const verifyAudit = async (params?: VerifyAuditParams, options?: RequestInit): Promise<AuditVerification> => {
 
-  return customFetch<AuditVerification>(getVerifyAuditUrl(),
+  return customFetch<AuditVerification>(getVerifyAuditUrl(params),
   {
     ...options,
     method: 'GET'
@@ -8814,23 +8841,23 @@ export const verifyAudit = async ( options?: RequestInit): Promise<AuditVerifica
 
 
 
-export const getVerifyAuditQueryKey = () => {
+export const getVerifyAuditQueryKey = (params?: VerifyAuditParams,) => {
     return [
-    `/api/audit/verify`
+    `/api/audit/verify`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getVerifyAuditQueryOptions = <TData = Awaited<ReturnType<typeof verifyAudit>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifyAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getVerifyAuditQueryOptions = <TData = Awaited<ReturnType<typeof verifyAudit>>, TError = ErrorType<unknown>>(params?: VerifyAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifyAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getVerifyAuditQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getVerifyAuditQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof verifyAudit>>> = ({ signal }) => verifyAudit({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof verifyAudit>>> = ({ signal }) => verifyAudit(params, { signal, ...requestOptions });
 
 
 
@@ -8845,11 +8872,11 @@ export type VerifyAuditQueryError = ErrorType<unknown>
 
 
 export function useVerifyAudit<TData = Awaited<ReturnType<typeof verifyAudit>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifyAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: VerifyAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifyAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getVerifyAuditQueryOptions(options)
+  const queryOptions = getVerifyAuditQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -8862,17 +8889,27 @@ export function useVerifyAudit<TData = Awaited<ReturnType<typeof verifyAudit>>, 
 
 
 
-export const getExportAuditUrl = () => {
+export const getExportAuditUrl = (params?: ExportAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/audit/export`
+  return stringifiedParams.length > 0 ? `/api/audit/export?${stringifiedParams}` : `/api/audit/export`
 }
 
-export const exportAudit = async ( options?: RequestInit): Promise<AuditBundle> => {
+/**
+ * One window of the verifiable bundle (default 1000 events, at most 5000) with the chain verification of that window; page with `afterSeq = lastSeq` until `complete`.
+ */
+export const exportAudit = async (params?: ExportAuditParams, options?: RequestInit): Promise<AuditBundle> => {
 
-  return customFetch<AuditBundle>(getExportAuditUrl(),
+  return customFetch<AuditBundle>(getExportAuditUrl(params),
   {
     ...options,
     method: 'GET'
@@ -8885,23 +8922,23 @@ export const exportAudit = async ( options?: RequestInit): Promise<AuditBundle> 
 
 
 
-export const getExportAuditQueryKey = () => {
+export const getExportAuditQueryKey = (params?: ExportAuditParams,) => {
     return [
-    `/api/audit/export`
+    `/api/audit/export`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getExportAuditQueryOptions = <TData = Awaited<ReturnType<typeof exportAudit>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getExportAuditQueryOptions = <TData = Awaited<ReturnType<typeof exportAudit>>, TError = ErrorType<unknown>>(params?: ExportAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getExportAuditQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getExportAuditQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAudit>>> = ({ signal }) => exportAudit({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAudit>>> = ({ signal }) => exportAudit(params, { signal, ...requestOptions });
 
 
 
@@ -8916,11 +8953,11 @@ export type ExportAuditQueryError = ErrorType<unknown>
 
 
 export function useExportAudit<TData = Awaited<ReturnType<typeof exportAudit>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ExportAuditParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getExportAuditQueryOptions(options)
+  const queryOptions = getExportAuditQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -8933,20 +8970,28 @@ export function useExportAudit<TData = Awaited<ReturnType<typeof exportAudit>>, 
 
 
 
-export const getExportAuditCsvUrl = () => {
+export const getExportAuditCsvUrl = (params?: ExportAuditCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/audit/export/csv`
+  return stringifiedParams.length > 0 ? `/api/audit/export/csv?${stringifiedParams}` : `/api/audit/export/csv`
 }
 
 /**
+ * At most 50,000 rows per file, hash columns included but no payloads. `X-Audit-Export-Complete` says whether the ledger ended inside this file and `X-Audit-Last-Seq` is the `afterSeq` for the next one.
  * @summary Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)
  */
-export const exportAuditCsv = async ( options?: RequestInit): Promise<string> => {
+export const exportAuditCsv = async (params?: ExportAuditCsvParams, options?: RequestInit): Promise<string> => {
 
-  return customFetch<string>(getExportAuditCsvUrl(),
+  return customFetch<string>(getExportAuditCsvUrl(params),
   {
     ...options,
     method: 'GET'
@@ -8959,23 +9004,23 @@ export const exportAuditCsv = async ( options?: RequestInit): Promise<string> =>
 
 
 
-export const getExportAuditCsvQueryKey = () => {
+export const getExportAuditCsvQueryKey = (params?: ExportAuditCsvParams,) => {
     return [
-    `/api/audit/export/csv`
+    `/api/audit/export/csv`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getExportAuditCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportAuditCsv>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getExportAuditCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportAuditCsv>>, TError = ErrorType<unknown>>(params?: ExportAuditCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getExportAuditCsvQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getExportAuditCsvQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAuditCsv>>> = ({ signal }) => exportAuditCsv({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAuditCsv>>> = ({ signal }) => exportAuditCsv(params, { signal, ...requestOptions });
 
 
 
@@ -8993,11 +9038,11 @@ export type ExportAuditCsvQueryError = ErrorType<unknown>
  */
 
 export function useExportAuditCsv<TData = Awaited<ReturnType<typeof exportAuditCsv>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ExportAuditCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getExportAuditCsvQueryOptions(options)
+  const queryOptions = getExportAuditCsvQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

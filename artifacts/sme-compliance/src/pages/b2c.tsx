@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetMe,
   useListB2cReports,
   useListB2cReportItems,
   useSubmitB2cReport,
-  useListInvoices,
   getListB2cReportsQueryKey,
   getListB2cReportItemsQueryKey,
   type B2cReportBatch,
@@ -23,7 +22,6 @@ import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled, serverErrorMessage } from "@/lib/errors";
-import { idMap } from "@/lib/rows";
 import { Store, Clock3, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import {
   formatNaira,
@@ -83,13 +81,6 @@ function BatchItems({ batchId }: { batchId: string }) {
       retry: false,
     },
   });
-  const { data: invoices } = useListInvoices();
-
-  const invoiceNumber = useMemo(
-    () => idMap(invoices, (inv) => inv.id, (inv) => inv.invoiceNumber),
-    [invoices],
-  );
-
   if (isLoading) {
     return (
       <div className="space-y-2 pt-2">
@@ -130,7 +121,7 @@ function BatchItems({ batchId }: { batchId: string }) {
               href={`/invoices/${item.invoiceId}`}
               className="font-medium hover:underline"
             >
-              {invoiceNumber.get(item.invoiceId) || `Invoice ${item.invoiceId.slice(0, 8)}…`}
+              {item.invoiceNumber || `Invoice ${item.invoiceId.slice(0, 8)}…`}
             </Link>
             <p className="text-xs text-muted-foreground">
               Added {formatDate(item.createdAt)}

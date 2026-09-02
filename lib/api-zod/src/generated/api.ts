@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.88.0
+ * OpenAPI spec version: 0.89.0
  */
 import * as zod from 'zod';
 
@@ -518,12 +518,23 @@ export const CreateMembershipResponse = zod.object({
 })
 
 
+/**
+ * Bounded read: the caller's party sphere alphabetically by legal name, one page per request (default 100, at most 500 — a reference list). Pickers pass `type` so the page covers their whole working set.
+ */
 export const listPartiesQueryQMax = 120;
+
+export const listPartiesQueryLimitDefault = 100;
+export const listPartiesQueryLimitMax = 500;
+
+export const listPartiesQueryOffsetMin = 0;
 
 
 
 export const ListPartiesQueryParams = zod.object({
-  "q": zod.coerce.string().max(listPartiesQueryQMax).optional().describe('Matches the legal name or TIN.')
+  "q": zod.coerce.string().max(listPartiesQueryQMax).optional().describe('Matches the legal name or TIN.'),
+  "type": zod.enum(['client_business', 'buyer', 'firm', 'bank']).optional().describe('Only parties of this kind.'),
+  "limit": zod.coerce.number().min(1).max(listPartiesQueryLimitMax).default(listPartiesQueryLimitDefault),
+  "offset": zod.coerce.number().min(listPartiesQueryOffsetMin).optional()
 })
 
 export const ListPartiesResponseItem = zod.object({
@@ -760,6 +771,21 @@ export const CheckConsentResponse = zod.object({
 })
 
 
+/**
+ * Bounded read: the caller's engagements newest first, one page per request (default 100, at most 200).
+ */
+export const listEngagementsQueryLimitDefault = 100;
+export const listEngagementsQueryLimitMax = 200;
+
+export const listEngagementsQueryOffsetMin = 0;
+
+
+
+export const ListEngagementsQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listEngagementsQueryLimitMax).default(listEngagementsQueryLimitDefault),
+  "offset": zod.coerce.number().min(listEngagementsQueryOffsetMin).optional()
+})
+
 export const ListEngagementsResponseItem = zod.object({
   "id": zod.string(),
   "firmId": zod.string(),
@@ -842,8 +868,9 @@ export const UpdateEngagementResponse = zod.object({
 
 
 /**
- * Without limit/offset/q the full tenant-scoped list is returned oldest first (legacy behaviour, kept for existing clients). When any of the paging/search parameters are present the list is returned NEWEST first and bounded (limit defaults to 50).
+ * Bounded read: the tenant-scoped list NEWEST first, one page per request. A bare request is the default page (limit 100); a limit above the maximum or an over-long search term is a 400. Whole-book questions (counts, totals) are answered by the dashboard summary and the CSV export, never by walking pages.
  */
+export const listInvoicesQueryLimitDefault = 100;
 export const listInvoicesQueryLimitMax = 200;
 
 export const listInvoicesQueryOffsetMin = 0;
@@ -854,7 +881,7 @@ export const listInvoicesQueryQMax = 120;
 
 export const ListInvoicesQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
-  "limit": zod.coerce.number().min(1).max(listInvoicesQueryLimitMax).optional(),
+  "limit": zod.coerce.number().min(1).max(listInvoicesQueryLimitMax).default(listInvoicesQueryLimitDefault),
   "offset": zod.coerce.number().min(listInvoicesQueryOffsetMin).optional(),
   "q": zod.coerce.string().max(listInvoicesQueryQMax).optional().describe('Matches the invoice number or either party\'s legal name.')
 })
@@ -2575,12 +2602,43 @@ export const ListRailStatesResponseItem = zod.object({
 export const ListRailStatesResponse = zod.array(ListRailStatesResponseItem)
 
 
-export const VerifyAuditResponse = zod.object({
-  "valid": zod.boolean(),
-  "count": zod.number(),
-  "brokenAtSeq": zod.number().nullish()
+/**
+ * Re-hash the ledger and confirm no row was altered or removed. Without parameters the whole chain is walked (in bounded batches); with `afterSeq`/`limit` one window is verified and `lastSeq`/`complete` say where the next window starts, so a client can verify a large ledger incrementally.
+ */
+export const verifyAuditQueryAfterSeqMin = 0;
+
+export const verifyAuditQueryLimitMax = 10000;
+
+
+
+export const VerifyAuditQueryParams = zod.object({
+  "afterSeq": zod.coerce.number().min(verifyAuditQueryAfterSeqMin).optional().describe('Verify events after this sequence (its hash anchors the window).'),
+  "limit": zod.coerce.number().min(1).max(verifyAuditQueryLimitMax).optional().describe('Verify at most this many events.')
 })
 
+export const VerifyAuditResponse = zod.object({
+  "valid": zod.boolean(),
+  "count": zod.number().describe('Events verified by this call.'),
+  "brokenAtSeq": zod.number().nullish(),
+  "lastSeq": zod.number().nullish().describe('The last verified sequence — the `afterSeq` for the next window.'),
+  "complete": zod.boolean().describe('True when no events remain after lastSeq.')
+})
+
+
+/**
+ * One window of the verifiable bundle (default 1000 events, at most 5000) with the chain verification of that window; page with `afterSeq = lastSeq` until `complete`.
+ */
+export const exportAuditQueryAfterSeqMin = 0;
+
+export const exportAuditQueryLimitDefault = 1000;
+export const exportAuditQueryLimitMax = 5000;
+
+
+
+export const ExportAuditQueryParams = zod.object({
+  "afterSeq": zod.coerce.number().min(exportAuditQueryAfterSeqMin).optional(),
+  "limit": zod.coerce.number().min(1).max(exportAuditQueryLimitMax).default(exportAuditQueryLimitDefault)
+})
 
 export const ExportAuditResponse = zod.object({
   "events": zod.array(zod.object({
@@ -2597,16 +2655,29 @@ export const ExportAuditResponse = zod.object({
 })),
   "verification": zod.object({
   "valid": zod.boolean(),
-  "count": zod.number(),
-  "brokenAtSeq": zod.number().nullish()
+  "count": zod.number().describe('Events verified by this call.'),
+  "brokenAtSeq": zod.number().nullish(),
+  "lastSeq": zod.number().nullish().describe('The last verified sequence — the `afterSeq` for the next window.'),
+  "complete": zod.boolean().describe('True when no events remain after lastSeq.')
 }),
-  "exportedAt": zod.coerce.date()
+  "exportedAt": zod.coerce.date(),
+  "lastSeq": zod.number().nullish().describe('The last event in this window — the `afterSeq` for the next.'),
+  "complete": zod.boolean().describe('True when the ledger ends inside this window.')
 })
 
 
 /**
+ * At most 50,000 rows per file, hash columns included but no payloads. `X-Audit-Export-Complete` says whether the ledger ended inside this file and `X-Audit-Last-Seq` is the `afterSeq` for the next one.
  * @summary Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)
  */
+export const exportAuditCsvQueryAfterSeqMin = 0;
+
+
+
+export const ExportAuditCsvQueryParams = zod.object({
+  "afterSeq": zod.coerce.number().min(exportAuditCsvQueryAfterSeqMin).optional()
+})
+
 export const ExportAuditCsvResponse = zod.unknown()
 
 
@@ -5235,6 +5306,7 @@ export const ListB2cReportItemsResponseItem = zod.object({
   "id": zod.string(),
   "batchId": zod.string(),
   "invoiceId": zod.string(),
+  "invoiceNumber": zod.string().nullable(),
   "amount": zod.string(),
   "createdAt": zod.coerce.date()
 })
