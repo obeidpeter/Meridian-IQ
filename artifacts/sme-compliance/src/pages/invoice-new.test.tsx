@@ -157,10 +157,17 @@ describe("no-TIN buyer never blocks a draft", () => {
     );
   });
 
-  test("the 'Customer has a TIN' checklist row shows the not-yet state", () => {
+  test("the 'Customer has a TIN' readiness step flags attention, not completion", () => {
     renderWithClient(<InvoiceNew />);
+    // A buyer is selected but carries no TIN: the rail says so (attention),
+    // rather than pretending the step is merely unstarted or complete.
     const row = screen.getByText("Customer has a TIN");
-    expect(row.textContent).toContain("not yet");
+    expect(row.textContent).toContain("needs attention");
+    expect(row.textContent).not.toContain("complete");
+    expect(
+      screen.getByTestId("readiness-customer-tin").getAttribute("data-state"),
+    ).toBe("attention");
+    expect(screen.getByText(/a draft can still be saved/)).toBeTruthy();
   });
 });
 
