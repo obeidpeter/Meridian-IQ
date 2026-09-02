@@ -59,13 +59,6 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     devDefault: true,
   },
   {
-    key: "stamp_verification",
-    releaseTag: "R1",
-    description: "Public stamp verification",
-    launchDefault: false,
-    devDefault: true,
-  },
-  {
     key: "messaging_notifications",
     releaseTag: "R1",
     description: "WhatsApp/SMS/email notifications",
@@ -276,6 +269,15 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
 ];
 
 export type ReleaseTag = ReleaseFlag["releaseTag"];
+
+// Flags retired from the manifest (D17). Public stamp verification is part
+// of the R0 core — it is the QR link printed on every stamped PDF and
+// nothing ever read the flag — so `stamp_verification` gated nothing while
+// blocking the R1 badge. The seed removes a retired flag's row (and its
+// overrides) from databases that booted before its retirement; a retired
+// key can never be re-seeded by accident because it is absent from
+// RELEASE_FLAGS.
+export const RETIRED_FLAGS: readonly string[] = ["stamp_verification"];
 
 const RELEASE_ORDER: ReleaseTag[] = ["R0", "R1", "R2", "R3", "R4"];
 

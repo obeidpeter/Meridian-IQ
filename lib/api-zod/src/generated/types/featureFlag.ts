@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.89.0
+ * OpenAPI spec version: 0.90.0
  */
 
 export interface FeatureFlag {
@@ -13,4 +13,6 @@ export interface FeatureFlag {
   /** @nullable */
   description?: string | null;
   updatedAt: Date;
+  /** Size of the flag's pilot cohort (firm overrides the caller can see). */
+  overrideCount: number;
 }

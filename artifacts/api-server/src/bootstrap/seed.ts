@@ -3,6 +3,7 @@ import {
   getDb,
   runInBypassContext,
   featureFlagsTable,
+  featureFlagOverridesTable,
   schemaVersionsTable,
   partiesTable,
   firmsTable,
@@ -25,7 +26,7 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
-import { RELEASE_FLAGS } from "../modules/flags/releases";
+import { RELEASE_FLAGS, RETIRED_FLAGS } from "../modules/flags/releases";
 import { hashPassword, PRODUCTION_DEMO_EMAILS } from "../modules/auth/session";
 
 // Release-tagged feature flags (PL-02): the manifest lives in
@@ -88,6 +89,17 @@ const SEED_DEMO =
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
 export async function seedPlatform(): Promise<void> {
   await runInBypassContext(async () => {
+    // A retired flag (releases.ts RETIRED_FLAGS) leaves the table — and its
+    // overrides — so it stops appearing on the console and blocking the
+    // release badge on databases that booted before its retirement.
+    for (const key of RETIRED_FLAGS) {
+      await getDb()
+        .delete(featureFlagOverridesTable)
+        .where(eq(featureFlagOverridesTable.flagKey, key));
+      await getDb()
+        .delete(featureFlagsTable)
+        .where(eq(featureFlagsTable.key, key));
+    }
     for (const flag of FLAGS) {
       await getDb()
         .insert(featureFlagsTable)

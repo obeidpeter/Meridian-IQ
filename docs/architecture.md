@@ -366,3 +366,21 @@ cannot drift from the activation posture (D9); remaining page-level
 differences from the mockups are tracked in the UX backlog rather than
 rebuilt wholesale; D12–D15 are the product decisions those screens forced,
 each with its own round.
+
+### D17 — Pilot cohorts are audited overrides; a flag that gates nothing is retired
+
+Context: the manifest promised that "a per-firm override activates a named
+pilot", but the override was a bare upsert with no listing, no reason, no
+actor and no audit row, and one R1 flag (`stamp_verification`) gated no
+route while still blocking the R1 badge.
+Decision: a firm's pilot membership is a first-class override with a
+required reason and the setting user, listable per flag, clearable (which
+is not the same as an explicit "off"), and every change — including the
+platform-wide flip — lands on the audit chain naming the actor and the
+target firm. Public stamp verification is R0 core (it is the QR link on
+every stamped PDF), so its flag is retired: `RETIRED_FLAGS` names it, the
+seed removes the row, and the posture tests pin the retirement.
+Consequences: the console shows who is in a pilot and why; an activation
+decision is reconstructible from the ledger; the R1 badge is reachable by
+lighting the six R1 capabilities that exist; a retired key can never be
+re-seeded by accident.

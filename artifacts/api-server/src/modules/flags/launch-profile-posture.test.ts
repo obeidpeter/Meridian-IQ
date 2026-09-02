@@ -71,7 +71,6 @@ test("the launch-dark opt-ins the roadmap deferred stay launch-dark, dev-lit", (
     "client_reports",
     "collection_accounts",
     "money_analytics",
-    "stamp_verification",
     "statutory_desks",
   ];
   for (const key of deferred) {
@@ -125,8 +124,15 @@ test("Clerk composes a global runtime wall with per-firm entitlement", () => {
 test("the seed maps the manifest through the NODE_ENV branch", () => {
   const seed = src("bootstrap/seed.ts");
   assert.ok(
-    seed.includes('import { RELEASE_FLAGS } from "../modules/flags/releases"'),
-    "the seed's flag rows come from the manifest, not a local list",
+    seed.includes(
+      'import { RELEASE_FLAGS, RETIRED_FLAGS } from "../modules/flags/releases"',
+    ),
+    "the seed's flag rows come from the manifest, not a local list — and retired keys leave with it (D17)",
+  );
+  const retireAt = seed.indexOf("for (const key of RETIRED_FLAGS)");
+  assert.ok(
+    retireAt >= 0 && retireAt < seed.indexOf("for (const flag of FLAGS)"),
+    "retired flags are removed before the manifest rows are seeded",
   );
   assert.ok(
     seed.includes('process.env.NODE_ENV === "production"') &&

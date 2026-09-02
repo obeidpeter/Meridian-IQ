@@ -1,9 +1,10 @@
 import type { RequestHandler } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
   getDb,
   featureFlagsTable,
   featureFlagOverridesTable,
+  firmsTable,
   type FeatureFlag,
 } from "@workspace/db";
 import { DomainError } from "../errors";
@@ -77,25 +78,126 @@ export function requireFlag(
   };
 }
 
-export async function listFlags(): Promise<FeatureFlag[]> {
+export type FlagWithCohort = FeatureFlag & { overrideCount: number };
+
+// Every platform flag with the size of its pilot cohort (R99). Under a firm
+// principal's RLS the count covers that firm's own overrides only; the
+// operator (bypass) sees the whole cohort.
+export async function listFlags(): Promise<FlagWithCohort[]> {
   return getDb()
-    .select()
+    .select({
+      key: featureFlagsTable.key,
+      enabled: featureFlagsTable.enabled,
+      releaseTag: featureFlagsTable.releaseTag,
+      description: featureFlagsTable.description,
+      updatedAt: featureFlagsTable.updatedAt,
+      overrideCount: sql<number>`(
+        SELECT count(*)::int FROM feature_flag_overrides o
+        WHERE o.flag_key = ${featureFlagsTable.key}
+      )`,
+    })
     .from(featureFlagsTable)
     .orderBy(featureFlagsTable.key);
 }
 
-export async function setFlag(key: string, enabled: boolean): Promise<void> {
-  await getDb()
-    .update(featureFlagsTable)
-    .set({ enabled })
-    .where(eq(featureFlagsTable.key, key));
+export async function getFlag(key: string): Promise<FeatureFlag> {
+  const [flag] = await getDb()
+    .select()
+    .from(featureFlagsTable)
+    .where(eq(featureFlagsTable.key, key))
+    .limit(1);
+  if (!flag) {
+    throw new DomainError("FLAG_NOT_FOUND", `Unknown feature flag: ${key}`, 404);
+  }
+  return flag;
 }
 
+// Flip a platform flag. Returns null when the key was never seeded
+// (dark-by-absence) so internal callers keep their no-op semantics; the
+// route turns that null into a 404, never a silent 204 — an operator who
+// flips a flag must know it landed.
+export async function setFlag(
+  key: string,
+  enabled: boolean,
+): Promise<{ before: FeatureFlag; after: FeatureFlag } | null> {
+  const [before] = await getDb()
+    .select()
+    .from(featureFlagsTable)
+    .where(eq(featureFlagsTable.key, key))
+    .limit(1);
+  if (!before) return null;
+  const [after] = await getDb()
+    .update(featureFlagsTable)
+    .set({ enabled, updatedAt: new Date() })
+    .where(eq(featureFlagsTable.key, key))
+    .returning();
+  return { before, after: after ?? { ...before, enabled } };
+}
+
+// One member of a flag's pilot cohort, as the cohort page reads it.
+export interface FirmOverride {
+  flagKey: string;
+  firmId: string;
+  firmName: string;
+  enabled: boolean;
+  reason: string | null;
+  setByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const overrideColumns = {
+  flagKey: featureFlagOverridesTable.flagKey,
+  firmId: featureFlagOverridesTable.firmId,
+  firmName: firmsTable.name,
+  enabled: featureFlagOverridesTable.enabled,
+  reason: featureFlagOverridesTable.reason,
+  setByUserId: featureFlagOverridesTable.setByUserId,
+  createdAt: featureFlagOverridesTable.createdAt,
+  updatedAt: featureFlagOverridesTable.updatedAt,
+};
+
+// The pilot cohort of one flag (R99): every firm override on it, by firm
+// name. Cross-firm by nature — the operator runs in the bypass context; a
+// firm principal's RLS narrows it to that firm's own row.
+export async function listFirmOverrides(key: string): Promise<FirmOverride[]> {
+  await getFlag(key);
+  return getDb()
+    .select(overrideColumns)
+    .from(featureFlagOverridesTable)
+    .innerJoin(firmsTable, eq(firmsTable.id, featureFlagOverridesTable.firmId))
+    .where(eq(featureFlagOverridesTable.flagKey, key))
+    .orderBy(asc(firmsTable.name), asc(featureFlagOverridesTable.firmId));
+}
+
+async function readOverride(
+  key: string,
+  firmId: string,
+): Promise<FirmOverride | null> {
+  const [row] = await getDb()
+    .select(overrideColumns)
+    .from(featureFlagOverridesTable)
+    .innerJoin(firmsTable, eq(firmsTable.id, featureFlagOverridesTable.firmId))
+    .where(
+      and(
+        eq(featureFlagOverridesTable.flagKey, key),
+        eq(featureFlagOverridesTable.firmId, firmId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+// Set (or re-set) a firm's override with who and why (R99). Returns the
+// row as it was and as it is, so the route can put both on the audit chain.
+// `who` is optional only for internal seeding (tests, fixtures) — the route
+// always supplies the actor and a reason.
 export async function setFirmOverride(
   key: string,
   firmId: string,
   enabled: boolean,
-): Promise<void> {
+  who: { actorId?: string | null; reason?: string | null } = {},
+): Promise<{ before: FirmOverride | null; after: FirmOverride }> {
   if (key === CLERK_RUNTIME_FLAG_KEY) {
     throw new DomainError(
       "FLAG_NOT_OVERRIDABLE",
@@ -103,16 +205,63 @@ export async function setFirmOverride(
       400,
     );
   }
+  await getFlag(key);
+  const [firm] = await getDb()
+    .select({ id: firmsTable.id })
+    .from(firmsTable)
+    .where(eq(firmsTable.id, firmId))
+    .limit(1);
+  if (!firm) {
+    throw new DomainError("FIRM_NOT_FOUND", "Unknown firm", 404);
+  }
+  const before = await readOverride(key, firmId);
   await getDb()
     .insert(featureFlagOverridesTable)
-    .values({ flagKey: key, firmId, enabled })
+    .values({
+      flagKey: key,
+      firmId,
+      enabled,
+      reason: who.reason ?? null,
+      setByUserId: who.actorId ?? null,
+    })
     .onConflictDoUpdate({
       target: [
         featureFlagOverridesTable.flagKey,
         featureFlagOverridesTable.firmId,
       ],
-      set: { enabled },
+      set: {
+        enabled,
+        reason: who.reason ?? null,
+        setByUserId: who.actorId ?? null,
+        updatedAt: new Date(),
+      },
     });
+  const after = await readOverride(key, firmId);
+  if (!after) {
+    throw new DomainError("OVERRIDE_NOT_FOUND", "Override did not persist", 500);
+  }
+  return { before, after };
+}
+
+// Clear a firm's override so the platform default applies again (R99) —
+// distinct from an explicit `enabled: false`, which darkens the firm even
+// when the platform flag is lit. Returns the row that was cleared, null
+// when there was none.
+export async function clearFirmOverride(
+  key: string,
+  firmId: string,
+): Promise<FirmOverride | null> {
+  const before = await readOverride(key, firmId);
+  if (!before) return null;
+  await getDb()
+    .delete(featureFlagOverridesTable)
+    .where(
+      and(
+        eq(featureFlagOverridesTable.flagKey, key),
+        eq(featureFlagOverridesTable.firmId, firmId),
+      ),
+    );
+  return before;
 }
 
 // The lit feature keys for a principal's firm: every platform flag row with
