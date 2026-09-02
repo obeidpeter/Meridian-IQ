@@ -16,6 +16,8 @@ import {
   usagePct,
   fieldLabel,
   captureStatusExplanation,
+  dockAnswerView,
+  dockErrorMessage,
 } from "./clerk";
 
 describe("invoiceLinks", () => {
@@ -443,6 +445,59 @@ describe("captureStatusExplanation", () => {
     for (const s of ["pending", "extracted", "in_review", "approved", "failed"]) {
       expect(captureStatusExplanation(s)).toBeNull();
     }
+  });
+});
+
+describe("dockAnswerView", () => {
+  const fact = (key: string) => ({ key, label: key, value: "1" });
+
+  test("a records answer carries the full page's source line and caps facts at six", () => {
+    const view = dockAnswerView({
+      answered: true,
+      proposition: "p",
+      citation: "computed from your invoices",
+      dataIntent: "data.overdue",
+      dataParams: { month: "July 2026" },
+      facts: Array.from({ length: 8 }, (_, i) => fact(`f${i}`)),
+    });
+    expect(view.sourceLine).toBe(
+      "From your records (July 2026) · computed from your invoices",
+    );
+    expect(view.facts).toHaveLength(6);
+    expect(view.hasMore).toBe(true);
+  });
+
+  test("a register answer names the approved claim; nothing dropped means no hasMore", () => {
+    const view = dockAnswerView({
+      answered: true,
+      proposition: "p",
+      citation: "VAT Act s.15",
+      claimKey: "vat.rate",
+      claimVersion: 3,
+      facts: [fact("a")],
+    });
+    expect(view.sourceLine).toBe("Source: VAT Act s.15 · approved claim vat.rate v3");
+    expect(view.hasMore).toBe(false);
+  });
+
+  test("deep links or a proposed action mean there is more in the full workspace", () => {
+    expect(
+      dockAnswerView({ answered: true, sections: [{ facts: [], action: {} }] }).hasMore,
+    ).toBe(true);
+    expect(dockAnswerView({ answered: true, links: [{}] }).hasMore).toBe(true);
+  });
+});
+
+describe("dockErrorMessage", () => {
+  test("the kill switch and the monthly allowance each explain themselves", () => {
+    const err = (status: number) =>
+      Object.assign(new Error(`HTTP ${status}`), { status, response: { status } });
+    expect(dockErrorMessage(err(503))).toContain("switched off");
+    expect(dockErrorMessage(err(429))).toContain("allowance");
+  });
+
+  test("anything else relays the server's words and says nothing changed", () => {
+    expect(dockErrorMessage(new Error("boom"))).toContain("Nothing was changed.");
   });
 });
 

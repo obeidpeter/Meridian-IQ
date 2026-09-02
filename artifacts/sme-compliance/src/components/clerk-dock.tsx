@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAskClerk, type ClerkAnswer } from "@workspace/api-client-react";
 import { ClerkDock as SharedClerkDock } from "@workspace/web-ui";
+import { dockAnswerView, dockErrorMessage } from "@/lib/clerk";
 
 // The dock body lives in @workspace/web-ui (shared with the console); this
 // wrapper supplies the SME app's voice — page context, suggestions, copy —
@@ -17,20 +18,13 @@ function pageContext(location: string) {
 }
 
 function dockAnswer(answer: ClerkAnswer) {
-  return {
-    answered: answer.answered,
-    refusalReason: answer.refusalReason,
-    proposition: answer.proposition,
-    facts:
-      answer.sections?.flatMap((section) => section.facts).slice(0, 6) ??
-      answer.facts?.slice(0, 6) ??
-      [],
-  };
+  return dockAnswerView(answer);
 }
 
 export function ClerkDock() {
   const [location, navigate] = useLocation();
   const [answer, setAnswer] = useState<ClerkAnswer | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const ask = useAskClerk();
   const suggestions = useMemo(() => {
     if (location.startsWith("/invoices")) {
@@ -70,10 +64,17 @@ export function ClerkDock() {
       answer={answer ? dockAnswer(answer) : null}
       pending={ask.isPending}
       error={ask.isError}
+      errorMessage={errorMessage}
       onAsk={(question) =>
         ask.mutate(
           { data: { question } },
-          { onSuccess: (row) => setAnswer(row.answer ?? null) },
+          {
+            onSuccess: (row) => {
+              setErrorMessage(null);
+              setAnswer(row.answer ?? null);
+            },
+            onError: (e) => setErrorMessage(dockErrorMessage(e)),
+          },
         )
       }
       onOpenFull={() => navigate("/clerk/ask")}

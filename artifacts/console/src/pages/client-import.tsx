@@ -73,6 +73,30 @@ function parseClientRows(text: string): ClientImportRow[] {
   });
 }
 
+/**
+ * The per-row outcome as CSV (row, legal name, status, errors) so a firm
+ * migrating a large book can hand the list to a colleague or work through
+ * it offline instead of transcribing from the on-screen list.
+ */
+export function importResultsCsv(
+  results: { rowNumber: number; status: string; errors?: { field?: string; message?: string }[] }[],
+  source: { legalName?: string }[],
+): string {
+  const cell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const lines = [["row", "legalName", "status", "errors"].map(cell).join(",")];
+  for (const r of results) {
+    const errors = (r.errors ?? [])
+      .map((e) => (e.field ? `${e.field}: ${e.message ?? ""}` : (e.message ?? "")))
+      .join("; ");
+    lines.push(
+      [String(r.rowNumber), source[r.rowNumber - 1]?.legalName ?? "", r.status, errors]
+        .map(cell)
+        .join(","),
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
 export function ClientImport() {
   usePageTitle("Client import");
   const { toast } = useToast();
@@ -497,10 +521,27 @@ export function ClientImport() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">
                 {result.committed ? "Import results" : "Validation preview"}
               </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  downloadBlob(
+                    result.committed
+                      ? "client-import-results.csv"
+                      : "client-import-validation.csv",
+                    importResultsCsv(result.rows, rows),
+                    "text/csv",
+                  )
+                }
+                data-testid="button-download-results"
+              >
+                <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+                Download
+              </Button>
             </CardHeader>
             <CardContent className="space-y-2">
               {result.rows.map((r) => {

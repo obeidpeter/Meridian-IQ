@@ -318,3 +318,64 @@ export function captureStatusExplanation(
   return null;
 }
 
+// ---- Clerk dock -----------------------------------------------------------
+
+/** The dock's failure line: the same split the full pages make, in one string. */
+export function dockErrorMessage(err: unknown): string {
+  if (killSwitchTripped(err)) {
+    return "Clerk is switched off right now — an operator can restore it. Nothing was changed.";
+  }
+  if (clerkBudgetExhausted(err)) {
+    return "This month's Clerk allowance is used up — questions resume next month. Nothing was changed.";
+  }
+  return `${serverErrorMessage(err)} Nothing was changed.`;
+}
+
+const DOCK_FACT_CAP = 6;
+
+/**
+ * The dock's compact view of an answer: the same fact cap as before, plus
+ * the SOURCE line the full page shows (records + scope + citation, or the
+ * approved claim) and whether anything was dropped — facts past the cap,
+ * deep links, section titles or proposed actions — so the dock can point at
+ * the full workspace rather than imply this is everything.
+ */
+export function dockAnswerView(answer: {
+  answered: boolean;
+  refusalReason?: string | null;
+  proposition?: string | null;
+  citation?: string | null;
+  dataIntent?: string | null;
+  dataParams?: Record<string, string>;
+  claimKey?: string | null;
+  claimVersion?: number | string | null;
+  facts?: { key: string; label: string; value: string; unit?: string | null }[];
+  sections?: {
+    facts: { key: string; label: string; value: string; unit?: string | null }[];
+    action?: unknown;
+  }[];
+  links?: unknown[];
+}) {
+  const allFacts = answer.sections?.flatMap((s) => s.facts) ?? answer.facts ?? [];
+  const scope = dataAnswerScope(answer.dataParams);
+  const sourceLine = answer.dataIntent
+    ? `From your records${scope ? ` (${scope})` : ""}${answer.citation ? ` · ${answer.citation}` : ""}`
+    : answer.claimKey
+      ? `Source: ${answer.citation ?? "approved claim"} · approved claim ${answer.claimKey}${answer.claimVersion != null ? ` v${answer.claimVersion}` : ""}`
+      : answer.citation
+        ? `Source: ${answer.citation}`
+        : null;
+  const hasMore =
+    allFacts.length > DOCK_FACT_CAP ||
+    (answer.links?.length ?? 0) > 0 ||
+    (answer.sections?.some((s) => !!s.action) ?? false);
+  return {
+    answered: answer.answered,
+    refusalReason: answer.refusalReason,
+    proposition: answer.proposition,
+    facts: allFacts.slice(0, DOCK_FACT_CAP),
+    sourceLine,
+    hasMore,
+  };
+}
+

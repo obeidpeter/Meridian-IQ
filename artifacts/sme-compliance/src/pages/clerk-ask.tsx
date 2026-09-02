@@ -568,6 +568,8 @@ function AnswerCard({
 
 // Exported for the component tests (the page export wraps it in
 // CapabilityGate, whose useGetMe needs a live session).
+const FOLLOWUP_GENERIC = "Follow-ups continue this question";
+
 export function AskContent() {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
@@ -667,7 +669,12 @@ export function AskContent() {
   // display scope (a month label, a client name), say what a follow-up will
   // keep — and offer a way off the thread. Clearing drops previousCaseId
   // only; the answer stays on screen.
-  const pinsLine = previousCaseId ? followupPinsLine(lastAnswer) : "";
+  // While a thread is active the chip is always visible: with the display
+  // pins when the answer carried any, else the generic line — so the "New
+  // topic" escape never disappears while follow-ups still inherit scope.
+  const pinsLine = previousCaseId
+    ? followupPinsLine(lastAnswer) || FOLLOWUP_GENERIC
+    : "";
 
   return (
     <div className="space-y-6">

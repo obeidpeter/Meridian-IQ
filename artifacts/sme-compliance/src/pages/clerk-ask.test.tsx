@@ -414,7 +414,11 @@ describe("Ask 2.0 sections, plan, and follow-up pins", () => {
     expect(screen.getByTestId("row-fact-count")).toBeTruthy();
     expect(screen.queryByTestId("text-answer-plan")).toBeNull();
     expect(screen.queryByTestId("section-answer-0")).toBeNull();
-    expect(screen.queryByTestId("chip-followup-pins")).toBeNull();
+    // A data answer threads, so the chip shows — with the generic line, since
+    // this answer carries no display pins (R93).
+    expect(screen.getByTestId("chip-followup-pins").textContent).toBe(
+      "Follow-ups continue this question",
+    );
   });
 
   test("a sectioned answer threads follow-ups even without a flat dataIntent, and shows what they keep", () => {
@@ -451,11 +455,13 @@ describe("Ask 2.0 sections, plan, and follow-up pins", () => {
     });
   });
 
-  test("a data answer without display pins threads silently — no chip, exactly today's UX", () => {
+  test("a data answer without display pins still shows the thread with generic copy", () => {
     render(<AskContent />);
     askQuestion("What did we submit this month?");
     deliver(answeredCase("case-1", dataAnswer("3 invoices were submitted.")));
-    expect(screen.queryByTestId("chip-followup-pins")).toBeNull();
+    expect(screen.getByTestId("chip-followup-pins").textContent).toBe(
+      "Follow-ups continue this question",
+    );
     askQuestion("and for June?");
     expect(harness.mutateCalls[1]).toEqual({
       data: { question: "and for June?", previousCaseId: "case-1" },
