@@ -391,6 +391,17 @@ async function journeyFirstLandingConsent(page, BASE, check) {
     "a decided business never sees the step again",
     (await page.getByTestId("consent-capture").count()) === 0,
   );
+  // The vault as a shelf of the invoice list (D16): Today's stamped tile
+  // deep-links to the Stamped view, and the filter rides the URL.
+  await page.getByTestId("link-open-vault").click();
+  await page.waitForSelector('[data-testid="filter-invoices-stamped"]', {
+    timeout: 10000,
+  });
+  check(
+    "Open vault lands on the Stamped shelf of the invoice list",
+    page.url().includes("filter=stamped") &&
+      (await page.getByTestId("filter-invoices-stamped").getAttribute("aria-pressed")) === "true",
+  );
   await signOutFromApp(page, BASE);
 }
 

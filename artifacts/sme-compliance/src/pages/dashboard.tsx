@@ -1800,6 +1800,15 @@ export function Dashboard() {
                 detail={`${formatNaira(summary?.stampedValue)} total value`}
                 icon={<CheckCircle className="size-4" aria-hidden="true" />}
                 tone="positive"
+                action={
+                  <Link
+                    href="/invoices?filter=stamped"
+                    className="text-xs font-bold text-primary hover:underline"
+                    data-testid="link-open-vault"
+                  >
+                    Open vault
+                  </Link>
+                }
               />
               <Metric
                 label="Drafts"

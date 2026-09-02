@@ -469,7 +469,7 @@ function PortfolioSection({
       className="scroll-mt-24 space-y-4"
       data-testid={`portfolio-section-${id}`}
     >
-      <h2 className="border-b border-slate-200 pb-1.5 text-[11px] font-extrabold text-teal-700 dark:border-slate-800">
+      <h2 className="mi-eyebrow border-b border-border pb-1.5">
         {label}
       </h2>
       {children}
@@ -617,7 +617,7 @@ function VatPackCard() {
   const exportHref = `/api/vat-pack/export?month=${encodeURIComponent(pack.monthStart)}`;
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-vat-pack"
     >
       <CardHeader>
@@ -775,7 +775,7 @@ function VatPositionCard() {
   if (!isSuccess || !position) return null;
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-vat-position"
     >
       <CardHeader>
@@ -876,7 +876,7 @@ function VatSettlementCard() {
   if (!isSuccess || !check) return null;
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-vat-settlement"
     >
       <CardHeader>
@@ -1009,7 +1009,7 @@ function QuarterlyReviewCard() {
   };
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-quarterly-review"
     >
       <CardHeader>
@@ -1192,7 +1192,7 @@ function ComplianceCalendarCard() {
   if (!isSuccess || !calendarHasContent(calendar)) return null;
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-compliance-calendar"
     >
       <CardHeader>
@@ -1287,7 +1287,7 @@ function ComplianceScorecardCard() {
   };
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-compliance-scorecard"
     >
       <CardHeader>
@@ -1382,7 +1382,7 @@ function ClerkAdoptionCard() {
   if (!isSuccess || !report || report.clients.length === 0) return null;
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-clerk-adoption"
     >
       <CardHeader>
@@ -1472,7 +1472,7 @@ function RejectionPatternsCard() {
     );
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-rejection-patterns"
     >
       <CardHeader>
@@ -1551,7 +1551,7 @@ export function ReceivablesCard() {
 
   return (
     <Card
-      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      className="shadow-sm"
       data-testid="card-receivables"
     >
       <CardHeader>
@@ -1767,22 +1767,22 @@ function SavedViewsBar({
 
   return (
     <div
-      className="border-b border-slate-200 bg-slate-50/70 px-4 py-3"
+      className="border-b border-border bg-muted/40 px-4 py-3"
       data-testid="portfolio-saved-views"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-bold text-slate-600">
+        <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
           <Bookmark className="size-3.5" aria-hidden="true" />
           Saved views
         </span>
         {views.map((view) => (
           <span
             key={view.id}
-            className="inline-flex min-h-8 max-w-full items-stretch overflow-hidden rounded-md border border-slate-200 bg-white"
+            className="inline-flex min-h-8 max-w-full items-stretch overflow-hidden rounded-md border border-border bg-card"
           >
             <button
               type="button"
-              className="max-w-48 truncate px-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="max-w-48 truncate px-2.5 text-xs font-semibold text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => onApply(view)}
               title={`Apply ${view.name}`}
             >
@@ -1790,7 +1790,7 @@ function SavedViewsBar({
             </button>
             <button
               type="button"
-              className="grid w-8 place-items-center border-l border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="grid w-8 place-items-center border-l border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => onRemove(view)}
               aria-label={`Delete saved view ${view.name}`}
               title={`Delete ${view.name}`}
@@ -1854,7 +1854,7 @@ function SavedViewsBar({
         </form>
       )}
       {views.length === 0 && !editing && (
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Keep useful search, risk, and sort combinations one click away.
         </p>
       )}
@@ -1906,18 +1906,18 @@ function ClientWorkbenchTable({
   }, [clients.length, search]);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-[var(--mi-radius)] border border-border bg-card shadow-sm">
       {toolbar}
-      <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 border-b border-border px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-extrabold text-slate-950">
+          <p className="text-sm font-bold text-foreground">
             {compact ? "Clients needing attention" : "Client book"}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Showing {clients.length} of {totalClients} clients
           </p>
           <div
-            className="mt-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5"
+            className="mt-2 inline-flex rounded-md border border-border bg-muted/50 p-0.5"
             role="group"
             aria-label="Client scope"
           >
@@ -1934,13 +1934,13 @@ function ClientWorkbenchTable({
                 onClick={() => onScopeChange(value)}
                 className={`rounded px-2.5 py-1 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   scope === value
-                    ? "bg-white text-slate-950 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
                 data-testid={`button-client-scope-${value}`}
               >
                 {label}
-                <span className="ml-1 tabular-nums text-[10px] font-semibold text-slate-400">
+                <span className="ml-1 tabular-nums text-[10px] font-semibold text-muted-foreground">
                   {scopeCounts[value]}
                 </span>
               </button>
@@ -1951,7 +1951,7 @@ function ClientWorkbenchTable({
           <div className="grid gap-2 sm:grid-cols-[minmax(14rem,1fr)_10rem_11rem]">
             <div className="relative">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
@@ -1990,17 +1990,17 @@ function ClientWorkbenchTable({
       </div>
       {clients.length === 0 ? (
         <div className="px-4 py-12 text-center">
-          <p className="text-sm font-bold text-slate-900">
+          <p className="text-sm font-bold text-foreground">
             No matching clients
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Change the search or risk filter to widen the client book.
           </p>
         </div>
       ) : (
         <ScrollRegion label="Client book table">
           <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-[11px] font-bold text-slate-500">
+            <thead className="bg-muted/50 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-2.5">Client</th>
                 <th className="px-3 py-2.5">
@@ -2016,7 +2016,7 @@ function ClientWorkbenchTable({
                 <th className="w-24 px-4 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {clients.map((client) => (
                 <tr
                   key={client.clientPartyId}
@@ -2024,7 +2024,7 @@ function ClientWorkbenchTable({
                   data-testid={`row-client-${client.clientPartyId}`}
                 >
                   <td className="px-4 py-3">
-                    <p className="max-w-64 truncate font-bold text-slate-950">
+                    <p className="max-w-64 truncate font-bold text-foreground">
                       <Link
                         href={`/clients/${client.clientPartyId}`}
                         className="hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -2033,7 +2033,7 @@ function ClientWorkbenchTable({
                         {client.legalName}
                       </Link>
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {client.totalInvoices} invoice
                       {client.totalInvoices === 1 ? "" : "s"}
                     </p>
@@ -2044,32 +2044,32 @@ function ClientWorkbenchTable({
                     </span>
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">
-                    <p className="font-semibold text-slate-900">
+                    <p className="font-semibold text-foreground">
                       {formatMoney(client.unsubmittedValue, "NGN")}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted-foreground">
                       {client.unsubmittedCount} item
                       {client.unsubmittedCount === 1 ? "" : "s"}
                     </p>
                   </td>
-                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-700">
+                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-foreground">
                     {client.failedCount}
                   </td>
-                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-700">
+                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-foreground">
                     {client.pendingCount}
                   </td>
                   <td className="px-3 py-3">
                     {client.nextDeadline ? (
                       <>
-                        <p className="max-w-56 truncate font-medium text-slate-800">
+                        <p className="max-w-56 truncate font-medium text-foreground">
                           {client.nextDeadline.title}
                         </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {formatDate(client.nextDeadline.dueDate)}
                         </p>
                       </>
                     ) : (
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-muted-foreground">
                         No deadline
                       </span>
                     )}
@@ -2490,7 +2490,7 @@ export function Portfolio() {
             onDismiss={handleDismissGettingStarted}
           />
         )}
-        <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
+        <Card className="shadow-sm">
           <EmptyState
             icon={Users}
             title="Start your client book"
@@ -2656,7 +2656,7 @@ export function Portfolio() {
             />
           )}
           {data && false && (
-            <Card className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
+            <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between gap-4 text-base">
                   <span>Clients by penalty risk</span>
@@ -2675,7 +2675,7 @@ export function Portfolio() {
                       className="-mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_1rem] sm:gap-4"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">
+                        <p className="truncate text-sm font-bold text-foreground">
                           {c.legalName}
                         </p>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
