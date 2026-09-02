@@ -1541,6 +1541,12 @@ Every release-gated capability, grouped by release (R0–R4), each with a
 switch. Turning a flag on makes its surface live for every firm instantly;
 off makes it unreachable (the pages answer "not yet enabled"). Only the
 operator can flip flags — firm admins and auditors see this page read-only.
+Under each flag, **Pilot cohort** lists the firms with an override on it:
+the operator picks a firm, chooses on or off, and must give a reason; the
+override (and its later clearing, which hands the firm back to the platform
+switch) is recorded on the audit chain with who did it and why. An "on"
+override lights the flag for that firm ahead of the platform switch; an
+"off" override keeps it dark for that firm even after the switch is flipped.
 
 ### Audit & evidence
 
@@ -1849,41 +1855,66 @@ evidence gate passes (or per firm). A dark feature isn't hidden — it's
 unreachable, for every role. If a page shows _"…is not yet enabled"_, ask
 your operator to flip its flag (Compliance Desk → Feature flags).
 
-| Flag                      | Release | What it unlocks                                                                               | Ships  |
-| ------------------------- | ------- | --------------------------------------------------------------------------------------------- | ------ |
-| `invoice_lifecycle`       | R0      | Core invoicing                                                                                | **On** |
-| `advisory_engagements`    | R0      | Advisory toolkit                                                                              | **On** |
-| `consent_ledger`          | R0      | Consent ledger                                                                                | **On** |
-| `buyer_confirmations`     | R1      | Confirmation workflow                                                                         | **On** |
-| `stamp_verification`      | R1      | Public stamp verification                                                                     | **On** |
-| `messaging_notifications` | R1      | WhatsApp/SMS/email/push alerts + delivery log                                                 | Dark   |
-| `anonymized_benchmarks`   | R2      | Aggregate analytics                                                                           | Dark   |
-| `reconciliation`          | R2      | Bank-statement reconciliation                                                                 | Dark   |
-| `b2c_reporting`           | R2      | B2C 24-hour reports                                                                           | Dark   |
-| `buyer_rails`             | R2      | The whole Buyer Rails portal                                                                  | Dark   |
-| `white_label`             | R2      | Theming, subdomains, client import, certification                                             | Dark   |
-| `erp_connectors`          | R2      | ERP integrations                                                                              | Dark   |
-| `bank_feeds`              | R2      | Scheduled bank-feed statement pulls                                                           | Dark   |
-| `credit_readiness`        | R3      | Credit layer (dormant by design)                                                              | Dark   |
-| `bank_data_room`          | R4      | Bank data room (dormant by design)                                                            | Dark   |
-| `clerk_ai`                | R3      | Every Clerk AI surface — this is the kill switch: flipping it off instantly disables them all | **On** |
-| `clerk_actions`           | R3      | Clerk's proposed actions ("Clerk suggests" — human-approved batch execution)                  | Dark   |
-| `clerk_action_policies`   | R3      | Daily automation on top of proposed actions (standing approvals) — both flags must be on      | Dark   |
+Every flag below comes from the release manifest (`modules/flags/releases.ts`,
+the one source of truth). **Launch** is what a fresh production database boots
+with — only the R0 core; everything else awaits its activation gate.
+**Dev / demo** is what development, CI and the live demo boot with. A flag can
+also be lit **for one firm** ahead of the platform switch: the operator adds
+the firm to the flag's _pilot cohort_ with a reason, and the override (set or
+cleared) lands on the audit chain — see the "Feature flags" page in section 7.
+
+| Flag | Release | What it unlocks | Launch | Dev / demo |
+| --- | --- | --- | --- | --- |
+| `advisory_engagements` | R0 | Advisory engagement spine | **On** | On |
+| `consent_ledger` | R0 | Three-layer consent ledger | **On** | On |
+| `invoice_lifecycle` | R0 | Core invoice draft/validate/submit lifecycle | **On** | On |
+| `buyer_confirmations` | R1 | Buyer confirmation workflow | Dark | On |
+| `client_reports` | R1 | Client-facing report packs: the monthly compliance pack (register, VAT position, deadlines) and its notify rail | Dark | On |
+| `collection_accounts` | R1 | Collection accounts: registration and firm-facing views. The inbound provider webhook is NOT behind this flag — it stays governed solely by its fail-closed shared token | Dark | On |
+| `messaging_notifications` | R1 | WhatsApp/SMS/email notifications | Dark | Dark |
+| `money_analytics` | R1 | Money surfaces beyond the invoice core: payables/bills with the double-payment guard, recurring invoices | Dark | On |
+| `statutory_desks` | R1 | Statutory desks: filings register + cockpit, filing matrix, withholding-tax desk, authority-notice obligations | Dark | On |
+| `anonymized_benchmarks` | R2 | Layer-2 anonymized aggregate analytics | Dark | Dark |
+| `b2c_reporting` | R2 | B2C 24-hour reporting module with compliance clocks (SME-08) | Dark | Dark |
+| `bank_feeds` | R2 | Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam) | Dark | Dark |
+| `buyer_rails` | R2 | Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05) | Dark | Dark |
+| `erp_connectors` | R2 | ERP connector contract and first two connectors (PL-03, INT-06) | Dark | Dark |
+| `reconciliation` | R2 | Bank-statement ingestion and reconciliation v1 (SME-07, INT-05) | Dark | Dark |
+| `white_label` | R2 | White-label theming, subdomains, bulk client import, certification (CON-05) | Dark | Dark |
+| `clerk_action_policies` | R3 | Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions) | Dark | Dark |
+| `clerk_actions` | R3 | Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue) | Dark | Dark |
+| `clerk_advisory_briefs` | R3 | Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag | Dark | Dark |
+| `clerk_ai` | R3 | Clerk AI rollout entitlement: capture extraction and register-backed Q&A; enable per firm for pilots | Dark | On |
+| `clerk_ai_runtime` | R3 | Clerk AI global runtime safety switch: disabling stops every Clerk surface and model call, including entitled pilot firms | Dark | On |
+| `clerk_auto_reconcile` | R3 | Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies | Dark | Dark |
+| `clerk_auto_retrieval_eval` | R3 | Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day) | Dark | Dark |
+| `clerk_memory` | R3 | Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings | Dark | Dark |
+| `credit_readiness` | R3 | Layer-3 credit readiness scoring | Dark | Dark |
+| `bank_data_room` | R4 | Bank data room and financing origination | Dark | Dark |
 
 The credit/bank R3/R4 flags stay dark until their business gates pass — that's
-policy, not an oversight (`clerk_ai` is the exception: it ships on, and exists
-to be switched _off_). Further Clerk flags are opt-in and default dark
-until an operator enables them:
-`clerk_digest` (weekly firm digests), `clerk_client_statements` (monthly
-client statements), `clerk_advisory_briefs` (monthly advisory briefs —
+policy, not an oversight. `clerk_ai` ships **dark at launch** like every
+non-core flag; once lit it is the Clerk kill switch — flipping it off
+instantly disables every Clerk surface — and `clerk_ai_runtime` is the global
+safety switch behind it that no firm override can light. Further Clerk
+capabilities are opt-ins that ship dark in every environment until an
+operator enables them: `clerk_actions` and `clerk_action_policies` (proposed
+actions, then daily automation on top — both must be on),
+`clerk_auto_reconcile`, `clerk_advisory_briefs` (monthly advisory briefs —
 generation only; already-generated briefs still deliver and display when
-it's later switched off), `clerk_memory` (the memory features: "last
-time" cards on Ask, past-reply style examples on the Desk — spends
-tokens), `clerk_auto_eval` (nightly eval run — spends tokens),
-`clerk_auto_phrasing_eval` (nightly phrasing eval — spends tokens),
-`clerk_auto_retrieval_eval` (nightly retrieval-quality run — spends
-tokens), `clerk_triage` (escalation routing suggestions), and
+it's later switched off), `clerk_memory` (the memory features: "last time"
+cards on Ask, past-reply style examples on the Desk — spends tokens) and
+`clerk_auto_retrieval_eval` (nightly retrieval-quality run — spends tokens).
+A few Clerk switches are deliberately **absent** from the manifest and stay
+dark everywhere until a row is inserted on purpose: `clerk_digest` (weekly
+firm digests), `clerk_client_statements` (monthly client statements),
+`clerk_triage` (escalation routing suggestions), `clerk_auto_eval` and
+`clerk_auto_phrasing_eval` (nightly eval runs — spend tokens) and
 `clerk_red_team` (adversarial eval-fixture generation — spends tokens).
+
+Public stamp verification (the QR link printed on every stamped invoice) is
+part of the R0 core and has no flag: the old `stamp_verification` flag gated
+nothing and was retired.
 
 Two notes on where the newer features sit in this table. The **Notice Desk**
 pages themselves (Obligations, the Authority notices card, the Tax-notice

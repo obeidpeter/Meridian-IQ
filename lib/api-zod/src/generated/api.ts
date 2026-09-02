@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.89.0
+ * OpenAPI spec version: 0.90.0
  */
 import * as zod from 'zod';
 
@@ -2183,32 +2183,90 @@ export const ListFeatureFlagsResponseItem = zod.object({
   "enabled": zod.boolean(),
   "releaseTag": zod.string(),
   "description": zod.string().nullish(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "overrideCount": zod.number().describe('Size of the flag\'s pilot cohort (firm overrides the caller can see).')
 })
 export const ListFeatureFlagsResponse = zod.array(ListFeatureFlagsResponseItem)
 
 
+/**
+ * Flip a platform flag for every firm. Lands on the audit chain as `flag.update` with the actor and the optional reason; an unseeded key is a 404.
+ */
 export const UpdateFeatureFlagParams = zod.object({
   "key": zod.coerce.string()
 })
 
+export const updateFeatureFlagBodyReasonMax = 280;
+
+
+
 export const UpdateFeatureFlagBody = zod.object({
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "reason": zod.string().max(updateFeatureFlagBodyReasonMax).optional()
 })
 
 export const UpdateFeatureFlagResponse = zod.void()
 
 
+/**
+ * The flag's pilot cohort — every firm override on it, by firm name, with who set it and why. Cross-firm for the operator; a firm principal sees only its own row.
+ */
+export const ListFeatureFlagOverridesParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const ListFeatureFlagOverridesResponseItem = zod.object({
+  "flagKey": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string(),
+  "enabled": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "setByUserId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListFeatureFlagOverridesResponse = zod.array(ListFeatureFlagOverridesResponseItem)
+
+
+/**
+ * Set (or re-set) one firm's override with a reason. Lands on the audit chain as `flag.override.set` with before/after. An explicit `enabled: false` darkens the firm even while the platform flag is lit; to hand the firm back to the platform default, clear the override instead.
+ */
 export const SetFeatureFlagOverrideParams = zod.object({
   "key": zod.coerce.string()
 })
 
+export const setFeatureFlagOverrideBodyReasonMin = 3;
+export const setFeatureFlagOverrideBodyReasonMax = 280;
+
+
+
 export const SetFeatureFlagOverrideBody = zod.object({
   "firmId": zod.string(),
-  "enabled": zod.boolean()
+  "enabled": zod.boolean(),
+  "reason": zod.string().min(setFeatureFlagOverrideBodyReasonMin).max(setFeatureFlagOverrideBodyReasonMax).describe('Why this firm is in (or out of) the pilot — recorded on the audit chain.')
 })
 
-export const SetFeatureFlagOverrideResponse = zod.void()
+export const SetFeatureFlagOverrideResponse = zod.object({
+  "flagKey": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string(),
+  "enabled": zod.boolean(),
+  "reason": zod.string().nullable(),
+  "setByUserId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * Clear one firm's override so the platform default applies again. Lands on the audit chain as `flag.override.clear`; 404 when the firm has no override on the flag.
+ */
+export const ClearFeatureFlagOverrideParams = zod.object({
+  "key": zod.coerce.string(),
+  "firmId": zod.coerce.string()
+})
+
+export const ClearFeatureFlagOverrideResponse = zod.void()
 
 
 export const ListErrorCatalogueResponseItem = zod.object({

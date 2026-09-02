@@ -10,11 +10,19 @@ import type { FeatureFlag } from "@workspace/api-client-react";
 
 const harness = vi.hoisted(() => ({
   flags: [] as unknown[],
+  overrides: [] as unknown[],
+  firms: [] as unknown[],
   // Every (vars, callbacks) pair update.mutate was called with, in order.
   mutateCalls: [] as [unknown, unknown][],
+  overrideCalls: [] as unknown[],
+  clearCalls: [] as unknown[],
   reset() {
     this.flags = [];
+    this.overrides = [];
+    this.firms = [];
     this.mutateCalls = [];
+    this.overrideCalls = [];
+    this.clearCalls = [];
   },
 }));
 
@@ -35,11 +43,38 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
         harness.mutateCalls.push([vars, callbacks]);
       },
     }),
+    useListFeatureFlagOverrides: () => ({
+      data: harness.overrides,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
+    useListFirms: () => ({ data: harness.firms }),
+    useSetFeatureFlagOverride: () => ({
+      mutate: (vars: unknown) => {
+        harness.overrideCalls.push(vars);
+      },
+    }),
+    useClearFeatureFlagOverride: () => ({
+      mutate: (vars: unknown) => {
+        harness.clearCalls.push(vars);
+      },
+    }),
   };
 });
 
 // Import AFTER the mock so the page module binds the stand-ins.
 import { FeatureFlags } from "./feature-flags";
+
+// The cohort form's Switch sits inside a <form>, so Radix mounts its hidden
+// form input and measures it with ResizeObserver, which jsdom lacks.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver ??=
+  ResizeObserverStub;
 
 function flag(over: Partial<FeatureFlag> = {}): FeatureFlag {
   return {
@@ -48,6 +83,7 @@ function flag(over: Partial<FeatureFlag> = {}): FeatureFlag {
     releaseTag: "R2",
     description: null,
     updatedAt: "2026-08-01T09:00:00.000Z",
+    overrideCount: 0,
     ...over,
   };
 }
@@ -116,5 +152,65 @@ describe("disable confirm gate", () => {
     fireEvent.click(screen.getByText("Keep it live"));
     expect(harness.mutateCalls).toHaveLength(0);
     expect(screen.queryByTestId("button-confirm-disable-flag")).toBeNull();
+  });
+});
+
+// R99: the pilot cohort under each flag — who is in, why, and the two
+// audited moves (set with a reason, clear back to the platform default).
+describe("pilot cohort", () => {
+  test("expanding the cohort lists each firm override with its reason; clear fires the mutation", () => {
+    harness.flags = [flag({ key: "reconciliation", overrideCount: 1 })];
+    harness.overrides = [
+      {
+        flagKey: "reconciliation",
+        firmId: "firm-a",
+        firmName: "Ade & Co",
+        enabled: true,
+        reason: "Pilot cohort 1",
+        setByUserId: "op-1",
+        createdAt: "2026-08-01T09:00:00.000Z",
+        updatedAt: "2026-08-02T09:00:00.000Z",
+      },
+    ];
+    renderPage();
+
+    expect(screen.getByTestId("button-cohort-reconciliation").textContent).toMatch(
+      /Pilot cohort \(1\)/,
+    );
+    expect(screen.queryByTestId("cohort-reconciliation")).toBeNull();
+    fireEvent.click(screen.getByTestId("button-cohort-reconciliation"));
+    const row = screen.getByTestId("override-reconciliation-firm-a");
+    expect(row.textContent).toMatch(/Ade & Co/);
+    expect(row.textContent).toMatch(/On for this firm/);
+    expect(row.textContent).toMatch(/Pilot cohort 1/);
+
+    fireEvent.click(screen.getByTestId("button-clear-override-reconciliation-firm-a"));
+    expect(harness.clearCalls).toEqual([{ key: "reconciliation", firmId: "firm-a" }]);
+  });
+
+  test("setting an override needs a firm and a reason, then sends both", () => {
+    harness.flags = [flag({ key: "reconciliation" })];
+    harness.firms = [{ id: "firm-b", name: "Bola Partners" }];
+    renderPage();
+    fireEvent.click(screen.getByTestId("button-cohort-reconciliation"));
+    expect(screen.getByTestId("text-cohort-empty-reconciliation")).toBeTruthy();
+
+    const submit = screen.getByTestId("button-set-override-reconciliation") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("select-override-firm-reconciliation"), {
+      target: { value: "firm-b" },
+    });
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("input-override-reason-reconciliation"), {
+      target: { value: "Cohort 2 pilot" },
+    });
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
+    expect(harness.overrideCalls).toEqual([
+      {
+        key: "reconciliation",
+        data: { firmId: "firm-b", enabled: true, reason: "Cohort 2 pilot" },
+      },
+    ]);
   });
 });

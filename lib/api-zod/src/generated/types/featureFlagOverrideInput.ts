@@ -3,10 +3,16 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.89.0
+ * OpenAPI spec version: 0.90.0
  */
 
 export interface FeatureFlagOverrideInput {
   firmId: string;
   enabled: boolean;
+  /**
+     * Why this firm is in (or out of) the pilot — recorded on the audit chain.
+     * @minLength 3
+     * @maxLength 280
+     */
+  reason: string;
 }

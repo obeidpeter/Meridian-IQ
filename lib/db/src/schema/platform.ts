@@ -52,7 +52,13 @@ export const featureFlagOverridesTable = pgTable(
       .notNull()
       .references(() => firmsTable.id),
     enabled: boolean("enabled").notNull(),
+    // Activation control plane (R99): who set the pilot and why, read back
+    // on the cohort page; the tamper-evident record is the audit chain
+    // (flag.override.set / flag.override.clear).
+    reason: text("reason"),
+    setByUserId: text("set_by_user_id"),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (t) => [unique().on(t.flagKey, t.firmId)],
 );
@@ -221,6 +227,7 @@ export const schemaVersionsTable = pgTable("schema_versions", {
 });
 
 export type FeatureFlag = typeof featureFlagsTable.$inferSelect;
+export type FeatureFlagOverride = typeof featureFlagOverridesTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type OutboxEvent = typeof outboxTable.$inferSelect;
 export type MessageChannel = (typeof messageChannelEnum.enumValues)[number];

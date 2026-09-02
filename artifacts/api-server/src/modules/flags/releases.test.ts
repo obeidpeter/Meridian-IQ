@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RELEASE_FLAGS, activationReleaseTag } from "./releases.ts";
+import { RELEASE_FLAGS, RETIRED_FLAGS, activationReleaseTag } from "./releases.ts";
 
 // The activation badge the shells render (Me.releaseTag) must move only on a
 // COMPLETE activation of a release — a single pilot override or a partial
@@ -31,6 +31,15 @@ test("a partially activated release does not advance the stage", () => {
   const allButOne = [...keysAt(["R0"]), ...r1.slice(1)];
   assert.equal(activationReleaseTag(allButOne), "R0");
   assert.equal(activationReleaseTag([...keysAt(["R0"]), ...r1]), "R1");
+});
+
+test("a retired flag is out of the manifest and never gates the badge (D17)", () => {
+  assert.ok(RETIRED_FLAGS.includes("stamp_verification"));
+  for (const key of RETIRED_FLAGS) {
+    assert.ok(!RELEASE_FLAGS.some((f) => f.key === key), `${key} is retired`);
+  }
+  // Every real R1 capability lit reaches R1 without the retired key.
+  assert.equal(activationReleaseTag(keysAt(["R0", "R1"])), "R1");
 });
 
 test("a later release cannot count while an earlier one is incomplete", () => {

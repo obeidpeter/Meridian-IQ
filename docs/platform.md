@@ -946,6 +946,36 @@ failed` transition, idempotent on replay, pointer-only audit. Subscription
   (`lib/notifications.ts`), and the SME error-focus mapping is mirrored on
   mobile.
 
+## Feature flags and activation (PL-02)
+
+`modules/flags/releases.ts` is the release manifest — every seeded flag with
+its release tag and its `launchDefault` / `devDefault` — and
+`modules/flags/flags.ts` is the service: `isFeatureEnabled` reads a firm's
+override first and the platform row second, `requireFlag` 404s a dark route,
+and `litFeatureKeys` composes `Me.features`. A flag retired from the manifest
+goes on `RETIRED_FLAGS` and the seed deletes its row (and overrides) on the
+next boot, so it stops appearing on the console and blocking the release
+badge (D17: `stamp_verification` gated nothing — public verification is the
+QR link on every stamped PDF, R0 core).
+
+**The activation control plane (R99).** A firm's pilot membership is an
+override row (`feature_flag_overrides`: `enabled`, `reason`, `setByUserId`,
+`updatedAt`). The operator sets it with a reason (`POST
+/feature-flags/{key}/override`, 200 with the row), reads a flag's cohort by
+firm name (`GET /feature-flags/{key}/overrides`; a firm admin sees its own
+row only, through RLS) and clears it (`DELETE
+/feature-flags/{key}/override/{firmId}`), which hands the firm back to the
+platform switch — distinct from an explicit `enabled: false`, which darkens
+the firm even while the platform flag is lit. Every move lands on the audit
+chain with the actor and the TARGET firm: `flag.override.set` (before/after),
+`flag.override.clear` (before) and `flag.update` for the platform-wide PATCH,
+which is a 404 — never a silent no-op — for a key that was never seeded. The
+console's Feature flags page shows each flag's cohort size and, expanded, the
+members with their reasons. Sweeps that read a flag globally (the messaging
+rail, the buyer exposure refresh) are unaffected by a firm override by
+design: an override lights a surface for a firm's users, never a platform
+process.
+
 ## Observability
 
 - `GET /api/healthz` — liveness (no DB touch) + contract version.

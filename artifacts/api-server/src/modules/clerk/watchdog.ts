@@ -40,7 +40,9 @@ export interface WatchdogDeps {
 
 const realDeps: WatchdogDeps = {
   isEnabled: () => isFeatureEnabled(CLERK_FLAG_KEY),
-  disable: () => setFlag(CLERK_FLAG_KEY, false),
+  disable: async () => {
+    await setFlag(CLERK_FLAG_KEY, false);
+  },
 };
 
 export async function runClerkWatchdog(

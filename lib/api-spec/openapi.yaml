@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.89.0
+  version: 0.90.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1841,6 +1841,10 @@ paths:
     patch:
       operationId: updateFeatureFlag
       tags: [platform]
+      description: >-
+        Flip a platform flag for every firm. Lands on the audit chain as
+        `flag.update` with the actor and the optional reason; an unseeded
+        key is a 404.
       parameters:
         - $ref: "#/components/parameters/KeyParam"
       requestBody:
@@ -1852,10 +1856,35 @@ paths:
       responses:
         "204":
           description: Updated
+  /feature-flags/{key}/overrides:
+    get:
+      operationId: listFeatureFlagOverrides
+      tags: [platform]
+      description: >-
+        The flag's pilot cohort — every firm override on it, by firm name,
+        with who set it and why. Cross-firm for the operator; a firm
+        principal sees only its own row.
+      parameters:
+        - $ref: "#/components/parameters/KeyParam"
+      responses:
+        "200":
+          description: Overrides
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeatureFlagOverride"
   /feature-flags/{key}/override:
     post:
       operationId: setFeatureFlagOverride
       tags: [platform]
+      description: >-
+        Set (or re-set) one firm's override with a reason. Lands on the audit
+        chain as `flag.override.set` with before/after. An explicit
+        `enabled: false` darkens the firm even while the platform flag is
+        lit; to hand the firm back to the platform default, clear the
+        override instead.
       parameters:
         - $ref: "#/components/parameters/KeyParam"
       requestBody:
@@ -1865,9 +1894,30 @@ paths:
             schema:
               $ref: "#/components/schemas/FeatureFlagOverrideInput"
       responses:
+        "200":
+          description: The override as stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureFlagOverride"
+  /feature-flags/{key}/override/{firmId}:
+    delete:
+      operationId: clearFeatureFlagOverride
+      tags: [platform]
+      description: >-
+        Clear one firm's override so the platform default applies again.
+        Lands on the audit chain as `flag.override.clear`; 404 when the firm
+        has no override on the flag.
+      parameters:
+        - $ref: "#/components/parameters/KeyParam"
+        - name: firmId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
         "204":
-          description: Set
-
+          description: Cleared
   /error-catalogue:
     get:
       operationId: listErrorCatalogue
@@ -9261,7 +9311,7 @@ components:
 
     FeatureFlag:
       type: object
-      required: [key, enabled, releaseTag, updatedAt]
+      required: [key, enabled, releaseTag, updatedAt, overrideCount]
       properties:
         key:
           type: string
@@ -9274,20 +9324,53 @@ components:
         updatedAt:
           type: string
           format: date-time
+        overrideCount:
+          type: integer
+          description: Size of the flag's pilot cohort (firm overrides the caller can see).
     FeatureFlagUpdate:
       type: object
       required: [enabled]
       properties:
         enabled:
           type: boolean
+        reason:
+          type: string
+          maxLength: 280
     FeatureFlagOverrideInput:
       type: object
-      required: [firmId, enabled]
+      required: [firmId, enabled, reason]
       properties:
         firmId:
           type: string
         enabled:
           type: boolean
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 280
+          description: Why this firm is in (or out of) the pilot — recorded on the audit chain.
+    FeatureFlagOverride:
+      type: object
+      required: [flagKey, firmId, firmName, enabled, reason, setByUserId, createdAt, updatedAt]
+      properties:
+        flagKey:
+          type: string
+        firmId:
+          type: string
+        firmName:
+          type: string
+        enabled:
+          type: boolean
+        reason:
+          type: ["string", "null"]
+        setByUserId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     ErrorCatalogueEntry:
       type: object

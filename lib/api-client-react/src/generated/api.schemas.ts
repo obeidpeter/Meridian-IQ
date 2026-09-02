@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.89.0
+ * OpenAPI spec version: 0.90.0
  */
 export interface HealthStatus {
   status: string;
@@ -1665,15 +1665,38 @@ export interface FeatureFlag {
   /** @nullable */
   description?: string | null;
   updatedAt: string;
+  /** Size of the flag's pilot cohort (firm overrides the caller can see). */
+  overrideCount: number;
 }
 
 export interface FeatureFlagUpdate {
   enabled: boolean;
+  /** @maxLength 280 */
+  reason?: string;
 }
 
 export interface FeatureFlagOverrideInput {
   firmId: string;
   enabled: boolean;
+  /**
+     * Why this firm is in (or out of) the pilot — recorded on the audit chain.
+     * @minLength 3
+     * @maxLength 280
+     */
+  reason: string;
+}
+
+export interface FeatureFlagOverride {
+  flagKey: string;
+  firmId: string;
+  firmName: string;
+  enabled: boolean;
+  /** @nullable */
+  reason: string | null;
+  /** @nullable */
+  setByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ErrorCatalogueEntrySource = typeof ErrorCatalogueEntrySource[keyof typeof ErrorCatalogueEntrySource];

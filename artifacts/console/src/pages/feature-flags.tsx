@@ -3,12 +3,19 @@ import {
   useGetMe,
   useListFeatureFlags,
   useUpdateFeatureFlag,
+  useListFeatureFlagOverrides,
+  useSetFeatureFlagOverride,
+  useClearFeatureFlagOverride,
+  useListFirms,
   getListFeatureFlagsQueryKey,
+  getListFeatureFlagOverridesQueryKey,
 } from "@workspace/api-client-react";
-import type { FeatureFlag } from "@workspace/api-client-react";
+import type { FeatureFlag, FeatureFlagOverride } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,16 +32,219 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { serverErrorToast } from "@/lib/errors";
-import { Info, ToggleRight } from "lucide-react";
+import { Info, ToggleRight, Users, ChevronDown, ChevronUp } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
 // Flags ship dark and are flipped per release gate (PL-02). Grouping by
-// release tag mirrors how the roadmap reasons about them.
+// release tag mirrors how the roadmap reasons about them. Each flag also
+// carries its pilot cohort (R99): the firms whose override lights or darkens
+// it ahead of — or against — the platform default, each with who set it and
+// why, every change on the audit chain.
 const RELEASE_ORDER = ["R0", "R1", "R2", "R3", "R4"];
+const REASON_MIN = 3;
 
 function releaseRank(tag: string): number {
   const i = RELEASE_ORDER.indexOf(tag);
   return i === -1 ? RELEASE_ORDER.length : i;
+}
+
+function FlagCohort({
+  flag,
+  canWrite,
+}: {
+  flag: FeatureFlag;
+  canWrite: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const {
+    data: overrides,
+    isLoading,
+    error,
+    refetch,
+  } = useListFeatureFlagOverrides(flag.key, {
+    query: { queryKey: getListFeatureFlagOverridesQueryKey(flag.key) },
+  });
+  const { data: firms } = useListFirms();
+  const setOverride = useSetFeatureFlagOverride();
+  const clearOverride = useClearFeatureFlagOverride();
+
+  const [firmId, setFirmId] = useState("");
+  const [enabled, setEnabled] = useState(true);
+  const [reason, setReason] = useState("");
+  const [busyFirm, setBusyFirm] = useState<string | null>(null);
+
+  const refresh = () => {
+    queryClient.invalidateQueries({
+      queryKey: getListFeatureFlagOverridesQueryKey(flag.key),
+    });
+    queryClient.invalidateQueries({ queryKey: getListFeatureFlagsQueryKey() });
+  };
+
+  const canSubmit =
+    canWrite && firmId !== "" && reason.trim().length >= REASON_MIN;
+
+  const submit = () => {
+    if (!canSubmit) return;
+    setBusyFirm(firmId);
+    setOverride.mutate(
+      { key: flag.key, data: { firmId, enabled, reason: reason.trim() } },
+      {
+        onSuccess: (row) => {
+          toast({
+            title: `${row.firmName}: ${flag.key} ${row.enabled ? "on" : "off"}`,
+            description: "Recorded on the audit chain with your reason.",
+          });
+          setFirmId("");
+          setReason("");
+          refresh();
+        },
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not set the override",
+            fallback: "Try again.",
+          }),
+        onSettled: () => setBusyFirm(null),
+      },
+    );
+  };
+
+  const clear = (row: FeatureFlagOverride) => {
+    setBusyFirm(row.firmId);
+    clearOverride.mutate(
+      { key: flag.key, firmId: row.firmId },
+      {
+        onSuccess: () => {
+          toast({
+            title: `${row.firmName} back on the platform default`,
+            description: `${flag.key} now follows the platform switch for this firm.`,
+          });
+          refresh();
+        },
+        onError: (e) =>
+          serverErrorToast(toast, e, {
+            title: "Could not clear the override",
+            fallback: "Try again.",
+          }),
+        onSettled: () => setBusyFirm(null),
+      },
+    );
+  };
+
+  return (
+    <div
+      className="mt-3 rounded-md border bg-muted/30 p-3 space-y-3"
+      data-testid={`cohort-${flag.key}`}
+    >
+      {isLoading ? (
+        <Skeleton className="h-10" />
+      ) : error ? (
+        <QueryError thing="pilot cohort" onRetry={() => refetch()} />
+      ) : (overrides ?? []).length === 0 ? (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid={`text-cohort-empty-${flag.key}`}
+        >
+          No firm overrides — every firm follows the platform switch.
+        </p>
+      ) : (
+        <ul className="divide-y text-sm">
+          {(overrides ?? []).map((row) => (
+            <li
+              key={row.firmId}
+              className="flex items-start justify-between gap-3 py-2"
+              data-testid={`override-${flag.key}-${row.firmId}`}
+            >
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {row.firmName}
+                  <span
+                    className={`ml-2 text-xs font-normal rounded-full px-2 py-0.5 ${
+                      row.enabled
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                        : "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    {row.enabled ? "On for this firm" : "Off for this firm"}
+                  </span>
+                </p>
+                {row.reason && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {row.reason}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Set {formatDateTime(row.updatedAt)}
+                </p>
+              </div>
+              {canWrite && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busyFirm === row.firmId}
+                  onClick={() => clear(row)}
+                  data-testid={`button-clear-override-${flag.key}-${row.firmId}`}
+                >
+                  Clear
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canWrite && (
+        <form
+          className="grid gap-2 sm:grid-cols-[1fr_auto_2fr_auto] sm:items-center"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+          data-testid={`form-override-${flag.key}`}
+        >
+          <select
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={firmId}
+            onChange={(e) => setFirmId(e.target.value)}
+            aria-label={`Firm to override ${flag.key} for`}
+            data-testid={`select-override-firm-${flag.key}`}
+          >
+            <option value="">Choose a firm…</option>
+            {(firms ?? []).map((firm) => (
+              <option key={firm.id} value={firm.id}>
+                {firm.name}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              aria-label={`Override direction for ${flag.key}`}
+              data-testid={`switch-override-enabled-${flag.key}`}
+            />
+            {enabled ? "On" : "Off"}
+          </label>
+          <Input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why (recorded on the audit chain)"
+            maxLength={280}
+            aria-label={`Reason for the ${flag.key} override`}
+            data-testid={`input-override-reason-${flag.key}`}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!canSubmit || busyFirm !== null}
+            data-testid={`button-set-override-${flag.key}`}
+          >
+            Set override
+          </Button>
+        </form>
+      )}
+    </div>
+  );
 }
 
 function FlagRow({
@@ -48,32 +258,48 @@ function FlagRow({
   onToggle: (flag: FeatureFlag, enabled: boolean) => void;
   saving: boolean;
 }) {
+  const [cohortOpen, setCohortOpen] = useState(false);
   return (
-    <div
-      className="flex items-start justify-between gap-4 py-3"
-      data-testid={`flag-${flag.key}`}
-    >
-      <div className="min-w-0">
-        <p className="font-medium text-sm">
-          {flag.key}
-          <span className="ml-2 text-xs font-normal text-muted-foreground border rounded-full px-2 py-0.5">
-            {flag.releaseTag}
-          </span>
-        </p>
-        {flag.description && (
-          <p className="text-xs text-muted-foreground mt-1">{flag.description}</p>
-        )}
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Updated {formatDateTime(flag.updatedAt)}
-        </p>
+    <div className="py-3" data-testid={`flag-${flag.key}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-medium text-sm">
+            {flag.key}
+            <span className="ml-2 text-xs font-normal text-muted-foreground border rounded-full px-2 py-0.5">
+              {flag.releaseTag}
+            </span>
+          </p>
+          {flag.description && (
+            <p className="text-xs text-muted-foreground mt-1">{flag.description}</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Updated {formatDateTime(flag.updatedAt)}
+          </p>
+          <button
+            type="button"
+            className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            onClick={() => setCohortOpen((open) => !open)}
+            aria-expanded={cohortOpen}
+            data-testid={`button-cohort-${flag.key}`}
+          >
+            <Users className="w-3.5 h-3.5" aria-hidden="true" />
+            Pilot cohort ({flag.overrideCount})
+            {cohortOpen ? (
+              <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+        <Switch
+          checked={flag.enabled}
+          disabled={!canWrite || saving}
+          onCheckedChange={(checked) => onToggle(flag, checked)}
+          aria-label={`Toggle ${flag.key}`}
+          data-testid={`switch-${flag.key}`}
+        />
       </div>
-      <Switch
-        checked={flag.enabled}
-        disabled={!canWrite || saving}
-        onCheckedChange={(checked) => onToggle(flag, checked)}
-        aria-label={`Toggle ${flag.key}`}
-        data-testid={`switch-${flag.key}`}
-      />
+      {cohortOpen && <FlagCohort flag={flag} canWrite={canWrite} />}
     </div>
   );
 }
@@ -165,7 +391,10 @@ export function FeatureFlags() {
           Feature flags
         </h1>
         <p className="text-muted-foreground mt-1">
-          Release-tagged surfaces ship dark and go live per gate (PL-02).
+          Release-tagged surfaces ship dark and go live per gate (PL-02). A
+          firm's pilot cohort lights a flag for that firm ahead of the platform
+          switch — every override carries a reason and lands on the audit
+          chain.
         </p>
       </div>
 
@@ -176,7 +405,7 @@ export function FeatureFlags() {
         >
           <Info className="w-4 h-4" aria-hidden="true" />
           Read-only view — only the Compliance Desk operator can flip release
-          flags.
+          flags or change a pilot cohort.
         </p>
       )}
 
@@ -240,7 +469,8 @@ export function FeatureFlags() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               The surface goes dark immediately — its routes answer 404 for
-              all tenants until the flag is switched back on.
+              all tenants until the flag is switched back on. Firms with an
+              explicit "on" override keep it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

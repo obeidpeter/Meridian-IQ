@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.89.0
+ * OpenAPI spec version: 0.90.0
  */
 import {
   useMutation,
@@ -184,6 +184,7 @@ import type {
   ExtractionPromptInfo,
   FailureExplanation,
   FeatureFlag,
+  FeatureFlagOverride,
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
   Filing,
@@ -7375,6 +7376,9 @@ export const getUpdateFeatureFlagUrl = (key: string,) => {
   return `/api/feature-flags/${key}`
 }
 
+/**
+ * Flip a platform flag for every firm. Lands on the audit chain as `flag.update` with the actor and the optional reason; an unseeded key is a 404.
+ */
 export const updateFeatureFlag = async (key: string,
     featureFlagUpdate: FeatureFlagUpdate, options?: RequestInit): Promise<void> => {
 
@@ -7432,6 +7436,80 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getUpdateFeatureFlagMutationOptions(options));
     }
 
+export const getListFeatureFlagOverridesUrl = (key: string,) => {
+
+
+
+
+  return `/api/feature-flags/${key}/overrides`
+}
+
+/**
+ * The flag's pilot cohort — every firm override on it, by firm name, with who set it and why. Cross-firm for the operator; a firm principal sees only its own row.
+ */
+export const listFeatureFlagOverrides = async (key: string, options?: RequestInit): Promise<FeatureFlagOverride[]> => {
+
+  return customFetch<FeatureFlagOverride[]>(getListFeatureFlagOverridesUrl(key),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFeatureFlagOverridesQueryKey = (key: string,) => {
+    return [
+    `/api/feature-flags/${key}/overrides`
+    ] as const;
+    }
+
+
+export const getListFeatureFlagOverridesQueryOptions = <TData = Awaited<ReturnType<typeof listFeatureFlagOverrides>>, TError = ErrorType<unknown>>(key: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFeatureFlagOverrides>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFeatureFlagOverridesQueryKey(key);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFeatureFlagOverrides>>> = ({ signal }) => listFeatureFlagOverrides(key, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: key !== null && key !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFeatureFlagOverrides>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFeatureFlagOverridesQueryResult = NonNullable<Awaited<ReturnType<typeof listFeatureFlagOverrides>>>
+export type ListFeatureFlagOverridesQueryError = ErrorType<unknown>
+
+
+
+export function useListFeatureFlagOverrides<TData = Awaited<ReturnType<typeof listFeatureFlagOverrides>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFeatureFlagOverrides>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFeatureFlagOverridesQueryOptions(key,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getSetFeatureFlagOverrideUrl = (key: string,) => {
 
 
@@ -7440,10 +7518,13 @@ export const getSetFeatureFlagOverrideUrl = (key: string,) => {
   return `/api/feature-flags/${key}/override`
 }
 
+/**
+ * Set (or re-set) one firm's override with a reason. Lands on the audit chain as `flag.override.set` with before/after. An explicit `enabled: false` darkens the firm even while the platform flag is lit; to hand the firm back to the platform default, clear the override instead.
+ */
 export const setFeatureFlagOverride = async (key: string,
-    featureFlagOverrideInput: FeatureFlagOverrideInput, options?: RequestInit): Promise<void> => {
+    featureFlagOverrideInput: FeatureFlagOverrideInput, options?: RequestInit): Promise<FeatureFlagOverride> => {
 
-  return customFetch<void>(getSetFeatureFlagOverrideUrl(key),
+  return customFetch<FeatureFlagOverride>(getSetFeatureFlagOverrideUrl(key),
   {
     ...options,
     method: 'POST',
@@ -7495,6 +7576,75 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getSetFeatureFlagOverrideMutationOptions(options));
+    }
+
+export const getClearFeatureFlagOverrideUrl = (key: string,
+    firmId: string,) => {
+
+
+
+
+  return `/api/feature-flags/${key}/override/${firmId}`
+}
+
+/**
+ * Clear one firm's override so the platform default applies again. Lands on the audit chain as `flag.override.clear`; 404 when the firm has no override on the flag.
+ */
+export const clearFeatureFlagOverride = async (key: string,
+    firmId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getClearFeatureFlagOverrideUrl(key,firmId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getClearFeatureFlagOverrideMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearFeatureFlagOverride>>, TError,{key: string;firmId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearFeatureFlagOverride>>, TError,{key: string;firmId: string}, TContext> => {
+
+const mutationKey = ['clearFeatureFlagOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearFeatureFlagOverride>>, {key: string;firmId: string}> = (props) => {
+          const {key,firmId} = props ?? {};
+
+          return  clearFeatureFlagOverride(key,firmId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearFeatureFlagOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof clearFeatureFlagOverride>>>
+
+    export type ClearFeatureFlagOverrideMutationError = ErrorType<unknown>
+
+    export const useClearFeatureFlagOverride = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearFeatureFlagOverride>>, TError,{key: string;firmId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearFeatureFlagOverride>>,
+        TError,
+        {key: string;firmId: string},
+        TContext
+      > => {
+      return useMutation(getClearFeatureFlagOverrideMutationOptions(options));
     }
 
 export const getListErrorCatalogueUrl = () => {
