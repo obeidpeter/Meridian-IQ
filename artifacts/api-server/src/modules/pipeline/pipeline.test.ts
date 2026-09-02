@@ -144,7 +144,7 @@ async function closeBreakers(): Promise<void> {
   for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
     await getDb()
       .update(railStatesTable)
-      .set({ state: "closed", failureCount: 0, openedAt: null })
+      .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null })
       .where(eq(railStatesTable.rail, rail));
   }
 }

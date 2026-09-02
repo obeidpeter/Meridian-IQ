@@ -212,6 +212,19 @@ export const outboxClaimFailuresTotal = new Counter(
   "meridian_outbox_claim_failures_total",
   "Errors thrown while claiming the next outbox event.",
 );
+// Outbox depth and age (R96), set by the pipeline.gauges sweep: `pending` is
+// ready to run, `parked` is waiting for a rail breaker, `dead` awaits an
+// operator replay. A growing oldest-pending age with a flat dead count is
+// the "rail outage in progress" shape; a growing dead count is the "operator
+// needed" shape.
+export const outboxEvents = new LabeledGauge(
+  "meridian_outbox_events",
+  "Outbox events by state (pending, parked, processing, dead).",
+);
+export const outboxOldestPendingAgeSeconds = new Gauge(
+  "meridian_outbox_oldest_pending_age_seconds",
+  "Age of the oldest pending outbox event, in seconds (0 when none).",
+);
 export const usabilityEventsTotal = new Counter(
   "meridian_usability_events_total",
   "Privacy-safe aggregate product usability events by closed event and surface.",
@@ -225,6 +238,8 @@ const METRICS: Metric[] = [
   sweepLastSuccessBySweep,
   sweepDurationSeconds,
   outboxClaimFailuresTotal,
+  outboxEvents,
+  outboxOldestPendingAgeSeconds,
   usabilityEventsTotal,
 ];
 

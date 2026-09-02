@@ -1523,7 +1523,9 @@ Live health of the machinery:
   configured or dark, presence only — the page never shows secret values.
 - **Dead-lettered events** — queued work the pipeline gave up on, with the
   error and a **Replay** button.
-- **Reconcile pipeline** — one click re-queues anything stuck.
+- **Reconcile pipeline** — one click re-queues anything stuck that has no
+  live or dead-lettered event; a dead-lettered event is never re-queued
+  behind your back — replay it deliberately from the list above.
 - **Message deliveries** — every outbound alert (template, channel,
   failover, delivery status), once notifications are switched on.
 
@@ -2011,6 +2013,12 @@ rail-configuration card shows each rail's key **ids** (never a secret) and
 whether the plain token path is still open. To rotate a key: add the new
 `id:secret` to the ring, move the provider to it, then drop the old entry.
 
+Outage knobs (R96): `OUTBOX_RETRY_HORIZON_MS` (default 86400000, 24 h) is
+how long a retriable submission keeps retrying from its first attempt before
+it dead-letters; `OUTBOX_MAX_BACKOFF_MS` (default 900000, 15 min) caps the
+jittered backoff between tries; `RAIL_OPEN_COOLDOWN_MS` (default 30000) is
+how long an open rail breaker waits before letting one probe through.
+
 Worker and shutdown knobs (R101): `SWEEP_TIMEOUT_MS` (default 120000) bounds
 each named compliance sweep so a hung one cannot stall the minute pass;
 `SHUTDOWN_TIMEOUT_MS` (default 25000) is how long a stopping instance waits
@@ -2196,6 +2204,21 @@ reissue.
 **The operator can't see the Portfolio.**
 By design — the Compliance Desk works cases across all firms but doesn't
 browse any single firm's business pages. Firm data belongs to firm roles.
+
+**The stamping rail is down — invoices are piling up in "Awaiting stamp."**
+This is the situation the pipeline is built to sit out. Read the signs on
+**Platform ops**: a rail showing _Open_ with a "next probe" time, one
+_Rail circuit breaker OPEN_ health alert per outage (not one per minute), and
+in `/api/metrics` a rising `meridian_outbox_events{state="parked"}` and
+`meridian_outbox_oldest_pending_age_seconds` with a flat `state="dead"`.
+Nothing is lost: parked submissions wait for the breaker, burn no retries,
+and resume on their own — one probe per cooldown, then the backlog drains
+with jittered backoff. Do nothing unless the outage outlasts the retry
+horizon (24 hours by default), in which case events dead-letter with
+`RAIL_TIMEOUT` / `RAIL_UNAVAILABLE`; once the rail is back, replay them from
+**Dead-lettered events** (a replay starts a fresh horizon). Do not click
+_Reconcile pipeline_ expecting it to revive dead events — it deliberately
+will not.
 
 **An invoice is stuck in "Awaiting stamp."**
 The demo rail stamps within seconds; if something ever wedges, the Desk's

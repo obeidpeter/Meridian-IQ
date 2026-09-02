@@ -15,6 +15,7 @@ import { appendAudit } from "../audit/audit";
 import { buildCanonical } from "../invoice/service";
 import { canTransition, recordTransition } from "../invoice/lifecycle";
 import {
+  railOpenCooldownMs,
   recoverExistingStamp,
   submitWithFailover,
   type StampResult,
@@ -29,6 +30,8 @@ import {
   sweepLastSuccessBySweep,
   sweepDurationSeconds,
   outboxClaimFailuresTotal,
+  outboxEvents,
+  outboxOldestPendingAgeSeconds,
 } from "../../lib/metrics";
 
 // Async submission pipeline (INT-09, SME-03 backend). A transactional outbox row
@@ -37,20 +40,70 @@ import {
 // a dead-letter queue after maxAttempts. Nothing here is synchronous with the
 // user request.
 
+// Outage policy (R96). A retriable failure is retried on a capped, jittered
+// exponential backoff for as long as a WALL-CLOCK horizon allows — measured
+// from the event's first attempt, so a 24-hour rail outage is survived
+// rather than dead-lettered after the six tries the old attempt count
+// allowed (about two minutes). `maxAttempts` remains the minimum number of
+// tries an event gets even when its horizon was spent parked. Jitter keeps
+// a backlog that wakes together from hitting the rail in one wave.
 const BASE_BACKOFF_MS = 2_000;
+const DEFAULT_MAX_BACKOFF_MS = 15 * 60 * 1000;
+const DEFAULT_RETRY_HORIZON_MS = 24 * 60 * 60 * 1000;
+const PARK_JITTER_MS = 2_000;
 
-function backoffMs(attempts: number): number {
-  return BASE_BACKOFF_MS * Math.pow(2, attempts);
+export function outboxMaxBackoffMs(): number {
+  const configured = Number(process.env.OUTBOX_MAX_BACKOFF_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : DEFAULT_MAX_BACKOFF_MS;
+}
+
+export function outboxRetryHorizonMs(): number {
+  const configured = Number(process.env.OUTBOX_RETRY_HORIZON_MS);
+  return Number.isFinite(configured) && configured >= 0
+    ? Math.floor(configured)
+    : DEFAULT_RETRY_HORIZON_MS;
+}
+
+/** Capped exponential backoff with half-range jitter: [cap/2, cap] of 2s·2^n. */
+export function backoffMs(attempts: number): number {
+  const raw = Math.min(outboxMaxBackoffMs(), BASE_BACKOFF_MS * Math.pow(2, attempts));
+  return Math.floor(raw / 2 + Math.random() * (raw / 2));
+}
+
+/**
+ * Where a failed attempt leaves the event: dead once BOTH the minimum tries
+ * and the wall-clock horizon (from the first attempt) are spent, otherwise
+ * pending again after the jittered backoff.
+ */
+export function retryDisposition(
+  event: Pick<OutboxEvent, "maxAttempts" | "firstAttemptAt">,
+  attempts: number,
+  now = new Date(),
+): { dead: boolean; nextAttemptAt: Date; firstAttemptAt: Date } {
+  const firstAttemptAt = event.firstAttemptAt ?? now;
+  const elapsed = now.getTime() - firstAttemptAt.getTime();
+  const dead =
+    attempts >= event.maxAttempts && elapsed >= outboxRetryHorizonMs();
+  return {
+    dead,
+    firstAttemptAt,
+    nextAttemptAt: dead ? now : new Date(now.getTime() + backoffMs(attempts)),
+  };
 }
 
 // A handler reports its result rather than throwing, so the outbox status update
 // and the domain writes (attempt/stamp/status/lifecycle) commit atomically in the
 // single bypass transaction opened by processOne. `retry` re-queues with backoff;
-// `dead` dead-letters immediately (terminal business rejection or non-retriable).
+// `dead` dead-letters immediately (terminal business rejection or non-retriable);
+// `park` (R96) holds the event until the rail's breaker allows a probe — no
+// attempt is burned, because nothing was sent.
 type HandlerOutcome =
   | { kind: "done" }
   | { kind: "retry"; error: string }
-  | { kind: "dead"; error: string };
+  | { kind: "dead"; error: string }
+  | { kind: "park"; until: Date; error: string };
 
 // Shared mark-failed transition for handleInvoiceSubmit's two terminal paths
 // (business rejection and non-retriable transport error): flip the invoice to
@@ -159,7 +212,20 @@ async function handleInvoiceSubmit(
   const canonical = await buildCanonical(invoiceId);
   const idempotencyKey = `${invoiceId}:${invoice.invoiceNumber}`;
   const attemptNo = event.attempts + 1;
-  const { result } = await submitWithFailover(canonical, idempotencyKey);
+  const { result, circuitOpen, retryAfter } = await submitWithFailover(
+    canonical,
+    idempotencyKey,
+  );
+
+  // Every breaker is open: nothing was sent, so there is no attempt to record
+  // and none to burn — park until the earliest rail will take a probe (R96).
+  if (circuitOpen) {
+    return {
+      kind: "park",
+      until: retryAfter ?? new Date(Date.now() + railOpenCooldownMs()),
+      error: "RAIL_UNAVAILABLE",
+    };
+  }
 
   // One row per rail per try, with the request actually sent and the response
   // actually received (CORE-02) — the record a dispute or an accreditation
@@ -379,22 +445,30 @@ export function registerHandler(
 export type { HandlerOutcome };
 
 // Claim one pending event atomically (SKIP LOCKED so multiple workers are safe).
+// The locking subquery is raw SQL (the builder cannot express FOR UPDATE SKIP
+// LOCKED inside an UPDATE), but the UPDATE itself goes through the builder so
+// the returned row is mapped to the schema's camelCase shape. A raw
+// `RETURNING *` handed back snake_case columns, which left `maxAttempts`
+// (and now `firstAttemptAt`/`parkCount`) undefined on the claimed event and
+// silently disabled attempt-count dead-lettering (R96).
 async function claimnext(): Promise<OutboxEvent | null> {
-  const rows = await getDb().execute<OutboxEvent>(sql`
-    UPDATE outbox_events SET status = 'processing', locked_at = now()
-    WHERE id = (
-      SELECT id FROM outbox_events
-      WHERE status = 'pending' AND next_attempt_at <= now()
-      ORDER BY created_at ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
+  const [event] = await getDb()
+    .update(outboxTable)
+    .set({ status: "processing", lockedAt: sql`now()` })
+    .where(
+      eq(
+        outboxTable.id,
+        sql`(
+          SELECT id FROM outbox_events
+          WHERE status = 'pending' AND next_attempt_at <= now()
+          ORDER BY created_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )`,
+      ),
     )
-    RETURNING *
-  `);
-  const list =
-    (rows as unknown as { rows?: OutboxEvent[] }).rows ??
-    (rows as unknown as OutboxEvent[]);
-  return list[0] ?? null;
+    .returning();
+  return event ?? null;
 }
 
 async function processOne(): Promise<boolean> {
@@ -430,14 +504,37 @@ async function processOne(): Promise<boolean> {
         handlerError = err instanceof Error ? err.message : String(err);
         throw err; // roll back partial domain writes + the claim
       }
+      const now = new Date();
       const attempts = event.attempts + 1;
-      if (outcome.kind === "done") {
+      const firstAttemptAt = event.firstAttemptAt ?? now;
+      if (outcome.kind === "park") {
+        // Parked (R96): status stays pending so the drain index still holds
+        // the row, the attempt counter and the horizon clock do not move,
+        // and the wake-up is jittered so a parked backlog does not probe
+        // the rail in one wave.
+        const until = new Date(
+          outcome.until.getTime() + Math.random() * PARK_JITTER_MS,
+        );
+        await getDb()
+          .update(outboxTable)
+          .set({
+            status: "pending",
+            lockedAt: null,
+            nextAttemptAt: until,
+            parkedUntil: until,
+            parkCount: event.parkCount + 1,
+            lastError: `${outcome.error}: parked until ${until.toISOString()}`,
+          })
+          .where(eq(outboxTable.id, event.id));
+      } else if (outcome.kind === "done") {
         const containsInboundPayload = event.type.startsWith("inbound.");
         await getDb()
           .update(outboxTable)
           .set({
             status: "done",
             attempts,
+            firstAttemptAt,
+            parkedUntil: null,
             lockedAt: null,
             ...(containsInboundPayload ? { payload: { redacted: true } } : {}),
           })
@@ -448,27 +545,29 @@ async function processOne(): Promise<boolean> {
           .set({
             status: "dead",
             attempts,
+            firstAttemptAt,
+            parkedUntil: null,
             lockedAt: null,
             lastError: outcome.error,
-            nextAttemptAt: new Date(),
+            nextAttemptAt: now,
           })
           .where(eq(outboxTable.id, event.id));
         await openCaseForDeadEvent(event, outcome.error);
       } else {
-        const dead = attempts >= event.maxAttempts;
+        const next = retryDisposition(event, attempts, now);
         await getDb()
           .update(outboxTable)
           .set({
-            status: dead ? "dead" : "pending",
+            status: next.dead ? "dead" : "pending",
             attempts,
+            firstAttemptAt: next.firstAttemptAt,
+            parkedUntil: null,
             lockedAt: null,
             lastError: outcome.error,
-            nextAttemptAt: dead
-              ? new Date()
-              : new Date(Date.now() + backoffMs(attempts)),
+            nextAttemptAt: next.nextAttemptAt,
           })
           .where(eq(outboxTable.id, event.id));
-        if (dead) await openCaseForDeadEvent(event, outcome.error);
+        if (next.dead) await openCaseForDeadEvent(event, outcome.error);
       }
       return true;
     });
@@ -483,20 +582,20 @@ async function processOne(): Promise<boolean> {
     // runs here, so no partial ledger rows can be written.
     await runInBypassContext(async () => {
       const attempts = event.attempts + 1;
-      const dead = attempts >= event.maxAttempts;
+      const next = retryDisposition(event, attempts);
       await getDb()
         .update(outboxTable)
         .set({
-          status: dead ? "dead" : "pending",
+          status: next.dead ? "dead" : "pending",
           attempts,
+          firstAttemptAt: next.firstAttemptAt,
+          parkedUntil: null,
           lockedAt: null,
           lastError: message,
-          nextAttemptAt: dead
-            ? new Date()
-            : new Date(Date.now() + backoffMs(attempts)),
+          nextAttemptAt: next.nextAttemptAt,
         })
         .where(eq(outboxTable.id, event.id));
-      if (dead) await openCaseForDeadEvent(event, message);
+      if (next.dead) await openCaseForDeadEvent(event, message);
     });
     return true;
   }
@@ -566,6 +665,7 @@ export async function reconcile(): Promise<number> {
       .where(eq(invoicesTable.status, "submitted"));
     let requeued = 0;
     let recovered = 0;
+    let deadLettered = 0;
     for (const invoice of stuck) {
       const [stamp] = await getDb()
         .select({ id: stampRecordsTable.id })
@@ -573,18 +673,24 @@ export async function reconcile(): Promise<number> {
         .where(eq(stampRecordsTable.invoiceId, invoice.id))
         .limit(1);
       if (stamp) continue;
-      const [live] = await getDb()
-        .select({ id: outboxTable.id })
+      // A live row (pending — parked or not — or processing) is already on
+      // its way. A DEAD row is terminal until an operator replays it (R96):
+      // resurrecting it here would re-queue a fresh row every pass, burn a
+      // new retry budget, and mint a new alert and Desk case each time.
+      const open = await getDb()
+        .select({ status: outboxTable.status })
         .from(outboxTable)
         .where(
           and(
             eq(outboxTable.aggregateId, invoice.id),
             ne(outboxTable.status, "done"),
-            ne(outboxTable.status, "dead"),
           ),
-        )
-        .limit(1);
-      if (live) continue;
+        );
+      if (open.some((row) => row.status === "dead")) {
+        deadLettered++;
+        continue;
+      }
+      if (open.length > 0) continue;
       const idempotencyKey = `${invoice.id}:${invoice.invoiceNumber}`;
       // Fail soft: an invoice whose canonical form no longer builds (or a rail
       // lookup that throws) is re-queued so the submit handler records the
@@ -625,8 +731,11 @@ export async function reconcile(): Promise<number> {
         });
       requeued++;
     }
-    if (recovered > 0) {
-      logger.info({ recovered }, "reconcile recovered stamps the rail already held");
+    if (recovered > 0 || deadLettered > 0) {
+      logger.info(
+        { requeued, recovered, deadLettered },
+        "reconcile pass: dead-lettered invoices wait for an operator replay",
+      );
     }
     return requeued;
   });
@@ -681,6 +790,10 @@ export async function replayDead(outboxId: string): Promise<void> {
         attempts: 0,
         nextAttemptAt: new Date(),
         lastError: null,
+        // A replay starts a fresh retry horizon (R96).
+        firstAttemptAt: null,
+        parkedUntil: null,
+        parkCount: 0,
       })
       .where(and(eq(outboxTable.id, outboxId), eq(outboxTable.status, "dead")));
   });
@@ -824,6 +937,40 @@ export async function sweepPipelineRetention(): Promise<void> {
 }
 
 registerSweep("pipeline.retention", sweepPipelineRetention);
+
+// Outbox gauges (R96): depth by state, the age of the oldest ready event and
+// the dead-letter count — the series an alert on "the pipeline is stuck"
+// reads. Set by a sweep (every minute; on Autoscale, every external ping)
+// rather than at scrape time, so /api/metrics never touches the database.
+export async function sweepOutboxGauges(): Promise<void> {
+  const [row] = (
+    await getDb().execute(sql`
+      SELECT
+        count(*) FILTER (WHERE status = 'pending' AND (parked_until IS NULL OR parked_until <= now()))::int AS ready,
+        count(*) FILTER (WHERE status = 'pending' AND parked_until > now())::int AS parked,
+        count(*) FILTER (WHERE status = 'processing')::int AS processing,
+        count(*) FILTER (WHERE status = 'dead')::int AS dead,
+        coalesce(
+          extract(epoch FROM now() - min(created_at) FILTER (WHERE status = 'pending')),
+          0
+        )::float AS oldest_pending_age_seconds
+      FROM outbox_events
+    `)
+  ).rows as {
+    ready: number;
+    parked: number;
+    processing: number;
+    dead: number;
+    oldest_pending_age_seconds: number;
+  }[];
+  outboxEvents.set({ state: "pending" }, row?.ready ?? 0);
+  outboxEvents.set({ state: "parked" }, row?.parked ?? 0);
+  outboxEvents.set({ state: "processing" }, row?.processing ?? 0);
+  outboxEvents.set({ state: "dead" }, row?.dead ?? 0);
+  outboxOldestPendingAgeSeconds.set(Number(row?.oldest_pending_age_seconds ?? 0));
+}
+
+registerSweep("pipeline.gauges", sweepOutboxGauges);
 
 // Module-level reentrancy guards shared by the interval loops AND the external
 // wake-up trigger (see runScheduledWorkOnce): a run that exceeds its period —
