@@ -41,3 +41,22 @@ export function mfaChallengeDisposition(args: {
   }
   return args.status !== undefined ? "server-error" : "network-error";
 }
+
+/**
+ * Whole minutes left on the pending mfa token, for the challenge screen's
+ * expiry hint. Rounds up so "1 minute left" is never shown for a token that
+ * already lapsed, and never goes below zero.
+ */
+export function mfaMinutesLeft(issuedAt: number, now: number): number {
+  const left = issuedAt + MFA_TOKEN_TTL_MS - now;
+  return left <= 0 ? 0 : Math.ceil(left / 60_000);
+}
+
+/** The coarse, human phrasing of mfaMinutesLeft for the help text. */
+export function mfaExpiryHint(issuedAt: number, now: number): string {
+  const minutes = mfaMinutesLeft(issuedAt, now);
+  if (minutes === 0) return "this step has expired";
+  if (minutes === 1) return "about a minute left";
+  return `about ${minutes} minutes left`;
+}
+
