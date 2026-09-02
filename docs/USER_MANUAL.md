@@ -661,6 +661,19 @@ never passwords or security codes), and the party-level audit trail. Very
 large sections are capped and marked _truncated_ rather than silently
 shortened, and the download itself is recorded on the audit trail.
 
+### Your first sign-in: choosing what MeridianIQ may do
+
+The very first time a business's own account signs in, the app shows a
+one-page **consent step** before the workspace — layers 1 and 2 as plain
+choices (**Allow** or **Not now**) and layer 3 shown but marked _not yet
+available_. Both answers are recorded on the consent ledger, including
+"not now", so the step never appears again; the Consent page shows such a
+choice as **Declined** rather than "Revoked", and you can change it there
+at any time. Declining layer 1 is allowed, but the step says what it costs:
+nothing can be submitted or stamped for you until you allow it. Accountant
+and firm accounts never see this step — consent belongs to the business's
+own account.
+
 ---
 
 ## 5. Clerk — the AI assistant
@@ -1028,6 +1041,15 @@ The summary tiles show client count, high-risk count, unsubmitted invoice
 value, and overdue deadlines. Click any client to drill down to their full
 invoice list — a partner can reach any failing invoice in three clicks.
 
+**My clients / All clients** — the client book and the "clients needing
+attention" list carry a scope switch. _My clients_ shows the clients
+assigned to you **plus every unassigned client**; _All clients_ is the whole
+book. Staff who have at least one assignment land on _My clients_; firm
+admins, and staff nobody has assigned yet, land on _All clients_. The scope
+is remembered in the page address, so a bookmark or the browser's back
+button returns to the same view. Assignment only shapes this default view —
+everyone in the firm can still open any client.
+
 - **What automation would have done** — when your firm has any automation
   history or backlog, the portfolio carries a backtest card: for each
   automation kind (settle receipts, submit overdue, retry failed, draft
@@ -1254,6 +1276,34 @@ and role (firm admin, firm staff, or a client user tied to a chosen client),
 and send. The invite link is **shown once** — copy it and pass it on; it
 expires after 7 days and works once. The invitee opens it, sets a password
 (8+ characters), and signs straight in. Pending invitations can be revoked.
+
+### Assigning clients to your team
+
+Each client page carries a **Team** card: who looks after this client. A
+firm admin ticks the firm members who should have it in their _My clients_
+view and selects **Save assignments**; everyone else sees the list
+read-only. Assignees must be firm admins or firm staff of your own firm.
+Every add and removal is written to the audit trail. An unassigned client
+is simply visible to the whole firm — assignment narrows the default view,
+never who may open a client.
+
+### Access review _(firm admin only)_
+
+**Access review** (in the Practice menu) lists everyone who can open your
+firm's workspaces: name, role, when their access started, when they last
+signed in, whether two-factor authentication is on, and the clients they
+are assigned to. Firm roles without 2FA, and accounts that have never
+signed in, are flagged. **Download CSV** gives you the same register as a
+spreadsheet.
+
+When you have checked it, select **Attest as reviewed**. The attestation is
+recorded on the tamper-evident audit chain together with a fingerprint of
+the register as you saw it. If anything changes afterwards — someone joins,
+a role changes, an assignment moves — the page shows that the register has
+changed since the last attestation and the button arms again; attesting a
+register that has already moved on is refused, so nobody signs off on a
+state they did not look at. The register counts sign-ins from the audit
+trail, so it needs no extra tracking of your team.
 
 ### Plans & billing
 

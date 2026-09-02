@@ -128,6 +128,18 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: "first-sign-in-consent",
+    title: "Your first sign-in: the consent step",
+    summary:
+      "The first time the business's own account signs in, you choose what MeridianIQ may do before the workspace opens.",
+    steps: [
+      'Answer "Allow" or "Not now" for layers 1 and 2; layer 3 is shown but not yet available.',
+      'Both answers are recorded — including "Not now" — so the step never comes back.',
+      "Declining layer 1 is allowed, but nothing can be submitted or stamped for you until you allow it from the Consent page.",
+      "Accountant and firm accounts never see this step: consent belongs to the business's own account.",
+    ],
+  },
+  {
     id: "deadlines",
     title: "Deadlines and reminders",
     summary:

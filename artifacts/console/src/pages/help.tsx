@@ -58,6 +58,30 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: "assign-clients",
+    title: "Assign clients to your team",
+    summary:
+      "The Team card on a client page says who looks after it — it shapes each person's My clients view, never who may open the client.",
+    steps: [
+      'Open the client and find the "Team" card. Firm admins tick the members who look after this client and select "Save assignments".',
+      'On the Portfolio, "My clients" shows what is assigned to you plus every unassigned client; "All clients" is the whole book.',
+      "Staff with at least one assignment land on My clients; admins and unassigned staff land on All clients.",
+      "Every add and removal is recorded on the audit trail. Unassigned clients stay visible to everyone.",
+    ],
+  },
+  {
+    id: "access-review",
+    title: "Run an access review",
+    summary:
+      "Access review lists everyone who can open your firm's workspaces; attest it once you have checked it.",
+    steps: [
+      "Open Access review from the Practice menu (firm admins only).",
+      "Check each member's role, when their access started, their last sign-in, two-factor status and assigned clients. Firm roles without 2FA and never-used accounts are flagged.",
+      '"Download CSV" gives you the same register as a spreadsheet.',
+      'Select "Attest as reviewed" — it is recorded on the audit chain against a fingerprint of the register, and re-arms only when the register changes.',
+    ],
+  },
+  {
     id: "penalty-risk",
     title: "How penalty risk is ranked",
     summary:
