@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { QueryError } from "@/components/query-error";
+import { EmptyState } from "@/components/empty-state";
+import { Link } from "wouter";
 import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
@@ -37,6 +39,7 @@ import {
   AlertTriangle,
   FileSearch,
   Sparkles,
+  Users,
 } from "lucide-react";
 import {
   formatNaira,
@@ -211,29 +214,34 @@ function AssessmentTab() {
           <CardTitle className="text-base">Client</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={clientPartyId} onValueChange={selectClient}>
-            <SelectTrigger
-              className="max-w-sm"
-              aria-label="Client being assessed"
-              data-testid="select-client"
+          {portfolio && portfolio.clients.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Add a client to run an assessment"
+              description="Assessments are recorded against a client's engagement. Add your first client from the portfolio, then come back here."
             >
-              <SelectValue placeholder="Pick the client being assessed" />
-            </SelectTrigger>
-            <SelectContent>
-              {portfolio && portfolio.clients.length === 0 ? (
-                <p className="px-2 py-1.5 text-sm text-muted-foreground">
-                  No clients yet — import your client book from the Client
-                  import page first.
-                </p>
-              ) : (
-                (portfolio?.clients ?? []).map((c) => (
+              <Button asChild variant="outline" data-testid="link-advisory-add-client">
+                <Link href="/">Go to your portfolio</Link>
+              </Button>
+            </EmptyState>
+          ) : (
+            <Select value={clientPartyId} onValueChange={selectClient}>
+              <SelectTrigger
+                className="max-w-sm"
+                aria-label="Client being assessed"
+                data-testid="select-client"
+              >
+                <SelectValue placeholder="Pick the client being assessed" />
+              </SelectTrigger>
+              <SelectContent>
+                {(portfolio?.clients ?? []).map((c) => (
                   <SelectItem key={c.clientPartyId} value={c.clientPartyId}>
                     {c.legalName}
                   </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </CardContent>
       </Card>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useCreateClient,
   getGetPortfolioQueryKey,
@@ -62,12 +62,15 @@ interface AddClientDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Optional: called with the created client (e.g. to jump to its detail). */
   onCreated?: (client: CreatedClient) => void;
+  /** Optional: legal name to start from (e.g. a won prospect's name). */
+  initialLegalName?: string;
 }
 
 export function AddClientDialog({
   open,
   onOpenChange,
   onCreated,
+  initialLegalName,
 }: AddClientDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -79,6 +82,12 @@ export function AddClientDialog({
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
+
+  // A prefilled name lands when the dialog opens for it; the close handler
+  // below clears every field, so a later plain open starts blank again.
+  useEffect(() => {
+    if (open && initialLegalName) setLegalName(initialLegalName);
+  }, [open, initialLegalName]);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {

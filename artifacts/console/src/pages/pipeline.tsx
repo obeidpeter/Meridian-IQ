@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import {
   useListPipeline,
   useCreateProspect,
@@ -32,10 +33,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
+import { AddClientDialog } from "@/components/add-client-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, UserPlus } from "lucide-react";
 
 const STAGES: { key: ProspectInputStage; label: string }[] = [
   { key: "lead", label: "Lead" },
@@ -61,6 +64,11 @@ export function Pipeline() {
   const [stage, setStage] = useState<ProspectInputStage>("lead");
   const [estimate, setEstimate] = useState("50");
   const [showLost, setShowLost] = useState(false);
+  // A prospect moved to Active (or an Active card's button) opens the
+  // client-book dialog prefilled with the prospect's name — the won lead
+  // becomes a client without retyping it in the portfolio.
+  const [addClientFor, setAddClientFor] = useState<OnboardingProspect | null>(null);
+  const [, navigate] = useLocation();
   // Per-card pending state: while a stage change is in flight the affected
   // Select keeps showing the chosen stage instead of snapping back, and only
   // that card's control disables.
@@ -117,8 +125,12 @@ export function Pipeline() {
         onSuccess: () => {
           toast({
             title: `Moved ${p.name} to ${STAGE_LABEL[newStage] ?? newStage}`,
+            ...(newStage === "active"
+              ? { description: "Add them to your client book to start work." }
+              : {}),
           });
           invalidate();
+          if (newStage === "active") setAddClientFor(p);
         },
         onError: (e) =>
           serverErrorToast(toast, e, {
@@ -135,6 +147,14 @@ export function Pipeline() {
 
   return (
     <div className="space-y-6">
+      <AddClientDialog
+        open={addClientFor !== null}
+        onOpenChange={(next) => {
+          if (!next) setAddClientFor(null);
+        }}
+        initialLegalName={addClientFor?.name}
+        onCreated={(client) => navigate(`/clients/${client.partyId}`)}
+      />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
@@ -240,6 +260,15 @@ export function Pipeline() {
         <QueryError thing="the pipeline" onRetry={() => refetch()} />
       ) : (
         <>
+          {(data ?? []).length === 0 && (
+            <Card data-testid="pipeline-empty">
+              <EmptyState
+                icon={UserPlus}
+                title="No prospects yet"
+                description="Add a prospect, then move it along with each card's stage picker. Reaching Active hands it to your client book."
+              />
+            </Card>
+          )}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {STAGES.filter((s) => s.key !== "lost").map((s) => {
               const items = byStage(s.key);
@@ -255,7 +284,9 @@ export function Pipeline() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {items.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">—</p>
+                      <p className="text-xs text-muted-foreground">
+                        No prospects at this stage.
+                      </p>
                     ) : (
                       items.map((p) => {
                         const isMoving = pendingMove?.id === p.id;
@@ -269,6 +300,27 @@ export function Pipeline() {
                             <p className="text-xs text-muted-foreground">
                               ~{p.estimatedMonthlyInvoices} inv/mo
                             </p>
+                            {p.contactEmail && (
+                              <p
+                                className="text-xs text-muted-foreground break-all"
+                                data-testid={`text-prospect-email-${p.id}`}
+                              >
+                                {p.contactEmail}
+                              </p>
+                            )}
+                            {p.stage === "active" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => setAddClientFor(p)}
+                                data-testid={`button-add-to-clients-${p.id}`}
+                              >
+                                <UserPlus className="w-4 h-4 mr-1.5" aria-hidden="true" />
+                                Add to client book
+                              </Button>
+                            )}
                             <Select
                               value={isMoving ? pendingMove.stage : p.stage}
                               disabled={isMoving}
