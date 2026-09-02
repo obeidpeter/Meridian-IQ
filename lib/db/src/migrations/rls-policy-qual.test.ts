@@ -63,6 +63,8 @@ const PINNED: Record<string, PinnedPolicy> = {
   "clerk_red_team_fixtures/meridian_bypass_only": { cmd: "ALL", roles: "public", qual: "f4fc01217632ad30", withCheck: "f4fc01217632ad30" },
   "clerk_retrieval_eval_runs/meridian_bypass_only": { cmd: "ALL", roles: "public", qual: "f4fc01217632ad30", withCheck: "f4fc01217632ad30" },
   "client_onboarding_runs/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
+  // 0045 (D12): the same firm-keyed predicate as the onboarding runs.
+  "client_assignments/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "collection_accounts/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "confirmations/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "bc9f8c08010ae3d2", withCheck: "bc9f8c08010ae3d2" },
   "consent_records/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "b1cc10e162986b9e", withCheck: "b1cc10e162986b9e" },

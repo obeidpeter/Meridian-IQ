@@ -283,6 +283,10 @@ Consequences: no change to RBAC capabilities or RLS policies beyond the new
 tenant table's own policy migration; assignment changes are audited like
 any other firm action; the staff workspace gains a "My clients / All
 clients" switch rather than a second portfolio page.
+Status: shipped in R72 — `client_assignments` (firm-keyed, policy migration
+0045), `GET/PUT /console/clients/{id}/assignments` (firm admin, audited),
+`ClientRisk.assignedUserIds`, and the console's "My clients / All clients"
+scope (assigned to me or unassigned; admins default to all).
 
 ### D13 — One session is one workspace; the header chip is a label
 

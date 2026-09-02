@@ -291,3 +291,34 @@ describe("getting-started dismissal storage", () => {
     expect(readGettingStartedDismissed(null)).toBe(false);
   });
 });
+
+// Per-staff client assignment (D12): the scope is a partition of the DEFAULT
+// view. "mine" keeps what is assigned to me plus everything unassigned
+// (default-open); "all" is the whole book; and the default only narrows a
+// staff member who actually has assignments.
+import { defaultClientScope, scopeClients } from "./portfolio";
+
+describe("scopeClients / defaultClientScope", () => {
+  const me = "u-me";
+  const book = [
+    { clientPartyId: "c-mine", assignedUserIds: [me] },
+    { clientPartyId: "c-theirs", assignedUserIds: ["u-other"] },
+    { clientPartyId: "c-open", assignedUserIds: [] },
+    { clientPartyId: "c-legacy" },
+  ];
+  test("mine = assigned to me or unassigned; all = everything", () => {
+    expect(scopeClients(book, "mine", me).map((c) => c.clientPartyId)).toEqual([
+      "c-mine",
+      "c-open",
+      "c-legacy",
+    ]);
+    expect(scopeClients(book, "all", me)).toHaveLength(4);
+    expect(scopeClients(book, "mine", undefined)).toHaveLength(4);
+  });
+  test("staff with an assignment default to mine; admins and unassigned staff to all", () => {
+    expect(defaultClientScope("firm_staff", book, me)).toBe("mine");
+    expect(defaultClientScope("firm_staff", book, "u-nobody")).toBe("all");
+    expect(defaultClientScope("firm_admin", book, me)).toBe("all");
+    expect(defaultClientScope(undefined, book, me)).toBe("all");
+  });
+});

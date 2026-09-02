@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
+import { ClientTeamCard } from "@/components/client-team-card";
 import {
   useGetClientPortfolio,
   useGetMe,
@@ -1034,6 +1035,13 @@ export function ClientDetail() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {activeView === "today" && (
+          <ClientTeamCard
+            clientPartyId={id}
+            canAssign={(me?.capabilities ?? []).includes("client.assign")}
+          />
         )}
 
         {activeView === "money" && (

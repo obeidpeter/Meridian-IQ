@@ -953,30 +953,6 @@
   "source": "cognitive-walkthrough-2026-08"
  },
  {
-  "area": "Console / staff workspace",
-  "effort": "L",
-  "evidence": "UI mockup review 2026-09 (staff client-work workspace); docs/architecture.md D12.",
-  "files": [
-   "lib/db/src/schema.ts",
-   "lib/db/src/migrations",
-   "lib/api-spec/openapi.yaml",
-   "artifacts/console/src/pages/portfolio.tsx"
-  ],
-  "fix": "Add a firm-scoped staff-to-client assignment table (own policy migration), an assignment endpoint, and a 'My clients / All clients' default filter on the portfolio and work queue. Unassigned clients stay visible to all; firm admins always see everything.",
-  "launchActive": true,
-  "nng": [
-   "match-real-world",
-   "flexibility-efficiency"
-  ],
-  "problem": "Every firm staff member sees the whole portfolio; there is no 'my clients' view, so a growing practice cannot partition daily work by person.",
-  "severity": "medium",
-  "source": "ui-mockups-2026-09",
-  "title": "Per-staff client assignment (D12)",
-  "userGroups": [
-   "firm"
-  ]
- },
- {
   "area": "Console / team, roles and access",
   "effort": "M",
   "evidence": "UI mockup review 2026-09 (firm admin team, roles and access management); docs/architecture.md D14.",
