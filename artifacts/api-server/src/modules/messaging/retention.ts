@@ -64,4 +64,4 @@ export async function sweepMessagesRetention(): Promise<number> {
   });
 }
 
-registerSweep(atMostHourly(sweepMessagesRetention));
+registerSweep("messaging.retention", atMostHourly(sweepMessagesRetention));

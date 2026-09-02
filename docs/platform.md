@@ -121,9 +121,24 @@ looked at. Reporting and attestation only: no identity federation.
 
 `modules/pipeline/pipeline.ts` runs three in-process loops: outbox drain,
 reconciliation sweep, and the registered compliance sweeps. Register new
-periodic work with `registerSweep(fn)` — wrapped `atMostHourly` when every
-worker tick would be too often. The sweep inventory lives in the code, not
-here: grep `registerSweep(` for the authoritative list.
+periodic work with `registerSweep("area.name", fn, { timeoutMs? })` —
+wrapped `atMostHourly` when every worker tick would be too often. The sweep
+inventory lives in the code, not here: grep `registerSweep(` for the
+authoritative list (40 sweeps at R101).
+
+**Sweep hygiene (R101).** Every sweep is named, and the name is the label:
+`meridian_sweep_errors_total{sweep,kind}` counts each failure as `error` or
+`timeout`, `meridian_sweep_last_success_by_sweep_timestamp_seconds{sweep}`
+says when each sweep last completed, `meridian_sweep_duration_seconds` times
+each one, and the log line names it. Each sweep runs under a per-sweep
+timeout (`SWEEP_TIMEOUT_MS`, default 120 s, or the registration's own) so a
+hung sweep cannot pin the pass — and with it every later minute tick, which
+the reentrancy guard would skip forever; a timed-out promise is abandoned,
+not cancelled, and the pass moves on. A failure of the pass itself (lock
+acquisition or release) is counted under `sweep="pass"` and never escapes
+the interval as an unhandled rejection. The pass-level
+`meridian_sweep_runs_total` / `meridian_sweep_last_success_timestamp_seconds`
+pair is unchanged (loop liveness, all-green pass).
 
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). The decision is captured on a client user's FIRST
@@ -151,6 +166,16 @@ canonical request that was sent and the response received, and every
 `stamp_records` row carries `provider` and `environment` (`simulator` /
 `sandbox` today), so sandbox stamps issued before accreditation can never be
 read as live ones after cutover.
+
+**Graceful shutdown (R101, `lib/shutdown.ts`).** On SIGTERM/SIGINT the
+instance flips readiness off first (`/api/readyz` answers 503 with
+`reason: shutting_down` in every environment, so the load balancer drains
+it), stops the worker timers, closes the listener and lets in-flight
+requests finish (idle keep-alive sockets are closed), waits for the worker
+pass that may be mid-transaction to settle (`awaitWorkerIdle`), ends the
+pool and exits 0. `SHUTDOWN_TIMEOUT_MS` (default 25 s, inside a typical 30 s
+orchestrator grace) forces exit 1 if any step hangs; a second signal during
+shutdown is ignored.
 
 **Multi-instance safety.** The loops are reentrancy-guarded per process, and
 every sweep is **idempotent** by construction (advisory locks, dedup
@@ -1007,12 +1032,17 @@ legacy header still admitted).
 ## Observability
 
 - `GET /api/healthz` — liveness (no DB touch) + contract version.
-- `GET /api/readyz` — readiness (`SELECT 1`); 503 if the DB is unreachable.
+- `GET /api/readyz` — readiness (`SELECT 1`); 503 if the DB is unreachable,
+  and 503 `shutting_down` while the instance drains (R101).
 - `GET /api/metrics` — Prometheus text: request-duration histogram
   (method/route/status, id segments collapsed), process health (event-loop
-  lag, RSS, heap, uptime), and sweep liveness
-  (`meridian_sweep_last_success_*`). Hand-rolled in `lib/metrics.ts` (a
-  metrics lib would fork drizzle via `@opentelemetry/api`).
+  lag, RSS, heap, uptime), and sweep liveness — pass-level
+  (`meridian_sweep_runs_total`, `meridian_sweep_last_success_timestamp_seconds`)
+  and per named sweep (`meridian_sweep_errors_total{sweep,kind}`,
+  `meridian_sweep_last_success_by_sweep_timestamp_seconds{sweep}`,
+  `meridian_sweep_duration_seconds{sweep,outcome}`). Hand-rolled in
+  `lib/metrics.ts` (a metrics lib would fork drizzle via
+  `@opentelemetry/api`).
 - `/api/internal/sweep` is fail-closed unless its ring (`SWEEP_KEYS` or the
   legacy `SWEEP_TOKEN`) is configured and the caller signs or presents a key
   in the `x-op-token` header; it also has an endpoint rate limit.

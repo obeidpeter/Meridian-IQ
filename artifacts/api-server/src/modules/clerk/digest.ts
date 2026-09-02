@@ -864,7 +864,7 @@ export async function latestDigestForFirm(
   return row ?? null;
 }
 
-registerSweep(async function sweepClerkDigests(): Promise<void> {
+registerSweep("clerk.digests", async function sweepClerkDigests(): Promise<void> {
   // Opt-in: generating digests for every firm can spend firm tokens, so the
   // flag must be turned on deliberately (off/missing = no digests at all).
   if (await isFeatureEnabled(DIGEST_FLAG_KEY)) {

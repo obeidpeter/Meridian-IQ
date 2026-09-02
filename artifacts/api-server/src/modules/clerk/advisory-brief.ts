@@ -784,4 +784,4 @@ export async function sweepAdvisoryBriefs(
   }
 }
 
-registerSweep(() => sweepAdvisoryBriefs());
+registerSweep("clerk.advisory_briefs", () => sweepAdvisoryBriefs());

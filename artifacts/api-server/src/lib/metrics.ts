@@ -82,6 +82,33 @@ export class Gauge implements Metric {
   }
 }
 
+// A gauge with labels: one series per label set (the per-sweep last-success
+// timestamps). Unlike Counter it exposes nothing but HELP/TYPE until a
+// series exists — an absent sweep must not read as "succeeded at epoch 0".
+export class LabeledGauge implements Metric {
+  private series = new Map<string, { labels: Labels; value: number }>();
+  constructor(
+    readonly name: string,
+    readonly help: string,
+  ) {}
+  set(labels: Labels, value: number): void {
+    this.series.set(fmtLabels(labels), { labels, value });
+  }
+  setToCurrentTime(labels: Labels): void {
+    this.set(labels, Date.now() / 1000);
+  }
+  expose(): string {
+    const lines = [
+      `# HELP ${this.name} ${this.help}`,
+      `# TYPE ${this.name} gauge`,
+    ];
+    for (const { labels, value } of this.series.values()) {
+      lines.push(`${this.name}${fmtLabels(labels)} ${value}`);
+    }
+    return lines.join("\n");
+  }
+}
+
 export class Histogram implements Metric {
   private readonly buckets: number[];
   private series = new Map<
@@ -160,11 +187,23 @@ export const sweepRunsTotal = new Counter(
 );
 export const sweepErrorsTotal = new Counter(
   "meridian_sweep_errors_total",
-  "Errors thrown by individual compliance sweeps within a pass.",
+  "Failures of individual compliance sweeps within a pass, by sweep name and kind (error|timeout).",
 );
 export const sweepLastSuccess = new Gauge(
   "meridian_sweep_last_success_timestamp_seconds",
   "Unix time of the last compliance sweep pass in which every sweep succeeded.",
+);
+// Per-sweep hygiene (R101): which named sweep last succeeded when, and how
+// long each takes — the series an alert on "clerk.digests has not succeeded
+// in a day" needs, which the pass-level gauge above cannot answer.
+export const sweepLastSuccessBySweep = new LabeledGauge(
+  "meridian_sweep_last_success_by_sweep_timestamp_seconds",
+  "Unix time each named compliance sweep last completed without error.",
+);
+export const sweepDurationSeconds = new Histogram(
+  "meridian_sweep_duration_seconds",
+  "Duration of each named compliance sweep, by sweep and outcome (ok|error|timeout).",
+  [0.1, 0.5, 1, 5, 15, 60, 120],
 );
 // The outbox drain swallows claim errors to protect the loop; this counter is
 // how a persistent claim failure (permissions regression, schema drift)
@@ -183,6 +222,8 @@ const METRICS: Metric[] = [
   sweepRunsTotal,
   sweepErrorsTotal,
   sweepLastSuccess,
+  sweepLastSuccessBySweep,
+  sweepDurationSeconds,
   outboxClaimFailuresTotal,
   usabilityEventsTotal,
 ];

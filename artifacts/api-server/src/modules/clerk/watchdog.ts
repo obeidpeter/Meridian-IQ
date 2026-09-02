@@ -157,7 +157,7 @@ export async function sweepStuckPendingCases(): Promise<number> {
   return rows.length;
 }
 
-registerSweep(runClerkWatchdog);
-registerSweep(sweepStuckPendingCases);
-registerSweep(sweepExpiredClaims);
-registerSweep(sweepExpiredCaseContent);
+registerSweep("clerk.watchdog", runClerkWatchdog);
+registerSweep("clerk.stuck_pending_cases", sweepStuckPendingCases);
+registerSweep("clerk.expired_claims", sweepExpiredClaims);
+registerSweep("clerk.expired_case_content", sweepExpiredCaseContent);

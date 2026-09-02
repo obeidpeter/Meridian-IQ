@@ -244,4 +244,4 @@ export async function sweepHealthWatch(
   });
 }
 
-registerSweep(atMostHourly(sweepHealthWatch));
+registerSweep("desk.health_watch", atMostHourly(sweepHealthWatch));

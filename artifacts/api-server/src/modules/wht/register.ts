@@ -7,4 +7,4 @@ import { sweepWhtReminders } from "./reminders";
 // deadline crossing its threshold should nudge within the minute, not the
 // hour. Kept out of reminders.ts so that module stays importable by
 // node --test without the pipeline worker's dependency graph.
-registerSweep(() => sweepWhtReminders());
+registerSweep("wht.reminders", () => sweepWhtReminders());

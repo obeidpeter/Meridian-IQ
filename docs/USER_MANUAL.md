@@ -2011,6 +2011,13 @@ rail-configuration card shows each rail's key **ids** (never a secret) and
 whether the plain token path is still open. To rotate a key: add the new
 `id:secret` to the ring, move the provider to it, then drop the old entry.
 
+Worker and shutdown knobs (R101): `SWEEP_TIMEOUT_MS` (default 120000) bounds
+each named compliance sweep so a hung one cannot stall the minute pass;
+`SHUTDOWN_TIMEOUT_MS` (default 25000) is how long a stopping instance waits
+for in-flight requests and the running worker pass before it exits anyway.
+On SIGTERM the server answers `/api/readyz` with 503 first, so a rolling
+restart drains cleanly.
+
 Security and capacity knobs (not feature switches): `SESSION_SIGNING_KEYS`
 (`id:secret,…` key-ring; or a single `SESSION_SECRET`) signs session cookies
 — **production refuses to start without one**; `PASSWORD_KDF_CONCURRENCY` /

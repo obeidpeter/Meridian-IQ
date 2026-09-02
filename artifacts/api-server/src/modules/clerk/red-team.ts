@@ -290,7 +290,7 @@ export async function growRedTeamFixtures(
   });
 }
 
-registerSweep(async function sweepRedTeamGrowth(): Promise<void> {
+registerSweep("clerk.red_team_growth", async function sweepRedTeamGrowth(): Promise<void> {
   // Opt-in: generating adversarial fixtures spends tokens, so the flag must be
   // deliberately on (off/missing = fail closed, no generation at all). The
   // kill switch also applies (assertClerkEnabled below).

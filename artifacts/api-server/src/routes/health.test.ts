@@ -1,5 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { markReady, markUnready } from "../lib/readiness.ts";
 import healthRouter from "./health.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import {
@@ -48,4 +49,17 @@ test("/metrics serves Prometheus text with the app's series", async () => {
   const text = await res.text();
   assert.match(text, /http_request_duration_seconds/);
   assert.match(text, /process_resident_memory_bytes/);
+});
+
+test("/readyz answers 503 while shutting down, in every environment (R101)", async () => {
+  const base = await listen(appFor(principal, healthRouter));
+  markUnready("shutting_down");
+  try {
+    const res = await fetch(`${base}/readyz`);
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { status: "unavailable", reason: "shutting_down" });
+  } finally {
+    markReady();
+  }
+  assert.equal((await fetch(`${base}/readyz`)).status, 200);
 });

@@ -238,7 +238,7 @@ const AUTO_RETRIEVAL_FLAG_KEY = "clerk_auto_retrieval_eval";
 // in memory.ts).
 const RETRIEVAL_SWEEP_LOCK_ID = 731_851;
 
-registerSweep(async function sweepRetrievalAutoEval(): Promise<void> {
+registerSweep("clerk.retrieval_auto_eval", async function sweepRetrievalAutoEval(): Promise<void> {
   const due = await runInBypassContext(async () => {
     const locked = await tryAdvisoryXactLock(RETRIEVAL_SWEEP_LOCK_ID);
     if (!locked) return false;
@@ -387,4 +387,4 @@ export async function sweepRetrievalWatch(
   });
 }
 
-registerSweep(atMostHourly(sweepRetrievalWatch));
+registerSweep("clerk.retrieval_watch", atMostHourly(sweepRetrievalWatch));

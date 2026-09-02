@@ -435,7 +435,7 @@ async function refreshBuyerExposures(): Promise<number> {
 }
 
 // Register the daily-refresh sweep with the worker at import time.
-registerSweep(refreshBuyerExposures);
+registerSweep("buyer.exposures", refreshBuyerExposures);
 
 export interface ScoreboardEntry {
   rank: number;

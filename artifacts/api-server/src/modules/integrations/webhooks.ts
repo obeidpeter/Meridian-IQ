@@ -712,7 +712,7 @@ export async function dispatchWebhookDeliveries(): Promise<number> {
 // Registered with the pipeline worker at import time (routes/integrations.ts
 // imports this module), like the other feature sweeps. Both halves are
 // idempotent/claim-guarded, so multi-instance passes are safe no-ops.
-registerSweep(async () => {
+registerSweep("integrations.webhooks", async () => {
   await fanOutWebhookEvents();
   await dispatchWebhookDeliveries();
 });
