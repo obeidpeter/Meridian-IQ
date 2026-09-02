@@ -39,7 +39,7 @@ const SECTIONS: Array<{
     label: "Activation",
     title: "Evidence and activation",
     description:
-      "Release gates, commercial activation and live proof from the operational spine.",
+      "Release gates, commercial activation and live proof from platform records.",
     icon: Gauge,
   },
   {

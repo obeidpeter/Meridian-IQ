@@ -202,7 +202,7 @@ export function FeatureFlags() {
           <EmptyState
             icon={ToggleRight}
             title="No flags seeded yet"
-            description="Release flags are seeded by the platform — they appear here once the spine registers them."
+            description="Release flags are seeded by the platform — they appear here once the platform registers them."
           />
         </Card>
       ) : (

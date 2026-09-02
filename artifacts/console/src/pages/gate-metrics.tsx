@@ -79,7 +79,7 @@ export function GateMetrics() {
         </h1>
         <p className="text-muted-foreground mt-1">
           Releases unlock on evidence, not calendar dates — this is the
-          evidence, measured live from the spine.
+          evidence, measured live from platform data.
         </p>
       </div>
 

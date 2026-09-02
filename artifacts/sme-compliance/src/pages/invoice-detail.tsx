@@ -364,14 +364,14 @@ function ConfirmationCard({
       <CardContent>
         {featureDisabled ? (
           <p className="text-sm text-muted-foreground">
-            Buyer confirmations are not yet enabled for this organization. Ask
-            your operator to enable it.
+            Buyer confirmations are not yet switched on for your business. Ask
+            your accounting firm about switching it on.
           </p>
         ) : timeline.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No confirmation activity yet.
             {invoice.status === "stamped"
-              ? " Request a confirmation so your buyer acknowledges this invoice."
+              ? " Request a confirmation so your customer acknowledges this invoice."
               : " Confirmations open up once the invoice is stamped."}
           </p>
         ) : (
@@ -791,8 +791,8 @@ export function ValidationErrorsCard({
         </ul>
         {partyFieldFlagged && (
           <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
-            Issues on buyer or supplier fields live on the customer or business
-            record, not on this invoice — ask your firm to correct the record,
+            Issues with customer or business details live on the customer or
+            business record, not on this invoice — ask your firm to correct the record,
             then submit again.
           </p>
         )}
@@ -1331,7 +1331,7 @@ export function InvoiceDetail() {
       toast({
         title: "Confirmation requested",
         description:
-          "Your buyer will be asked to confirm receipt of this invoice.",
+          "Your customer will be asked to confirm receipt of this invoice.",
       });
     } catch (e) {
       toast({
@@ -1840,7 +1840,7 @@ export function InvoiceDetail() {
               </dd>
             </div>
             <div className="flex justify-between gap-4 py-2.5">
-              <dt className="text-muted-foreground">Buyer</dt>
+              <dt className="text-muted-foreground">Customer</dt>
               <dd className="max-w-[65%] text-right font-medium">
                 {buyer?.legalName ??
                   `Party ${invoice.buyerPartyId.slice(0, 8)}`}
@@ -1862,7 +1862,7 @@ export function InvoiceDetail() {
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
             Once the rail accepts and stamps this invoice, corrections require
             the cancellation or credit-note workflow. Do not submit while the
-            buyer, amount, currency, or VAT is still being checked.
+            customer, amount, currency, or VAT is still being checked.
           </p>
           <AlertDialogFooter>
             <AlertDialogCancel>Go back and review</AlertDialogCancel>

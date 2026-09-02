@@ -8,13 +8,15 @@ import {
   useListFirmTeam,
   useReplaceClientAssignments,
 } from "@workspace/api-client-react";
-import { Users } from "lucide-react";
+import { Link } from "wouter";
+import { UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { roleLabel } from "@/components/capability-gate";
 import { serverErrorMessage } from "@/lib/errors";
+import { inviteClientLoginHref } from "@/lib/invitations";
 
 /**
  * Who looks after this client (architecture.md D12). Everyone in the firm
@@ -86,12 +88,24 @@ export function ClientTeamCard({
   return (
     <Card data-testid="card-client-team">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2.5 text-base">
-          <span className="mi-card-icon">
-            <Users aria-hidden="true" />
-          </span>
-          Team
-        </CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2.5 text-base">
+            <span className="mi-card-icon">
+              <Users aria-hidden="true" />
+            </span>
+            Team
+          </CardTitle>
+          {canAssign && (
+            <Link
+              href={inviteClientLoginHref(clientPartyId)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+              data-testid="link-invite-client-login"
+            >
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              Invite a client login
+            </Link>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground">
           Who looks after this client. Everyone in the firm can still open it;
           assignment only shapes each person&rsquo;s &ldquo;My clients&rdquo;

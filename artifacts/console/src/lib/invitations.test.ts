@@ -5,6 +5,8 @@ import {
   invitationStatusTone,
   invitationStatusLabel,
   effectiveInvitationStatus,
+  inviteClientLoginHref,
+  readInvitationPrefill,
 } from "./invitations";
 
 describe("acceptInviteLink", () => {
@@ -91,5 +93,35 @@ describe("effectiveInvitationStatus", () => {
         new Date("2026-02-01T00:00:00Z"),
       ),
     ).toBe("revoked");
+  });
+});
+
+describe("inviteClientLoginHref / readInvitationPrefill", () => {
+  test("the client-detail link opens the form on client_user for that party", () => {
+    const href = inviteClientLoginHref("cp-1");
+    expect(href).toBe("/invitations?role=client_user&clientPartyId=cp-1");
+    expect(readInvitationPrefill(href.slice(href.indexOf("?")))).toEqual({
+      role: "client_user",
+      clientPartyId: "cp-1",
+    });
+  });
+
+  test("percent-encodes the party id and reads it back intact", () => {
+    const href = inviteClientLoginHref("a b/c");
+    expect(href).toContain("clientPartyId=a%20b%2Fc");
+    expect(readInvitationPrefill(href.slice(href.indexOf("?"))).clientPartyId).toBe(
+      "a b/c",
+    );
+  });
+
+  test("an unknown or missing role falls back to firm_staff with no party", () => {
+    expect(readInvitationPrefill("?role=operator")).toEqual({
+      role: "firm_staff",
+      clientPartyId: "",
+    });
+    expect(readInvitationPrefill("")).toEqual({
+      role: "firm_staff",
+      clientPartyId: "",
+    });
   });
 });
