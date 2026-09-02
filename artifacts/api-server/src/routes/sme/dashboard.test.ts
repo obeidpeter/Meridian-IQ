@@ -52,6 +52,7 @@ const ROWS: Row[] = [
   { num: `DASH-${SALT}-C1`, status: "cancelled", issued: daysAgo(10), total: "5.00" },
 ];
 const ids = new Map<string, string>();
+const idOf = (num: string): string | null => ids.get(num) ?? null;
 
 before(async () => {
   const db = getDb();
@@ -112,7 +113,7 @@ test("the summary's counts and totals are the SQL fold of the book", async () =>
   assert.equal(s.penaltyRisk, "high");
   // The most overdue submission is the next deadline.
   assert.equal(s.nextDeadline?.kind, "penalty_watch");
-  assert.equal(s.nextDeadline?.invoiceId, ids.get(`DASH-${SALT}-D1`));
+  assert.equal(s.nextDeadline?.invoiceId, idOf(`DASH-${SALT}-D1`));
   // Activity is the newest eight invoices, newest first — never the book.
   assert.equal(s.recentActivity.length, 8);
   assert.equal(s.recentActivity[0].invoiceNumber, `DASH-${SALT}-C1`);
@@ -130,12 +131,12 @@ test("the calendar carries one deadline per unsubmitted invoice and agrees with 
   ).json()) as { kind: string; status: string; invoiceId: string | null; dueDate: string }[];
   const byInvoice = new Map(deadlines.filter((d) => d.invoiceId).map((d) => [d.invoiceId, d]));
   assert.equal(byInvoice.size, 3, "exactly the three unsubmitted invoices");
-  assert.equal(byInvoice.get(ids.get(`DASH-${SALT}-D1`))?.kind, "penalty_watch");
-  assert.equal(byInvoice.get(ids.get(`DASH-${SALT}-D1`))?.status, "overdue");
-  assert.equal(byInvoice.get(ids.get(`DASH-${SALT}-D2`))?.kind, "invoice_submission");
-  assert.equal(byInvoice.get(ids.get(`DASH-${SALT}-D2`))?.status, "upcoming");
-  assert.equal(byInvoice.get(ids.get(`DASH-${SALT}-D3`))?.kind, "invoice_submission");
-  assert.equal(byInvoice.get(ids.get(`DASH-${SALT}-D3`))?.status, "due_soon");
+  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D1`))?.kind, "penalty_watch");
+  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D1`))?.status, "overdue");
+  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D2`))?.kind, "invoice_submission");
+  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D2`))?.status, "upcoming");
+  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D3`))?.kind, "invoice_submission");
+  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D3`))?.status, "due_soon");
   for (let i = 1; i < deadlines.length; i++) {
     assert.ok(deadlines[i - 1].dueDate <= deadlines[i].dueDate, "sorted by due date");
   }
