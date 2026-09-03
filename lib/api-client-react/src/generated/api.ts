@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.93.0
+ * OpenAPI spec version: 0.94.0
  */
 import {
   useMutation,
@@ -286,6 +286,7 @@ import type {
   ListPartiesParams,
   ListPaymentBehaviourParams,
   ListRecurringSuggestionsParams,
+  ListRetryingEventsParams,
   ListStatementsParams,
   ListUnbilledIncomeParams,
   ListWhtCreditsParams,
@@ -8747,6 +8748,87 @@ export function useListDeadLetters<TData = Awaited<ReturnType<typeof listDeadLet
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListDeadLettersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListRetryingEventsUrl = (params?: ListRetryingEventsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/operator/retrying?${stringifiedParams}` : `/api/operator/retrying`
+}
+
+/**
+ * Pending outbox events that have failed at least once or are parked behind a rail breaker, soonest retry first (R102).
+ */
+export const listRetryingEvents = async (params?: ListRetryingEventsParams, options?: RequestInit): Promise<OutboxEvent[]> => {
+
+  return customFetch<OutboxEvent[]>(getListRetryingEventsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRetryingEventsQueryKey = (params?: ListRetryingEventsParams,) => {
+    return [
+    `/api/operator/retrying`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRetryingEventsQueryOptions = <TData = Awaited<ReturnType<typeof listRetryingEvents>>, TError = ErrorType<unknown>>(params?: ListRetryingEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRetryingEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRetryingEventsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRetryingEvents>>> = ({ signal }) => listRetryingEvents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRetryingEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRetryingEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listRetryingEvents>>>
+export type ListRetryingEventsQueryError = ErrorType<unknown>
+
+
+
+export function useListRetryingEvents<TData = Awaited<ReturnType<typeof listRetryingEvents>>, TError = ErrorType<unknown>>(
+ params?: ListRetryingEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRetryingEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRetryingEventsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

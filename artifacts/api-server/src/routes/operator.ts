@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
 import { desc, inArray } from "drizzle-orm";
-import { getDb, auditEventsTable, railStatesTable, type Rail } from "@workspace/db";
+import {
+  getDb,
+  auditEventsTable,
+  railStatesTable,
+  type OutboxEvent,
+  type Rail,
+} from "@workspace/db";
+import { pageBounds } from "../lib/page";
 import {
   GetClerkAssuranceResponse,
   GetComplianceOperationsResponse,
@@ -14,6 +21,8 @@ import {
   GetGateMetricsResponse,
   ListHealthAlertsResponse,
   GetRailConfigResponse,
+  ListRetryingEventsQueryParams,
+  ListRetryingEventsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { describeKeyRing, legacyTokenPathEnabled } from "../lib/op-token";
@@ -21,6 +30,7 @@ import { assertCan } from "../modules/auth/rbac";
 import { railTransportSummary } from "../modules/rails/adapter";
 import {
   listDeadLetters,
+  listRetrying,
   replayDead,
   reconcile,
 } from "../modules/pipeline/pipeline";
@@ -42,9 +52,42 @@ import { getClerkAssuranceWorkspace } from "../modules/clerk/assurance";
 
 const router: IRouter = Router();
 
+const iso = (value: Date | null | undefined): string | null =>
+  value ? value.toISOString() : null;
+
+// Timestamps the contract types as nullable strings are serialised here:
+// a row straight from the driver carries Date objects, which the response
+// schema would refuse — during the one outage the card exists for.
+function serialiseOutboxEvent(event: OutboxEvent) {
+  return {
+    ...event,
+    nextAttemptAt: iso(event.nextAttemptAt),
+    parkedUntil: iso(event.parkedUntil),
+    firstAttemptAt: iso(event.firstAttemptAt),
+  };
+}
+
 router.get("/operator/dead-letters", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
-  res.json(ListDeadLettersResponse.parse(await listDeadLetters()));
+  res.json(
+    ListDeadLettersResponse.parse(
+      (await listDeadLetters()).map(serialiseOutboxEvent),
+    ),
+  );
+});
+
+// What is still on its way (R102): pending events that have failed at least
+// once or are parked behind a breaker, soonest retry first — the answer to
+// "why has this invoice not stamped yet" before anything dead-letters.
+router.get("/operator/retrying", async (req, res): Promise<void> => {
+  assertCan(req.principal, "operator.queue.read");
+  const query = parseOrThrow(ListRetryingEventsQueryParams, req.query);
+  const bounds = pageBounds(query, { defaultLimit: 50, maxLimit: 200 });
+  res.json(
+    ListRetryingEventsResponse.parse(
+      (await listRetrying(bounds)).map(serialiseOutboxEvent),
+    ),
+  );
 });
 
 router.post(
@@ -87,10 +130,15 @@ router.get("/operator/rails", async (req, res): Promise<void> => {
           failureCount: 0,
           openedAt: null,
           retryAt: null,
+          probeStartedAt: null,
+          lastErrorCode: null,
           updatedAt: now,
         };
         return {
           ...row,
+          openedAt: iso(row.openedAt),
+          retryAt: iso(row.retryAt),
+          lastErrorCode: row.lastErrorCode ?? null,
           transport: summary.transport,
           environment: summary.environment,
           configured: summary.rails[rail].configured,

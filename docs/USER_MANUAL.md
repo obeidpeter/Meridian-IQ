@@ -1535,6 +1535,12 @@ Live health of the machinery:
   access-point rails, "dark" means the in-process simulator stamps that
   rail; "configured" means its submissions go over HTTP to the access point
   named in `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL`.
+- **Retrying events** — queued work that has failed at least once or is
+  parked behind a rail breaker, soonest retry first, each with its last
+  error and either a _Retrying_ or a _Parked_ pill. This is where "why has
+  this invoice not stamped yet" is answered before anything dead-letters.
+  The rails card above it also shows each rail's **last error** code (for
+  example `RAIL_UNAUTHORIZED`) while its breaker is counting failures.
 - **Dead-lettered events** — queued work the pipeline gave up on, with the
   error and a **Replay** button.
 - **Reconcile pipeline** — one click re-queues anything stuck that has no
@@ -2245,20 +2251,18 @@ and resume on their own — one probe per cooldown, then the backlog drains
 with jittered backoff. Do nothing unless the outage outlasts the retry
 horizon (24 hours by default), in which case events dead-letter with
 `RAIL_TIMEOUT` / `RAIL_UNAVAILABLE`; once the rail is back, replay them from
-**Dead-lettered events** (a replay starts a fresh horizon). The alert itself
-names only the rail, when its breaker opened and the failure count — never
-an error code — so to learn _why_ the rail is refusing, read the code off a
-submission that actually reached it: the retrying outbox row's last error
-(on the Desk, the **Dead-lettered events** list shows it once a row
-dead-letters; while it is still retrying it is the row's `last_error` in the
-outbox table and the api-server's "rail submission not accepted" log line —
-a _parked_ row only ever says `RAIL_UNAVAILABLE: parked until …`, because
-nothing was sent), or the invoice's own attempt history (the SME app's
+**Dead-lettered events** (a replay starts a fresh horizon). The alert names
+the rail, when its breaker opened, the failure count and the **last error
+code** the rail produced (R102); the rails card on **Platform ops** shows the
+same code, and the **Retrying events** card lists every submission still on
+its way with its own last error (a _parked_ row only ever says
+`RAIL_UNAVAILABLE: parked until …`, because nothing was sent). The
+invoice's own attempt history says the same thing per invoice (the SME app's
 submission timeline, the mobile transmission history, or
 `GET /api/invoices/{id}/attempts`). If that code is `RAIL_UNAUTHORIZED`, the
-access point is refusing this deployment's credentials — fix
-`RAIL_PRIMARY_TOKEN` / `RAIL_SECONDARY_TOKEN` and the backlog drains by
-itself. Do not click _Reconcile pipeline_ expecting it to revive dead
+access point is refusing this deployment's credentials — the alert says so
+in words — fix `RAIL_PRIMARY_TOKEN` / `RAIL_SECONDARY_TOKEN` and the backlog
+drains by itself. Do not click _Reconcile pipeline_ expecting it to revive dead
 events — it deliberately will not.
 
 **An invoice is stuck in "Awaiting stamp."**

@@ -204,13 +204,16 @@ async function journeyOperatorDesk(page, BASE, check) {
   await page.waitForSelector("text=reconciliation disabled", { timeout: 8000 });
   check("feature flag toggles round-trip", true);
 
-  // Platform ops: rails + messages section render
+  // Platform ops: rails + retrying + messages sections render
   await page.getByTestId("nav-platform-ops").click();
   await page.waitForSelector('[data-testid="card-rails"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="card-retrying"]', {
+    timeout: 10000,
+  });
   await page.waitForSelector('[data-testid="card-messages"]', {
     timeout: 10000,
   });
-  check("platform ops renders rails and message log", true);
+  check("platform ops renders rails, retrying events and message log", true);
 
   // Control centre activation evidence + audit evidence
   await page.getByTestId("nav-control-centre").click();

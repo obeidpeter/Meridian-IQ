@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.93.0
+ * OpenAPI spec version: 0.94.0
  */
 export interface HealthStatus {
   status: string;
@@ -1911,6 +1911,22 @@ export interface OutboxEvent {
   maxAttempts: number;
   /** @nullable */
   lastError?: string | null;
+  /**
+     * When the worker will next pick the event up (pending rows).
+     * @nullable
+     */
+  nextAttemptAt?: string | null;
+  /**
+     * Set while the event waits for a rail breaker (R96).
+     * @nullable
+     */
+  parkedUntil?: string | null;
+  parkCount?: number;
+  /**
+     * Start of the retry horizon (R96).
+     * @nullable
+     */
+  firstAttemptAt?: string | null;
   createdAt: string;
 }
 
@@ -1941,6 +1957,11 @@ export interface RailState {
      * @nullable
      */
   retryAt?: string | null;
+  /**
+     * The catalogue code of the failure that last counted against this rail (cleared on success).
+     * @nullable
+     */
+  lastErrorCode?: string | null;
   /** The transport serving the rails right now — `simulator` until a RAIL_*_URL is lit, then `http`. */
   transport: string;
   /** Provenance stamped on every stamp record (`sandbox` unless RAIL_ENVIRONMENT says `live`). */
@@ -7386,6 +7407,18 @@ export type GetMonthEndCloseParams = {
  * Required for firm principals; a client_user is pinned to its own party.
  */
 clientPartyId?: string;
+};
+
+export type ListRetryingEventsParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
 
 export type VerifyAuditParams = {

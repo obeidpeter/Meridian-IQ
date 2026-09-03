@@ -33,6 +33,8 @@ export interface OpenRailRow {
   rail: string;
   openedAt: Date | null;
   failureCount: number;
+  /** The catalogue code of the failure that last counted against the rail (R102). */
+  lastErrorCode: string | null;
 }
 
 export interface DeadOutboxRow {
@@ -65,6 +67,7 @@ const realDeps: HealthWatchDeps = {
         rail: railStatesTable.rail,
         openedAt: railStatesTable.openedAt,
         failureCount: railStatesTable.failureCount,
+        lastErrorCode: railStatesTable.lastErrorCode,
       })
       .from(railStatesTable)
       .where(eq(railStatesTable.state, "open")),
@@ -187,8 +190,13 @@ export async function sweepHealthWatch(
           rail: rail.rail,
           openedAt,
           failureCount: rail.failureCount,
+          // Pointer-only: the code names the failure class (a refused
+          // credential reads differently from a timeout), never a body.
+          lastErrorCode: rail.lastErrorCode,
           reason:
-            "The rail's circuit breaker is open: submissions are failing over or queueing until the rail recovers.",
+            rail.lastErrorCode === "RAIL_UNAUTHORIZED"
+              ? "The rail's circuit breaker is open because the access point refuses this deployment's credentials: fix the rail token; submissions wait and resume."
+              : "The rail's circuit breaker is open: submissions are failing over or queueing until the rail recovers.",
         },
         "Rail circuit breaker OPEN: submissions to this rail are failing; review rail health on the Compliance Desk.",
       );

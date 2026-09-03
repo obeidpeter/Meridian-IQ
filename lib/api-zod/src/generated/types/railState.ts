@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.93.0
+ * OpenAPI spec version: 0.94.0
  */
 import type { RailStateState } from './railStateState';
 
@@ -21,6 +21,11 @@ export interface RailState {
      * @nullable
      */
   retryAt?: string | null;
+  /**
+     * The catalogue code of the failure that last counted against this rail (cleared on success).
+     * @nullable
+     */
+  lastErrorCode?: string | null;
   /** The transport serving the rails right now — `simulator` until a RAIL_*_URL is lit, then `http`. */
   transport: string;
   /** Provenance stamped on every stamp record (`sandbox` unless RAIL_ENVIRONMENT says `live`). */

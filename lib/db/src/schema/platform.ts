@@ -197,6 +197,11 @@ export const railStatesTable = pgTable("rail_states", {
   // half-open probes (R96); retryAt is when the next probe may run.
   openedAt: timestamp("opened_at", { withTimezone: true }),
   retryAt: timestamp("retry_at", { withTimezone: true }),
+  // R102: the half-open PROBE SLOT is claimed atomically by one worker
+  // (probe_started_at = when; a stale lease may be taken over), and the
+  // last failure's catalogue code is kept for the alert and the Desk.
+  probeStartedAt: timestamp("probe_started_at", { withTimezone: true }),
+  lastErrorCode: text("last_error_code"),
   updatedAt: updatedAt(),
 });
 

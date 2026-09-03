@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, ne, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, lt, ne, notExists, or, sql } from "drizzle-orm";
 import {
   getDb,
   pool,
@@ -894,6 +894,34 @@ export async function replayDead(outboxId: string): Promise<void> {
         parkCount: 0,
       })
       .where(and(eq(outboxTable.id, outboxId), eq(outboxTable.status, "dead")));
+  });
+}
+
+// The events still on their way (R102): pending rows that have already
+// failed at least once, or are parked behind a breaker — the Desk's view of
+// "what is retrying and why", bounded like every list.
+export async function listRetrying(bounds: {
+  limit: number;
+  offset: number;
+}): Promise<OutboxEvent[]> {
+  return runInBypassContext(async () => {
+    const rows = await getDb()
+      .select()
+      .from(outboxTable)
+      .where(
+        and(
+          eq(outboxTable.status, "pending"),
+          or(gt(outboxTable.attempts, 0), isNotNull(outboxTable.parkedUntil)),
+        ),
+      )
+      .orderBy(asc(outboxTable.nextAttemptAt), asc(outboxTable.createdAt))
+      .limit(bounds.limit)
+      .offset(bounds.offset);
+    return rows.map((row) =>
+      row.type === "inbound.email" || row.type === "inbound.whatsapp"
+        ? { ...row, payload: { redacted: true } }
+        : row,
+    );
   });
 }
 
