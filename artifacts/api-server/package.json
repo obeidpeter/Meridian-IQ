@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test": "tsx --test --test-force-exit --test-concurrency=1 \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "benchmark": "tsx ./src/bench/pipeline-benchmark.ts"
+    "benchmark": "tsx ./src/bench/pipeline-benchmark.ts",
+    "fake-rail": "tsx ./src/fake-rail-main.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.35",

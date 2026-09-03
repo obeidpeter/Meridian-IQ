@@ -5,15 +5,17 @@ import { eq } from "drizzle-orm";
 import { getDb, railStatesTable, type Rail } from "@workspace/db";
 import type { CanonicalInvoice } from "../invoice/canonical.ts";
 import {
+  breakerStatus,
   currentRailTransport,
+  railOpenCooldownMs,
+  railTransportSummary,
   recoverExistingStamp,
   setRailTransport,
   submitWithFailover,
   type RailTransport,
   type StampResult,
-  breakerStatus,
-  railOpenCooldownMs,
 } from "./adapter.ts";
+import { scriptedRail } from "./transports/scripted.ts";
 
 // The rail adapter's transport seam (R97). Pinned:
 //  - the simulator is the default transport, deterministic (same invoice →
@@ -240,3 +242,125 @@ test("the breaker opens after three transient errors, keeps its outage start acr
     await closeBreakers();
   }
 });
+
+// ---- Transport resolution (R95) ----
+
+const RAIL_ENV_KEYS = [
+  "RAIL_PRIMARY_URL",
+  "RAIL_SECONDARY_URL",
+  "RAIL_PRIMARY_TOKEN",
+  "RAIL_SECONDARY_TOKEN",
+  "RAIL_ENVIRONMENT",
+] as const;
+
+function withRailEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = Object.fromEntries(RAIL_ENV_KEYS.map((k) => [k, process.env[k]]));
+  for (const k of RAIL_ENV_KEYS) delete process.env[k];
+  return fn().finally(() => {
+    for (const k of RAIL_ENV_KEYS) {
+      const v = saved[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    setRailTransport(null);
+  });
+}
+
+test("resolution: the environment lights the HTTP transport, a bound transport wins, null restores env resolution", async () =>
+  withRailEnv(async () => {
+    assert.equal(currentRailTransport().name, "simulator");
+    assert.deepEqual(railTransportSummary(), {
+      transport: "simulator",
+      environment: "sandbox",
+      rails: { rail_primary: { configured: true }, rail_secondary: { configured: true } },
+    });
+
+    process.env.RAIL_PRIMARY_URL = "http://127.0.0.1:9/";
+    process.env.RAIL_ENVIRONMENT = "live";
+    const http = currentRailTransport();
+    assert.equal(http.name, "http");
+    assert.equal(http.environment, "live");
+    assert.deepEqual(http.rails, ["rail_primary"]);
+    assert.equal(currentRailTransport(), http, "memoised while the env tuple is unchanged");
+    assert.deepEqual(railTransportSummary(), {
+      transport: "http",
+      environment: "live",
+      rails: { rail_primary: { configured: true }, rail_secondary: { configured: false } },
+    });
+
+    process.env.RAIL_SECONDARY_URL = "http://127.0.0.1:9";
+    const rebuilt = currentRailTransport();
+    assert.notEqual(rebuilt, http, "a changed env tuple rebuilds the transport");
+    assert.deepEqual(rebuilt.rails, ["rail_primary", "rail_secondary"]);
+
+    const fake = scriptedRail({ name: "bound-fake" });
+    const previous = setRailTransport(fake);
+    assert.equal(previous, rebuilt, "setRailTransport hands back what resolution would have used");
+    assert.equal(currentRailTransport().name, "bound-fake");
+    assert.equal(railTransportSummary().transport, "bound-fake");
+
+    setRailTransport(null);
+    assert.equal(currentRailTransport().name, "http", "null restores ENV resolution, not the simulator");
+    delete process.env.RAIL_PRIMARY_URL;
+    delete process.env.RAIL_SECONDARY_URL;
+    assert.equal(currentRailTransport().name, "simulator");
+  }));
+
+test("a transport that serves one rail: failover never counts the other rail, and one open breaker is a full outage", async () =>
+  withRailEnv(async () => {
+    await closeBreakers();
+    const fake = scriptedRail({ name: "single-rail", rails: ["rail_primary"] });
+    fake.script(INV.invoiceNumber, { outcome: "unavailable", times: 1 });
+    setRailTransport(fake);
+    const key = `${INV.invoiceNumber}:single`;
+    const first = await submitWithFailover(INV, key);
+    assert.equal(first.result.status, "error");
+    assert.equal(first.result.errorCode, "RAIL_UNAVAILABLE");
+    assert.equal(first.tried.length, 1, "rail_secondary is not served, so it was never tried");
+    assert.equal(first.circuitOpen, false);
+    assert.deepEqual(
+      fake.calls.map((c) => c.rail),
+      ["rail_primary"],
+    );
+
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(), retryAt: new Date(Date.now() + 60_000) })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+    const parked = await submitWithFailover(INV, key);
+    assert.equal(parked.circuitOpen, true, "the only served rail refused, so every breaker is open");
+    assert.ok(parked.retryAfter instanceof Date);
+    assert.equal(fake.calls.length, 1, "nothing was sent while parked");
+    await closeBreakers();
+  }));
+
+test("a lookup honours an open breaker but never moves it: the next SUBMIT is the probe", async () =>
+  withRailEnv(async () => {
+    await closeBreakers();
+    const fake = scriptedRail({ name: "lookup-probe" });
+    setRailTransport(fake);
+    const key = `${INV.invoiceNumber}:lookup-probe`;
+    // rail_primary: open but DUE (retry-at passed); rail_secondary: open and not due.
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(Date.now() - 60_000), retryAt: new Date(Date.now() - 1_000) })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(), retryAt: new Date(Date.now() + 60_000) })
+      .where(eq(railStatesTable.rail, "rail_secondary"));
+
+    assert.equal(await recoverExistingStamp(INV, key), null);
+    assert.deepEqual(
+      fake.calls.map((c) => `${c.op}:${c.rail}`),
+      ["lookup:rail_primary"],
+      "the due rail was asked; the refused one was not",
+    );
+    assert.equal((await breakerStatus("rail_primary")).state, "open", "a null lookup leaves the breaker where it was");
+
+    const probe = await submitWithFailover(INV, key);
+    assert.equal(probe.result.status, "accepted");
+    assert.equal(probe.tried.length, 1, "rail_primary took the probe; rail_secondary stayed refused");
+    assert.equal((await breakerStatus("rail_primary")).state, "closed", "the submit was the probe and it closed the breaker");
+    await closeBreakers();
+  }));

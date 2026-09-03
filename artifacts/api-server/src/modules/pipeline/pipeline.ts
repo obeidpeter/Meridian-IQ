@@ -212,7 +212,7 @@ async function handleInvoiceSubmit(
   const canonical = await buildCanonical(invoiceId);
   const idempotencyKey = `${invoiceId}:${invoice.invoiceNumber}`;
   const attemptNo = event.attempts + 1;
-  const { result, circuitOpen, retryAfter } = await submitWithFailover(
+  const { result, tried, circuitOpen, retryAfter } = await submitWithFailover(
     canonical,
     idempotencyKey,
   );
@@ -227,30 +227,37 @@ async function handleInvoiceSubmit(
     };
   }
 
-  // One row per rail per try, with the request actually sent and the response
-  // actually received (CORE-02) — the record a dispute or an accreditation
-  // review reads, so the invoice number alone was never enough.
-  await getDb()
-    .insert(submissionAttemptsTable)
-    .values({
-      invoiceId,
-      rail: result.rail,
-      attemptNo,
-      idempotencyKey,
-      status:
-        result.status === "accepted"
-          ? "accepted"
-          : result.status === "rejected"
-            ? "rejected"
-            : "error",
-      requestPayload: {
-        invoiceNumber: invoice.invoiceNumber,
+  // One row per rail actually CALLED this try, with the request sent and the
+  // response received (CORE-02) — the record a dispute or an accreditation
+  // review reads, so the invoice number alone was never enough. A failover
+  // leaves the first rail's timeout or 5xx on the record too (R95); a breaker
+  // refusal sent nothing and is not an attempt.
+  const sent = tried.filter(
+    (r) => (r.raw as { circuit?: unknown } | undefined)?.circuit !== "open",
+  );
+  for (const r of sent.length > 0 ? sent : [result]) {
+    await getDb()
+      .insert(submissionAttemptsTable)
+      .values({
+        invoiceId,
+        rail: r.rail,
+        attemptNo,
         idempotencyKey,
-        canonical: canonical as unknown as Record<string, unknown>,
-      },
-      responsePayload: result.raw,
-      errorCode: result.errorCode ?? null,
-    });
+        status:
+          r.status === "accepted"
+            ? "accepted"
+            : r.status === "rejected"
+              ? "rejected"
+              : "error",
+        requestPayload: {
+          invoiceNumber: invoice.invoiceNumber,
+          idempotencyKey,
+          canonical: canonical as unknown as Record<string, unknown>,
+        },
+        responsePayload: r.raw,
+        errorCode: r.errorCode ?? null,
+      });
+  }
 
   if (result.status === "accepted") {
     await persistStamp(invoice, result, false);

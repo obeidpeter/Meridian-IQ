@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.92.0
+ * OpenAPI spec version: 0.93.0
  */
 import * as zod from 'zod';
 
@@ -2658,6 +2658,9 @@ export const ListRailStatesResponseItem = zod.object({
   "failureCount": zod.number(),
   "openedAt": zod.string().nullish().describe('When this outage instance began; stays fixed across failed probes.'),
   "retryAt": zod.string().nullish().describe('When the breaker next lets a probe through (open rails only).'),
+  "transport": zod.string().describe('The transport serving the rails right now — `simulator` until a RAIL_\*_URL is lit, then `http`.'),
+  "environment": zod.string().describe('Provenance stamped on every stamp record (`sandbox` unless RAIL_ENVIRONMENT says `live`).'),
+  "configured": zod.boolean().describe('Whether the live transport serves this rail (an HTTP transport serves only rails with a URL).'),
   "updatedAt": zod.coerce.date()
 })
 export const ListRailStatesResponse = zod.array(ListRailStatesResponseItem)

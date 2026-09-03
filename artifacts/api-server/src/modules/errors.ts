@@ -47,6 +47,24 @@ export const ERROR_CATALOGUE: Record<string, CatalogueEntry> = {
     fix: "Retried with exponential backoff.",
     retriable: true,
   },
+  // R95: the two outcomes only a real transport can produce. Both retriable on
+  // purpose — a refused credential or an unreadable answer is the PLATFORM's
+  // failure, not the invoice's, so the invoice stays `submitted`, the breaker
+  // opens, one health alert fires, and the backlog drains once it is fixed
+  // (a protocol retry that meets MBS_DUPLICATE recovers the stamp the rail
+  // already issued).
+  RAIL_UNAUTHORIZED: {
+    code: "RAIL_UNAUTHORIZED",
+    cause: "The access-point rail refused this deployment's credentials.",
+    fix: "Fix RAIL_PRIMARY_TOKEN / RAIL_SECONDARY_TOKEN; submissions wait on the breaker and resume.",
+    retriable: true,
+  },
+  RAIL_PROTOCOL: {
+    code: "RAIL_PROTOCOL",
+    cause: "The access-point rail answered in a shape this build does not understand.",
+    fix: "Retried; if the rail had already stamped the invoice, the duplicate path recovers the stamp it holds.",
+    retriable: true,
+  },
   UNKNOWN: {
     code: "UNKNOWN",
     cause: "An unclassified error occurred.",

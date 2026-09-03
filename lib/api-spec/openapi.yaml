@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.92.0
+  version: 0.93.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -9734,7 +9734,7 @@ components:
           type: integer
     RailState:
       type: object
-      required: [rail, state, failureCount, updatedAt]
+      required: [rail, state, failureCount, updatedAt, transport, environment, configured]
       properties:
         rail:
           type: string
@@ -9749,6 +9749,15 @@ components:
         retryAt:
           type: ["string", "null"]
           description: When the breaker next lets a probe through (open rails only).
+        transport:
+          type: string
+          description: The transport serving the rails right now — `simulator` until a RAIL_*_URL is lit, then `http`.
+        environment:
+          type: string
+          description: Provenance stamped on every stamp record (`sandbox` unless RAIL_ENVIRONMENT says `live`).
+        configured:
+          type: boolean
+          description: Whether the live transport serves this rail (an HTTP transport serves only rails with a URL).
         updatedAt:
           type: string
           format: date-time

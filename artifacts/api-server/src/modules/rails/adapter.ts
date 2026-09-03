@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   getDb,
@@ -9,14 +9,17 @@ import {
   type Rail,
 } from "@workspace/db";
 import type { CanonicalInvoice } from "../invoice/canonical";
-import { canonicalJson } from "../../lib/canonical-json";
 import { isRetriable } from "../errors";
 import { isPresentableAsEligible } from "../invoice/lifecycle";
+import { deterministicStamp } from "./faults";
+import { createHttpRailTransport, httpRailConfigFromEnv } from "./transports/http";
 
 // One adapter interface over two accredited access-point rails (INT-01, C3).
-// The rails are simulated (no real MBS/APP reachable) but exercise the full
-// contract: idempotent submission, stamp issuance, verification, failover and a
-// circuit breaker (INT-09).
+// The rails are simulated by default (no real MBS/APP reachable until
+// accreditation) but exercise the full contract: idempotent submission, stamp
+// issuance, verification, failover and a circuit breaker (INT-09). R95 adds
+// the HTTP transport behind the same seam, bound only when RAIL_PRIMARY_URL /
+// RAIL_SECONDARY_URL is lit — see "Transport resolution" below.
 
 const RAILS: Rail[] = ["rail_primary", "rail_secondary"];
 
@@ -48,6 +51,12 @@ export interface StampResult {
 export interface RailTransport {
   readonly name: string;
   readonly environment: string;
+  /**
+   * The rails this transport serves (R95); undefined = every rail. Failover
+   * and recovery iterate only served rails, so a deployment with one access
+   * point lit never counts the other rail as a failure.
+   */
+  readonly rails?: readonly Rail[];
   submit(rail: Rail, inv: CanonicalInvoice, idempotencyKey: string): Promise<StampResult>;
   lookup(
     rail: Rail,
@@ -62,33 +71,17 @@ const RAIL_SECRET: Record<Rail, string> = {
 };
 
 // A single simulated rail call. Deterministic stamp derived from the canonical
-// payload so the same invoice yields the same IRN (idempotency at the rail).
+// payload so the same invoice yields the same IRN (idempotency at the rail);
+// the derivation lives in faults.ts so the fakes mint identical stamps.
 function callRail(
   rail: Rail,
   inv: CanonicalInvoice,
   idempotencyKey: string,
 ): StampResult {
-  const digest = createHash("sha256")
-    .update(canonicalJson(inv))
-    .digest("hex");
-  const irn = `IRN-${digest.slice(0, 16).toUpperCase()}`;
-  const csid = createHmac("sha256", RAIL_SECRET[rail])
-    .update(irn + idempotencyKey)
-    .digest("hex")
-    .slice(0, 24);
-  const signedArtifactRef = createHmac("sha256", RAIL_SECRET[rail])
-    .update(canonicalJson(inv))
-    .digest("base64");
-  const qrPayload = Buffer.from(
-    JSON.stringify({ irn, csid, tin: inv.supplier.tin, total: inv.payableAmount }),
-  ).toString("base64");
   return {
     status: "accepted",
     rail,
-    irn,
-    csid,
-    qrPayload,
-    signedArtifactRef,
+    ...deterministicStamp(inv, idempotencyKey, RAIL_SECRET[rail]),
     raw: { accepted: true },
     provider: SIMULATOR.name,
     environment: SIMULATOR.environment,
@@ -111,22 +104,70 @@ const SIMULATOR: RailTransport = {
   },
 };
 
-let transport: RailTransport = SIMULATOR;
+// ---- Transport resolution (R95) ----
+//
+// Three tiers, checked per call so a flipped environment is honoured without
+// a restart (the payments/provider.ts posture):
+//   1. a transport BOUND with setRailTransport (tests, or an explicit wiring);
+//   2. the HTTP transport, when RAIL_PRIMARY_URL / RAIL_SECONDARY_URL is lit —
+//      memoised on the exact env tuple so it is rebuilt only when that changes;
+//   3. the in-code simulator.
+// The simulator therefore stays the default until accreditation lights a URL.
+let bound: RailTransport | null = null;
+let envTransport: { key: string; transport: RailTransport } | null = null;
 
-/** The transport in use (the simulator unless one has been bound). */
+function transportFromEnv(): RailTransport {
+  const cfg = httpRailConfigFromEnv();
+  if (!cfg) {
+    envTransport = null;
+    return SIMULATOR;
+  }
+  const key = JSON.stringify(cfg);
+  if (!envTransport || envTransport.key !== key) {
+    envTransport = { key, transport: createHttpRailTransport(cfg) };
+  }
+  return envTransport.transport;
+}
+
+/** The transport in use: bound, else the environment's, else the simulator. */
 export function currentRailTransport(): RailTransport {
-  return transport;
+  return bound ?? transportFromEnv();
 }
 
 /**
- * Bind a transport (null restores the simulator). Returns the previous one so a
- * test can restore it. This is the seam the accreditation round will drive
- * from environment configuration.
+ * Bind a transport; null unbinds it, restoring environment-driven resolution
+ * (the simulator when no rail URL is lit). Returns the previously bound
+ * transport (or the one resolution would have used) so a test can restore it.
  */
 export function setRailTransport(next: RailTransport | null): RailTransport {
-  const previous = transport;
-  transport = next ?? SIMULATOR;
+  const previous = currentRailTransport();
+  bound = next;
   return previous;
+}
+
+/** The rails a transport serves (every rail unless it says otherwise). */
+function servedRails(transport: RailTransport): readonly Rail[] {
+  return transport.rails && transport.rails.length > 0 ? transport.rails : RAILS;
+}
+
+export interface RailTransportSummary {
+  transport: string;
+  environment: string;
+  rails: Record<Rail, { configured: boolean }>;
+}
+
+/** What the operator sees: which transport is live and which rails it serves. */
+export function railTransportSummary(): RailTransportSummary {
+  const transport = currentRailTransport();
+  const served = new Set(servedRails(transport));
+  return {
+    transport: transport.name,
+    environment: transport.environment,
+    rails: {
+      rail_primary: { configured: served.has("rail_primary") },
+      rail_secondary: { configured: served.has("rail_secondary") },
+    },
+  };
 }
 
 // ---- Circuit breaker (persisted per rail) ----
@@ -182,8 +223,14 @@ async function ensureRailState(rail: Rail) {
 
 // The gate a call passes through: an open breaker whose retry-at has come
 // lets ONE probe through (half_open); otherwise it refuses and says when.
+// Only a SUBMIT is a probe — it always ends in recordSuccess/recordFailure,
+// which moves the breaker on. A lookup (`probe: false`) is admitted on the
+// same terms but never flips the state: a null lookup records nothing, and a
+// breaker parked in half_open by a lookup would wave every later submit
+// through without a probe (R95).
 async function railGate(
   rail: Rail,
+  opts: { probe: boolean } = { probe: true },
 ): Promise<{ allowed: boolean; retryAt: Date | null }> {
   const state = await ensureRailState(rail);
   if (state.state !== "open") return { allowed: true, retryAt: null };
@@ -191,17 +238,20 @@ async function railGate(
     state.retryAt ??
     new Date((state.openedAt?.getTime() ?? 0) + railOpenCooldownMs());
   if (Date.now() >= retryAt.getTime()) {
-    await getDb()
-      .update(railStatesTable)
-      .set({ state: "half_open" })
-      .where(eq(railStatesTable.rail, rail));
+    if (opts.probe) {
+      await getDb()
+        .update(railStatesTable)
+        .set({ state: "half_open" })
+        .where(eq(railStatesTable.rail, rail));
+    }
     return { allowed: true, retryAt: null };
   }
   return { allowed: false, retryAt };
 }
 
+/** Whether a lookup may run: the breaker's answer, without moving it. */
 async function railAvailable(rail: Rail): Promise<boolean> {
-  return (await railGate(rail)).allowed;
+  return (await railGate(rail, { probe: false })).allowed;
 }
 
 async function recordSuccess(rail: Rail): Promise<void> {
@@ -253,10 +303,12 @@ export async function submitWithFailover(
   inv: CanonicalInvoice,
   idempotencyKey: string,
 ): Promise<FailoverResult> {
+  const transport = currentRailTransport();
+  const served = servedRails(transport);
   const tried: StampResult[] = [];
   let refused = 0;
   let retryAfter: Date | null = null;
-  for (const rail of RAILS) {
+  for (const rail of served) {
     const gate = await railGate(rail);
     if (!gate.allowed) {
       refused += 1;
@@ -291,7 +343,7 @@ export async function submitWithFailover(
       return { result, tried, circuitOpen: false, retryAfter: null };
     }
   }
-  const circuitOpen = refused === RAILS.length;
+  const circuitOpen = refused === served.length;
   return {
     result: tried[tried.length - 1] ?? {
       status: "error",
@@ -320,9 +372,12 @@ export async function recoverExistingStamp(
   idempotencyKey: string,
   preferred?: Rail,
 ): Promise<StampResult | null> {
-  const order = preferred
-    ? [preferred, ...RAILS.filter((r) => r !== preferred)]
-    : RAILS;
+  const transport = currentRailTransport();
+  const served = servedRails(transport);
+  const order =
+    preferred && served.includes(preferred)
+      ? [preferred, ...served.filter((r) => r !== preferred)]
+      : served;
   for (const rail of order) {
     if (!(await railAvailable(rail))) continue;
     const found = await transport.lookup(rail, inv, idempotencyKey);
