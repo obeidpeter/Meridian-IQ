@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, asc, eq, lt, ne, notExists, sql } from "drizzle-orm";
 import {
   getDb,
   pool,
@@ -781,11 +781,37 @@ async function reconcileOne(invoice: InvoiceRow): Promise<ReconcileOutcome> {
 }
 
 export async function reconcile(): Promise<number> {
+  // Only invoices a pass can ACT on fill the batch: no stamp row yet and no
+  // outbox row still live or dead-lettered (a dead row waits for an operator
+  // replay, R96). Otherwise fifty permanently-stuck invoices would starve
+  // every newer one. reconcileOne re-checks inside its own transaction.
   const stuck = await runInBypassContext(() =>
     getDb()
       .select()
       .from(invoicesTable)
-      .where(eq(invoicesTable.status, "submitted"))
+      .where(
+        and(
+          eq(invoicesTable.status, "submitted"),
+          notExists(
+            getDb()
+              .select({ one: sql`1` })
+              .from(stampRecordsTable)
+              .where(eq(stampRecordsTable.invoiceId, invoicesTable.id)),
+          ),
+          notExists(
+            getDb()
+              .select({ one: sql`1` })
+              .from(outboxTable)
+              .where(
+                and(
+                  // aggregate_id is text (any aggregate), invoices.id a uuid.
+                  eq(outboxTable.aggregateId, sql`${invoicesTable.id}::text`),
+                  ne(outboxTable.status, "done"),
+                ),
+              ),
+          ),
+        ),
+      )
       .orderBy(asc(invoicesTable.createdAt))
       .limit(RECONCILE_BATCH),
   );
@@ -1298,6 +1324,14 @@ export function startWorker(intervalMs = 1_500): void {
     void guardedSweepPass();
   }, SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
+}
+
+/**
+ * Clear the stop flag without arming timers — for a test that drained after
+ * stopWorker(), or an instance resumed by hand. startWorker clears it too.
+ */
+export function resumeWorker(): void {
+  stopping = false;
 }
 
 export function stopWorker(): void {

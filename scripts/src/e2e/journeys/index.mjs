@@ -6,10 +6,13 @@
 // credit-note lifecycle. Journeys restore what they mutate
 // (flags, consent, passwords, the submit-approval policy, action policies)
 // so the suite reruns
-// cleanly on the same seed — with two deliberate exceptions: the payables
+// cleanly on the same seed — with three deliberate exceptions: the payables
 // journey's payment flags and the collections journey's settlement are
-// append-only settlement EVIDENCE and stay behind (see journeyPayables /
-// journeyCollections).
+// append-only settlement EVIDENCE (see journeyPayables / journeyCollections),
+// and the integration journey's rejected probe — a failed invoice, its dead
+// outbox row and an open high-priority Desk case — is append-only RAIL
+// evidence, numbered fresh per run so nothing reads it by position (see
+// journeyIntegrationLayer). All three stay behind.
 // Split by concern (the routes/clerk pattern): shared.mjs carries the demo
 // constants and session helpers; the journey groups are contiguous slices of
 // the original single file; and runJourneys below keeps the ORIGINAL order —

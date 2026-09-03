@@ -45,6 +45,12 @@ async function control(method: string, path: string, body?: unknown): Promise<Re
   });
 }
 
+async function lookup(key: string): Promise<Response> {
+  return fetch(`${fake.url}/v0/submissions/${encodeURIComponent(key)}`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+}
+
 test("healthz answers, unknown paths are 404, a submission needs a key and an invoice", async () => {
   const health = await control("GET", "/__fake/healthz");
   assert.equal(health.status, 200);
@@ -190,4 +196,176 @@ test("a scripted timeout holds the response until the client gives up, and close
   controller.abort();
   await attempt.catch(() => undefined);
   assert.equal(fake.calls.at(-1)?.outcome, "timeout");
+});
+
+// ---- Lookup-op scripts: the GET a recovery makes can fail too ----
+
+test("a lookup-op script faults the GET, never the POST: 503, 401, 429 and a 200 that is not a stamp", async () => {
+  const cells: Array<["unavailable" | "unauthorized" | "rate_limit" | "malformed", number, string | null]> = [
+    ["unavailable", 503, "RAIL_UNAVAILABLE"],
+    ["unauthorized", 401, "RAIL_UNAUTHORIZED"],
+    ["rate_limit", 429, "RAIL_RATE_LIMITED"],
+    ["malformed", 200, null],
+  ];
+  for (const [outcome, status, code] of cells) {
+    const { inv, key } = submission();
+    fake.script(inv.invoiceNumber, { op: "lookup", outcome, times: 1 });
+    const posted = await post({ idempotencyKey: key, rail: "rail_primary", invoice: inv });
+    assert.equal(posted.status, 201, `${outcome}: the submit is untouched by a lookup-op script`);
+    await posted.text();
+
+    const got = await lookup(key);
+    assert.equal(got.status, status, outcome);
+    const body = (await got.json()) as Record<string, unknown>;
+    if (code === null) {
+      assert.equal(body.irn, undefined, "not the shape the profile defines");
+      assert.equal(typeof body.stamp, "string");
+    } else {
+      assert.equal(body.code, code, outcome);
+    }
+    assert.equal(fake.calls.at(-1)?.outcome, `lookup_${outcome}`);
+    assert.equal(fake.calls.at(-1)?.idempotencyKey, key);
+
+    const again = await lookup(key);
+    assert.equal(again.status, 200, `${outcome}: once consumed the stamp the rail holds is answered`);
+    assert.deepEqual(await again.json(), fake.held.get(key));
+  }
+});
+
+test("a lookup-op timeout holds the GET until the client gives up", async () => {
+  const { inv, key } = submission();
+  const posted = await post({ idempotencyKey: key, rail: "rail_primary", invoice: inv });
+  assert.equal(posted.status, 201);
+  await posted.text();
+  fake.script(inv.invoiceNumber, { op: "lookup", outcome: "timeout" });
+  const controller = new AbortController();
+  const attempt = fetch(`${fake.url}/v0/submissions/${encodeURIComponent(key)}`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: controller.signal,
+  });
+  const raced = await Promise.race([
+    attempt.then(() => "answered"),
+    new Promise<string>((resolve) => setTimeout(() => resolve("silent"), 300)),
+  ]);
+  assert.equal(raced, "silent");
+  controller.abort();
+  await attempt.catch(() => undefined);
+  assert.equal(fake.calls.at(-1)?.outcome, "lookup_timeout");
+  assert.equal(fake.calls.at(-1)?.httpStatus, 0);
+});
+
+test("malformed with holdsStamp: the submit answers 200 garbage, a re-send is a real 409 and the GET answers the stamp", async () => {
+  const { inv, key } = submission();
+  fake.script(inv.invoiceNumber, { outcome: "malformed", holdsStamp: true });
+  const first = await post({ idempotencyKey: key, rail: "rail_primary", invoice: inv });
+  assert.equal(first.status, 200);
+  const garbage = (await first.json()) as Record<string, unknown>;
+  assert.equal(garbage.irn, undefined, "not a stamp the profile defines");
+  assert.equal(typeof garbage.stamp, "string");
+
+  const again = await post({ idempotencyKey: key, rail: "rail_primary", invoice: inv });
+  assert.equal(again.status, 409, "the rail DID stamp: the re-send is a duplicate");
+  assert.equal(((await again.json()) as { code: string }).code, "MBS_DUPLICATE");
+
+  const got = await lookup(key);
+  assert.equal(got.status, 200);
+  const stamp = (await got.json()) as { irn: string };
+  assert.match(stamp.irn, /^IRN-[0-9A-F]{16}$/);
+  assert.deepEqual(stamp, fake.held.get(key));
+  assert.deepEqual(
+    fake.calls.filter((c) => c.idempotencyKey === key).map((c) => c.outcome),
+    ["malformed", "duplicate", "lookup_hit"],
+  );
+
+  // Without holdsStamp nothing is held: the GET misses and a re-send is accepted afresh.
+  const orphan = submission();
+  fake.script(orphan.inv.invoiceNumber, { outcome: "malformed", times: 1 });
+  const m = await post({ idempotencyKey: orphan.key, rail: "rail_primary", invoice: orphan.inv });
+  assert.equal(m.status, 200);
+  await m.text();
+  const miss = await lookup(orphan.key);
+  assert.equal(miss.status, 404);
+  await miss.text();
+  const resend = await post({ idempotencyKey: orphan.key, rail: "rail_primary", invoice: orphan.inv });
+  assert.equal(resend.status, 201);
+  await resend.text();
+});
+
+test("a scripted rate_limit carries the Retry-After it was given, in-process and over the control endpoint", async () => {
+  const a = submission();
+  fake.script(a.inv.invoiceNumber, { outcome: "rate_limit", retryAfterSeconds: 30, times: 1 });
+  const ra = await post({ idempotencyKey: a.key, rail: "rail_primary", invoice: a.inv });
+  assert.equal(ra.status, 429);
+  assert.equal(ra.headers.get("retry-after"), "30");
+  assert.equal(((await ra.json()) as { code: string }).code, "RAIL_RATE_LIMITED");
+
+  const b = submission();
+  const queued = await control("PUT", "/__fake/script", {
+    invoiceNumber: b.inv.invoiceNumber,
+    outcome: "rate_limit",
+    retryAfterSeconds: 7.9,
+    times: 1,
+  });
+  assert.equal(queued.status, 204);
+  const rb = await post({ idempotencyKey: b.key, rail: "rail_primary", invoice: b.inv });
+  assert.equal(rb.status, 429);
+  assert.equal(rb.headers.get("retry-after"), "7", "whole seconds on the wire");
+  await rb.text();
+});
+
+// ---- The fake's own limits answer 413/500, never a business rejection ----
+
+test("a 2 MB submission is 413 with connection: close, and the next request on a fresh fetch succeeds", async () => {
+  const { inv, key } = submission();
+  const huge = await post({
+    idempotencyKey: key,
+    rail: "rail_primary",
+    invoice: inv,
+    padding: "x".repeat(2 * 1024 * 1024),
+  });
+  assert.equal(huge.status, 413);
+  assert.equal(huge.headers.get("connection"), "close");
+  assert.equal(((await huge.json()) as { code: string }).code, "PAYLOAD_TOO_LARGE");
+  assert.equal(fake.calls.at(-1)?.outcome, "too_large");
+  assert.equal(fake.calls.at(-1)?.httpStatus, 413);
+  assert.equal(fake.held.has(key), false, "nothing was stamped");
+
+  const next = await post({ idempotencyKey: key, rail: "rail_primary", invoice: inv });
+  assert.equal(next.status, 201, "the rail still serves after dropping that connection");
+  await next.text();
+  assert.equal(fake.calls.at(-1)?.outcome, "accept");
+});
+
+test("an unreadable submission body is the fake's own 500, never a 400/422 the profile reserves for the invoice", async () => {
+  const resp = await fetch(`${fake.url}/v0/submissions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` },
+    body: "{not json",
+  });
+  assert.equal(resp.status, 500);
+  assert.equal(resp.headers.get("connection"), "close");
+  assert.equal(((await resp.json()) as { code: string }).code, "UNREADABLE_BODY");
+  assert.equal(fake.calls.at(-1)?.outcome, "unreadable");
+});
+
+test("PUT /__fake/script accepts op lookup and refuses an unknown op", async () => {
+  const bad = await control("PUT", "/__fake/script", { invoiceNumber: "X", outcome: "unavailable", op: "nope" });
+  assert.equal(bad.status, 400);
+  await bad.text();
+
+  const { inv, key } = submission();
+  const ok = await control("PUT", "/__fake/script", {
+    invoiceNumber: inv.invoiceNumber,
+    outcome: "unavailable",
+    op: "lookup",
+    times: 1,
+  });
+  assert.equal(ok.status, 204);
+  const posted = await post({ idempotencyKey: key, rail: "rail_primary", invoice: inv });
+  assert.equal(posted.status, 201, "a lookup-op script leaves the submit alone");
+  await posted.text();
+  const got = await lookup(key);
+  assert.equal(got.status, 503);
+  await got.text();
+  assert.equal(fake.calls.at(-1)?.outcome, "lookup_unavailable");
 });

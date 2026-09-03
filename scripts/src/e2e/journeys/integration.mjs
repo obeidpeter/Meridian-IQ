@@ -370,8 +370,10 @@ async function journeyIntegrationLayer(
   const railsRes = await page.request.get(BASE + "/api/operator/rails");
   const rails = railsRes.status() === 200 ? await railsRes.json() : [];
   const primary = rails.find((r) => r.rail === "rail_primary") ?? null;
-  // rail_secondary is only gated (and so only gets a breaker row) after a
-  // failover attempt; with one lit rail it is absent or reads unconfigured.
+  // /operator/rails ALWAYS lists both rails: rail_secondary is only gated
+  // (and so only gets a breaker row) after a failover attempt, so with one
+  // lit rail the route synthesises its row — closed, never tripped, and
+  // reading unconfigured because the transport does not serve it.
   const secondary = rails.find((r) => r.rail === "rail_secondary") ?? null;
   const configRes = await page.request.get(BASE + "/api/operator/rail-config");
   const railConfig = configRes.status() === 200 ? await configRes.json() : [];
@@ -382,10 +384,12 @@ async function journeyIntegrationLayer(
     primary?.transport === "http" &&
       primary?.environment === "sandbox" &&
       primary?.configured === true &&
-      (secondary === null || secondary.configured === false) &&
+      secondary?.transport === "http" &&
+      secondary?.configured === false &&
+      secondary?.state === "closed" &&
       configured("rail_primary") === true &&
       configured("rail_secondary") === false,
-    `rails: ${rails.map((r) => `${r.rail}=${r.transport}/${r.environment}/${r.configured}`).join(", ") || "none"}; config primary ${configured("rail_primary")}, secondary ${configured("rail_secondary")}`,
+    `rails: ${rails.map((r) => `${r.rail}=${r.transport}/${r.environment}/${r.configured}/${r.state}`).join(", ") || "none"}; config primary ${configured("rail_primary")}, secondary ${configured("rail_secondary")}`,
   );
   await apiLogin(page, BASE, "demo.admin@meridianiq.example");
 

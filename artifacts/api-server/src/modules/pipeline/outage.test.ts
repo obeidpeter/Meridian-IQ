@@ -14,6 +14,7 @@ import {
   type Rail,
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clearRailEnv } from "../../test-helpers/rail-env.ts";
 import { setRailTransport } from "../rails/adapter.ts";
 import { scriptedRail } from "../rails/transports/scripted.ts";
 import {
@@ -118,7 +119,12 @@ async function drainUntilScheduled(id: string) {
   }
 }
 
+// RAIL_* is cleared for the whole file: setRailTransport(null) must resolve
+// to the simulator here, never to a developer shell's HTTP rail (R95).
+let restoreRailEnv: () => void = () => {};
+
 before(async () => {
+  restoreRailEnv = clearRailEnv();
   await getDb().insert(firmsTable).values({ id: firm, name: `Outage Firm ${SALT}` });
   await getDb().insert(partiesTable).values([
     { id: supplier, type: "client_business", legalName: `Outage Supplier ${SALT}`, tin: "12345678-0001", street: "1 Marina", city: "Lagos", countryCode: "NG" },
@@ -129,6 +135,7 @@ before(async () => {
 
 after(async () => {
   setRailTransport(null);
+  restoreRailEnv();
   delete process.env.OUTBOX_RETRY_HORIZON_MS;
   await setBreakers("closed", null);
 });

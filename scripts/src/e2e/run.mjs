@@ -107,6 +107,101 @@ async function waitForOk(url, what, timeoutMs = 30000) {
   throw new Error(`${what} did not become healthy in time`);
 }
 
+const tail = (log, lines) => log.split("\n").slice(-lines).join("\n");
+
+// Readiness is a RACE between the health poll and the child itself dying:
+// a spawn error (ENOENT on the tsx shim) or an early exit (EADDRINUSE on
+// the port, a crash at boot) must reject NOW with the cause and the child's
+// log tail, not after the 30 s poll gives up. The listeners are detached
+// once the race settles so a later, deliberate SIGTERM never surfaces as a
+// stray rejection.
+async function untilHealthy(child, what, url, log) {
+  let onError;
+  let onExit;
+  const died = new Promise((_, reject) => {
+    onError = (err) =>
+      reject(
+        new Error(
+          `${what} could not be spawned: ${err.code ?? err.message}\n--- ${what} log tail ---\n${tail(log(), 10)}`,
+        ),
+      );
+    onExit = (code, signal) =>
+      reject(
+        new Error(
+          `${what} exited before it became healthy (${signal ? `signal ${signal}` : `exit code ${code}`})\n--- ${what} log tail ---\n${tail(log(), 10)}`,
+        ),
+      );
+    child.once("error", onError);
+    child.once("exit", onExit);
+  });
+  try {
+    await Promise.race([waitForOk(url, what), died]);
+  } finally {
+    child.off("error", onError);
+    child.off("exit", onExit);
+  }
+}
+
+// Wait (briefly) for a signalled child to actually leave, so its final log
+// lines land before the noise report below reads the buffers.
+function exited(child, timeoutMs = 3000) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+// pino writes JSON in production ({"level":40|50,…}) and pino-pretty text in
+// development (`WARN (pid): msg`, coloured, with the payload indented on the
+// lines that follow). Both shapes are kept, ANSI stripped, continuation
+// lines attached to the warning they belong to.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*m/g;
+function isWarnOrError(line) {
+  if (!line.startsWith("{")) return /\b(WARN|ERROR|FATAL)\b/.test(line);
+  try {
+    return Number(JSON.parse(line).level) >= 40;
+  } catch {
+    return false;
+  }
+}
+function warnOrErrorLines(log) {
+  const kept = [];
+  let carry = false;
+  for (const raw of log.split("\n")) {
+    const line = raw.replace(ANSI, "");
+    if (line.trim() === "") {
+      carry = false;
+      continue;
+    }
+    if (isWarnOrError(line)) {
+      kept.push(line);
+      carry = true;
+    } else if (carry && /^\s/.test(line)) {
+      kept.push(line);
+    } else {
+      carry = false;
+    }
+  }
+  return kept;
+}
+
+const NOISE_CAP = 60;
+function printCapped(heading, lines) {
+  const shown = lines.slice(-NOISE_CAP);
+  const elided = lines.length - shown.length;
+  console.error(
+    `--- ${heading} (${lines.length}${elided ? `, last ${shown.length} shown` : ""}) ---`,
+  );
+  console.error(shown.length ? shown.join("\n") : "(none)");
+}
+
 // Prefer an explicitly provided browser, then the preinstalled one, then
 // playwright's own download (CI runs `playwright install chromium`).
 function browserExecutable() {
@@ -131,8 +226,15 @@ const rail = spawn(
   },
 );
 let railLog = "";
+let railErr = "";
 rail.stdout.on("data", (d) => (railLog += d));
-rail.stderr.on("data", (d) => (railLog += d));
+rail.stderr.on("data", (d) => {
+  railLog += d;
+  railErr += d;
+});
+// A ChildProcess with no "error" listener throws the spawn error as an
+// uncaught exception; keep it in the log so the readiness race reports it.
+rail.on("error", (err) => (railLog += `[spawn] ${err.message}\n`));
 
 let api;
 let apiLog = "";
@@ -141,7 +243,12 @@ let hookReceiver;
 let browser;
 let exitCode;
 try {
-  await waitForOk(`${RAIL_URL}/__fake/healthz`, "fake rail");
+  await untilHealthy(
+    rail,
+    "fake rail",
+    `${RAIL_URL}/__fake/healthz`,
+    () => railLog,
+  );
 
   api = spawn(
     "node",
@@ -180,14 +287,26 @@ try {
         RAIL_PRIMARY_URL: RAIL_URL,
         RAIL_PRIMARY_TOKEN: FAKE_RAIL_TOKEN,
         RAIL_ENVIRONMENT: "sandbox",
+        // Pinned EMPTY (httpRailConfigFromEnv trims empties to unset) so a
+        // developer shell that exports a secondary rail or a custom timeout
+        // cannot light rail_secondary or reshape the run's transport.
+        RAIL_SECONDARY_URL: "",
+        RAIL_SECONDARY_TOKEN: "",
+        RAIL_TIMEOUT_MS: "",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
   api.stdout.on("data", (d) => (apiLog += d));
   api.stderr.on("data", (d) => (apiLog += d));
+  api.on("error", (err) => (apiLog += `[spawn] ${err.message}\n`));
 
-  await waitForOk(`http://127.0.0.1:${API_PORT}/api/healthz`, "api-server");
+  await untilHealthy(
+    api,
+    "api-server",
+    `http://127.0.0.1:${API_PORT}/api/healthz`,
+    () => apiLog,
+  );
   staticServer = await startStaticServer({ port: WEB_PORT, apiPort: API_PORT });
   hookReceiver = await startWebhookReceiver({ port: HOOK_PORT });
 
@@ -228,5 +347,13 @@ try {
   staticServer?.close();
   api?.kill("SIGTERM");
   rail.kill("SIGTERM");
+  await Promise.all([exited(api), exited(rail)]);
 }
+// On EVERY exit path — a green run included — surface what the api-server
+// warned or errored about (rail-transport warnings ride this channel: an
+// unexpected rail answer, a refused credential, a redirect) and anything the
+// fake rail wrote to stderr. The crash tails above stay as they are; this is
+// the signal a passing run would otherwise bury.
+printCapped("api-server warn/error lines", warnOrErrorLines(apiLog));
+printCapped("fake rail stderr", railErr.split("\n").filter((l) => l !== ""));
 process.exit(exitCode);

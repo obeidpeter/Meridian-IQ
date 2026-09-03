@@ -20,12 +20,16 @@ import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 //  - "overdue now" is the digest predicate, not windowed;
 //  - the table is engaged-clients-only, attention first (overdue paper,
 //    then the weakest window rate, nulls last);
+//  - failureRate counts BUSINESS REJECTIONS only (R95): a rail timeout or
+//    5xx the platform failed over from is the platform's failure, not the
+//    client's — an invoice with an error row AND an accepted row is accepted;
 //  - the note pins posture-not-blame.
 
 const SALT = makeRunSalt();
 const firmId = randomUUID();
 const clientA = randomUUID(); // active, one overdue draft, one failure
 const clientB = randomUUID(); // tiny sample — rates must be null
+const clientC = randomUUID(); // one failover, one rejection, one clean acceptance
 const clientArchived = randomUUID(); // archived engagement — excluded
 const buyer = randomUUID();
 const vendor = randomUUID();
@@ -35,7 +39,7 @@ async function seedInvoice(input: {
   buyerPartyId?: string;
   invoiceNumber: string;
   issueDate: string;
-  status?: "draft" | "validated" | "stamped" | "cancelled";
+  status?: "draft" | "validated" | "stamped" | "cancelled" | "failed";
 }): Promise<string> {
   const id = randomUUID();
   await getDb().insert(invoicesTable).values({
@@ -55,15 +59,17 @@ async function seedInvoice(input: {
 
 async function seedAttempt(
   invoiceId: string,
-  status: "accepted" | "rejected",
+  status: "accepted" | "rejected" | "error",
   when: string,
+  opts: { rail?: "rail_primary" | "rail_secondary"; errorCode?: string } = {},
 ): Promise<void> {
   await getDb().insert(submissionAttemptsTable).values({
     invoiceId,
-    rail: "rail_primary",
+    rail: opts.rail ?? "rail_primary",
     attemptNo: 1,
     idempotencyKey: randomUUID(),
     status,
+    errorCode: opts.errorCode ?? null,
     createdAt: new Date(`${when}T09:00:00Z`),
   });
 }
@@ -74,6 +80,7 @@ before(async () => {
   await db.insert(partiesTable).values([
     { id: clientA, type: "client_business", legalName: `SC Alpha ${SALT}` },
     { id: clientB, type: "client_business", legalName: `SC Beta ${SALT}` },
+    { id: clientC, type: "client_business", legalName: `SC Gamma ${SALT}` },
     { id: clientArchived, type: "client_business", legalName: `SC Gone ${SALT}` },
     { id: buyer, type: "buyer", legalName: `SC Buyer ${SALT}` },
     { id: vendor, type: "buyer", legalName: `SC Vendor ${SALT}` },
@@ -81,6 +88,7 @@ before(async () => {
   await db.insert(engagementsTable).values([
     { firmId, clientPartyId: clientA, type: "retainer", status: "open", title: `sc A ${SALT}` },
     { firmId, clientPartyId: clientB, type: "retainer", status: "open", title: `sc B ${SALT}` },
+    { firmId, clientPartyId: clientC, type: "retainer", status: "open", title: `sc C ${SALT}` },
     { firmId, clientPartyId: clientArchived, type: "retainer", status: "archived", title: `sc X ${SALT}` },
   ]);
 
@@ -139,6 +147,30 @@ before(async () => {
   });
   await seedAttempt(b1, "accepted", daysAgo(29));
 
+  // Client C (R95): three attempted invoices — c1 failed over (rail_primary
+  // error, rail_secondary accepted, one try), c2 was rejected, c3 accepted
+  // cleanly. Two accepted (under the window-rate floor), one failure.
+  const c1 = await seedInvoice({
+    supplierPartyId: clientC,
+    invoiceNumber: `SC-C1-${SALT}`,
+    issueDate: daysAgo(30),
+  });
+  await seedAttempt(c1, "error", daysAgo(29), { rail: "rail_primary", errorCode: "RAIL_UNAVAILABLE" });
+  await seedAttempt(c1, "accepted", daysAgo(29), { rail: "rail_secondary" });
+  const c2 = await seedInvoice({
+    supplierPartyId: clientC,
+    invoiceNumber: `SC-C2-${SALT}`,
+    issueDate: daysAgo(3),
+    status: "failed",
+  });
+  await seedAttempt(c2, "rejected", daysAgo(2), { errorCode: "MBS_INVALID_TIN" });
+  const c3 = await seedInvoice({
+    supplierPartyId: clientC,
+    invoiceNumber: `SC-C3-${SALT}`,
+    issueDate: daysAgo(20),
+  });
+  await seedAttempt(c3, "accepted", daysAgo(19));
+
   // The archived client's paper must not appear at all.
   await seedInvoice({
     supplierPartyId: clientArchived,
@@ -150,10 +182,12 @@ before(async () => {
 
 test("the scorecard ranks attention first with floored rates", async () => {
   const scorecard = await computeComplianceScorecard(firmId);
-  assert.equal(scorecard.rows.length, 2, "engaged clients only");
+  assert.equal(scorecard.rows.length, 3, "engaged clients only");
   assert.match(scorecard.note, /not a verdict/);
 
-  const [first, second] = scorecard.rows;
+  // No overdue paper and no window rate for B or C: name order, B then C.
+  const [first, second, third] = scorecard.rows;
+  assert.equal(third.clientPartyId, clientC);
   assert.equal(first.clientPartyId, clientA, "overdue paper leads");
   assert.equal(first.clientName, `SC Alpha ${SALT}`);
   assert.equal(first.issuedCount, 5);
@@ -186,6 +220,23 @@ test("the scorecard ranks attention first with floored rates", async () => {
   assert.equal(second.withinWindowRate, null, "1 accepted is under the floor");
   assert.equal(second.failureRate, null, "1 attempted is under the floor");
   assert.equal(second.overdueNow, 0);
+});
+
+test("a failover's error row is not a failure; a rejection is", async () => {
+  const scorecard = await computeComplianceScorecard(firmId);
+  const gamma = scorecard.rows.find((r) => r.clientPartyId === clientC);
+  assert.ok(gamma, "client C is on the table");
+  assert.equal(gamma.issuedCount, 3);
+  assert.equal(gamma.acceptedCount, 2, "c1 (failed over) and c3 are accepted");
+  // 3 attempted, only c2 was REJECTED: c1's RAIL_UNAVAILABLE row on
+  // rail_primary is the platform's failure, and its rail_secondary
+  // acceptance makes it an accepted invoice.
+  assert.ok(
+    gamma.failureRate !== null && Math.abs(gamma.failureRate - 1 / 3) < 1e-9,
+    `failureRate ${gamma.failureRate} — the rejection alone over 3 attempted`,
+  );
+  assert.equal(gamma.withinWindowRate, null, "2 accepted is under the floor");
+  assert.equal(gamma.overdueNow, 0);
 });
 
 test("another firm sees an empty table", async () => {

@@ -16,6 +16,7 @@ import {
   type Rail,
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clearRailEnv } from "../../test-helpers/rail-env.ts";
 import { setRailTransport, type StampResult } from "../rails/adapter.ts";
 import { scriptedRail } from "../rails/transports/scripted.ts";
 import { drain, reconcile } from "./pipeline.ts";
@@ -128,7 +129,12 @@ async function closeBreakers(): Promise<void> {
   }
 }
 
+// RAIL_* is cleared for the whole file: setRailTransport(null) must resolve
+// to the simulator here, never to a developer shell's HTTP rail (R95).
+let restoreRailEnv: () => void = () => {};
+
 before(async () => {
+  restoreRailEnv = clearRailEnv();
   await closeBreakers();
   await getDb().insert(firmsTable).values({ id: firm, name: `Pipeline Firm ${SALT}` });
   await getDb().insert(partiesTable).values([
@@ -155,6 +161,7 @@ before(async () => {
 
 after(async () => {
   setRailTransport(null);
+  restoreRailEnv();
   await closeBreakers();
 });
 

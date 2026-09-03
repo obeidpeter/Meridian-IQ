@@ -49,9 +49,12 @@ const RAIL_ENV: Record<Rail, { url: string; token: string }> = {
   rail_primary: { url: "RAIL_PRIMARY_URL", token: "RAIL_PRIMARY_TOKEN" },
   rail_secondary: { url: "RAIL_SECONDARY_URL", token: "RAIL_SECONDARY_TOKEN" },
 };
-const DEFAULT_TIMEOUT_MS = 10_000;
+// Four calls per event (two submits, two lookups) at the default budget fit
+// inside the 25 s graceful-shutdown grace (lib/shutdown.ts) with room to
+// spare; raising RAIL_TIMEOUT_MS means raising SHUTDOWN_TIMEOUT_MS with it.
+const DEFAULT_TIMEOUT_MS = 5_000;
 // A per-call budget above this would let one event hold its transaction and
-// the worker past the graceful-shutdown deadline (four calls per event).
+// the worker far past any sensible shutdown deadline.
 export const MAX_TIMEOUT_MS = 60_000;
 const DEFAULT_ENVIRONMENT: RailEnvironment = "sandbox";
 // The most of a response the transport reads at all, and the most of it the
@@ -252,12 +255,14 @@ async function readBody(resp: Response, token: string | undefined): Promise<Read
   let text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
   // NUL is refused by Postgres text and jsonb columns; a bearer echoed back
   // by a gateway must not reach every invoice reader.
-  text = text.replace(/ /g, "");
+  // JSON can also spell NUL as the escape \u0000, which parsing turns back
+  // into the real character, so the parsed value is walked as well.
+  text = text.replace(/\u0000/g, "");
   if (token) text = text.split(token).join("[redacted]");
   let parsed: unknown = null;
   if (!truncated && !aborted && text.length > 0) {
     try {
-      parsed = JSON.parse(text) as unknown;
+      parsed = withoutNul(JSON.parse(text) as unknown);
     } catch {
       parsed = null;
     }
@@ -269,6 +274,20 @@ async function readBody(resp: Response, token: string | undefined): Promise<Read
         ? text.slice(0, RAW_BODY_LIMIT)
         : null;
   return { parsed, persisted, truncated, aborted };
+}
+
+/** The value with U+0000 stripped from every string and key (JSON escapes survive parsing). */
+function withoutNul(value: unknown): unknown {
+  if (typeof value === "string") return value.replace(/\u0000/g, "");
+  if (Array.isArray(value)) return value.map(withoutNul);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      out[key.replace(/\u0000/g, "")] = withoutNul(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 function parseRetryAfter(header: string | null): number | undefined {
