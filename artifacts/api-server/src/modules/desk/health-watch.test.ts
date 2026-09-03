@@ -105,7 +105,9 @@ test("an open rail circuit alerts once per outage instance, not per pass", async
   const openedAt = new Date("2026-07-20T06:00:00.000Z");
   const deps: HealthWatchDeps = {
     ...quiet,
-    openRails: async () => [{ rail, openedAt, failureCount: 3 }],
+    openRails: async () => [
+      { rail, openedAt, failureCount: 3, lastErrorCode: "RAIL_UNAUTHORIZED" },
+    ],
   };
 
   const first = await sweepHealthWatch(deps);
@@ -121,6 +123,10 @@ test("an open rail circuit alerts once per outage instance, not per pass", async
   assert.equal(event.entityType, "rail");
   assert.equal((event.after as { rail?: string }).rail, rail);
   assert.equal((event.after as { failureCount?: number }).failureCount, 3);
+  // R102: the failure class rides on the alert (pointer-only) so a refused
+  // credential reads differently from an outage, in the evidence AND the reason.
+  assert.equal((event.after as { lastErrorCode?: string }).lastErrorCode, "RAIL_UNAUTHORIZED");
+  assert.match(String((event.after as { reason?: string }).reason), /credentials/);
 
   // Same outage instance on the next pass: the ledger dedups.
   const second = await sweepHealthWatch(deps);
@@ -134,7 +140,9 @@ test("an open rail circuit alerts once per outage instance, not per pass", async
   const reopenedAt = new Date("2026-07-21T09:30:00.000Z");
   const third = await sweepHealthWatch({
     ...quiet,
-    openRails: async () => [{ rail, openedAt: reopenedAt, failureCount: 4 }],
+    openRails: async () => [
+      { rail, openedAt: reopenedAt, failureCount: 4, lastErrorCode: "RAIL_TIMEOUT" },
+    ],
   });
   assert.equal(third.alerted, 1);
   assert.ok(

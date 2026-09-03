@@ -466,3 +466,24 @@ proves boot-time transport selection instead of assuming it; the two
 retriable codes it added (`RAIL_UNAUTHORIZED`, `RAIL_PROTOCOL`) mean a bad
 credential or a garbled answer costs delay, never a failed invoice — and so
 does a stamp lookup the rail leaves unanswered.
+
+### D21 — Breaker bookkeeping is autocommit, and the half-open probe is a slot
+
+Context: R95 left the breaker writes inside the worker's event transaction,
+so a second worker's gate queued behind the first worker's rail call, two
+workers failing over in opposite orders could deadlock, and a rolled-back
+try forgot the failure the rail really produced; the rail alert carried no
+error code and nothing on the Desk showed a submission that was still
+retrying.
+Decision: every breaker write is one short autocommit statement on the raw
+pool (the same posture as the login throttle and the inference ledger); the
+half-open probe is claimed atomically by exactly one worker with a lease,
+taken over once the lease passes; `recordFailure` counts, opens or re-arms
+in one statement and keeps the last error code; the alert evidence, the
+rails card and a new retrying-events card carry it; a seeded soak over two
+conformance fake rails with concurrent workers pins the invariants.
+Consequences: no event transaction locks `rail_states`; a failure survives a
+rollback (the correct memory for a breaker); an operator distinguishes a
+refused credential from an outage on the alert; multi-instance workers
+share one probe per cooldown; and the soak is the regression net for every
+later change to the pipeline's concurrency.

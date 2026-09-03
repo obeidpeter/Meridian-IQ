@@ -358,13 +358,43 @@ the breaker and, when open, re-arms its `retry_at`;
 `recoverExistingStamp` remembers the last such error and re-throws it only
 when no served rail held the stamp and at least one could not answer, so
 "no rail knows it" only ever means 404 everywhere. `ensureRailState` reads
-the breaker row with a plain SELECT before it ever inserts: an upsert on
-every gate would queue behind another worker's uncommitted breaker write for
-as long as that worker's rail call takes. Known limitation: breaker
-bookkeeping still commits inside the event transaction, so two workers
-probing the same open rail serialise on its row for the length of a rail
-call; the follow-up is breaker bookkeeping on the raw `pool` with an
-explicit half-open slot.
+the breaker row with a plain SELECT before it ever inserts.
+
+**Breaker bookkeeping across workers (R102).** Every breaker WRITE — the
+half-open probe claim, `recordSuccess`, `recordFailure` — is one short
+autocommit statement on the raw `pool`, never a statement inside the
+worker's event transaction. A write there held the `rail_states` row lock
+for the length of the rail call, so a second worker's gate queued behind the
+first worker's timeout and two workers failing over in opposite orders could
+deadlock; now nothing in an event transaction locks `rail_states`
+(`pipeline/rails-matrix.test.ts` cell 21 writes the breaker row from a second
+connection mid-call and asserts it never waits). It also means a failure the
+rail really produced is remembered even when the event's own writes roll
+back — a breaker must not forget an outage because a later write failed
+(cell 10). The half-open probe is a SLOT: `UPDATE … SET state='half_open',
+probe_started_at=now() WHERE state='open' AND retry_at <= now()` — exactly
+one worker wins, every other worker is refused (and parks) until the probe's
+lease ends (`probeLeaseMs()` = 2 × `RAIL_TIMEOUT_MS` + 5 s), and a probe
+that dies holding the slot (a crashed instance) is taken over once its lease
+has passed. `recordFailure` is one statement (`failure_count + 1`, the
+threshold opens or re-arms in the same UPDATE), so two workers failing at
+once cannot lose a count; it also keeps `last_error_code` — the catalogue
+code of the failure that last counted — which the health alert's evidence
+and `GET /operator/rails` carry, so a refused credential reads differently
+from an outage on the alert card and the rails card. A recovery lookup that
+every served rail refuses is a retry (`RailLookupError`), never a miss.
+`GET /operator/retrying` lists the pending outbox rows that have failed at
+least once or are parked, soonest retry first and bounded, with their last
+error — the Desk's answer to "why has this not stamped yet" before anything
+dead-letters. `pipeline/soak.ts` is the rail soak: N invoices through the
+real pipeline over two conformance fake rails under a seeded fault mix with
+several drain loops at once, then every invariant checked (one stamp per
+stamped invoice and it is the one the rail holds; one terminal lifecycle
+transition and one stamp/rejected audit row per invoice; at most one
+accepted submission; a Desk case for every rejection and nothing else; no
+row left claimed; no stale half-open probe). `rail-soak.test.ts` runs a
+CI-sized soak; `pnpm --filter @workspace/api-server run soak [invoices]
+[workers] [seed]` runs a large one and prints the report.
 
 **The rail call stays inside `processOne`'s bypass transaction.**
 Deliberately: the claimed outbox row (`FOR UPDATE SKIP LOCKED`) is exactly

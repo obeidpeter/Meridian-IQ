@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.93.0
+  version: 0.94.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2115,6 +2115,32 @@ paths:
       responses:
         "200":
           description: Dead-lettered events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OutboxEvent"
+  /operator/retrying:
+    get:
+      operationId: listRetryingEvents
+      tags: [operator]
+      description: Pending outbox events that have failed at least once or are parked behind a rail breaker, soonest retry first (R102).
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Retrying events
           content:
             application/json:
               schema:
@@ -9723,6 +9749,17 @@ components:
           type: integer
         lastError:
           type: ["string", "null"]
+        nextAttemptAt:
+          type: ["string", "null"]
+          description: When the worker will next pick the event up (pending rows).
+        parkedUntil:
+          type: ["string", "null"]
+          description: Set while the event waits for a rail breaker (R96).
+        parkCount:
+          type: integer
+        firstAttemptAt:
+          type: ["string", "null"]
+          description: Start of the retry horizon (R96).
         createdAt:
           type: string
           format: date-time
@@ -9749,6 +9786,9 @@ components:
         retryAt:
           type: ["string", "null"]
           description: When the breaker next lets a probe through (open rails only).
+        lastErrorCode:
+          type: ["string", "null"]
+          description: The catalogue code of the failure that last counted against this rail (cleared on success).
         transport:
           type: string
           description: The transport serving the rails right now — `simulator` until a RAIL_*_URL is lit, then `http`.

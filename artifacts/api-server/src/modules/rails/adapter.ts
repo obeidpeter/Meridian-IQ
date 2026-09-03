@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   getDb,
+  pool,
   railStatesTable,
   stampRecordsTable,
   stampVerificationsTable,
@@ -12,7 +13,11 @@ import type { CanonicalInvoice } from "../invoice/canonical";
 import { isRetriable } from "../errors";
 import { isPresentableAsEligible } from "../invoice/lifecycle";
 import { RailLookupError, deterministicStamp } from "./faults";
-import { createHttpRailTransport, httpRailConfigFromEnv } from "./transports/http";
+import {
+  createHttpRailTransport,
+  httpRailConfigFromEnv,
+  railTimeoutMs,
+} from "./transports/http";
 
 // One adapter interface over two accredited access-point rails (INT-01, C3).
 // The rails are simulated by default (no real MBS/APP reachable until
@@ -189,12 +194,25 @@ export function railOpenCooldownMs(): number {
     : DEFAULT_OPEN_COOLDOWN_MS;
 }
 
+/**
+ * How long a worker may hold the half-open probe slot (R102): one submit
+ * and one lookup at the transport budget, plus slack. A probe that dies
+ * with the slot (a crashed instance) is taken over once the lease passes.
+ */
+export function probeLeaseMs(): number {
+  return 2 * railTimeoutMs() + 5_000;
+}
+
 export interface BreakerStatus {
   rail: Rail;
   state: "closed" | "open" | "half_open";
   failureCount: number;
   openedAt: Date | null;
   retryAt: Date | null;
+  /** When the current half-open probe took the slot (R102). */
+  probeStartedAt: Date | null;
+  /** The catalogue code of the failure that last counted against the rail (R102). */
+  lastErrorCode: string | null;
 }
 
 /** The breaker as an operator or a parked submission reads it. */
@@ -206,6 +224,8 @@ export async function breakerStatus(rail: Rail): Promise<BreakerStatus> {
     failureCount: state.failureCount,
     openedAt: state.openedAt,
     retryAt: state.retryAt,
+    probeStartedAt: state.probeStartedAt,
+    lastErrorCode: state.lastErrorCode,
   };
 }
 
@@ -221,40 +241,82 @@ async function ensureRailState(rail: Rail) {
       .limit(1);
   const [existing] = await read();
   if (existing) return existing;
-  await getDb()
-    .insert(railStatesTable)
-    .values({ rail })
-    .onConflictDoNothing({ target: railStatesTable.rail });
+  await pool.query(
+    "INSERT INTO rail_states (rail) VALUES ($1) ON CONFLICT (rail) DO NOTHING",
+    [rail],
+  );
   const [row] = await read();
   return row;
 }
+
+// ---- Breaker bookkeeping OUTSIDE the event transaction (R102) ----
+//
+// Every breaker WRITE below is one short autocommit statement on the raw
+// `pool`, never a statement inside the worker's event transaction: a write
+// there held the rail_states row lock for the length of the rail call, so a
+// second worker's gate queued behind the first worker's timeout, and two
+// workers failing over in opposite orders could deadlock. It also means a
+// failure the rail really produced is remembered even when the event's own
+// writes are rolled back — a breaker must not forget an outage because a
+// later write failed. Reads stay plain SELECTs, which never wait.
+//
+// The half-open PROBE is a slot claimed atomically (`UPDATE … WHERE state =
+// 'open' AND retry_at <= now()` — exactly one worker wins), stamped with
+// probe_started_at and released by recordSuccess/recordFailure. Every other
+// worker is refused until the probe's lease ends; a probe that dies with the
+// slot is taken over once its lease has passed.
 
 // The gate a call passes through: an open breaker whose retry-at has come
 // lets ONE probe through (half_open); otherwise it refuses and says when.
 // Only a SUBMIT is a probe — it always ends in recordSuccess/recordFailure,
 // which moves the breaker on. A lookup (`probe: false`) is admitted on the
-// same terms but never flips the state: a null lookup records nothing, and a
-// breaker parked in half_open by a lookup would wave every later submit
+// same terms but never claims the slot: a null lookup records nothing, and
+// a breaker parked in half_open by a lookup would wave every later submit
 // through without a probe (R95).
 async function railGate(
   rail: Rail,
   opts: { probe: boolean } = { probe: true },
 ): Promise<{ allowed: boolean; retryAt: Date | null }> {
   const state = await ensureRailState(rail);
-  if (state.state !== "open") return { allowed: true, retryAt: null };
-  const retryAt =
-    state.retryAt ??
-    new Date((state.openedAt?.getTime() ?? 0) + railOpenCooldownMs());
-  if (Date.now() >= retryAt.getTime()) {
-    if (opts.probe) {
-      await getDb()
-        .update(railStatesTable)
-        .set({ state: "half_open" })
-        .where(eq(railStatesTable.rail, rail));
-    }
-    return { allowed: true, retryAt: null };
+  const now = Date.now();
+  if (state.state === "closed") return { allowed: true, retryAt: null };
+  if (state.state === "open") {
+    const retryAt =
+      state.retryAt ??
+      new Date((state.openedAt?.getTime() ?? 0) + railOpenCooldownMs());
+    if (now < retryAt.getTime()) return { allowed: false, retryAt };
+    if (!opts.probe) return { allowed: true, retryAt: null };
+    return claimProbe(rail);
   }
-  return { allowed: false, retryAt };
+  // half_open: a probe holds the slot (or died holding it).
+  if (!opts.probe) return { allowed: true, retryAt: null };
+  const leaseEnd = new Date(
+    (state.probeStartedAt?.getTime() ?? 0) + probeLeaseMs(),
+  );
+  if (now < leaseEnd.getTime()) return { allowed: false, retryAt: leaseEnd };
+  return claimProbe(rail);
+}
+
+/** Take the half-open slot if it is free (retry-at passed) or stale (lease passed). */
+async function claimProbe(
+  rail: Rail,
+): Promise<{ allowed: boolean; retryAt: Date | null }> {
+  const lease = probeLeaseMs();
+  const { rowCount } = await pool.query(
+    `UPDATE rail_states
+        SET state = 'half_open', probe_started_at = now(), updated_at = now()
+      WHERE rail = $1
+        AND (
+          (state = 'open'
+             AND COALESCE(retry_at, COALESCE(opened_at, to_timestamp(0)) + ($2::int * interval '1 millisecond')) <= now())
+          OR (state = 'half_open'
+             AND COALESCE(probe_started_at, to_timestamp(0)) + ($3::int * interval '1 millisecond') <= now())
+        )`,
+    [rail, railOpenCooldownMs(), lease],
+  );
+  if (rowCount === 1) return { allowed: true, retryAt: null };
+  // Another worker holds the probe (or the breaker just moved): wait it out.
+  return { allowed: false, retryAt: new Date(Date.now() + lease) };
 }
 
 /** Whether a lookup may run: the breaker's answer, without moving it. */
@@ -263,34 +325,32 @@ async function railAvailable(rail: Rail): Promise<boolean> {
 }
 
 async function recordSuccess(rail: Rail): Promise<void> {
-  await getDb()
-    .update(railStatesTable)
-    .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null })
-    .where(eq(railStatesTable.rail, rail));
+  await pool.query(
+    `UPDATE rail_states
+        SET state = 'closed', failure_count = 0, opened_at = NULL, retry_at = NULL,
+            probe_started_at = NULL, last_error_code = NULL, updated_at = now()
+      WHERE rail = $1`,
+    [rail],
+  );
 }
 
-async function recordFailure(rail: Rail): Promise<void> {
-  const state = await ensureRailState(rail);
-  const failureCount = state.failureCount + 1;
-  if (failureCount >= FAILURE_THRESHOLD) {
-    const now = new Date();
-    await getDb()
-      .update(railStatesTable)
-      .set({
-        state: "open",
-        failureCount,
-        // The outage instance started when the breaker FIRST opened; a
-        // failed probe re-arms the retry clock only.
-        openedAt: state.openedAt ?? now,
-        retryAt: new Date(now.getTime() + railOpenCooldownMs()),
-      })
-      .where(eq(railStatesTable.rail, rail));
-  } else {
-    await getDb()
-      .update(railStatesTable)
-      .set({ failureCount })
-      .where(eq(railStatesTable.rail, rail));
-  }
+// One statement, so two workers failing at once cannot lose a count: the
+// threshold opens the breaker (or re-arms an open/half-open one — the
+// outage instance `opened_at` is kept, only retry_at moves), the code is
+// remembered for the alert and the Desk, and the probe slot is released.
+async function recordFailure(rail: Rail, errorCode: string): Promise<void> {
+  await pool.query(
+    `UPDATE rail_states
+        SET failure_count = failure_count + 1,
+            last_error_code = $2,
+            state = CASE WHEN failure_count + 1 >= $3 THEN 'open'::circuit_state ELSE state END,
+            opened_at = CASE WHEN failure_count + 1 >= $3 THEN COALESCE(opened_at, now()) ELSE opened_at END,
+            retry_at = CASE WHEN failure_count + 1 >= $3 THEN now() + ($4::int * interval '1 millisecond') ELSE retry_at END,
+            probe_started_at = NULL,
+            updated_at = now()
+      WHERE rail = $1`,
+    [rail, errorCode.slice(0, 64), FAILURE_THRESHOLD, railOpenCooldownMs()],
+  );
 }
 
 export interface FailoverResult {
@@ -351,7 +411,7 @@ export async function submitWithFailover(
       return { result, tried, sent, circuitOpen: false, retryAfter: null };
     }
     // Transient error: count against the breaker and try the next rail.
-    await recordFailure(rail);
+    await recordFailure(rail, result.errorCode ?? "UNKNOWN");
     if (!isRetriable(result.errorCode ?? "UNKNOWN")) {
       return { result, tried, sent, circuitOpen: false, retryAfter: null };
     }
@@ -397,14 +457,16 @@ export async function recoverExistingStamp(
   // none held the stamp, the error is re-raised so the caller RETRIES —
   // the stamp may exist, and "no rail knows it" must only ever mean 404.
   let unanswered: RailLookupError | null = null;
+  let asked = 0;
   for (const rail of order) {
     if (!(await railAvailable(rail))) continue;
+    asked += 1;
     let found: StampResult | null;
     try {
       found = await transport.lookup(rail, inv, idempotencyKey);
     } catch (err) {
       if (!(err instanceof RailLookupError)) throw err;
-      await recordFailure(rail);
+      await recordFailure(rail, err.code);
       unanswered = err;
       continue;
     }
@@ -414,6 +476,11 @@ export async function recoverExistingStamp(
     }
   }
   if (unanswered) throw unanswered;
+  // Every served rail refused the lookup: nobody was asked, so "no rail
+  // knows the submission" would be a guess — the caller retries instead.
+  if (asked === 0) {
+    throw new RailLookupError(order[0] ?? "rail_primary", "RAIL_UNAVAILABLE");
+  }
   return null;
 }
 

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.93.0
+ * OpenAPI spec version: 0.94.0
  */
 import type { OutboxEventStatus } from './outboxEventStatus';
 
@@ -17,5 +17,21 @@ export interface OutboxEvent {
   maxAttempts: number;
   /** @nullable */
   lastError?: string | null;
+  /**
+     * When the worker will next pick the event up (pending rows).
+     * @nullable
+     */
+  nextAttemptAt?: string | null;
+  /**
+     * Set while the event waits for a rail breaker (R96).
+     * @nullable
+     */
+  parkedUntil?: string | null;
+  parkCount?: number;
+  /**
+     * Start of the retry horizon (R96).
+     * @nullable
+     */
+  firstAttemptAt?: string | null;
   createdAt: Date;
 }

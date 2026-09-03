@@ -11,6 +11,10 @@ import {
   railTransportLine,
   railNotConfiguredBadgeClasses,
   RAIL_NOT_CONFIGURED_LABEL,
+  railLastErrorLine,
+  retryingLine,
+  isParked,
+  RETRYING_EMPTY,
 } from "./platform-ops";
 
 // Helpers behind the two operator observability cards. The action-label map
@@ -128,5 +132,34 @@ describe("card copy", () => {
     expect(RAIL_CONFIG_INTRO).toBe(
       "Which environment-lit rails this deployment has configured. Values are never shown.",
     );
+  });
+});
+
+describe("rail last error and retrying lines (R102)", () => {
+  test("the rails card names the failure class, and explains a refused credential", () => {
+    expect(railLastErrorLine("RAIL_TIMEOUT")).toBe("last error RAIL_TIMEOUT");
+    expect(railLastErrorLine("RAIL_UNAUTHORIZED")).toContain("refuses our token");
+  });
+
+  test("a retrying row says its tries and next try; a parked row says so with its wake time", () => {
+    const now = new Date("2026-09-03T10:00:00.000Z");
+    const later = new Date("2026-09-03T10:05:00.000Z").toISOString();
+    expect(
+      retryingLine({ attempts: 2, maxAttempts: 6, nextAttemptAt: later, parkedUntil: null, parkCount: 0 }, now),
+    ).toMatch(/^2\/6 attempts · next try /);
+    expect(
+      retryingLine({ attempts: 0, maxAttempts: 6, nextAttemptAt: later, parkedUntil: later, parkCount: 3 }, now),
+    ).toMatch(/^0\/6 attempts · parked behind the rail breaker \(3 parks\) · wakes /);
+    expect(
+      retryingLine({ attempts: 1, maxAttempts: 6, nextAttemptAt: null, parkedUntil: null, parkCount: 0 }, now),
+    ).toBe("1/6 attempts");
+  });
+
+  test("isParked reads a parkedUntil still in the future; a passed one is a plain retry", () => {
+    const now = new Date("2026-09-03T10:00:00.000Z");
+    expect(isParked({ parkedUntil: "2026-09-03T10:01:00.000Z" }, now)).toBe(true);
+    expect(isParked({ parkedUntil: "2026-09-03T09:59:00.000Z" }, now)).toBe(false);
+    expect(isParked({ parkedUntil: null }, now)).toBe(false);
+    expect(RETRYING_EMPTY).toMatch(/Nothing retrying/);
   });
 });

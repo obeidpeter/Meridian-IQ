@@ -7,6 +7,7 @@ import type { CanonicalInvoice } from "../invoice/canonical.ts";
 import {
   breakerStatus,
   currentRailTransport,
+  probeLeaseMs,
   railOpenCooldownMs,
   railTransportSummary,
   recoverExistingStamp,
@@ -75,7 +76,14 @@ async function closeBreakers(): Promise<void> {
   for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
     await getDb()
       .update(railStatesTable)
-      .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null })
+      .set({
+        state: "closed",
+        failureCount: 0,
+        openedAt: null,
+        retryAt: null,
+        probeStartedAt: null,
+        lastErrorCode: null,
+      })
       .where(eq(railStatesTable.rail, rail));
   }
 }
@@ -477,6 +485,132 @@ test("the scripted fake runs a scripted rejection code through the shared saniti
     const wire = await submitWithFailover(INV, key);
     assert.equal(wire.result.status, "rejected");
     assert.equal(wire.result.errorCode, "E-1001", "an access point's own reference passes through");
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+// ---- Probe slot and raw-pool bookkeeping (R102) ----
+
+test("probe slot: two workers on a due-open breaker — exactly one probes, the other is refused until the lease ends", async () => {
+  await closeBreakers();
+  await getDb()
+    .update(railStatesTable)
+    .set({
+      state: "open",
+      failureCount: 3,
+      openedAt: new Date(Date.now() - 60_000),
+      retryAt: new Date(Date.now() - 1_000),
+      probeStartedAt: null,
+    })
+    .where(eq(railStatesTable.rail, "rail_primary"));
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const inner = scriptedRail({ name: "slow-probe", rails: ["rail_primary"] });
+  const slow: RailTransport = {
+    name: "slow-probe",
+    environment: "sandbox",
+    rails: ["rail_primary"],
+    async submit(rail, inv, key) {
+      await gate;
+      return inner.submit(rail, inv, key);
+    },
+    async lookup(rail, inv, key) {
+      return inner.lookup(rail, inv, key);
+    },
+  };
+  setRailTransport(slow);
+  try {
+    const key = `${INV.invoiceNumber}:probe-slot`;
+    const first = submitWithFailover(INV, key);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const during = await breakerStatus("rail_primary");
+    assert.equal(during.state, "half_open", "the first worker holds the probe slot");
+    assert.ok(during.probeStartedAt instanceof Date);
+
+    const second = await submitWithFailover(INV, `${key}-2`);
+    assert.equal(second.circuitOpen, true, "the second worker is refused while the probe is in flight");
+    assert.ok(second.retryAfter && second.retryAfter.getTime() > Date.now(), "and told when the lease ends");
+    assert.equal(inner.calls.length, 0, "the refused worker sent nothing");
+
+    release();
+    const done = await first;
+    assert.equal(done.result.status, "accepted");
+    const after = await breakerStatus("rail_primary");
+    assert.equal(after.state, "closed");
+    assert.equal(after.failureCount, 0);
+    assert.equal(after.probeStartedAt, null);
+    assert.equal(after.lastErrorCode, null);
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+test("probe slot: a probe that died with the slot is taken over once its lease passes; a failed probe records its code and re-arms", async () => {
+  await closeBreakers();
+  await getDb()
+    .update(railStatesTable)
+    .set({
+      state: "half_open",
+      failureCount: 3,
+      openedAt: new Date(Date.now() - 120_000),
+      retryAt: new Date(Date.now() - 60_000),
+      probeStartedAt: new Date(Date.now() - probeLeaseMs() - 1_000),
+    })
+    .where(eq(railStatesTable.rail, "rail_primary"));
+  const fake = scriptedRail({ name: "takeover", rails: ["rail_primary"] });
+  fake.script(INV.invoiceNumber, { outcome: "unauthorized", times: 1 });
+  setRailTransport(fake);
+  try {
+    const key = `${INV.invoiceNumber}:takeover`;
+    const probe = await submitWithFailover(INV, key);
+    assert.equal(probe.circuitOpen, false, "the stale slot was taken over");
+    assert.equal(probe.result.errorCode, "RAIL_UNAUTHORIZED");
+    const after = await breakerStatus("rail_primary");
+    assert.equal(after.state, "open");
+    assert.equal(after.failureCount, 4);
+    assert.equal(after.lastErrorCode, "RAIL_UNAUTHORIZED");
+    assert.equal(after.probeStartedAt, null, "the slot is released with the verdict");
+    assert.ok(after.retryAt && after.retryAt.getTime() > Date.now(), "retry-at re-armed");
+    assert.ok(
+      after.openedAt && after.openedAt.getTime() < Date.now() - 100_000,
+      "the outage instance is kept",
+    );
+
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "half_open", probeStartedAt: new Date() })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+    const refused = await submitWithFailover(INV, `${key}-2`);
+    assert.equal(refused.circuitOpen, true, "a live lease is honoured");
+    assert.equal(fake.calls.length, 1);
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+test("recovery: when every served rail refuses the lookup, nobody was asked — a retry, never a miss", async () => {
+  await closeBreakers();
+  for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(), retryAt: new Date(Date.now() + 60_000) })
+      .where(eq(railStatesTable.rail, rail));
+  }
+  const fake = scriptedRail({ name: "all-refused" });
+  fake.hold(INV.invoiceNumber);
+  setRailTransport(fake);
+  try {
+    await assert.rejects(
+      recoverExistingStamp(INV, `${INV.invoiceNumber}:refused`),
+      (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_UNAVAILABLE",
+    );
+    assert.equal(fake.calls.length, 0, "no rail was asked");
   } finally {
     setRailTransport(null);
     await closeBreakers();

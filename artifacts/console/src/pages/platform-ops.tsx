@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   useListDeadLetters,
+  useListRetryingEvents,
   useReplayDeadLetter,
   useReconcilePipeline,
   useListRailStates,
@@ -123,6 +124,117 @@ export function railNotConfiguredBadgeClasses(): string {
   return pillClasses("slate");
 }
 
+// The failure class the breaker last counted (R102): a refused credential
+// reads differently from an outage, so the card says which.
+export function railLastErrorLine(code: string): string {
+  return code === "RAIL_UNAUTHORIZED"
+    ? "last error RAIL_UNAUTHORIZED · the access point refuses our token"
+    : `last error ${code}`;
+}
+
+// ---- Retrying events (R102) --------------------------------------------------
+// Pending outbox rows that have already failed at least once, or are parked
+// behind a rail breaker: the answer to "why has this not stamped yet" BEFORE
+// anything dead-letters. One line per row, in the words the manual uses.
+export function isParked(
+  event: Pick<OutboxEvent, "parkedUntil">,
+  now: Date = new Date(),
+): boolean {
+  return Boolean(event.parkedUntil && new Date(event.parkedUntil).getTime() > now.getTime());
+}
+
+export function retryingLine(
+  event: Pick<OutboxEvent, "attempts" | "maxAttempts" | "nextAttemptAt" | "parkedUntil" | "parkCount">,
+  now: Date = new Date(),
+): string {
+  const tries = `${event.attempts}/${event.maxAttempts} attempts`;
+  if (isParked(event, now)) {
+    const parks = event.parkCount ?? 0;
+    return `${tries} · parked behind the rail breaker (${parks} park${parks === 1 ? "" : "s"}) · wakes ${formatDateTime(event.parkedUntil as string)}`;
+  }
+  return event.nextAttemptAt
+    ? `${tries} · next try ${formatDateTime(event.nextAttemptAt)}`
+    : tries;
+}
+
+export const RETRYING_EMPTY = "Nothing retrying — every queued event delivered or is waiting for its first try.";
+
+function RetryingSection() {
+  const { data, isLoading, error, refetch } = useListRetryingEvents({ limit: 50 });
+  return (
+    <Card data-testid="card-retrying">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <RefreshCw className="w-5 h-5 text-primary" aria-hidden="true" />{" "}
+          Retrying events
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24" />
+        ) : error ? (
+          <QueryError thing="retrying events" onRetry={() => refetch()} />
+        ) : (data ?? []).length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground flex items-center gap-2"
+            data-testid="text-retrying-empty"
+          >
+            <CheckCircle2
+              className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            {RETRYING_EMPTY}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {(data ?? []).map((event) => (
+              <div
+                key={event.id}
+                className="border rounded-md p-3"
+                data-testid={`retrying-${event.id}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">{event.type}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {event.aggregateType} · {event.aggregateId}
+                    </p>
+                    <p
+                      className="text-xs text-muted-foreground"
+                      data-testid={`retrying-line-${event.id}`}
+                    >
+                      {retryingLine(event)}
+                    </p>
+                    {event.lastError && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 flex items-start gap-1">
+                        <AlertTriangle
+                          className="w-3.5 h-3.5 mt-0.5 shrink-0"
+                          aria-hidden="true"
+                        />
+                        <span className="break-all">{event.lastError}</span>
+                      </p>
+                    )}
+                  </div>
+                  {isParked(event) ? (
+                    <span
+                      className={`${pillClasses("amber")} shrink-0`}
+                      data-testid={`retrying-parked-${event.id}`}
+                    >
+                      Parked
+                    </span>
+                  ) : (
+                    <span className={`${pillClasses("slate")} shrink-0`}>Retrying</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function RailsSection() {
   const { data, isLoading, error, refetch } = useListRailStates();
 
@@ -169,6 +281,14 @@ function RailsSection() {
                       ? ` · next probe ${formatDateTime(rail.retryAt)}`
                       : ""}
                   </p>
+                  {rail.lastErrorCode ? (
+                    <p
+                      className="text-xs text-red-700 dark:text-red-400 mt-0.5 font-mono"
+                      data-testid={`rail-last-error-${rail.rail}`}
+                    >
+                      {railLastErrorLine(rail.lastErrorCode)}
+                    </p>
+                  ) : null}
                 </div>
                 {rail.configured ? (
                   <span className={`${railBadgeClasses(rail.state)} shrink-0`}>
@@ -534,6 +654,7 @@ export function PlatformOps() {
 
       <HealthAlertsSection />
       <RailsSection />
+      <RetryingSection />
       <RailConfigSection />
       <DeadLettersSection />
       <MessagesSection />

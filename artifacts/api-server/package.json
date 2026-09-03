@@ -10,7 +10,8 @@
     "test": "tsx --test --test-force-exit --test-concurrency=1 \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "benchmark": "tsx ./src/bench/pipeline-benchmark.ts",
-    "fake-rail": "tsx ./src/fake-rail-main.ts"
+    "fake-rail": "tsx ./src/fake-rail-main.ts",
+    "soak": "tsx ./src/bench/rail-soak.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.35",

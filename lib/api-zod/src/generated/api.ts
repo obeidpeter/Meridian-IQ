@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.93.0
+ * OpenAPI spec version: 0.94.0
  */
 import * as zod from 'zod';
 
@@ -2635,9 +2635,45 @@ export const ListDeadLettersResponseItem = zod.object({
   "attempts": zod.number(),
   "maxAttempts": zod.number(),
   "lastError": zod.string().nullish(),
+  "nextAttemptAt": zod.string().nullish().describe('When the worker will next pick the event up (pending rows).'),
+  "parkedUntil": zod.string().nullish().describe('Set while the event waits for a rail breaker (R96).'),
+  "parkCount": zod.number().optional(),
+  "firstAttemptAt": zod.string().nullish().describe('Start of the retry horizon (R96).'),
   "createdAt": zod.coerce.date()
 })
 export const ListDeadLettersResponse = zod.array(ListDeadLettersResponseItem)
+
+
+/**
+ * Pending outbox events that have failed at least once or are parked behind a rail breaker, soonest retry first (R102).
+ */
+export const listRetryingEventsQueryLimitMax = 200;
+
+export const listRetryingEventsQueryOffsetMin = 0;
+
+
+
+export const ListRetryingEventsQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listRetryingEventsQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listRetryingEventsQueryOffsetMin).optional()
+})
+
+export const ListRetryingEventsResponseItem = zod.object({
+  "id": zod.string(),
+  "aggregateType": zod.string(),
+  "aggregateId": zod.string(),
+  "type": zod.string(),
+  "status": zod.enum(['pending', 'processing', 'done', 'dead']),
+  "attempts": zod.number(),
+  "maxAttempts": zod.number(),
+  "lastError": zod.string().nullish(),
+  "nextAttemptAt": zod.string().nullish().describe('When the worker will next pick the event up (pending rows).'),
+  "parkedUntil": zod.string().nullish().describe('Set while the event waits for a rail breaker (R96).'),
+  "parkCount": zod.number().optional(),
+  "firstAttemptAt": zod.string().nullish().describe('Start of the retry horizon (R96).'),
+  "createdAt": zod.coerce.date()
+})
+export const ListRetryingEventsResponse = zod.array(ListRetryingEventsResponseItem)
 
 
 export const ReplayDeadLetterParams = zod.object({
@@ -2658,6 +2694,7 @@ export const ListRailStatesResponseItem = zod.object({
   "failureCount": zod.number(),
   "openedAt": zod.string().nullish().describe('When this outage instance began; stays fixed across failed probes.'),
   "retryAt": zod.string().nullish().describe('When the breaker next lets a probe through (open rails only).'),
+  "lastErrorCode": zod.string().nullish().describe('The catalogue code of the failure that last counted against this rail (cleared on success).'),
   "transport": zod.string().describe('The transport serving the rails right now — `simulator` until a RAIL_\*_URL is lit, then `http`.'),
   "environment": zod.string().describe('Provenance stamped on every stamp record (`sandbox` unless RAIL_ENVIRONMENT says `live`).'),
   "configured": zod.boolean().describe('Whether the live transport serves this rail (an HTTP transport serves only rails with a URL).'),

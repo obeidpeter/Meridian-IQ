@@ -3,18 +3,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import {
-  getDb,
+  auditEventsTable,
   firmsTable,
-  partiesTable,
-  invoicesTable,
-  invoiceLinesTable,
+  getDb,
   invoiceLifecycleEventsTable,
+  invoiceLinesTable,
+  invoicesTable,
   operatorCasesTable,
   outboxTable,
+  partiesTable,
+  pool,
+  railStatesTable,
   stampRecordsTable,
   submissionAttemptsTable,
-  auditEventsTable,
-  railStatesTable,
   type Rail,
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
@@ -49,8 +50,8 @@ import { drain, reconcile, resumeWorker, stopWorker } from "./pipeline.ts";
 //    7    non-retriable transport err MBS_SCHEMA_INVALID  dead WITHOUT invoice.rejected; failover stops
 //    8    rail_primary breaker open   —                   the refusal is not an attempt; rail_secondary stamps
 //    9    unavailable ×2 then accept  RAIL_UNAVAILABLE    retry, then stamped on the replayed backoff
-//   10    primary unavailable, then   "boom"              rolled back: the breaker count, the attempt row and the
-//         the transport throws                            claim all undone; the retry stamps exactly once
+//   10    primary unavailable, then   "boom"              rolled back: the attempt row and the claim undone, the
+//         the transport throws                            breaker count KEPT (R102); the retry stamps exactly once
 //   11    duplicate (stamp held)      MBS_DUPLICATE       recovered: invoice.stamp_recovered
 //   12    reconcile vs a parked row   —                   a live parked row is never re-queued
 //   13    one served rail, breaker    —                   park: nothing sent, wake at retry-at, stamps once closed
@@ -578,7 +579,7 @@ test("cell 9 — unavailable ×2 then accept across retries: pending after the f
   assert.equal((await lifecycleRows(id)).length, 1);
 });
 
-test("cell 10 — rail_primary unavailable, then the transport throws on rail_secondary: the try is rolled back (breaker count, attempt, lifecycle and audit rows all undone), retried with backoff, then stamped exactly once", async () => {
+test("cell 10 — rail_primary unavailable, then the transport throws on rail_secondary: the try is rolled back (attempt, lifecycle and audit rows undone; the breaker count survives), retried with backoff, then stamped exactly once", async () => {
   const id = await seedInvoice(10);
   const outboxId = await enqueueSubmit(id);
   // rail_primary answers a real 503 through the inner fake — which makes the
@@ -617,11 +618,11 @@ test("cell 10 — rail_primary unavailable, then the transport throws on rail_se
   assert.equal((await lifecycleRows(id)).length, 0, "no lifecycle row survives a rolled-back try");
   assert.deepEqual(await auditActions(id), [], "no audit row survives a rolled-back try");
   assert.equal(await stampFor(id), undefined);
-  assert.equal(
-    (await breakerStatus("rail_primary")).failureCount,
-    0,
-    "rail_primary's recordFailure was undone with the claim",
-  );
+  // R102: breaker writes commit on their own (raw pool), so the failure the
+  // rail really produced is remembered even though the try rolled back.
+  const primaryAfter = await breakerStatus("rail_primary");
+  assert.equal(primaryAfter.failureCount, 1, "rail_primary's failure survives the rolled-back try");
+  assert.equal(primaryAfter.lastErrorCode, "RAIL_UNAVAILABLE");
   assert.equal((await breakerStatus("rail_secondary")).failureCount, 0);
   assert.deepEqual(
     callsFor(inner, 10),
@@ -1067,6 +1068,57 @@ test("cell 18 — reconcile takes each stuck invoice in its own transaction: two
   await drainUntilSettled(d);
   assert.equal(await invoiceStatus(c), "stamped");
   assert.equal(await invoiceStatus(d), "stamped");
+});
+
+test("cell 21 — R102: an event transaction holds no rail_states lock during its rail call, so another worker's breaker write never waits", async () => {
+  await flushReadyQueue();
+  const inner = scriptedRail({ name: "lock-free" });
+  inner.script(invoiceNumber(21), { outcome: "unavailable", times: 1 });
+  let observedMs: number | null = null;
+  let observedError: string | null = null;
+  const probing: RailTransport = {
+    name: "lock-free",
+    environment: "sandbox",
+    async submit(rail, inv, key) {
+      if (rail === "rail_secondary" && inv.invoiceNumber === invoiceNumber(21)) {
+        // Mid-event, after rail_primary's failure was recorded: a second
+        // worker writes the same breaker row on its own connection. Before
+        // R102 that UPDATE queued behind this event's transaction until the
+        // rail call ended — here it must complete at once.
+        const client = await pool.connect();
+        try {
+          await client.query("SET statement_timeout = 2000");
+          const started = Date.now();
+          await client.query(
+            "UPDATE rail_states SET updated_at = now() WHERE rail = 'rail_primary'",
+          );
+          observedMs = Date.now() - started;
+        } catch (err) {
+          observedError = err instanceof Error ? err.message : String(err);
+        } finally {
+          client.release();
+        }
+      }
+      return inner.submit(rail, inv, key);
+    },
+    async lookup(rail, inv, key) {
+      return inner.lookup(rail, inv, key);
+    },
+  };
+  setRailTransport(probing);
+  const id = await seedInvoice(21);
+  await enqueueSubmit(id);
+  await drainUntilSettled(id);
+  assert.equal(await invoiceStatus(id), "stamped");
+  assert.equal(observedError, null, "the other worker's breaker write was not refused");
+  assert.ok(
+    observedMs !== null && observedMs < 1_000,
+    `the other worker's breaker write completed without waiting (${observedMs} ms)`,
+  );
+  const primary = await breakerStatus("rail_primary");
+  assert.equal(primary.failureCount, 1);
+  assert.equal(primary.lastErrorCode, "RAIL_UNAVAILABLE");
+  assert.equal((await breakerStatus("rail_secondary")).failureCount, 0);
 });
 
 // stopWorker() leaves the worker's stop flag set; resumeWorker() clears it

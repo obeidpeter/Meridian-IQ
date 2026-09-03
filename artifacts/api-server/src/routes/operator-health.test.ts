@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { getDb, railStatesTable } from "@workspace/db";
+import { getDb, outboxTable, railStatesTable } from "@workspace/db";
 import operatorRouter from "./operator.ts";
 import { setRailTransport } from "../modules/rails/adapter.ts";
 import { scriptedRail } from "../modules/rails/transports/scripted.ts";
@@ -284,4 +284,84 @@ test("every endpoint requires operator.queue.read (firm_admin is 403)", async ()
   assert.equal((await fetch(`${base}/operator/health-alerts`)).status, 403);
   assert.equal((await fetch(`${base}/operator/rail-config`)).status, 403);
   assert.equal((await fetch(`${base}/operator/rails`)).status, 403);
+});
+
+test("GET /operator/rails serialises an OPEN breaker (timestamps as strings) and carries lastErrorCode (R102)", async () => {
+  const openedAt = new Date(Date.now() - 60_000);
+  const retryAt = new Date(Date.now() + 30_000);
+  await getDb()
+    .insert(railStatesTable)
+    .values({ rail: "rail_primary" })
+    .onConflictDoNothing({ target: railStatesTable.rail });
+  await getDb()
+    .update(railStatesTable)
+    .set({ state: "open", failureCount: 3, openedAt, retryAt, lastErrorCode: "RAIL_UNAUTHORIZED" })
+    .where(eq(railStatesTable.rail, "rail_primary"));
+  try {
+    const base = await listen(appFor(operator, operatorRouter));
+    const res = await fetch(`${base}/operator/rails`);
+    assert.equal(res.status, 200, "an open breaker must not break the card");
+    const body = (await res.json()) as Array<{
+      rail: string;
+      state: string;
+      openedAt: string | null;
+      retryAt: string | null;
+      lastErrorCode: string | null;
+    }>;
+    const primary = body.find((r) => r.rail === "rail_primary");
+    assert.equal(primary?.state, "open");
+    assert.equal(primary?.openedAt, openedAt.toISOString());
+    assert.equal(primary?.retryAt, retryAt.toISOString());
+    assert.equal(primary?.lastErrorCode, "RAIL_UNAUTHORIZED");
+    const secondary = body.find((r) => r.rail === "rail_secondary");
+    assert.equal(secondary?.lastErrorCode ?? null, null);
+  } finally {
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null, probeStartedAt: null, lastErrorCode: null })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+  }
+});
+
+test("GET /operator/retrying lists pending events that failed or are parked, soonest first, bounded (R102)", async () => {
+  const soon = new Date(Date.now() + 10_000);
+  const later = new Date(Date.now() + 20_000);
+  const ids = { failed: randomUUID(), parked: randomUUID(), fresh: randomUUID(), dead: randomUUID() };
+  const aggregate = (tag: string) => `retrying-${tag}-${SALT}`;
+  await getDb().insert(outboxTable).values([
+    { id: ids.failed, aggregateType: "invoice", aggregateId: aggregate("failed"), type: "invoice.submit", payload: {}, status: "pending", attempts: 2, nextAttemptAt: soon, lastError: "RAIL_TIMEOUT" },
+    { id: ids.parked, aggregateType: "invoice", aggregateId: aggregate("parked"), type: "invoice.submit", payload: {}, status: "pending", attempts: 0, nextAttemptAt: later, parkedUntil: later, parkCount: 1, lastError: "RAIL_UNAVAILABLE: parked until later" },
+    { id: ids.fresh, aggregateType: "invoice", aggregateId: aggregate("fresh"), type: "invoice.submit", payload: {}, status: "pending", attempts: 0, nextAttemptAt: new Date(Date.now() + 3_600_000) },
+    { id: ids.dead, aggregateType: "invoice", aggregateId: aggregate("dead"), type: "invoice.submit", payload: {}, status: "dead", attempts: 6, nextAttemptAt: soon, lastError: "MBS_INVALID_TIN" },
+  ]);
+  try {
+    const base = await listen(appFor(operator, operatorRouter));
+    const res = await fetch(`${base}/operator/retrying?limit=200`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as Array<{
+      id: string;
+      nextAttemptAt: string | null;
+      parkedUntil: string | null;
+      parkCount: number;
+      lastError: string | null;
+    }>;
+    const known = Object.values(ids) as string[];
+    const listed = body.filter((e) => known.includes(e.id)).map((e) => e.id);
+    assert.deepEqual(listed, [ids.failed, ids.parked], "failed-once then parked, soonest first; fresh and dead rows absent");
+    const failed = body.find((e) => e.id === ids.failed);
+    assert.equal(failed?.nextAttemptAt, soon.toISOString());
+    assert.equal(failed?.lastError, "RAIL_TIMEOUT");
+    const parked = body.find((e) => e.id === ids.parked);
+    assert.equal(parked?.parkedUntil, later.toISOString());
+    assert.equal(parked?.parkCount, 1);
+
+    const one = await fetch(`${base}/operator/retrying?limit=1`);
+    assert.equal(((await one.json()) as unknown[]).length, 1, "bounded");
+    const bad = await fetch(`${base}/operator/retrying?limit=0`);
+    assert.equal(bad.status, 400, "bad paging input is a 400, never the whole book");
+  } finally {
+    for (const id of Object.values(ids) as Array<ReturnType<typeof randomUUID>>) {
+      await getDb().delete(outboxTable).where(eq(outboxTable.id, id));
+    }
+  }
 });
