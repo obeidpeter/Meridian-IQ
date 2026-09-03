@@ -77,7 +77,7 @@ async function sweepUnmappedCodesInner(): Promise<void> {
         eq(submissionAttemptsTable.invoiceId, invoicesTable.id),
       )
       .where(eq(submissionAttemptsTable.errorCode, code))
-      .orderBy(desc(submissionAttemptsTable.createdAt))
+      .orderBy(desc(submissionAttemptsTable.seq))
       .limit(1);
     if (!latest) continue;
 

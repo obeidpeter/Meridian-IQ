@@ -126,7 +126,7 @@ router.get("/invoices/:id/attempts", async (req, res): Promise<void> => {
     .select()
     .from(submissionAttemptsTable)
     .where(eq(submissionAttemptsTable.invoiceId, params.id))
-    .orderBy(asc(submissionAttemptsTable.attemptNo));
+    .orderBy(asc(submissionAttemptsTable.attemptNo), asc(submissionAttemptsTable.seq));
   res.json(ListSubmissionAttemptsResponse.parse(rows));
 });
 

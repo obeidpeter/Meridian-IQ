@@ -5,7 +5,9 @@ import {
   FaultScript,
   RAIL_FAULT_TABLE,
   deterministicStamp,
+  isRailFaultOp,
   isRailFaultOutcome,
+  sanitiseRejectionCode,
   type RailFault,
   type StampFields,
 } from "./faults";
@@ -21,11 +23,15 @@ import {
 // tooling and need no credentials.
 //
 //   POST   /v0/submissions                 → 201 stamp | scripted fault
-//   GET    /v0/submissions/{idempotencyKey} → 200 stamp | 404
-//   PUT    /__fake/script                  {invoiceNumber, outcome, code?, times?, holdsStamp?}
+//   GET    /v0/submissions/{idempotencyKey} → 200 stamp | 404 | scripted lookup fault
+//   PUT    /__fake/script                  {invoiceNumber, outcome, code?, times?, holdsStamp?, op?, retryAfterSeconds?}
 //   GET    /__fake/calls                   the protocol calls seen so far
 //   DELETE /__fake                         reset scripts, store and calls
 //   GET    /__fake/healthz                 200 {ok: true}
+//
+// Its OWN failures (an unreadable or oversized body) answer 413/500 —
+// never 400/422, which the profile reserves for business rejections — so a
+// fake-side limit can never fail an invoice.
 
 export interface FakeRailOptions {
   /** 0 (default) = an ephemeral port. */
@@ -68,13 +74,15 @@ const BODY_LIMIT = 1_048_576;
 const TIMEOUT_HOLD_MS = 60_000;
 const DEFAULT_SECRET = "fake-rail-signing-secret";
 
+class BodyTooLarge extends Error {}
+
 async function readJson(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buf.length;
-    if (size > BODY_LIMIT) throw new Error("body too large");
+    if (size > BODY_LIMIT) throw new BodyTooLarge("body too large");
     chunks.push(buf);
   }
   const text = Buffer.concat(chunks).toString("utf8");
@@ -82,18 +90,30 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(text) as unknown;
 }
 
-function send(res: ServerResponse, status: number, body?: unknown): void {
+function send(
+  res: ServerResponse,
+  status: number,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): void {
   if (body === undefined) {
-    res.writeHead(status);
+    res.writeHead(status, headers);
     res.end();
     return;
   }
   const text = JSON.stringify(body);
   res.writeHead(status, {
+    ...headers,
     "content-type": "application/json",
     "content-length": Buffer.byteLength(text),
   });
   res.end(text);
+}
+
+/** Answer and drop the connection: a half-read request must not poison the keep-alive pool. */
+function sendAndClose(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): void {
+  send(res, status, body, { connection: "close" });
+  req.destroy();
 }
 
 function invoiceNumberOf(body: unknown): string | null {
@@ -130,13 +150,36 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
     });
   }
 
+  /** Hold the response until the client gives up (or the ceiling passes). */
+  function holdOpen(res: ServerResponse): void {
+    const timer = setTimeout(() => {
+      pendingTimeouts.delete(timer);
+      if (!res.writableEnded) send(res, 504, { code: "RAIL_TIMEOUT" });
+    }, TIMEOUT_HOLD_MS);
+    pendingTimeouts.add(timer);
+    res.on("close", () => {
+      clearTimeout(timer);
+      pendingTimeouts.delete(timer);
+    });
+  }
+
   async function handleSubmit(req: IncomingMessage, res: ServerResponse): Promise<void> {
     let body: unknown;
     try {
       body = await readJson(req);
-    } catch {
-      record(req, { rail: null, invoiceNumber: null, idempotencyKey: null, outcome: "bad_request", httpStatus: 400 });
-      send(res, 400, { code: "BAD_REQUEST", message: "unreadable body" });
+    } catch (err) {
+      const tooLarge = err instanceof BodyTooLarge;
+      record(req, {
+        rail: null,
+        invoiceNumber: null,
+        idempotencyKey: null,
+        outcome: tooLarge ? "too_large" : "unreadable",
+        httpStatus: tooLarge ? 413 : 500,
+      });
+      sendAndClose(req, res, tooLarge ? 413 : 500, {
+        code: tooLarge ? "PAYLOAD_TOO_LARGE" : "UNREADABLE_BODY",
+        message: tooLarge ? "body over the fake rail's limit" : "unreadable body",
+      });
       return;
     }
     const idempotencyKey = (body as { idempotencyKey?: unknown } | null)?.idempotencyKey;
@@ -165,7 +208,7 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       send(res, 409, { code: "MBS_DUPLICATE", message: "already stamped" });
       return;
     }
-    const fault = faults.next(invoiceNumber) ?? { outcome: "accept" as const };
+    const fault = faults.next(invoiceNumber, "submit") ?? { outcome: "accept" as const };
     const shape = RAIL_FAULT_TABLE[fault.outcome];
     switch (fault.outcome) {
       case "accept": {
@@ -184,25 +227,22 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
         return;
       }
       case "reject": {
-        const code = fault.code ?? shape.errorCode ?? "MBS_SCHEMA_INVALID";
+        const code = sanitiseRejectionCode(fault.code) ?? shape.errorCode ?? "MBS_SCHEMA_INVALID";
         record(req, { ...meta, outcome: "reject", httpStatus: shape.httpStatus });
         send(res, shape.httpStatus, { code, message: `rejected: ${code}` });
         return;
       }
       case "timeout": {
         record(req, { ...meta, outcome: "timeout", httpStatus: 0 });
-        const timer = setTimeout(() => {
-          pendingTimeouts.delete(timer);
-          if (!res.writableEnded) send(res, 504, { code: "RAIL_TIMEOUT" });
-        }, TIMEOUT_HOLD_MS);
-        pendingTimeouts.add(timer);
-        res.on("close", () => {
-          clearTimeout(timer);
-          pendingTimeouts.delete(timer);
-        });
+        holdOpen(res);
         return;
       }
       case "malformed": {
+        // The rail DID stamp when holdsStamp: the answer just never made
+        // sense to the client — the case the retry-then-409 path recovers.
+        if (fault.holdsStamp) {
+          held.set(idempotencyKey, deterministicStamp(invoice, idempotencyKey, secret));
+        }
         record(req, { ...meta, outcome: "malformed", httpStatus: shape.httpStatus });
         send(res, shape.httpStatus, { stamp: "not the shape the profile defines" });
         return;
@@ -212,14 +252,10 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       case "unauthorized": {
         record(req, { ...meta, outcome: fault.outcome, httpStatus: shape.httpStatus });
         const headers: Record<string, string> =
-          fault.outcome === "rate_limit" ? { "retry-after": "1" } : {};
-        const text = JSON.stringify({ code: shape.errorCode, message: fault.outcome });
-        res.writeHead(shape.httpStatus, {
-          ...headers,
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(text),
-        });
-        res.end(text);
+          fault.outcome === "rate_limit"
+            ? { "retry-after": String(Math.max(0, Math.floor(fault.retryAfterSeconds ?? 1))) }
+            : {};
+        send(res, shape.httpStatus, { code: shape.errorCode, message: fault.outcome }, headers);
         return;
       }
     }
@@ -234,16 +270,32 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       send(res, 400, { code: "BAD_REQUEST" });
       return;
     }
-    const meta = {
-      rail: null,
-      invoiceNumber: idempotencyKey.includes(":")
-        ? idempotencyKey.slice(idempotencyKey.indexOf(":") + 1)
-        : null,
-      idempotencyKey,
-    };
+    const invoiceNumber = idempotencyKey.includes(":")
+      ? idempotencyKey.slice(idempotencyKey.indexOf(":") + 1)
+      : null;
+    const meta = { rail: null, invoiceNumber, idempotencyKey };
     if (!authorized(req)) {
       record(req, { ...meta, outcome: "unauthorized", httpStatus: 401 });
       send(res, 401, { code: "RAIL_UNAUTHORIZED", message: "bad credentials" });
+      return;
+    }
+    const fault = invoiceNumber ? faults.next(invoiceNumber, "lookup") : null;
+    if (fault && fault.outcome !== "accept") {
+      const shape = RAIL_FAULT_TABLE[fault.outcome];
+      record(req, { ...meta, outcome: `lookup_${fault.outcome}`, httpStatus: shape.httpStatus });
+      if (fault.outcome === "timeout") {
+        holdOpen(res);
+        return;
+      }
+      if (fault.outcome === "malformed") {
+        send(res, 200, { stamp: "not the shape the profile defines" });
+        return;
+      }
+      if (fault.outcome === "reject" || fault.outcome === "duplicate") {
+        send(res, 404, { code: "NOT_FOUND" });
+        return;
+      }
+      send(res, shape.httpStatus, { code: shape.errorCode, message: fault.outcome });
       return;
     }
     const stamp = held.get(idempotencyKey);
@@ -275,7 +327,7 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       try {
         body = await readJson(req);
       } catch {
-        send(res, 400, { code: "BAD_REQUEST" });
+        sendAndClose(req, res, 400, { code: "BAD_REQUEST" });
         return;
       }
       const script = body as {
@@ -284,12 +336,15 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
         code?: unknown;
         times?: unknown;
         holdsStamp?: unknown;
+        op?: unknown;
+        retryAfterSeconds?: unknown;
       } | null;
       if (
         !script ||
         typeof script.invoiceNumber !== "string" ||
         !script.invoiceNumber ||
-        !isRailFaultOutcome(script.outcome)
+        !isRailFaultOutcome(script.outcome) ||
+        (script.op !== undefined && !isRailFaultOp(script.op))
       ) {
         send(res, 400, { code: "BAD_REQUEST", message: "invoiceNumber and a known outcome are required" });
         return;
@@ -298,6 +353,10 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       if (typeof script.code === "string" && script.code) fault.code = script.code;
       if (typeof script.times === "number" && script.times > 0) fault.times = Math.floor(script.times);
       if (script.holdsStamp === true) fault.holdsStamp = true;
+      if (isRailFaultOp(script.op)) fault.op = script.op;
+      if (typeof script.retryAfterSeconds === "number" && script.retryAfterSeconds >= 0) {
+        fault.retryAfterSeconds = script.retryAfterSeconds;
+      }
       faults.script(script.invoiceNumber, fault);
       send(res, 204);
       return;

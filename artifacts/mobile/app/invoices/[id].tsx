@@ -109,9 +109,12 @@ export default function InvoiceDetailScreen() {
 
   const invoice = detailQuery.data?.invoice;
   const lines = detailQuery.data?.lines ?? [];
-  const attempts = [...(attemptsQuery.data ?? [])].sort(
-    (a, b) => b.attemptNo - a.attemptNo,
-  );
+  // Newest first. The API lists oldest-first and rows of one try share
+  // attemptNo with the terminal answer LAST, so ties keep reverse API order.
+  const attempts = (attemptsQuery.data ?? [])
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => y.a.attemptNo - x.a.attemptNo || y.i - x.i)
+    .map((x) => x.a);
 
   const latestFailed = attempts.filter(
     (a) => attemptFailed(a) && a.errorCode,

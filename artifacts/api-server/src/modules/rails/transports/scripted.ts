@@ -3,6 +3,8 @@ import type { CanonicalInvoice } from "../../invoice/canonical";
 import type { RailTransport, StampResult } from "../adapter";
 import {
   FaultScript,
+  RAIL_FAULT_TABLE,
+  RailLookupError,
   classifiedResult,
   deterministicStamp,
   type RailFault,
@@ -17,7 +19,9 @@ import {
 // scripted here reads identically as an e2e scenario scripted there. It
 // answers the CLASSIFIED outcome instantly (a "timeout" is RAIL_TIMEOUT
 // without a wait) and keeps a call log for assertions. Unscripted invoices
-// are accepted with simulator-shaped deterministic stamps.
+// are accepted with simulator-shaped deterministic stamps. A fault scripted
+// with `op: "lookup"` makes the GET fail the way the HTTP transport would:
+// a RailLookupError, never a miss.
 
 export interface ScriptedCall {
   op: "submit" | "lookup";
@@ -68,8 +72,12 @@ export function scriptedRail(opts: ScriptedRailOptions = {}): ScriptedRail {
       calls.length = 0;
     },
     async submit(rail: Rail, inv: CanonicalInvoice, idempotencyKey: string) {
-      const fault = faults.next(inv.invoiceNumber) ?? { outcome: "accept" };
-      if (fault.outcome === "duplicate" && fault.holdsStamp && !held.has(inv.invoiceNumber)) {
+      const fault = faults.next(inv.invoiceNumber, "submit") ?? { outcome: "accept" };
+      if (
+        (fault.outcome === "duplicate" || fault.outcome === "malformed") &&
+        fault.holdsStamp &&
+        !held.has(inv.invoiceNumber)
+      ) {
         held.set(inv.invoiceNumber, {});
       }
       calls.push({
@@ -88,7 +96,23 @@ export function scriptedRail(opts: ScriptedRailOptions = {}): ScriptedRail {
       });
     },
     async lookup(rail: Rail, inv: CanonicalInvoice, idempotencyKey: string) {
-      const stamp = held.get(inv.invoiceNumber);
+      const fault = faults.next(inv.invoiceNumber, "lookup");
+      if (fault && fault.outcome !== "accept") {
+        calls.push({
+          op: "lookup",
+          rail,
+          invoiceNumber: inv.invoiceNumber,
+          idempotencyKey,
+          outcome: fault.outcome,
+        });
+        // reject / duplicate make no sense on a GET: read them as a miss.
+        if (fault.outcome === "reject" || fault.outcome === "duplicate") return null;
+        throw new RailLookupError(
+          rail,
+          RAIL_FAULT_TABLE[fault.outcome].errorCode ?? "RAIL_PROTOCOL",
+        );
+      }
+      const stamp = fault ? (held.get(inv.invoiceNumber) ?? {}) : held.get(inv.invoiceNumber);
       calls.push({
         op: "lookup",
         rail,

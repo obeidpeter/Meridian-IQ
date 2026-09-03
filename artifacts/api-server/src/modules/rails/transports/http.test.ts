@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import type { Rail } from "@workspace/db";
 import { sampleCanonical } from "../../../test-helpers/canonical.ts";
 import { startFakeRail, type FakeRail } from "../fake-rail.ts";
+import { RailLookupError } from "../faults.ts";
 import {
   createHttpRailTransport,
   httpRailConfigFromEnv,
@@ -161,14 +162,17 @@ test("429, 503, a scripted 401 and a non-conforming 2xx map to their retriable c
   }
 });
 
-test("a wrong bearer token is RAIL_UNAUTHORIZED on submit and null on lookup", async () => {
+test("a wrong bearer token is RAIL_UNAUTHORIZED on submit and a RailLookupError on lookup — never a miss", async () => {
   const transport = createHttpRailTransport(cfg({ tokens: { rail_primary: "wrong" } }));
   const { inv, key } = submission();
   const result = await transport.submit("rail_primary", inv, key);
   assert.equal(result.status, "error");
   assert.equal(result.errorCode, "RAIL_UNAUTHORIZED");
   assert.equal(fake.calls.at(-1)?.authorized, false);
-  assert.equal(await transport.lookup("rail_primary", inv, key), null);
+  await assert.rejects(
+    transport.lookup("rail_primary", inv, key),
+    (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_UNAUTHORIZED",
+  );
 });
 
 test("a silent access point is RAIL_TIMEOUT within the configured budget", async () => {
@@ -184,7 +188,7 @@ test("a silent access point is RAIL_TIMEOUT within the configured budget", async
   assert.ok(elapsed < 1_500, `gave up after ${elapsed}ms`);
 });
 
-test("an unreachable access point is RAIL_UNAVAILABLE and lookup answers null", async () => {
+test("an unreachable access point is RAIL_UNAVAILABLE on submit and a RailLookupError on lookup", async () => {
   const port = await freePort();
   const transport = createHttpRailTransport(
     cfg({ urls: { rail_primary: `http://127.0.0.1:${port}` } }),
@@ -193,8 +197,16 @@ test("an unreachable access point is RAIL_UNAVAILABLE and lookup answers null", 
   const result = await transport.submit("rail_primary", inv, key);
   assert.equal(result.status, "error");
   assert.equal(result.errorCode, "RAIL_UNAVAILABLE");
-  assert.equal((result.raw as { reason: string }).reason, "network");
-  assert.equal(await transport.lookup("rail_primary", inv, key), null);
+  assert.deepEqual(result.raw, {
+    httpStatus: 0,
+    body: null,
+    reason: "network",
+    timeoutMs: 2_000,
+  });
+  await assert.rejects(
+    transport.lookup("rail_primary", inv, key),
+    (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_UNAVAILABLE",
+  );
 });
 
 test("lookup: a miss is null, a hit is the stamp the rail holds", async () => {

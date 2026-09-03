@@ -66,18 +66,36 @@ router.post("/operator/reconcile", async (req, res): Promise<void> => {
 // Breaker state per rail plus which transport is live (R95): the simulator
 // until a RAIL_*_URL is lit, then the HTTP transport, which serves only the
 // rails it has a URL for — an unserved rail shows `configured: false`.
+// Both rails always appear: a breaker row is created lazily on a rail's
+// first gate, so a rail the transport never touches (unserved, or nothing
+// submitted yet) is synthesised as closed — the Desk must be able to say
+// "not configured" before the first submission, not after.
+const RAILS: readonly Rail[] = ["rail_primary", "rail_secondary"];
+
 router.get("/operator/rails", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
   const rows = await getDb().select().from(railStatesTable);
+  const byRail = new Map(rows.map((row) => [row.rail, row]));
   const summary = railTransportSummary();
+  const now = new Date();
   res.json(
     ListRailStatesResponse.parse(
-      rows.map((row) => ({
-        ...row,
-        transport: summary.transport,
-        environment: summary.environment,
-        configured: summary.rails[row.rail as Rail]?.configured ?? false,
-      })),
+      RAILS.map((rail) => {
+        const row = byRail.get(rail) ?? {
+          rail,
+          state: "closed" as const,
+          failureCount: 0,
+          openedAt: null,
+          retryAt: null,
+          updatedAt: now,
+        };
+        return {
+          ...row,
+          transport: summary.transport,
+          environment: summary.environment,
+          configured: summary.rails[rail].configured,
+        };
+      }),
     ),
   );
 });
@@ -225,7 +243,9 @@ router.get("/operator/rail-config", async (req, res): Promise<void> => {
         return {
           key: entry.key,
           label: entry.label,
-          configured: ring ? ring.configured : Boolean(process.env[entry.env]),
+          configured: ring
+            ? ring.configured
+            : Boolean(process.env[entry.env]?.trim()),
           note: entry.note,
           keyIds: ring ? ring.keyIds : [],
           legacyTokenAccepted: ring ? legacyTokenPathEnabled() : false,

@@ -220,7 +220,7 @@ export async function draftEscalationReply(
     })
     .from(submissionAttemptsTable)
     .where(eq(submissionAttemptsTable.invoiceId, escalation.invoiceId))
-    .orderBy(desc(submissionAttemptsTable.createdAt))
+    .orderBy(desc(submissionAttemptsTable.seq))
     .limit(5);
 
   const errorCode =

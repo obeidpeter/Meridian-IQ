@@ -11,7 +11,7 @@ import {
 import type { CanonicalInvoice } from "../invoice/canonical";
 import { isRetriable } from "../errors";
 import { isPresentableAsEligible } from "../invoice/lifecycle";
-import { deterministicStamp } from "./faults";
+import { RailLookupError, deterministicStamp } from "./faults";
 import { createHttpRailTransport, httpRailConfigFromEnv } from "./transports/http";
 
 // One adapter interface over two accredited access-point rails (INT-01, C3).
@@ -209,16 +209,23 @@ export async function breakerStatus(rail: Rail): Promise<BreakerStatus> {
   };
 }
 
+// Read the breaker row, creating it once. A plain SELECT first (R95): an
+// upsert on every gate would queue behind another worker's uncommitted
+// breaker write for as long as that worker's rail call takes.
 async function ensureRailState(rail: Rail) {
+  const read = () =>
+    getDb()
+      .select()
+      .from(railStatesTable)
+      .where(eq(railStatesTable.rail, rail))
+      .limit(1);
+  const [existing] = await read();
+  if (existing) return existing;
   await getDb()
     .insert(railStatesTable)
     .values({ rail })
     .onConflictDoNothing({ target: railStatesTable.rail });
-  const [row] = await getDb()
-    .select()
-    .from(railStatesTable)
-    .where(eq(railStatesTable.rail, rail))
-    .limit(1);
+  const [row] = await read();
   return row;
 }
 
@@ -288,7 +295,10 @@ async function recordFailure(rail: Rail): Promise<void> {
 
 export interface FailoverResult {
   result: StampResult;
+  /** Every rail considered, breaker refusals included (a refusal carries raw.circuit). */
   tried: StampResult[];
+  /** The rails actually CALLED, in order — what the attempts table records. */
+  sent: StampResult[];
   /** True when every rail's breaker refused the call — nothing was sent. */
   circuitOpen: boolean;
   /** The earliest moment a rail will accept a probe, when circuitOpen. */
@@ -307,6 +317,7 @@ export async function submitWithFailover(
   const transport = currentRailTransport();
   const served = servedRails(transport);
   const tried: StampResult[] = [];
+  const sent: StampResult[] = [];
   let refused = 0;
   let retryAfter: Date | null = null;
   for (const rail of served) {
@@ -329,19 +340,20 @@ export async function submitWithFailover(
     }
     const result = await transport.submit(rail, inv, idempotencyKey);
     tried.push(result);
+    sent.push(result);
     if (result.status === "accepted") {
       await recordSuccess(rail);
-      return { result, tried, circuitOpen: false, retryAfter: null };
+      return { result, tried, sent, circuitOpen: false, retryAfter: null };
     }
     if (result.status === "rejected") {
       // Terminal business rejection; do not failover.
       await recordSuccess(rail);
-      return { result, tried, circuitOpen: false, retryAfter: null };
+      return { result, tried, sent, circuitOpen: false, retryAfter: null };
     }
     // Transient error: count against the breaker and try the next rail.
     await recordFailure(rail);
     if (!isRetriable(result.errorCode ?? "UNKNOWN")) {
-      return { result, tried, circuitOpen: false, retryAfter: null };
+      return { result, tried, sent, circuitOpen: false, retryAfter: null };
     }
   }
   const circuitOpen = refused === served.length;
@@ -353,6 +365,7 @@ export async function submitWithFailover(
       raw: {},
     },
     tried,
+    sent,
     circuitOpen,
     retryAfter: circuitOpen ? retryAfter : null,
   };
@@ -379,14 +392,28 @@ export async function recoverExistingStamp(
     preferred && served.includes(preferred)
       ? [preferred, ...served.filter((r) => r !== preferred)]
       : served;
+  // A lookup the rail could not answer (RailLookupError) counts against that
+  // rail's breaker and is remembered: if no rail answered definitively and
+  // none held the stamp, the error is re-raised so the caller RETRIES —
+  // the stamp may exist, and "no rail knows it" must only ever mean 404.
+  let unanswered: RailLookupError | null = null;
   for (const rail of order) {
     if (!(await railAvailable(rail))) continue;
-    const found = await transport.lookup(rail, inv, idempotencyKey);
+    let found: StampResult | null;
+    try {
+      found = await transport.lookup(rail, inv, idempotencyKey);
+    } catch (err) {
+      if (!(err instanceof RailLookupError)) throw err;
+      await recordFailure(rail);
+      unanswered = err;
+      continue;
+    }
     if (found && found.status === "accepted" && found.irn && found.csid) {
       await recordSuccess(rail);
       return found;
     }
   }
+  if (unanswered) throw unanswered;
   return null;
 }
 

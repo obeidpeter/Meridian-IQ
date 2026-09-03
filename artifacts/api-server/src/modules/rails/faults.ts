@@ -39,6 +39,13 @@ export function isRailFaultOutcome(value: unknown): value is RailFaultOutcome {
   );
 }
 
+/** Which call a fault applies to. */
+export type RailFaultOp = "submit" | "lookup";
+
+export function isRailFaultOp(value: unknown): value is RailFaultOp {
+  return value === "submit" || value === "lookup";
+}
+
 export interface RailFault {
   outcome: RailFaultOutcome;
   /** Business rejection code for `reject` (default MBS_SCHEMA_INVALID). */
@@ -46,11 +53,20 @@ export interface RailFault {
   /** How many calls this fault applies to; unset = every call until reset. */
   times?: number;
   /**
-   * For `duplicate`: the rail really holds a stamp for the submission, so a
-   * lookup recovers it. Without it the duplicate is unrecoverable (the case
-   * that keeps the terminal failure).
+   * For `duplicate` and `malformed`: the rail really holds a stamp for the
+   * submission, so a lookup (or a re-send of the same key) recovers it.
+   * Without it the duplicate is unrecoverable (the case that keeps the
+   * terminal failure).
    */
   holdsStamp?: boolean;
+  /**
+   * `submit` (default) faults the POST; `lookup` faults the GET a recovery
+   * makes — on the wire an HTTP error, in the transport a RailLookupError,
+   * never a miss.
+   */
+  op?: RailFaultOp;
+  /** For `rate_limit`: the Retry-After the rail demands, in seconds (default 1). */
+  retryAfterSeconds?: number;
 }
 
 export interface RailFaultShape {
@@ -70,6 +86,36 @@ export const RAIL_FAULT_TABLE: Record<RailFaultOutcome, RailFaultShape> = {
   unauthorized: { httpStatus: 401, status: "error", errorCode: "RAIL_UNAUTHORIZED" },
   malformed: { httpStatus: 200, status: "error", errorCode: "RAIL_PROTOCOL" },
 };
+
+// A rejection code as the wire may carry it: short, printable, no spaces —
+// a catalogue key or an access point's own reference ("E-1001",
+// "mbs.invalid_tin"). Anything else falls back to MBS_SCHEMA_INVALID so a
+// rail can never inject an arbitrary lifecycle reason or Desk-case code.
+// Shared by the transport and the scripted fake so a scripted code the
+// wire would never deliver is never asserted in a pipeline test.
+export const MAX_REJECTION_CODE_LENGTH = 64;
+const REJECTION_CODE = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+export function sanitiseRejectionCode(code: unknown): string | null {
+  return typeof code === "string" && REJECTION_CODE.test(code) ? code : null;
+}
+
+/**
+ * A lookup that could not be answered — timeout, 5xx, refused credentials,
+ * an unreadable body. Distinct from a miss (null): the stamp may well exist,
+ * so callers retry rather than fail the invoice.
+ */
+export class RailLookupError extends Error {
+  readonly rail: Rail;
+  readonly code: string;
+
+  constructor(rail: Rail, code: string, message?: string) {
+    super(message ?? `rail lookup failed on ${rail}: ${code}`);
+    this.name = "RailLookupError";
+    this.rail = rail;
+    this.code = code;
+  }
+}
 
 /** The four fields an accepted submission carries on the wire. */
 export interface StampFields {
@@ -106,23 +152,25 @@ export function deterministicStamp(
 }
 
 /**
- * A scripted fault register: faults queue per invoice number (FIFO, each
- * consumed `times` calls, unbounded when unset); `"*"` scripts every invoice
- * not otherwise scripted. Shared by the scripted transport and the fake rail
- * server so a scenario reads the same in both.
+ * A scripted fault register: faults queue per (op, invoice number) — FIFO,
+ * each consumed `times` calls, unbounded when unset; `"*"` scripts every
+ * invoice not otherwise scripted. Shared by the scripted transport and the
+ * fake rail server so a scenario reads the same in both.
  */
 export class FaultScript {
   private readonly queues = new Map<string, RailFault[]>();
 
   script(invoiceNumber: string, fault: RailFault): void {
-    const queue = this.queues.get(invoiceNumber) ?? [];
+    const key = `${fault.op ?? "submit"}:${invoiceNumber}`;
+    const queue = this.queues.get(key) ?? [];
     queue.push({ ...fault });
-    this.queues.set(invoiceNumber, queue);
+    this.queues.set(key, queue);
   }
 
-  /** Consume the next fault for this invoice (exact key first, then "*"). */
-  next(invoiceNumber: string): RailFault | null {
-    for (const key of [invoiceNumber, "*"]) {
+  /** Consume the next fault for this call (exact key first, then "*"). */
+  next(invoiceNumber: string, op: RailFaultOp = "submit"): RailFault | null {
+    for (const name of [invoiceNumber, "*"]) {
+      const key = `${op}:${name}`;
       const queue = this.queues.get(key);
       const head = queue?.[0];
       if (!queue || !head) continue;
@@ -142,9 +190,9 @@ export class FaultScript {
 }
 
 /**
- * The StampResult a classified outcome yields — what the scripted transport
- * answers directly and what the HTTP transport must arrive at after mapping
- * the fake rail's wire response.
+ * The StampResult a classified submit outcome yields — what the scripted
+ * transport answers directly and what the HTTP transport must arrive at
+ * after mapping the fake rail's wire response.
  */
 export function classifiedResult(
   rail: Rail,
@@ -168,11 +216,16 @@ export function classifiedResult(
     };
   }
   const errorCode =
-    fault.outcome === "reject" ? (fault.code ?? shape.errorCode) : shape.errorCode;
-  return {
-    ...base,
-    status: shape.status,
-    errorCode,
-    raw: { code: errorCode, httpStatus: shape.httpStatus, outcome: fault.outcome },
+    fault.outcome === "reject"
+      ? (sanitiseRejectionCode(fault.code) ?? shape.errorCode)
+      : shape.errorCode;
+  const raw: Record<string, unknown> = {
+    code: errorCode,
+    httpStatus: shape.httpStatus,
+    outcome: fault.outcome,
   };
+  if (fault.outcome === "rate_limit") {
+    raw.retryAfterMs = Math.max(0, fault.retryAfterSeconds ?? 1) * 1000;
+  }
+  return { ...base, status: shape.status, errorCode, raw };
 }
