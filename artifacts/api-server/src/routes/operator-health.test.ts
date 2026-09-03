@@ -116,10 +116,15 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
     INBOUND_EMAIL_TOKEN: process.env.INBOUND_EMAIL_TOKEN,
     METRICS_TOKEN: process.env.METRICS_TOKEN,
     TOTP_REQUIRED_ROLES: process.env.TOTP_REQUIRED_ROLES,
+    RAIL_PRIMARY_URL: process.env.RAIL_PRIMARY_URL,
+    RAIL_SECONDARY_URL: process.env.RAIL_SECONDARY_URL,
   };
   process.env.INBOUND_EMAIL_TOKEN = secret;
   process.env.TOTP_REQUIRED_ROLES = "operator";
   delete process.env.METRICS_TOKEN;
+  // One access-point rail lit (R95): presence only, never the URL itself.
+  process.env.RAIL_PRIMARY_URL = `https://rail.example/${secret}`;
+  delete process.env.RAIL_SECONDARY_URL;
   try {
     const base = await listen(appFor(operator, operatorRouter));
     const res = await fetch(`${base}/operator/rail-config`);
@@ -139,6 +144,8 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
         "inbound_whatsapp",
         "messaging_relay",
         "payment_provider",
+        "rail_primary",
+        "rail_secondary",
         "payment_webhook",
         "collection_webhook",
         "metrics_token",
@@ -148,6 +155,8 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
     );
     const byKey = new Map(body.map((e) => [e.key, e]));
     assert.equal(byKey.get("inbound_email")?.configured, true);
+    assert.equal(byKey.get("rail_primary")?.configured, true);
+    assert.equal(byKey.get("rail_secondary")?.configured, false);
     // Key IDS only (R100): the single legacy token reads as the `legacy` id;
     // a ring lists its ids; a URL-style entry has none.
     assert.deepEqual(
