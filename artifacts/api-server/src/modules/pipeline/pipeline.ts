@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, asc, eq, lt, ne, notExists, sql } from "drizzle-orm";
 import {
   getDb,
   pool,
@@ -20,6 +20,8 @@ import {
   submitWithFailover,
   type StampResult,
 } from "../rails/adapter";
+import { RailLookupError } from "../rails/faults";
+import { railTimeoutMs } from "../rails/transports/http";
 import { openInvoiceCase } from "../desk/cases";
 import { isRetriable } from "../errors";
 import { logger } from "../../lib/logger";
@@ -81,15 +83,20 @@ export function retryDisposition(
   event: Pick<OutboxEvent, "maxAttempts" | "firstAttemptAt">,
   attempts: number,
   now = new Date(),
+  notBefore?: Date | null,
 ): { dead: boolean; nextAttemptAt: Date; firstAttemptAt: Date } {
   const firstAttemptAt = event.firstAttemptAt ?? now;
   const elapsed = now.getTime() - firstAttemptAt.getTime();
   const dead =
     attempts >= event.maxAttempts && elapsed >= outboxRetryHorizonMs();
+  const backoffAt = new Date(now.getTime() + backoffMs(attempts));
+  // A rail's Retry-After (R95) is a FLOOR under the backoff, never a ceiling.
+  const retryAt =
+    notBefore && notBefore.getTime() > backoffAt.getTime() ? notBefore : backoffAt;
   return {
     dead,
     firstAttemptAt,
-    nextAttemptAt: dead ? now : new Date(now.getTime() + backoffMs(attempts)),
+    nextAttemptAt: dead ? now : retryAt,
   };
 }
 
@@ -101,7 +108,7 @@ export function retryDisposition(
 // attempt is burned, because nothing was sent.
 type HandlerOutcome =
   | { kind: "done" }
-  | { kind: "retry"; error: string }
+  | { kind: "retry"; error: string; notBefore?: Date }
   | { kind: "dead"; error: string }
   | { kind: "park"; until: Date; error: string };
 
@@ -132,6 +139,18 @@ async function markInvoiceFailed(
 }
 
 type InvoiceRow = typeof invoicesTable.$inferSelect;
+
+// A 429's Retry-After (R95): honoured as a floor under the R96 backoff and
+// capped, so a mistaken or hostile header cannot park an invoice for a day.
+const MAX_RETRY_AFTER_MS = 60 * 60 * 1000;
+
+function retryAfterFrom(result: StampResult): Date | undefined {
+  const ms = Number(
+    (result.raw as { retryAfterMs?: unknown } | undefined)?.retryAfterMs,
+  );
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
+  return new Date(Date.now() + Math.min(ms, MAX_RETRY_AFTER_MS));
+}
 
 /**
  * Persist an accepted stamp and move the invoice to `stamped` (R97 factored
@@ -212,7 +231,7 @@ async function handleInvoiceSubmit(
   const canonical = await buildCanonical(invoiceId);
   const idempotencyKey = `${invoiceId}:${invoice.invoiceNumber}`;
   const attemptNo = event.attempts + 1;
-  const { result, circuitOpen, retryAfter } = await submitWithFailover(
+  const { result, sent, circuitOpen, retryAfter } = await submitWithFailover(
     canonical,
     idempotencyKey,
   );
@@ -227,30 +246,34 @@ async function handleInvoiceSubmit(
     };
   }
 
-  // One row per rail per try, with the request actually sent and the response
-  // actually received (CORE-02) — the record a dispute or an accreditation
-  // review reads, so the invoice number alone was never enough.
-  await getDb()
-    .insert(submissionAttemptsTable)
-    .values({
-      invoiceId,
-      rail: result.rail,
-      attemptNo,
-      idempotencyKey,
-      status:
-        result.status === "accepted"
-          ? "accepted"
-          : result.status === "rejected"
-            ? "rejected"
-            : "error",
-      requestPayload: {
-        invoiceNumber: invoice.invoiceNumber,
+  // One row per rail actually CALLED this try, with the request sent and the
+  // response received (CORE-02) — the record a dispute or an accreditation
+  // review reads, so the invoice number alone was never enough. A failover
+  // leaves the first rail's timeout or 5xx on the record too (R95); a breaker
+  // refusal sent nothing and is not an attempt.
+  for (const r of sent) {
+    await getDb()
+      .insert(submissionAttemptsTable)
+      .values({
+        invoiceId,
+        rail: r.rail,
+        attemptNo,
         idempotencyKey,
-        canonical: canonical as unknown as Record<string, unknown>,
-      },
-      responsePayload: result.raw,
-      errorCode: result.errorCode ?? null,
-    });
+        status:
+          r.status === "accepted"
+            ? "accepted"
+            : r.status === "rejected"
+              ? "rejected"
+              : "error",
+        requestPayload: {
+          invoiceNumber: invoice.invoiceNumber,
+          idempotencyKey,
+          canonical: canonical as unknown as Record<string, unknown>,
+        },
+        responsePayload: r.raw,
+        errorCode: r.errorCode ?? null,
+      });
+  }
 
   if (result.status === "accepted") {
     await persistStamp(invoice, result, false);
@@ -261,11 +284,16 @@ async function handleInvoiceSubmit(
     // The rail already holds a stamp for this submission — an earlier try
     // was accepted but its result never reached us. Recover it instead of
     // failing an invoice the authority has stamped (R97).
-    const recovered = await recoverExistingStamp(
-      canonical,
-      idempotencyKey,
-      result.rail,
-    );
+    let recovered: StampResult | null;
+    try {
+      recovered = await recoverExistingStamp(canonical, idempotencyKey, result.rail);
+    } catch (err) {
+      if (!(err instanceof RailLookupError)) throw err;
+      // The rail could not be ASKED (timeout, 5xx, refused credentials): the
+      // stamp may well exist, so this is a retry, never a terminal failure.
+      // The 409 attempt row above stays on the record.
+      return { kind: "retry", error: `${err.code}: stamp lookup failed` };
+    }
     if (recovered) {
       await getDb()
         .insert(submissionAttemptsTable)
@@ -307,7 +335,11 @@ async function handleInvoiceSubmit(
 
   // Transient error: re-queue so the outbox backoff logic runs.
   if (isRetriable(result.errorCode ?? "UNKNOWN")) {
-    return { kind: "retry", error: result.errorCode ?? "RAIL_ERROR" };
+    return {
+      kind: "retry",
+      error: result.errorCode ?? "RAIL_ERROR",
+      notBefore: retryAfterFrom(result),
+    };
   }
   // Non-retriable transport error: fail terminally.
   await markInvoiceFailed(invoiceId, invoice, result.errorCode ?? "error");
@@ -491,6 +523,15 @@ async function processOne(): Promise<boolean> {
   let handlerError: string | null = null;
   try {
     return await runInBypassContext(async () => {
+      // The rail call runs inside this transaction (R95): bound the hold so a
+      // deployment default shorter than the transport budget cannot kill the
+      // session mid-call, and a hung call cannot pin the connection forever.
+      // An event makes at most four rail calls (two submits, two lookups).
+      await getDb().execute(
+        sql.raw(
+          `SET LOCAL idle_in_transaction_session_timeout = '${transactionHoldBudgetMs()}ms'`,
+        ),
+      );
       const event = await claimnextSafe();
       if (!event) return false;
       claimedEvent = event;
@@ -554,7 +595,7 @@ async function processOne(): Promise<boolean> {
           .where(eq(outboxTable.id, event.id));
         await openCaseForDeadEvent(event, outcome.error);
       } else {
-        const next = retryDisposition(event, attempts, now);
+        const next = retryDisposition(event, attempts, now, outcome.notBefore);
         await getDb()
           .update(outboxTable)
           .set({
@@ -638,10 +679,21 @@ async function claimnextSafe(): Promise<OutboxEvent | null> {
   }
 }
 
+// The worst an event can hold its transaction: four rail calls plus slack.
+export function transactionHoldBudgetMs(): number {
+  return 4 * railTimeoutMs() + 30_000;
+}
+
+// Set by stopWorker (R95): a drain pass finishes the event in flight and
+// then stops CLAIMING, so a backlog against a slow rail cannot carry the
+// process past its graceful-shutdown deadline one claim at a time.
+let stopping = false;
+
 // Drain until no more ready events (bounded to avoid a hot loop).
 export async function drain(max = 50): Promise<number> {
   let processed = 0;
   for (let i = 0; i < max; i++) {
+    if (stopping) break;
     const did = await processOne();
     if (!did) break;
     processed++;
@@ -657,88 +709,134 @@ export async function drain(max = 50): Promise<number> {
 // recovered stamp is persisted in place; only an unknown submission is
 // re-queued. Returns the number of invoices re-queued (the operator counter);
 // recoveries are logged.
+// Each stuck invoice is reconciled in its OWN short transaction (R95): the
+// rail lookups it may make are bounded per call, but a pass over K invoices
+// against a hung rail must not hold one connection and the reconcile lock for
+// K × that budget. A pass takes at most RECONCILE_BATCH invoices, oldest
+// first; the next pass continues where it left off.
+const RECONCILE_BATCH = 50;
+
+type ReconcileOutcome = "skipped" | "dead" | "recovered" | "requeued";
+
+async function reconcileOne(invoice: InvoiceRow): Promise<ReconcileOutcome> {
+  const [stamp] = await getDb()
+    .select({ id: stampRecordsTable.id })
+    .from(stampRecordsTable)
+    .where(eq(stampRecordsTable.invoiceId, invoice.id))
+    .limit(1);
+  if (stamp) return "skipped";
+  // A live row (pending — parked or not — or processing) is already on
+  // its way. A DEAD row is terminal until an operator replays it (R96):
+  // resurrecting it here would re-queue a fresh row every pass, burn a
+  // new retry budget, and mint a new alert and Desk case each time.
+  const open = await getDb()
+    .select({ status: outboxTable.status })
+    .from(outboxTable)
+    .where(
+      and(
+        eq(outboxTable.aggregateId, invoice.id),
+        ne(outboxTable.status, "done"),
+      ),
+    );
+  if (open.some((row) => row.status === "dead")) return "dead";
+  if (open.length > 0) return "skipped";
+  const idempotencyKey = `${invoice.id}:${invoice.invoiceNumber}`;
+  // Fail soft: an invoice whose canonical form no longer builds (or a rail
+  // lookup that could not be answered) is re-queued so the submit handler
+  // records the failure with its reason, rather than aborting the pass.
+  const existing = await buildCanonical(invoice.id)
+    .then((canonical) => recoverExistingStamp(canonical, idempotencyKey))
+    .catch((err: unknown) => {
+      logger.warn(
+        { invoiceId: invoice.id, err },
+        "reconcile could not ask the rail for an existing stamp; re-queuing",
+      );
+      return null;
+    });
+  if (existing) {
+    await getDb()
+      .insert(submissionAttemptsTable)
+      .values({
+        invoiceId: invoice.id,
+        rail: existing.rail,
+        attemptNo: 0,
+        idempotencyKey,
+        status: "accepted",
+        requestPayload: { lookup: true, idempotencyKey, source: "reconcile" },
+        responsePayload: { ...existing.raw, recovered: true },
+        errorCode: null,
+      });
+    await persistStamp(invoice, existing, true);
+    return "recovered";
+  }
+  await getDb()
+    .insert(outboxTable)
+    .values({
+      aggregateType: "invoice",
+      aggregateId: invoice.id,
+      type: "invoice.submit",
+      payload: { invoiceId: invoice.id },
+    });
+  return "requeued";
+}
+
 export async function reconcile(): Promise<number> {
-  return runInBypassContext(async () => {
-    const stuck = await getDb()
+  // Only invoices a pass can ACT on fill the batch: no stamp row yet and no
+  // outbox row still live or dead-lettered (a dead row waits for an operator
+  // replay, R96). Otherwise fifty permanently-stuck invoices would starve
+  // every newer one. reconcileOne re-checks inside its own transaction.
+  const stuck = await runInBypassContext(() =>
+    getDb()
       .select()
       .from(invoicesTable)
-      .where(eq(invoicesTable.status, "submitted"));
-    let requeued = 0;
-    let recovered = 0;
-    let deadLettered = 0;
-    for (const invoice of stuck) {
-      const [stamp] = await getDb()
-        .select({ id: stampRecordsTable.id })
-        .from(stampRecordsTable)
-        .where(eq(stampRecordsTable.invoiceId, invoice.id))
-        .limit(1);
-      if (stamp) continue;
-      // A live row (pending — parked or not — or processing) is already on
-      // its way. A DEAD row is terminal until an operator replays it (R96):
-      // resurrecting it here would re-queue a fresh row every pass, burn a
-      // new retry budget, and mint a new alert and Desk case each time.
-      const open = await getDb()
-        .select({ status: outboxTable.status })
-        .from(outboxTable)
-        .where(
-          and(
-            eq(outboxTable.aggregateId, invoice.id),
-            ne(outboxTable.status, "done"),
+      .where(
+        and(
+          eq(invoicesTable.status, "submitted"),
+          notExists(
+            getDb()
+              .select({ one: sql`1` })
+              .from(stampRecordsTable)
+              .where(eq(stampRecordsTable.invoiceId, invoicesTable.id)),
           ),
-        );
-      if (open.some((row) => row.status === "dead")) {
-        deadLettered++;
-        continue;
-      }
-      if (open.length > 0) continue;
-      const idempotencyKey = `${invoice.id}:${invoice.invoiceNumber}`;
-      // Fail soft: an invoice whose canonical form no longer builds (or a rail
-      // lookup that throws) is re-queued so the submit handler records the
-      // failure with its reason, rather than aborting the whole pass.
-      const existing = await buildCanonical(invoice.id)
-        .then((canonical) => recoverExistingStamp(canonical, idempotencyKey))
-        .catch((err: unknown) => {
-          logger.warn(
-            { invoiceId: invoice.id, err },
-            "reconcile could not ask the rail for an existing stamp; re-queuing",
-          );
-          return null;
-        });
-      if (existing) {
-        await getDb()
-          .insert(submissionAttemptsTable)
-          .values({
-            invoiceId: invoice.id,
-            rail: existing.rail,
-            attemptNo: 0,
-            idempotencyKey,
-            status: "accepted",
-            requestPayload: { lookup: true, idempotencyKey, source: "reconcile" },
-            responsePayload: { ...existing.raw, recovered: true },
-            errorCode: null,
-          });
-        await persistStamp(invoice, existing, true);
-        recovered++;
-        continue;
-      }
-      await getDb()
-        .insert(outboxTable)
-        .values({
-          aggregateType: "invoice",
-          aggregateId: invoice.id,
-          type: "invoice.submit",
-          payload: { invoiceId: invoice.id },
-        });
-      requeued++;
-    }
-    if (recovered > 0 || deadLettered > 0) {
-      logger.info(
-        { requeued, recovered, deadLettered },
-        "reconcile pass: dead-lettered invoices wait for an operator replay",
-      );
-    }
-    return requeued;
-  });
+          notExists(
+            getDb()
+              .select({ one: sql`1` })
+              .from(outboxTable)
+              .where(
+                and(
+                  // aggregate_id is text (any aggregate), invoices.id a uuid.
+                  eq(outboxTable.aggregateId, sql`${invoicesTable.id}::text`),
+                  ne(outboxTable.status, "done"),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(asc(invoicesTable.createdAt))
+      .limit(RECONCILE_BATCH),
+  );
+  let requeued = 0;
+  let recovered = 0;
+  let deadLettered = 0;
+  for (const invoice of stuck) {
+    const outcome = await runInBypassContext(() => reconcileOne(invoice));
+    if (outcome === "dead") deadLettered++;
+    else if (outcome === "recovered") recovered++;
+    else if (outcome === "requeued") requeued++;
+  }
+  if (stuck.length === RECONCILE_BATCH) {
+    logger.info(
+      { batch: RECONCILE_BATCH },
+      "reconcile pass hit its batch size; the next pass continues",
+    );
+  }
+  if (recovered > 0 || deadLettered > 0) {
+    logger.info(
+      { requeued, recovered, deadLettered },
+      "reconcile pass: dead-lettered invoices wait for an operator replay",
+    );
+  }
+  return requeued;
 }
 
 // Duplicate-stamp reconciliation (INT-09), append-only (CORE-02). Duplicates are
@@ -1200,6 +1298,7 @@ async function runSweepPass(): Promise<void> {
 // collapse) so INT-09 recovery does not depend on a manual operator trigger;
 // a third loop runs the registered R2 compliance sweeps.
 export function startWorker(intervalMs = 1_500): void {
+  stopping = false;
   if (timer) return;
 
   // Reentrancy guards are module-level (shared with runScheduledWorkOnce):
@@ -1227,7 +1326,16 @@ export function startWorker(intervalMs = 1_500): void {
   sweepTimer.unref?.();
 }
 
+/**
+ * Clear the stop flag without arming timers — for a test that drained after
+ * stopWorker(), or an instance resumed by hand. startWorker clears it too.
+ */
+export function resumeWorker(): void {
+  stopping = false;
+}
+
 export function stopWorker(): void {
+  stopping = true;
   if (timer) {
     clearInterval(timer);
     timer = null;

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { desc, inArray } from "drizzle-orm";
-import { getDb, auditEventsTable, railStatesTable } from "@workspace/db";
+import { getDb, auditEventsTable, railStatesTable, type Rail } from "@workspace/db";
 import {
   GetClerkAssuranceResponse,
   GetComplianceOperationsResponse,
@@ -18,6 +18,7 @@ import {
 import { parseOrThrow } from "../lib/parse";
 import { describeKeyRing, legacyTokenPathEnabled } from "../lib/op-token";
 import { assertCan } from "../modules/auth/rbac";
+import { railTransportSummary } from "../modules/rails/adapter";
 import {
   listDeadLetters,
   replayDead,
@@ -62,10 +63,41 @@ router.post("/operator/reconcile", async (req, res): Promise<void> => {
   res.json(ReconcilePipelineResponse.parse({ requeued }));
 });
 
+// Breaker state per rail plus which transport is live (R95): the simulator
+// until a RAIL_*_URL is lit, then the HTTP transport, which serves only the
+// rails it has a URL for — an unserved rail shows `configured: false`.
+// Both rails always appear: a breaker row is created lazily on a rail's
+// first gate, so a rail the transport never touches (unserved, or nothing
+// submitted yet) is synthesised as closed — the Desk must be able to say
+// "not configured" before the first submission, not after.
+const RAILS: readonly Rail[] = ["rail_primary", "rail_secondary"];
+
 router.get("/operator/rails", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
   const rows = await getDb().select().from(railStatesTable);
-  res.json(ListRailStatesResponse.parse(rows));
+  const byRail = new Map(rows.map((row) => [row.rail, row]));
+  const summary = railTransportSummary();
+  const now = new Date();
+  res.json(
+    ListRailStatesResponse.parse(
+      RAILS.map((rail) => {
+        const row = byRail.get(rail) ?? {
+          rail,
+          state: "closed" as const,
+          failureCount: 0,
+          openedAt: null,
+          retryAt: null,
+          updatedAt: now,
+        };
+        return {
+          ...row,
+          transport: summary.transport,
+          environment: summary.environment,
+          configured: summary.rails[rail].configured,
+        };
+      }),
+    ),
+  );
 });
 
 // The closed set of durable health-alert actions the Desk surfaces: the ops
@@ -155,6 +187,18 @@ const RAIL_CONFIG_ENTRIES: {
     note: "Unset keeps billing checkout on the simulated provider.",
   },
   {
+    key: "rail_primary",
+    label: "Access-point rail (primary)",
+    env: "RAIL_PRIMARY_URL",
+    note: "Unset keeps rail_primary on the in-process simulator; set the access point's base URL (and RAIL_PRIMARY_TOKEN) to go live.",
+  },
+  {
+    key: "rail_secondary",
+    label: "Access-point rail (secondary)",
+    env: "RAIL_SECONDARY_URL",
+    note: "Unset keeps rail_secondary on the simulator; failover needs both rails lit.",
+  },
+  {
     key: "payment_webhook",
     label: "Payment settlement webhook",
     env: "PAYMENT_WEBHOOK_TOKEN",
@@ -199,7 +243,9 @@ router.get("/operator/rail-config", async (req, res): Promise<void> => {
         return {
           key: entry.key,
           label: entry.label,
-          configured: ring ? ring.configured : Boolean(process.env[entry.env]),
+          configured: ring
+            ? ring.configured
+            : Boolean(process.env[entry.env]?.trim()),
           note: entry.note,
           keyIds: ring ? ring.keyIds : [],
           legacyTokenAccepted: ring ? legacyTokenPathEnabled() : false,

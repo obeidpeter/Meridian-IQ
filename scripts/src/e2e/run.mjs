@@ -1,4 +1,5 @@
-// E2E harness: boots the BUILT api-server and the BUILT frontends behind a
+// E2E harness: boots the conformance fake rail, then the BUILT api-server
+// (stamping over HTTP through that rail) and the BUILT frontends behind a
 // path-router (mirroring the production origin), then drives the user
 // journeys headless. Requires DATABASE_URL pointing at a scratch database —
 // the server seeds demo data at boot and journeys assume that seed.
@@ -29,6 +30,11 @@ const API_PORT = Number(process.env.E2E_API_PORT ?? 5100);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 8091);
 // Local receiver the integration journey registers a firm webhook against.
 const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 8093);
+// The conformance fake rail (R95): the api-server's rail_primary points at it
+// so the WHOLE run stamps over HTTP through a scriptable access point — the
+// boot-time transport selection is proven end to end, not just in unit tests.
+const RAIL_PORT = Number(process.env.E2E_RAIL_PORT ?? 5199);
+const RAIL_URL = `http://127.0.0.1:${RAIL_PORT}`;
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
 
 // Machine-rail credentials, defined once: set on the api-server env below
@@ -44,6 +50,11 @@ const COLLECTION_WEBHOOK_KEY = {
 };
 const COLLECTION_WEBHOOK_KEYS = `${COLLECTION_WEBHOOK_KEY.id}:${COLLECTION_WEBHOOK_KEY.secret}`;
 const SWEEP_TOKEN = "e2e-sweep-trigger";
+// The bearer the fake rail demands and the api-server presents on every
+// submission (RAIL_PRIMARY_TOKEN): an unauthorized call would surface as
+// RAIL_UNAUTHORIZED retries, so the credential half of the transport is
+// exercised by every stamping in the run.
+const FAKE_RAIL_TOKEN = "e2e-rail-token";
 
 const REQUIRED = [
   "artifacts/api-server/dist/index.mjs",
@@ -80,18 +91,115 @@ function check(name, ok, detail = "") {
   );
 }
 
-async function waitForApi(timeoutMs = 30000) {
+// Poll a health URL until it answers 2xx (both spawned processes print a
+// ready line, but a port that ANSWERS is the only readiness that matters).
+async function waitForOk(url, what, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${API_PORT}/api/healthz`);
+      const res = await fetch(url);
       if (res.ok) return;
     } catch {
       /* not up yet */
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error("api-server did not become healthy in time");
+  throw new Error(`${what} did not become healthy in time`);
+}
+
+const tail = (log, lines) => log.split("\n").slice(-lines).join("\n");
+
+// Readiness is a RACE between the health poll and the child itself dying:
+// a spawn error (ENOENT on the tsx shim) or an early exit (EADDRINUSE on
+// the port, a crash at boot) must reject NOW with the cause and the child's
+// log tail, not after the 30 s poll gives up. The listeners are detached
+// once the race settles so a later, deliberate SIGTERM never surfaces as a
+// stray rejection.
+async function untilHealthy(child, what, url, log) {
+  let onError;
+  let onExit;
+  const died = new Promise((_, reject) => {
+    onError = (err) =>
+      reject(
+        new Error(
+          `${what} could not be spawned: ${err.code ?? err.message}\n--- ${what} log tail ---\n${tail(log(), 10)}`,
+        ),
+      );
+    onExit = (code, signal) =>
+      reject(
+        new Error(
+          `${what} exited before it became healthy (${signal ? `signal ${signal}` : `exit code ${code}`})\n--- ${what} log tail ---\n${tail(log(), 10)}`,
+        ),
+      );
+    child.once("error", onError);
+    child.once("exit", onExit);
+  });
+  try {
+    await Promise.race([waitForOk(url, what), died]);
+  } finally {
+    child.off("error", onError);
+    child.off("exit", onExit);
+  }
+}
+
+// Wait (briefly) for a signalled child to actually leave, so its final log
+// lines land before the noise report below reads the buffers.
+function exited(child, timeoutMs = 3000) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+// pino writes JSON in production ({"level":40|50,…}) and pino-pretty text in
+// development (`WARN (pid): msg`, coloured, with the payload indented on the
+// lines that follow). Both shapes are kept, ANSI stripped, continuation
+// lines attached to the warning they belong to.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*m/g;
+function isWarnOrError(line) {
+  if (!line.startsWith("{")) return /\b(WARN|ERROR|FATAL)\b/.test(line);
+  try {
+    return Number(JSON.parse(line).level) >= 40;
+  } catch {
+    return false;
+  }
+}
+function warnOrErrorLines(log) {
+  const kept = [];
+  let carry = false;
+  for (const raw of log.split("\n")) {
+    const line = raw.replace(ANSI, "");
+    if (line.trim() === "") {
+      carry = false;
+      continue;
+    }
+    if (isWarnOrError(line)) {
+      kept.push(line);
+      carry = true;
+    } else if (carry && /^\s/.test(line)) {
+      kept.push(line);
+    } else {
+      carry = false;
+    }
+  }
+  return kept;
+}
+
+const NOISE_CAP = 60;
+function printCapped(heading, lines) {
+  const shown = lines.slice(-NOISE_CAP);
+  const elided = lines.length - shown.length;
+  console.error(
+    `--- ${heading} (${lines.length}${elided ? `, last ${shown.length} shown` : ""}) ---`,
+  );
+  console.error(shown.length ? shown.join("\n") : "(none)");
 }
 
 // Prefer an explicitly provided browser, then the preinstalled one, then
@@ -104,49 +212,101 @@ function browserExecutable() {
   return undefined;
 }
 
-const api = spawn(
-  "node",
-  ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
+// The fake rail is a dev tool, not part of the api-server's built dist: it
+// runs from source via tsx (a workspace dev dependency, so CI has it after
+// `pnpm install`). It boots FIRST and must answer before the api-server is
+// spawned, so the server's first rail call never races the rail's listen.
+const rail = spawn(
+  path.join(ROOT, "node_modules/.bin/tsx"),
+  ["artifacts/api-server/src/fake-rail-main.ts"],
   {
     cwd: ROOT,
-    env: {
-      ...process.env,
-      PORT: String(API_PORT),
-      NODE_ENV: "development",
-      SEED_DEMO: "true",
-      DEMO_PASSWORD,
-      // The suite signs in as many roles from one loopback address. Preserve
-      // the per-credential throttle assertions while preventing the aggregate
-      // production IP cap from terminating unrelated later journeys.
-      LOGIN_IP_ATTEMPT_MAX: "1000",
-      // Lights the payment-confirmation machine rail (fail-closed: 404 while
-      // unset). The env is read per call server-side; the integration journey
-      // presents this token as x-op-token to settle its payment intent.
-      PAYMENT_WEBHOOK_TOKEN,
-      // Lights the inbound collection webhook (same fail-closed posture: the
-      // rail 404s while its ring is empty). The collections journey SIGNS its
-      // settlement with this key (x-op-key-id / x-op-timestamp /
-      // x-op-signature) and also proves the legacy x-op-token path still
-      // admits the ring's secret.
-      COLLECTION_WEBHOOK_KEYS,
-      // Lights /api/internal/sweep (fail-closed: 404 while unset). The
-      // integration journey polls the sweep to drain the pipeline + webhook
-      // outbox synchronously, presenting this token as x-op-token.
-      SWEEP_TOKEN,
-    },
+    env: { ...process.env, PORT: String(RAIL_PORT), FAKE_RAIL_TOKEN },
     stdio: ["ignore", "pipe", "pipe"],
   },
 );
-let apiLog = "";
-api.stdout.on("data", (d) => (apiLog += d));
-api.stderr.on("data", (d) => (apiLog += d));
+let railLog = "";
+let railErr = "";
+rail.stdout.on("data", (d) => (railLog += d));
+rail.stderr.on("data", (d) => {
+  railLog += d;
+  railErr += d;
+});
+// A ChildProcess with no "error" listener throws the spawn error as an
+// uncaught exception; keep it in the log so the readiness race reports it.
+rail.on("error", (err) => (railLog += `[spawn] ${err.message}\n`));
 
+let api;
+let apiLog = "";
 let staticServer;
 let hookReceiver;
 let browser;
 let exitCode;
 try {
-  await waitForApi();
+  await untilHealthy(
+    rail,
+    "fake rail",
+    `${RAIL_URL}/__fake/healthz`,
+    () => railLog,
+  );
+
+  api = spawn(
+    "node",
+    ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
+    {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        PORT: String(API_PORT),
+        NODE_ENV: "development",
+        SEED_DEMO: "true",
+        DEMO_PASSWORD,
+        // The suite signs in as many roles from one loopback address. Preserve
+        // the per-credential throttle assertions while preventing the aggregate
+        // production IP cap from terminating unrelated later journeys.
+        LOGIN_IP_ATTEMPT_MAX: "1000",
+        // Lights the payment-confirmation machine rail (fail-closed: 404 while
+        // unset). The env is read per call server-side; the integration journey
+        // presents this token as x-op-token to settle its payment intent.
+        PAYMENT_WEBHOOK_TOKEN,
+        // Lights the inbound collection webhook (same fail-closed posture: the
+        // rail 404s while its ring is empty). The collections journey SIGNS its
+        // settlement with this key (x-op-key-id / x-op-timestamp /
+        // x-op-signature) and also proves the legacy x-op-token path still
+        // admits the ring's secret.
+        COLLECTION_WEBHOOK_KEYS,
+        // Lights /api/internal/sweep (fail-closed: 404 while unset). The
+        // integration journey polls the sweep to drain the pipeline + webhook
+        // outbox synchronously, presenting this token as x-op-token.
+        SWEEP_TOKEN,
+        // Binds the HTTP rail transport to the fake rail for rail_primary ONLY
+        // (RAIL_SECONDARY_URL deliberately unset): one lit rail, so
+        // /operator/rail-config shows rail_secondary Dark and every stamping
+        // in the run rides rail_primary over HTTP. The environment is stamp
+        // provenance, never inferred from the URL.
+        RAIL_PRIMARY_URL: RAIL_URL,
+        RAIL_PRIMARY_TOKEN: FAKE_RAIL_TOKEN,
+        RAIL_ENVIRONMENT: "sandbox",
+        // Pinned EMPTY (httpRailConfigFromEnv trims empties to unset) so a
+        // developer shell that exports a secondary rail or a custom timeout
+        // cannot light rail_secondary or reshape the run's transport.
+        RAIL_SECONDARY_URL: "",
+        RAIL_SECONDARY_TOKEN: "",
+        RAIL_TIMEOUT_MS: "",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  api.stdout.on("data", (d) => (apiLog += d));
+  api.stderr.on("data", (d) => (apiLog += d));
+  api.on("error", (err) => (apiLog += `[spawn] ${err.message}\n`));
+
+  await untilHealthy(
+    api,
+    "api-server",
+    `http://127.0.0.1:${API_PORT}/api/healthz`,
+    () => apiLog,
+  );
   staticServer = await startStaticServer({ port: WEB_PORT, apiPort: API_PORT });
   hookReceiver = await startWebhookReceiver({ port: HOOK_PORT });
 
@@ -163,6 +323,8 @@ try {
     paymentWebhookToken: PAYMENT_WEBHOOK_TOKEN,
     collectionWebhookKey: COLLECTION_WEBHOOK_KEY,
     sweepToken: SWEEP_TOKEN,
+    fakeRailUrl: RAIL_URL,
+    fakeRailToken: FAKE_RAIL_TOKEN,
   });
 
   const failed = results.filter((r) => !r.ok);
@@ -175,11 +337,23 @@ try {
   console.error(
     "--- api-server log tail ---\n" + apiLog.split("\n").slice(-30).join("\n"),
   );
+  console.error(
+    "--- fake rail log tail ---\n" + railLog.split("\n").slice(-30).join("\n"),
+  );
   exitCode = 2;
 } finally {
   await browser?.close().catch(() => {});
   hookReceiver?.close();
   staticServer?.close();
-  api.kill("SIGTERM");
+  api?.kill("SIGTERM");
+  rail.kill("SIGTERM");
+  await Promise.all([exited(api), exited(rail)]);
 }
+// On EVERY exit path — a green run included — surface what the api-server
+// warned or errored about (rail-transport warnings ride this channel: an
+// unexpected rail answer, a refused credential, a redirect) and anything the
+// fake rail wrote to stderr. The crash tails above stay as they are; this is
+// the signal a passing run would otherwise bury.
+printCapped("api-server warn/error lines", warnOrErrorLines(apiLog));
+printCapped("fake rail stderr", railErr.split("\n").filter((l) => l !== ""));
 process.exit(exitCode);

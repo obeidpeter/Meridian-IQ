@@ -16,11 +16,9 @@ import {
   type Rail,
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import {
-  setRailTransport,
-  type RailTransport,
-  type StampResult,
-} from "../rails/adapter.ts";
+import { clearRailEnv } from "../../test-helpers/rail-env.ts";
+import { setRailTransport, type StampResult } from "../rails/adapter.ts";
+import { scriptedRail } from "../rails/transports/scripted.ts";
 import { drain, reconcile } from "./pipeline.ts";
 
 // Resubmission safety (R97). Pinned against a real Postgres:
@@ -35,50 +33,32 @@ import { drain, reconcile } from "./pipeline.ts";
 //    invoice: a held stamp is persisted in place (0 re-queued), an unknown
 //    one is re-queued (1);
 //  - every attempt row retains the canonical request that was sent.
+//
+// The rail is the scripted fake (R95): scripts and held stamps are keyed by
+// invoice number, so a bound fake never answers for stuck rows other suites
+// left in the scratch DB — those are simply accepted.
 
 const SALT = makeRunSalt();
 const firm = randomUUID();
 const supplier = randomUUID();
 const buyer = randomUUID();
 
-const fakeStamp = (rail: Rail, tag: string): StampResult => ({
-  status: "accepted",
-  rail,
+const invoiceNumber = (n: number) => `INV-PIPE-${n}-${SALT}`;
+
+/** A live-environment fake rail; every test scripts its own invoice on it. */
+const fakeRail = () => scriptedRail({ name: "fake-rail", environment: "live" });
+
+/**
+ * The stamp the fake hands back on lookup when it holds an invoice, tagged so
+ * a test can tell which lookup produced the persisted record.
+ */
+const heldStamp = (tag: string): Partial<StampResult> => ({
   irn: `IRN-${tag}`,
   csid: `csid-${tag}`,
   qrPayload: "qr",
   signedArtifactRef: "sig",
   raw: { lookedUp: true },
-  provider: "fake-rail",
-  environment: "live",
 });
-
-const invoiceNumber = (n: number) => `INV-PIPE-${n}-${SALT}`;
-
-/**
- * A rail that says "duplicate" on submit and, when it holds the named
- * invoice, hands the stamp back on lookup. Keyed by invoice number so a
- * bound fake never answers for stuck rows other suites left in the scratch DB.
- */
-function duplicateRail(holdsFor: string | null, tag: string): RailTransport {
-  return {
-    name: "fake-rail",
-    environment: "live",
-    async submit(rail) {
-      return {
-        status: "rejected",
-        rail,
-        errorCode: "MBS_DUPLICATE",
-        raw: { code: "MBS_DUPLICATE" },
-        provider: "fake-rail",
-        environment: "live",
-      };
-    },
-    async lookup(rail, inv) {
-      return holdsFor !== null && inv.invoiceNumber === holdsFor ? fakeStamp(rail, tag) : null;
-    },
-  };
-}
 
 async function seedInvoice(n: number, status: "submitted" | "draft" = "submitted") {
   const id = randomUUID();
@@ -149,7 +129,12 @@ async function closeBreakers(): Promise<void> {
   }
 }
 
+// RAIL_* is cleared for the whole file: setRailTransport(null) must resolve
+// to the simulator here, never to a developer shell's HTTP rail (R95).
+let restoreRailEnv: () => void = () => {};
+
 before(async () => {
+  restoreRailEnv = clearRailEnv();
   await closeBreakers();
   await getDb().insert(firmsTable).values({ id: firm, name: `Pipeline Firm ${SALT}` });
   await getDb().insert(partiesTable).values([
@@ -176,13 +161,19 @@ before(async () => {
 
 after(async () => {
   setRailTransport(null);
+  restoreRailEnv();
   await closeBreakers();
 });
 
 test("MBS_DUPLICATE is recovered: the held stamp is persisted, provenance and audit recorded", async () => {
   const id = await seedInvoice(1);
   await enqueueSubmit(id);
-  setRailTransport(duplicateRail(invoiceNumber(1), "recovered"));
+  // The rail says "duplicate" on submit and, holding the invoice, hands the
+  // stamp back on lookup.
+  const rail = fakeRail();
+  rail.script(invoiceNumber(1), { outcome: "duplicate" });
+  rail.hold(invoiceNumber(1), heldStamp("recovered"));
+  setRailTransport(rail);
   try {
     await drainUntilSettled(id);
   } finally {
@@ -214,7 +205,10 @@ test("MBS_DUPLICATE is recovered: the held stamp is persisted, provenance and au
 test("a duplicate no rail can produce keeps the terminal failure and says so", async () => {
   const id = await seedInvoice(2);
   await enqueueSubmit(id);
-  setRailTransport(duplicateRail(null, "none"));
+  // "Duplicate" on submit, but no rail holds the stamp: every lookup misses.
+  const rail = fakeRail();
+  rail.script(invoiceNumber(2), { outcome: "duplicate" });
+  setRailTransport(rail);
   try {
     await drainUntilSettled(id);
   } finally {
@@ -232,7 +226,10 @@ test("a duplicate no rail can produce keeps the terminal failure and says so", a
 
 test("reconcile() persists a stamp the rail already holds instead of re-queuing", async () => {
   const id = await seedInvoice(3); // stuck: submitted, no stamp, no outbox row
-  setRailTransport(duplicateRail(invoiceNumber(3), "reconciled"));
+  // reconcile() only asks (lookup); the rail holds this invoice's stamp.
+  const rail = fakeRail();
+  rail.hold(invoiceNumber(3), heldStamp("reconciled"));
+  setRailTransport(rail);
   let requeued: number;
   try {
     requeued = await reconcile();

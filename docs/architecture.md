@@ -22,7 +22,7 @@ flowchart TB
 
     miq["MeridianIQ<br/>Nigeria-first e-invoicing<br/>compliance platform"]
 
-    rails["FIRS/MBS access-point rails<br/>rail_primary + rail_secondary<br/>simulated in-code pending accreditation"]
+    rails["FIRS/MBS access-point rails<br/>rail_primary + rail_secondary<br/>simulated in-code by default,<br/>HTTP transport bound when RAIL_*_URL is lit"]
     model["OpenAI-compatible model provider<br/>env-provisioned base URL + key"]
     email["Inbound email provider"]
     wa["WhatsApp Business webhook"]
@@ -44,12 +44,16 @@ flowchart TB
 
 Reading notes, in the order the diagram surprises people:
 
-- **The rails are simulated.** `modules/rails/adapter.ts` presents one adapter
-  interface over two accredited access-point rails and exercises the full
-  contract (idempotent submission, deterministic sandbox stamps, verification,
-  failover, circuit breaker) without a real MBS/APP endpoint. Accreditation
-  swaps the adapter internals; callers don't change. Every diagram of this
-  system that omits the word "simulated" is lying.
+- **The rails are simulated by default.** `modules/rails/adapter.ts` presents
+  one adapter interface over two accredited access-point rails and exercises
+  the full contract (idempotent submission, deterministic sandbox stamps,
+  verification, failover, circuit breaker) without a real MBS/APP endpoint.
+  Behind the same `RailTransport` seam sits an HTTP transport
+  (`modules/rails/transports/http.ts`, a provisional access-point profile)
+  that is bound only when `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL` is lit —
+  going live is an environment change, and callers don't change. Until a
+  URL is set the simulator answers, and every diagram of this system that
+  omits the word "simulated" is lying.
 - **Every machine rail fails closed.** The inbound email, WhatsApp and
   payment/collection webhooks are token-governed: token unset means the rail
   is dark, not open.
@@ -76,7 +80,7 @@ flowchart TB
     subgraph server["api-server — Express 5 + Drizzle, one deployable"]
         api["REST API under /api<br/>bodies parsed with generated zod,<br/>contract-versioned handshake"]
         worker["in-process pipeline worker + sweeps<br/>outbox pattern, idempotent,<br/>multi-instance-safe, Lagos day boundaries"]
-        railsAdapter["rails adapter<br/>failover + circuit breaker"]
+        railsAdapter["rails adapter<br/>failover + circuit breaker<br/>simulator by default,<br/>HTTP transport when RAIL_*_URL is lit"]
         clerkGw["Clerk gateway<br/>kill switch, budgets,<br/>inference ledger"]
     end
 
@@ -208,16 +212,30 @@ version-skew story; the cost is that a server restart is required for any
 bundle to ship (see `CLAUDE.md` deployment notes) and per-app CDN routing is
 off the table for now.
 
-### D7 — One rails adapter, simulated until accredited
+### D7 — One rails adapter, simulated until accredited; the HTTP transport is bound only when a rail URL is lit
 
 Context: FIRS/MBS access-point accreditation is pending, but the whole
-lifecycle (submit → stamp → verify) had to be real for users and tests.
-Decision: a single adapter interface over two simulated rails with
-deterministic canonical-payload-derived stamps, idempotent submission,
-failover and a circuit breaker.
-Consequences: the platform's callers, tests and UI are already shaped for the
-real thing; accreditation is an adapter-internal change. The word "simulated"
-must travel with every architecture claim until then.
+lifecycle (submit → stamp → verify) had to be real for users and tests — and
+the first real access point had to be reachable without touching the
+pipeline, the recovery paths or the UI.
+Decision: a single adapter interface over two rails with deterministic
+canonical-payload-derived stamps, idempotent submission, failover and a
+circuit breaker, behind a `RailTransport` seam resolved per call in three
+tiers — a bound transport (tests), the HTTP transport when
+`RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL` is lit, else the in-code
+simulator. The HTTP transport speaks a provisional profile and maps every
+wire outcome onto the failure-class vocabulary, so the pipeline never sees
+HTTP — a lookup the rail leaves unanswered raises, and the pipeline retries
+rather than fails the invoice; a rail URL is vetted (https, or http to
+loopback only; no credentials in it) before it lights anything; a transport
+serves only the rails it has a URL for, and failover, recovery and the
+"full outage" test count served rails only.
+Consequences: the platform's callers, tests and UI are already shaped for
+the real thing, and going live is an environment change — a URL, a token,
+`RAIL_ENVIRONMENT=live` — not a code change; the Desk names the transport
+and environment on every rail line. The rails are simulated until that URL
+is set, and the word "simulated" must travel with every architecture claim
+until then.
 
 ### D8 — Clerk gateway as the single model choke point
 
@@ -419,3 +437,32 @@ Consequences: an outage shorter than the horizon costs nothing but delay;
 a longer one leaves a dead-letter queue the operator drains with replays
 after the rail returns; the runbook in the manual describes the signs and
 the one deliberate action.
+
+### D20 — A conformance fake rail, not a mock, proves the transport
+
+Context: the HTTP transport is the first rails code that leaves the process,
+and a mocked `fetch` would prove only that the code calls what the test
+expected; the in-code simulator cannot produce the one case the duplicate
+path exists for — a rail that really holds a stamp for a re-sent key — and a
+scenario scripted in a pipeline test had no guarantee of meaning the same
+thing on the wire.
+Decision: one fault table (`modules/rails/faults.ts`) shared by the HTTP
+transport, an in-process scripted fake (the test double every adapter and
+pipeline suite binds) and a `node:http` conformance fake rail that speaks
+the wire profile on a real socket, remembers accepted submissions, enforces
+the bearer and takes scripted faults per invoice through loopback control
+endpoints; the transport's tests run against it in-process and the e2e
+harness spawns it so a whole run stamps over HTTP. Only a submit probes an
+open breaker — a lookup never moves an open breaker forward, though a
+lookup the rail cannot answer counts as a failure on that rail and sends
+the event back to retry — and the rail call stays inside the worker's
+bypass transaction, bounded by `RAIL_TIMEOUT_MS` per call with at most four
+calls per event (the session's idle-in-transaction timeout is pinned to
+that budget).
+Consequences: every fault-matrix cell is pinned at the wire, at the
+classified result and at the pipeline disposition by tests that cannot drift
+from one another; a real access point is adapted in one file; the e2e run
+proves boot-time transport selection instead of assuming it; the two
+retriable codes it added (`RAIL_UNAUTHORIZED`, `RAIL_PROTOCOL`) mean a bad
+credential or a garbled answer costs delay, never a failed invoice — and so
+does a stamp lookup the rail leaves unanswered.

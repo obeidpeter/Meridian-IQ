@@ -1010,11 +1010,18 @@ export function InvoiceDetail() {
     },
   });
 
+  // The API lists attempts oldest-first; rows of one try share attemptNo
+  // and the terminal answer comes LAST (a failover leaves the first rail's
+  // error beside the rejection), so among the highest attemptNo keep the
+  // later row.
   const latestFailed = (attempts || [])
     .filter(
       (a) => (a.status === "rejected" || a.status === "error") && a.errorCode,
     )
-    .sort((a, b) => b.attemptNo - a.attemptNo)[0];
+    .reduce<(typeof attempts extends (infer T)[] | undefined ? T : never) | undefined>(
+      (best, a) => (!best || a.attemptNo >= best.attemptNo ? a : best),
+      undefined,
+    );
   const errorCode = latestFailed?.errorCode || undefined;
   const { data: catalogue } = useGetErrorCatalogueEntry(errorCode || "", {
     query: {

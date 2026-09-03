@@ -1508,7 +1508,17 @@ Clean counterparty data, which everything downstream depends on:
 Live health of the machinery:
 
 - **Submission rails** — each transmission rail's circuit-breaker state
-  (Healthy / Half-open / Circuit open) and recent failure count.
+  (Healthy / Half-open / Circuit open) and recent failure count. Each rail
+  line also names the **transport · environment** serving it —
+  `simulator · sandbox` until an access-point URL is configured, then
+  `http · sandbox` or `http · live` — so you always know whether stamps are
+  coming from the demo simulator or a real access point. A rail the
+  configured transport does not serve (only one access-point URL set) wears
+  a grey **Not configured** pill in place of its breaker badge: a healthy
+  breaker on a rail nothing talks to must not read as "ready to stamp".
+  Both rails are always listed — a rail nothing has submitted through yet
+  shows as Healthy with its transport line — so "Not configured" is visible
+  before the first submission, not after it.
 - **Health alerts** — the platform pages _itself_: an hourly watch raises a
   durable alert the first time it sees a rail circuit stuck open, a
   dead-lettered pipeline event, or a firm webhook delivery that exhausted
@@ -1519,8 +1529,12 @@ Live health of the machinery:
   own notification bell.
 - **Rail configuration** — which deployment-configured rails are lit on
   this installation (inbound email / WhatsApp intake, the messaging relay,
-  the payment provider and its confirmation webhook, the metrics token):
-  configured or dark, presence only — the page never shows secret values.
+  the payment provider and its confirmation webhook, the two access-point
+  rails — primary and secondary — and the metrics token): configured or
+  dark, presence only — the page never shows secret values. For the
+  access-point rails, "dark" means the in-process simulator stamps that
+  rail; "configured" means its submissions go over HTTP to the access point
+  named in `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL`.
 - **Dead-lettered events** — queued work the pipeline gave up on, with the
   error and a **Replay** button.
 - **Reconcile pipeline** — one click re-queues anything stuck that has no
@@ -1989,6 +2003,10 @@ unreachable (404), not broken:
 | `PAYMENT_WEBHOOK_TOKEN`                                         | The payment-confirmation webhook; unset (no `PAYMENT_WEBHOOK_KEYS` ring and no token) = 404. |
 | `COLLECTION_PROVIDER_URL` (+ `COLLECTION_PROVIDER_TOKEN`)       | The collection-account provisioning relay (real virtual accounts at a bank/PSP); unset = simulator (references are minted but no real account exists).     |
 | `COLLECTION_WEBHOOK_TOKEN`                                      | The inbound collection-payment webhook that settles invoices; an empty ring (`COLLECTION_WEBHOOK_KEYS` / the legacy token) = the rail 404s (fail-closed — nothing can mark invoices settled without it). |
+| `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL`                       | The FIRS/MBS access-point rails (each independently). Unset = the in-process simulator stamps that rail (sandbox stamps, no real authority). Set a rail's base URL to send its submissions over HTTP; failover between rails needs both. The URL must be `https://` (plain `http://` is accepted only to loopback — `127.0.0.1` / `localhost` — in production) and must not carry a `user:password@`; a URL that fails those checks leaves that rail **unconfigured**, with the reason (never the value) in the server log. Behind an egress proxy, start the api-server with `NODE_USE_ENV_PROXY=1` — Node's `fetch` ignores `HTTPS_PROXY` otherwise, and every call would fail as `RAIL_UNAVAILABLE`. |
+| `RAIL_PRIMARY_TOKEN` / `RAIL_SECONDARY_TOKEN`                   | The bearer credential each access point expects. A wrong token does not fail invoices: they wait on that rail's breaker and resume on their own once it is fixed (see §15).                              |
+| `RAIL_ENVIRONMENT`                                              | Written onto every stamp record as its provenance: exactly `sandbox` or `live` (any other value is refused with a warning and stamps stay `sandbox`). Set `live` only on the deployment that talks to the production access point — it is declared, never guessed from the URL. |
+| `RAIL_TIMEOUT_MS`                                               | How long one call to an access point may take (default 5000 = 5 s; values above 60000 are clamped to 60 s) before it counts as a timeout and the other rail is tried. One submission may make up to four such calls, so keep `SHUTDOWN_TIMEOUT_MS` above four times this value. |
 | `MESSAGES_RETENTION_DAYS`                                       | Message-ledger retention sweep (default 180 days; malformed values disable the sweep).                                                                     |
 | `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN`       | Per-principal rate limits (defaults 600 / 60; `0` disables a class).                                                                                       |
 | `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance.                                                       |
@@ -2017,12 +2035,20 @@ Outage knobs (R96): `OUTBOX_RETRY_HORIZON_MS` (default 86400000, 24 h) is
 how long a retriable submission keeps retrying from its first attempt before
 it dead-letters; `OUTBOX_MAX_BACKOFF_MS` (default 900000, 15 min) caps the
 jittered backoff between tries; `RAIL_OPEN_COOLDOWN_MS` (default 30000) is
-how long an open rail breaker waits before letting one probe through.
+how long an open rail breaker waits before letting one probe through;
+`RAIL_TIMEOUT_MS` (default 5000, R95; capped at 60 s) is how long one call
+to an access point may take before it counts as `RAIL_TIMEOUT`. A rail that
+answers 429 with a `Retry-After` is obeyed: the next try waits at least that
+long (capped at 1 hour) even when the backoff would have been shorter.
 
 Worker and shutdown knobs (R101): `SWEEP_TIMEOUT_MS` (default 120000) bounds
 each named compliance sweep so a hung one cannot stall the minute pass;
 `SHUTDOWN_TIMEOUT_MS` (default 25000) is how long a stopping instance waits
 for in-flight requests and the running worker pass before it exits anyway.
+A stopping worker finishes the submission in flight and claims no more, and
+one submission can take up to 4 × `RAIL_TIMEOUT_MS` (20 s at the defaults —
+more than the 25 s shutdown default, so on a deployment with a real access
+point either shorten the rail timeout or lengthen the shutdown grace).
 On SIGTERM the server answers `/api/readyz` with 503 first, so a rolling
 restart drains cleanly.
 
@@ -2207,7 +2233,10 @@ browse any single firm's business pages. Firm data belongs to firm roles.
 
 **The stamping rail is down — invoices are piling up in "Awaiting stamp."**
 This is the situation the pipeline is built to sit out. Read the signs on
-**Platform ops**: a rail showing _Open_ with a "next probe" time, one
+**Platform ops**: a rail showing _Open_ with a "next probe" time (the same
+line names the transport in use — `simulator` or `http` — and its
+environment, so you can tell whether it is a real access point or the demo
+simulator that is refusing), one
 _Rail circuit breaker OPEN_ health alert per outage (not one per minute), and
 in `/api/metrics` a rising `meridian_outbox_events{state="parked"}` and
 `meridian_outbox_oldest_pending_age_seconds` with a flat `state="dead"`.
@@ -2216,14 +2245,27 @@ and resume on their own — one probe per cooldown, then the backlog drains
 with jittered backoff. Do nothing unless the outage outlasts the retry
 horizon (24 hours by default), in which case events dead-letter with
 `RAIL_TIMEOUT` / `RAIL_UNAVAILABLE`; once the rail is back, replay them from
-**Dead-lettered events** (a replay starts a fresh horizon). Do not click
-_Reconcile pipeline_ expecting it to revive dead events — it deliberately
-will not.
+**Dead-lettered events** (a replay starts a fresh horizon). The alert itself
+names only the rail, when its breaker opened and the failure count — never
+an error code — so to learn _why_ the rail is refusing, read the code off a
+submission that actually reached it: the retrying outbox row's last error
+(on the Desk, the **Dead-lettered events** list shows it once a row
+dead-letters; while it is still retrying it is the row's `last_error` in the
+outbox table and the api-server's "rail submission not accepted" log line —
+a _parked_ row only ever says `RAIL_UNAVAILABLE: parked until …`, because
+nothing was sent), or the invoice's own attempt history (the SME app's
+submission timeline, the mobile transmission history, or
+`GET /api/invoices/{id}/attempts`). If that code is `RAIL_UNAUTHORIZED`, the
+access point is refusing this deployment's credentials — fix
+`RAIL_PRIMARY_TOKEN` / `RAIL_SECONDARY_TOKEN` and the backlog drains by
+itself. Do not click _Reconcile pipeline_ expecting it to revive dead
+events — it deliberately will not.
 
 **An invoice is stuck in "Awaiting stamp."**
 The demo rail stamps within seconds; if something ever wedges, the Desk's
-**Platform ops → Reconcile pipeline** re-queues stuck work, and dead-lettered
-events can be replayed there.
+**Platform ops → Reconcile pipeline** re-queues stuck work (50 invoices per
+click, oldest first — a large backlog takes a few clicks, or the hourly
+pass catches up on its own), and dead-lettered events can be replayed there.
 
 **I forwarded an invoice by email/WhatsApp and nothing appeared.**
 The intake rails are deployment-configured (dark until their tokens are

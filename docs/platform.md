@@ -151,6 +151,258 @@ VAT due dates, "overdue today" — use the LAGOS calendar via
 `lib/lagos-time.ts` (SQL: `AT TIME ZONE 'Africa/Lagos'`); never derive a
 business "today" from `toISOString().slice(0, 10)` or `current_date`.
 
+**Rail transport & selection (R95).** The `RailTransport` seam has three
+implementations and one resolution rule. `currentRailTransport()` in
+`modules/rails/adapter.ts` resolves per call — so a flipped environment is
+honoured without a restart, the `payments/provider.ts` posture — through
+three tiers: (1) a transport **bound** with `setRailTransport` (tests, or an
+explicit wiring; `null` unbinds it and restores env-driven resolution rather
+than forcing the simulator); else (2) the **HTTP transport**
+(`modules/rails/transports/http.ts`) when `RAIL_PRIMARY_URL` and/or
+`RAIL_SECONDARY_URL` is lit, memoised on the exact env tuple so it is rebuilt
+only when that changes; else (3) the in-code **simulator**. The simulator is
+therefore the default until accreditation lights a URL, and nothing
+downstream knows which tier answered except through the `provider` /
+`environment` provenance on every `StampResult`. A transport declares the
+rails it **serves** (`rails`; unset = both, which is what the simulator
+says): an HTTP transport serves only the rails it has a URL for, and
+`submitWithFailover` / `recoverExistingStamp` iterate served rails only, so
+a deployment with one access point lit never counts the unlit rail as a
+failure. `circuitOpen` means "every _served_ rail refused" — with one lit
+rail, one open breaker is a full outage and the submission parks (R96).
+`railTransportSummary()` is what the operator reads: the transport's name,
+its environment, and `configured` per rail. `rails/adapter.test.ts` pins the
+resolution order, the served-rails rule and the probe rule below.
+
+| Variable                                      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL`     | Base URL of each access point (trailing slash tolerated). Either one lights the HTTP transport; a rail without a URL is unserved (`configured: false`). A URL is **vetted** before it lights anything (`vettedRailUrl`): it must parse, carry no userinfo (a secret in a URL ends up in error messages), be `http:` or `https:`, and plain `http:` is refused in production unless the host is loopback (`127.0.0.1`, `localhost`, `::1`). A URL that fails any check leaves that rail **unconfigured** with a logged reason — the value itself is never logged, since it may be the misplaced secret. |
+| `RAIL_PRIMARY_TOKEN` / `RAIL_SECONDARY_TOKEN` | Bearer sent as `authorization` on every call to that rail (trimmed); unset sends no header. Never logged, and redacted from any body a gateway echoes it back in.                                                                                                                                                                                                                                                                                                      |
+| `RAIL_ENVIRONMENT`                            | Provenance the HTTP transport writes to `stamp_records.environment`: exactly `sandbox` or `live`. Anything else is refused with a warning and provenance stays `sandbox`. Declared, never inferred from the URL.                                                                                                                                                                                                                                                       |
+| `RAIL_TIMEOUT_MS`                             | Per-call `AbortSignal.timeout` on submit and lookup, covering the headers AND the body read (default 5000 = 5 s, so four calls per event fit the 25 s shutdown grace; a non-positive or non-numeric value falls back to the default; anything above 60000 is clamped to 60 s, because one event may make four calls inside one transaction — see the hold budget below).                                                                                                                                                  |
+
+One deployment gotcha: Node's global `fetch` ignores `HTTPS_PROXY` /
+`HTTP_PROXY` unless the api-server process is started with
+`NODE_USE_ENV_PROXY=1`. Behind an egress proxy, without it, every call is a
+network error (`RAIL_UNAVAILABLE`) however correct the URL and token are.
+
+The wire is the provisional **MeridianIQ access-point profile v0** — the
+shape a real access point will be adapted to in one file, not a claim about
+its API. Every request is JSON, with `authorization: Bearer <token>` when a
+token is set. A submit is `POST {base}/v0/submissions` with
+`idempotency-key: {invoiceId}:{invoiceNumber}` and body
+`{ idempotencyKey, rail, invoice: <CanonicalInvoice> }`; a lookup is
+`GET {base}/v0/submissions/{encodeURIComponent(idempotencyKey)}`. The
+transport classifies every response onto the failure-class vocabulary in
+`modules/errors.ts`, so the pipeline's park / retry / dead dispositions never
+see HTTP:
+
+| Response                                                                                                                  | Classified as                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| any 2xx with `{ irn, csid, qrPayload, signedArtifactRef }` conforming (bounds below)                                      | `accepted`                                                                                                                                                                                 |
+| 409                                                                                                                       | `rejected` `MBS_DUPLICATE` — the pipeline then calls `lookup` to recover                                                                                                                   |
+| 422 `{ code? }`                                                                                                           | `rejected` with the sanitised `code`, else `MBS_SCHEMA_INVALID`                                                                                                                            |
+| 400 `{ code }`                                                                                                            | `rejected` with the sanitised `code` — ONLY with one; a 400 without a usable code is `error` `RAIL_PROTOCOL` (a gateway's 400 must not fail an invoice)                                     |
+| 401/403                                                                                                                   | `error` `RAIL_UNAUTHORIZED`                                                                                                                                                                |
+| 429 (+ `Retry-After`)                                                                                                     | `error` `RAIL_RATE_LIMITED`; `Retry-After` (seconds or an HTTP date, capped at 1 h) lands in `raw.retryAfterMs`, which the pipeline honours as a **floor** under the R96 backoff            |
+| 5xx, or a network error (`ECONNREFUSED` …)                                                                                | `error` `RAIL_UNAVAILABLE`                                                                                                                                                                 |
+| abort at `RAIL_TIMEOUT_MS` — before the headers, or while reading the body (`raw.phase: "body"`)                          | `error` `RAIL_TIMEOUT`                                                                                                                                                                     |
+| 3xx (redirects are never followed — `redirect: "manual"`), any other status, or a 2xx body that does not conform          | `error` `RAIL_PROTOCOL`                                                                                                                                                                    |
+| lookup 404                                                                                                                | `null` — a definite miss                                                                                                                                                                   |
+| lookup 2xx conforming                                                                                                     | the stamp (`raw.lookedUp: true`)                                                                                                                                                           |
+| lookup anything else — 401/403, 429, 5xx, another status, a non-conforming 2xx, a timeout or a network error              | throws `RailLookupError(rail, code)`: the stamp may exist, so the caller RETRIES — an unanswered lookup is never a miss and never fails the invoice                                         |
+
+`raw` on every result is what `submission_attempts.response_payload`
+retains for a dispute or an accreditation review, so it is bounded and safe
+to show to every reader of the invoice. On an answered call it is
+`{ httpStatus, body }` (plus `truncated: true` when the read hit its cap and
+`retryAfterMs` on a 429); when nothing was answered it is
+`{ httpStatus: 0, body: null, reason: "timeout" | "network", timeoutMs }`.
+The transport reads at most 64 KiB of any response (the rest is cancelled
+and `raw.truncated` says so), strips NUL (Postgres `text` and `jsonb` refuse
+it), redacts the rail's bearer wherever a gateway echoes it, and persists
+`body` as parsed JSON only when the text is at most 4 KiB and nests at most
+8 deep — otherwise as the text cut to 4 KiB.
+
+**What an accepted body may carry.** The four fields must be non-empty
+printable-ASCII strings (0x21–0x7E, no whitespace) with `irn` and `csid` at
+most 128 chars, `signedArtifactRef` at most 4096 and `qrPayload` at most
+2900 in the base64 alphabet (`A-Za-z0-9+/=_-`). The bounds are the columns
+and the QR: the stamp lands in Postgres `text` / `jsonb` columns that every
+invoice, PDF and verification reader loads, and ~2,900 base64 chars is what
+a version-40 QR at error level M can hold (2,331 binary bytes) — a payload
+the PDF could not render is not a stamp. Anything out of bounds is a
+non-conforming body: `RAIL_PROTOCOL` on submit, `RailLookupError` on lookup.
+
+**What a rejection code may be.** `sanitiseRejectionCode` in
+`modules/rails/faults.ts` accepts a `code` only when it matches
+`/^[A-Za-z0-9_.:-]{1,64}$/` — a catalogue key or an access point's own
+reference (`E-1001`, `mbs.invalid_tin`); anything else falls back to
+`MBS_SCHEMA_INVALID`, so a rail can never inject an arbitrary lifecycle
+reason or Desk-case code. The same sanitiser runs in the scripted fake and
+the conformance rail, so a test can never script a code the wire would not
+deliver.
+
+**The fault matrix.** `modules/rails/faults.ts` is the ONE table the HTTP
+transport, the in-process scripted fake and the conformance fake rail all
+agree on: an outcome names what an access point did, the table says which
+HTTP status carries it on the wire and which catalogue code the transport
+must arrive at, so a scenario scripted in a test and a response mapped by
+the transport cannot drift apart. Every cell is pinned by tests — named
+here by file, under `artifacts/api-server/src/modules/`; the `pipeline/rails-matrix.test.ts`
+cells are numbered as in that suite. Two of its cells are cross-checks of
+neighbouring rules rather than fault-matrix cells: cell 10 (a transport that
+throws mid-failover rolls the whole try back — breaker count, attempt,
+lifecycle and audit rows — the CON-03 handler-rollback rule) and cell 12
+(reconcile never queues a second row beside a PARKED one — R96).
+
+| Outcome                                                        | On the wire                                                                | Classified                                                              | Pipeline disposition                                                                                                                                                                                                                                                                | Tested in                                                                                                                                                                  |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accept`                                                       | 201 + stamp body                                                           | `accepted`                                                              | `persistStamp`, `invoice.stamped`, outbox `done`, breaker closed                                                                                                                                                                                                                    | `rails/transports/http.test.ts`, `rails/fake-rail.test.ts`, `pipeline/rails-matrix.test.ts` (cells 3, 8, 9)                                                                |
+| `reject`                                                       | 422 `{ code }`                                                             | `rejected` `<code>` (default `MBS_SCHEMA_INVALID`)                      | terminal, no failover: invoice `failed` with the code as its lifecycle reason, `invoice.rejected` audit, attempt row `rejected`/code, outbox `dead`, Desk case                                                                                                                       | `rails/transports/http.test.ts`, `rails/adapter.test.ts` (the shared sanitiser), `pipeline/rails-matrix.test.ts` (cells 1, 15)                                             |
+| `duplicate`                                                    | 409                                                                        | `rejected` `MBS_DUPLICATE`                                              | `recoverExistingStamp` asks the served rails (the reporting rail first): a hit is persisted as `invoice.stamp_recovered` with its own attempt row; a definite miss (404 everywhere) keeps the terminal rejection and audits `invoice.stamp_recovery_failed`                        | `rails/transports/http.test.ts`, `rails/fake-rail.test.ts` (a really re-sent key), `pipeline/pipeline.test.ts`, `pipeline/rails-matrix.test.ts` (cell 11)                  |
+| `duplicate`, then the lookup cannot be answered                | 409, then the GET is 401/403, 429, 5xx, garbage, a timeout or refused      | `rejected` `MBS_DUPLICATE`, then `RailLookupError`                      | `retry` with `<code>: stamp lookup failed`; the 409 attempt row stays, the invoice is NEVER failed on an unanswered lookup, and the error counts on that rail's breaker (re-arming its retry-at when open); the replayed backoff recovers the stamp                                 | `rails/transports/http.test.ts`, `rails/fake-rail.test.ts` (lookup-op scripts), `rails/adapter.test.ts`, `pipeline/rails-matrix.test.ts` (cells 17, 18)                    |
+| `timeout`                                                      | no response within `RAIL_TIMEOUT_MS` (headers or body)                     | `error` `RAIL_TIMEOUT`                                                  | breaker failure on that rail, failover to the next served rail; every served rail failing → `retry` on the R96 backoff, invoice stays `submitted`                                                                                                                                    | `rails/transports/http.test.ts`, `rails/fake-rail.test.ts`, `pipeline/rails-matrix.test.ts` (cell 4), `pipeline/outage.test.ts`                                            |
+| `rate_limit`                                                   | 429                                                                        | `error` `RAIL_RATE_LIMITED`                                             | as `timeout`                                                                                                                                                                                                                                                                        | `rails/transports/http.test.ts`, `pipeline/rails-matrix.test.ts` (cell 2)                                                                                                  |
+| `rate_limit` with `Retry-After`                                | 429 + `Retry-After: N` (or an HTTP date)                                   | `error` `RAIL_RATE_LIMITED`, `raw.retryAfterMs`                         | as `timeout`, but `next_attempt_at` = max(the R96 backoff, now + `Retry-After`), the header capped at 1 h — a floor under the backoff, never a ceiling, and invisible when the backoff is already longer                                                                              | `rails/fake-rail.test.ts` (the header on the wire), `pipeline/rails-matrix.test.ts` (cell 16)                                                                              |
+| `unavailable`                                                  | 503, or a network error                                                    | `error` `RAIL_UNAVAILABLE`                                              | as `timeout` — primary unavailable then secondary accepting = stamped via `rail_secondary` with two attempt rows and primary `failureCount` 1; ×2 then accept = stamped on the replayed backoff with attempts numbered 1, 1, 2                                                       | `rails/transports/http.test.ts`, `pipeline/rails-matrix.test.ts` (cells 3, 9)                                                                                              |
+| `unauthorized`                                                 | 401 (or 403)                                                               | `error` `RAIL_UNAUTHORIZED`                                             | as `timeout`; the invoice is NOT failed — a bad token is the platform's fault                                                                                                                                                                                                        | `rails/transports/http.test.ts`, `rails/fake-rail.test.ts` (bearer enforcement), `pipeline/rails-matrix.test.ts` (cell 5)                                                  |
+| `malformed`                                                    | 2xx with a non-conforming body, a 3xx, or an unnamed status                | `error` `RAIL_PROTOCOL`                                                 | as `timeout`                                                                                                                                                                                                                                                                        | `rails/transports/http.test.ts`, `pipeline/rails-matrix.test.ts` (cell 6)                                                                                                  |
+| `malformed` that actually stamped, then 409                    | 200 garbage; the re-send of the same key is 409 and the GET holds the stamp | `error` `RAIL_PROTOCOL`, then `rejected` `MBS_DUPLICATE`                | `retry`, then recovered: stamp persisted, `invoice.stamp_recovered`, the garbage row, the 409 row and the lookup row all retained in `seq` order                                                                                                                                     | `rails/fake-rail.test.ts` (`malformed` + `holdsStamp`), `pipeline/rails-matrix.test.ts` (cell 14)                                                                          |
+| transport `error` with a non-retriable code                    | — (custom transports only; the HTTP transport never produces one)          | `error` with a code the catalogue marks terminal                        | failover stops at that rail: invoice `failed` with the code, NO `invoice.rejected` audit (it was not a business rejection), outbox `dead`, Desk case                                                                                                                                 | `pipeline/rails-matrix.test.ts` (cell 7)                                                                                                                                   |
+| one served breaker open, the other closed                      | the refused rail sees nothing                                              | —                                                                       | the refusal is not an attempt; stamped via the other rail; the open breaker stays open                                                                                                                                                                                              | `rails/adapter.test.ts` (tried vs sent), `pipeline/rails-matrix.test.ts` (cell 8)                                                                                          |
+| every served breaker open                                      | nothing sent                                                               | —                                                                       | `park` until the earliest `retry_at`; no attempt row, no retry burned (R96)                                                                                                                                                                                                         | `rails/adapter.test.ts`, `pipeline/rails-matrix.test.ts`, `pipeline/outage.test.ts`                                                                                        |
+| a single served rail with its breaker open                     | nothing sent                                                               | —                                                                       | `park` at that breaker's `retry_at` (one lit rail, one open breaker = a full outage); stamps once the breaker closes                                                                                                                                                                 | `rails/adapter.test.ts` (served rails), `pipeline/rails-matrix.test.ts` (cell 13)                                                                                          |
+
+**Two new catalogue codes**, both retriable on purpose. `RAIL_UNAUTHORIZED`
+(401/403) is the platform's failure, not the invoice's: the invoice must stay
+`submitted`, the breaker opens, the health watch raises one alert, and the
+backlog drains by itself once the operator fixes `RAIL_PRIMARY_TOKEN` /
+`RAIL_SECONDARY_TOKEN` — a terminal code here would fail every invoice in
+the queue for a typo in a secret. `RAIL_PROTOCOL` (a 2xx the transport
+cannot parse, a redirect, or a status the profile does not name) is
+retriable so a garbled acceptance never marks a stamped invoice failed: the
+retry re-sends the same idempotency key, meets `MBS_DUPLICATE`, and the
+duplicate path recovers the stamp the rail holds.
+
+**Two fakes, one vocabulary.** The **scripted in-process fake**
+(`transports/scripted.ts`, `scriptedRail()`) is the test double every adapter
+and pipeline suite binds with `setRailTransport`:
+`script(invoiceNumber, fault)` queues faults per invoice number (FIFO;
+`times` bounds how many calls each applies to; `"*"` scripts any invoice not
+otherwise scripted; `op: "lookup"` faults the GET a recovery makes instead
+of the POST — a `RailLookupError` with that outcome's code, never a miss;
+`holdsStamp` on a `duplicate` or `malformed` makes the rail really hold the
+stamp), `hold(invoiceNumber)` makes `lookup` answer a stamp, and `calls` is
+the log. It answers the CLASSIFIED outcome instantly — a scripted `timeout`
+is `RAIL_TIMEOUT` without a wait — and unscripted invoices are accepted with
+simulator-shaped stamps (`deterministicStamp` in `faults.ts`, the same IRN
+derivation the simulator uses; each implementation signs with its own
+secret, so a fake's CSID never verifies as the simulator's or vice versa).
+The **conformance fake rail** (`modules/rails/fake-rail.ts`,
+`startFakeRail({ port, token, secret })`) is a `node:http` access point that
+speaks profile v0 on a real socket: it remembers every submission it
+accepted, so a re-sent idempotency key answers 409 and a lookup returns the
+stamp it holds — the REAL duplicate the simulator cannot produce; a
+`malformed` scripted with `holdsStamp` stores the stamp too, so the re-send
+is a real 409; it enforces the bearer when started with a token; a scripted
+`timeout` holds the socket until the client aborts (504 on socket close or
+after 60 s, so it never leaks a handle); a `rate_limit` sends `Retry-After`
+from `retryAfterSeconds` (default 1); a lookup-op script answers the fault
+on the GET. Its own failures never wear the profile's business statuses: an
+oversized body is 413 with `connection: close`, an unreadable one 500 — a
+fake-side limit can never fail an invoice. Its loopback control endpoints
+need no credentials: `PUT /__fake/script`
+`{ invoiceNumber, outcome, code?, times?, holdsStamp?, op?, retryAfterSeconds? }`,
+`GET /__fake/calls`, `DELETE /__fake` (reset scripts, store and calls) and
+`GET /__fake/healthz`. `transports/http.test.ts` runs the HTTP transport
+against it in-process on an ephemeral port; the e2e harness spawns it as a
+process (`src/fake-rail-main.ts`, the package's `fake-rail` script,
+reading `PORT` and `FAKE_RAIL_TOKEN`) with `RAIL_PRIMARY_URL`
+pointed at it, so a WHOLE e2e run stamps over HTTP through the conformance
+rail and boot-time transport selection is proved end to end — the rejected
+path and the operator's transport visibility included.
+
+**Attempts are per rail called.** `submission_attempts` gets one row per
+rail the pipeline actually CALLED this try (`FailoverResult.sent`, as
+distinct from `tried`, which includes breaker refusals), carrying the
+canonical request sent and the response received (CORE-02): a failover
+leaves the first rail's timeout or 5xx on the record beside the second
+rail's acceptance, and a stamp recovered by lookup adds its own row
+(`recovered: true`). A breaker refusal sent nothing and writes nothing — it
+is not an attempt, and when every served breaker refuses, the event parks
+(R96). Rows of one try share `attempt_no` and `created_at` (they commit
+together), so the table carries a `seq` (bigserial) that orders the rows of
+a try — the order the rails were called, the terminal answer last. Every
+"latest attempt" reader orders by it: Clerk's explain, the status light
+(`latest()` prefers `seq` when present), the Desk's draft reply, the
+unmapped-code sweep, and the attempts route (`attemptNo, seq`) that the SME
+app's submission timeline and the mobile detail page read — so a failover
+whose second rail rejected names the rejection, not the first rail's
+timeout (`pipeline/rails-matrix.test.ts` cell 15 pins the route order, the
+status light and Clerk's explain together). The compliance scorecard's `saw_failure` counts business
+`rejected` rows only: a timeout or 5xx the platform failed over from is the
+platform's failure, not the client's.
+
+**Only a submit is a probe; a lookup error still counts.** The persisted
+breaker gate lets one call through an open breaker whose `retry_at` has
+come. A submit takes that slot as the half-open probe and always ends in
+`recordSuccess` / `recordFailure`, which moves the breaker on. A lookup is
+admitted on the same terms but never moves an open breaker forward: a
+`null` lookup records nothing and the state stays `open`, because a breaker
+parked in `half_open` by a lookup would wave every later submit through
+without a probe. A lookup that finds the stamp does close the breaker (the
+rail just answered), and a lookup the rail could NOT answer
+(`RailLookupError`) is a failure on that rail — it counts toward opening
+the breaker and, when open, re-arms its `retry_at`;
+`recoverExistingStamp` remembers the last such error and re-throws it only
+when no served rail held the stamp and at least one could not answer, so
+"no rail knows it" only ever means 404 everywhere. `ensureRailState` reads
+the breaker row with a plain SELECT before it ever inserts: an upsert on
+every gate would queue behind another worker's uncommitted breaker write for
+as long as that worker's rail call takes. Known limitation: breaker
+bookkeeping still commits inside the event transaction, so two workers
+probing the same open rail serialise on its row for the length of a rail
+call; the follow-up is breaker bookkeeping on the raw `pool` with an
+explicit half-open slot.
+
+**The rail call stays inside `processOne`'s bypass transaction.**
+Deliberately: the claimed outbox row (`FOR UPDATE SKIP LOCKED`) is exactly
+the lock wanted while the call is in flight, the domain writes and the outbox
+bookkeeping commit atomically, and `RAIL_TIMEOUT_MS` bounds how long the
+transaction is held. The hold is up to FOUR calls per event — two submits
+(one per served rail) and two lookups (a 409 recovery asks each served
+rail) — so `processOne` pins
+`SET LOCAL idle_in_transaction_session_timeout` to
+`transactionHoldBudgetMs()` = 4 × `RAIL_TIMEOUT_MS` + 30 s, so a deployment
+default shorter than the transport budget cannot kill the session mid-call
+and a hung call cannot pin the connection forever; that is also why
+`RAIL_TIMEOUT_MS` is clamped to 60 s. `SHUTDOWN_TIMEOUT_MS` should exceed
+one event's worst case (4 × `RAIL_TIMEOUT_MS`; 20 s at the default timeout,
+which is MORE than the 25 s shutdown default — shorten the timeout or
+lengthen the grace on a deployment with a real access point), and
+`stopWorker` sets a stopping flag that `drain()` checks before each claim
+(`startWorker` clears it), so a stopping instance finishes the event in
+flight and claims no more rather than working a backlog one claim at a time
+past its deadline. `reconcile()` follows the same rule at a different grain:
+one short transaction fetches at most 50 stuck `submitted` invoices that have
+no stamp row and no live or dead outbox row (so permanently stuck invoices
+can never starve a newer one out of the batch), oldest first, and each is then reconciled in its OWN transaction (`reconcileOne`),
+so a pass over a hung rail never holds one connection and the reconcile lock
+for K × the budget; the next pass continues where it left off. Revisit
+(call outside, then reclaim) only if a real access point's latency demands
+it; the price would be a second claim and a window in which a crash leaves
+a sent submission unrecorded, which the duplicate path would then have to
+recover.
+
+**What the Desk sees.** `GET /operator/rails` always lists BOTH rails: a
+breaker row is created lazily on a rail's first gate, so a rail the
+transport never touches (unserved, or nothing submitted yet) is synthesised
+as `closed`, carrying the same `transport` / `environment` and its
+`configured` flag (false when unserved) — the console must be able to say
+"Not configured" before the first submission, not after. `GET /operator/rail-config` reports the two access-point rails
+present only when their URL is non-blank after trimming.
+
 **Outage policy (R96).** A rail outage is survived, not dead-lettered. A
 retriable rail error (`RAIL_TIMEOUT`, `RAIL_UNAVAILABLE`, `RAIL_RATE_LIMITED`,
 unknown) is retried on a capped, jittered exponential backoff (2 s doubling
@@ -176,8 +428,8 @@ Desk case every pass. `GET /operator/rails` reports `retryAt`.
 
 **Resubmission safety (R97).** Everything that talks to an access point sits
 behind the `RailTransport` seam in `modules/rails/adapter.ts` (`submit` and
-`lookup`; the simulator is bound unless `setRailTransport` binds another —
-the accreditation round drives that from configuration). A submission that
+`lookup`; which implementation answers — a bound test double, the env-lit
+HTTP transport or the simulator — is the R95 resolution above). A submission that
 comes back `MBS_DUPLICATE` is an earlier try the rail accepted whose result
 never reached us, so the pipeline asks the rail for the stamp it holds
 (`recoverExistingStamp`) and persists it as `invoice.stamp_recovered`
@@ -187,8 +439,9 @@ on the audit chain). `reconcile()` makes the same lookup before it re-queues
 a stuck `submitted` invoice (and never beside a dead-lettered row, R96). Every `submission_attempts` row now retains the
 canonical request that was sent and the response received, and every
 `stamp_records` row carries `provider` and `environment` (`simulator` /
-`sandbox` today), so sandbox stamps issued before accreditation can never be
-read as live ones after cutover.
+`sandbox` until a rail URL is lit; `http` / `RAIL_ENVIRONMENT` after), so
+sandbox stamps issued before accreditation can never be read as live ones
+after cutover.
 
 **Graceful shutdown (R101, `lib/shutdown.ts`).** On SIGTERM/SIGINT the
 instance flips readiness off first (`/api/readyz` answers 503 with
@@ -962,10 +1215,14 @@ failed` transition, idempotent on replay, pointer-only audit. Subscription
   the source of truth, a lost nudge is never a lost alert.
   `GET /operator/rail-config` rounds out the visibility: which env-lit rails
   (inbound email/WhatsApp, the messaging relay, payment provider +
-  confirmation webhook, the metrics token) are configured on this
-  deployment — presence booleans ONLY, never values, so the Desk's
-  rail-configuration card can say "this rail is dark" without becoming a
-  secrets oracle.
+  confirmation webhook, the two access-point rails `rail_primary` /
+  `rail_secondary` by `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL` (R95), the
+  metrics token) are configured on this deployment — presence booleans
+  ONLY, never values, so the Desk's rail-configuration card can say "this
+  rail is dark" without becoming a secrets oracle. `GET /operator/rails`
+  names the rail transport in use beside each breaker: `transport`
+  (`simulator` / `http`), `environment`, and `configured` — false for a
+  rail the transport does not serve.
 - **Notification read-state & retention**: the feed carries `read` /
   `unreadCount` computed under the same recipient-identity predicate that is
   the inbox's isolation wall; `POST /notifications/mark-read` is an
@@ -1069,6 +1326,11 @@ legacy header still admitted).
   sweep). Hand-rolled in
   `lib/metrics.ts` (a metrics lib would fork drizzle via
   `@opentelemetry/api`).
+- `GET /operator/rails` reports, per rail, the breaker (`state`,
+  `failureCount`, `retryAt`) and the rail transport in use — `transport`
+  (`simulator` until a `RAIL_*_URL` is lit, then `http`), `environment`
+  and `configured` (R95); `GET /operator/rail-config` lists `rail_primary`
+  / `rail_secondary` beside the other env-lit rails, presence only.
 - `/api/internal/sweep` is fail-closed unless its ring (`SWEEP_KEYS` or the
   legacy `SWEEP_TOKEN`) is configured and the caller signs or presents a key
   in the `x-op-token` header; it also has an endpoint rate limit.

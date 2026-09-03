@@ -115,7 +115,9 @@ export async function computeComplianceScorecard(
       ),
       attempt_posture AS (
         SELECT sa.invoice_id,
-          BOOL_OR(sa.status IN ('rejected', 'error')) AS saw_failure
+          -- Business rejections only (R95): a rail timeout or 5xx the platform
+          -- failed over from is the platform's failure, not the client's.
+          BOOL_OR(sa.status = 'rejected') AS saw_failure
         FROM submission_attempts sa
         WHERE sa.invoice_id IN (SELECT id FROM window_invoices)
         GROUP BY 1

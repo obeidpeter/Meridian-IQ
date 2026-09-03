@@ -5,15 +5,19 @@ import { eq } from "drizzle-orm";
 import { getDb, railStatesTable, type Rail } from "@workspace/db";
 import type { CanonicalInvoice } from "../invoice/canonical.ts";
 import {
+  breakerStatus,
   currentRailTransport,
+  railOpenCooldownMs,
+  railTransportSummary,
   recoverExistingStamp,
   setRailTransport,
   submitWithFailover,
   type RailTransport,
   type StampResult,
-  breakerStatus,
-  railOpenCooldownMs,
 } from "./adapter.ts";
+import { RailLookupError } from "./faults.ts";
+import { scriptedRail } from "./transports/scripted.ts";
+import { clearRailEnv } from "../../test-helpers/rail-env.ts";
 
 // The rail adapter's transport seam (R97). Pinned:
 //  - the simulator is the default transport, deterministic (same invoice →
@@ -23,7 +27,13 @@ import {
 //    setRailTransport(null) restores it;
 //  - a business rejection never fails over (one submit, no second rail);
 //  - recoverExistingStamp asks the rail that reported the duplicate FIRST,
-//    then the other, and returns null when neither knows the submission.
+//    then the other, and returns null when neither knows the submission;
+//  - a lookup a rail could not ANSWER (RailLookupError) counts against that
+//    rail's breaker and is re-thrown only when no rail held the stamp (R95).
+//
+// RAIL_* is cleared for the whole file: with nothing bound the adapter
+// resolves from the environment, and a shell exporting RAIL_PRIMARY_URL
+// must not turn setRailTransport(null) into a real HTTP dial.
 
 const party = (tin: string): CanonicalInvoice["supplier"] => ({
   legalName: `Party ${tin}`,
@@ -70,12 +80,16 @@ async function closeBreakers(): Promise<void> {
   }
 }
 
+let restoreRailEnv: () => void = () => {};
+
 before(async () => {
+  restoreRailEnv = clearRailEnv();
   await closeBreakers();
 });
 
 after(async () => {
   setRailTransport(null);
+  restoreRailEnv();
   await closeBreakers();
 });
 
@@ -235,6 +249,234 @@ test("the breaker opens after three transient errors, keeps its outage start acr
     assert.equal(recovered.result.status, "accepted");
     const closed = await breakerStatus("rail_primary");
     assert.deepEqual([closed.state, closed.failureCount, closed.openedAt, closed.retryAt], ["closed", 0, null, null]);
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+// ---- Transport resolution (R95) ----
+
+test("resolution: the environment lights the HTTP transport, a bound transport wins, null restores env resolution", async () => {
+  try {
+    assert.equal(currentRailTransport().name, "simulator");
+    assert.deepEqual(railTransportSummary(), {
+      transport: "simulator",
+      environment: "sandbox",
+      rails: { rail_primary: { configured: true }, rail_secondary: { configured: true } },
+    });
+
+    process.env.RAIL_PRIMARY_URL = "http://127.0.0.1:9/";
+    process.env.RAIL_ENVIRONMENT = "live";
+    const http = currentRailTransport();
+    assert.equal(http.name, "http");
+    assert.equal(http.environment, "live");
+    assert.deepEqual(http.rails, ["rail_primary"]);
+    assert.equal(currentRailTransport(), http, "memoised while the env tuple is unchanged");
+    assert.deepEqual(railTransportSummary(), {
+      transport: "http",
+      environment: "live",
+      rails: { rail_primary: { configured: true }, rail_secondary: { configured: false } },
+    });
+
+    process.env.RAIL_SECONDARY_URL = "http://127.0.0.1:9";
+    const rebuilt = currentRailTransport();
+    assert.notEqual(rebuilt, http, "a changed env tuple rebuilds the transport");
+    assert.deepEqual(rebuilt.rails, ["rail_primary", "rail_secondary"]);
+
+    const fake = scriptedRail({ name: "bound-fake" });
+    const previous = setRailTransport(fake);
+    assert.equal(previous, rebuilt, "setRailTransport hands back what resolution would have used");
+    assert.equal(currentRailTransport().name, "bound-fake");
+    assert.equal(railTransportSummary().transport, "bound-fake");
+
+    setRailTransport(null);
+    assert.equal(currentRailTransport().name, "http", "null restores ENV resolution, not the simulator");
+    delete process.env.RAIL_PRIMARY_URL;
+    delete process.env.RAIL_SECONDARY_URL;
+    assert.equal(currentRailTransport().name, "simulator");
+  } finally {
+    // The file-level clear/restore brackets the whole run; this test is the
+    // one that lights keys, so it puts them out.
+    delete process.env.RAIL_PRIMARY_URL;
+    delete process.env.RAIL_SECONDARY_URL;
+    delete process.env.RAIL_ENVIRONMENT;
+    setRailTransport(null);
+  }
+});
+
+test("a transport that serves one rail: failover never counts the other rail, and one open breaker is a full outage", async () => {
+  await closeBreakers();
+  const fake = scriptedRail({ name: "single-rail", rails: ["rail_primary"] });
+  fake.script(INV.invoiceNumber, { outcome: "unavailable", times: 1 });
+  setRailTransport(fake);
+  try {
+    const key = `${INV.invoiceNumber}:single`;
+    const first = await submitWithFailover(INV, key);
+    assert.equal(first.result.status, "error");
+    assert.equal(first.result.errorCode, "RAIL_UNAVAILABLE");
+    assert.equal(first.tried.length, 1, "rail_secondary is not served, so it was never tried");
+    assert.equal(first.circuitOpen, false);
+    assert.deepEqual(
+      fake.calls.map((c) => c.rail),
+      ["rail_primary"],
+    );
+
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(), retryAt: new Date(Date.now() + 60_000) })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+    const parked = await submitWithFailover(INV, key);
+    assert.equal(parked.circuitOpen, true, "the only served rail refused, so every breaker is open");
+    assert.ok(parked.retryAfter instanceof Date);
+    assert.equal(fake.calls.length, 1, "nothing was sent while parked");
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+test("a lookup honours an open breaker but never moves it: the next SUBMIT is the probe", async () => {
+  await closeBreakers();
+  const fake = scriptedRail({ name: "lookup-probe" });
+  setRailTransport(fake);
+  try {
+    const key = `${INV.invoiceNumber}:lookup-probe`;
+    // rail_primary: open but DUE (retry-at passed); rail_secondary: open and not due.
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(Date.now() - 60_000), retryAt: new Date(Date.now() - 1_000) })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(), retryAt: new Date(Date.now() + 60_000) })
+      .where(eq(railStatesTable.rail, "rail_secondary"));
+
+    assert.equal(await recoverExistingStamp(INV, key), null);
+    assert.deepEqual(
+      fake.calls.map((c) => `${c.op}:${c.rail}`),
+      ["lookup:rail_primary"],
+      "the due rail was asked; the refused one was not",
+    );
+    assert.equal((await breakerStatus("rail_primary")).state, "open", "a null lookup leaves the breaker where it was");
+
+    const probe = await submitWithFailover(INV, key);
+    assert.equal(probe.result.status, "accepted");
+    assert.equal(probe.tried.length, 1, "rail_primary took the probe; rail_secondary stayed refused");
+    assert.equal((await breakerStatus("rail_primary")).state, "closed", "the submit was the probe and it closed the breaker");
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+// ---- Lookup errors, sent vs tried, the shared rejection-code sanitiser (R95) ----
+
+test("a lookup error counts against that rail's breaker and is re-thrown only when no rail held the stamp; a hit anywhere wins; three errors open the breaker", async () => {
+  await closeBreakers();
+  const fake = scriptedRail({ name: "lookup-errors" });
+  setRailTransport(fake);
+  try {
+    const key = `${INV.invoiceNumber}:lookup-errors`;
+    // Lookups run rail_primary then rail_secondary (no preferred rail), and a
+    // lookup fault is consumed by the first GET — rail_primary's. The
+    // secondary's lookup misses (nothing held).
+    fake.script(INV.invoiceNumber, { op: "lookup", outcome: "unavailable", times: 1 });
+    await assert.rejects(
+      recoverExistingStamp(INV, key),
+      (err: unknown) => {
+        assert.ok(err instanceof RailLookupError, "a RailLookupError, not a plain throw");
+        assert.equal(err.code, "RAIL_UNAVAILABLE");
+        assert.equal(err.rail, "rail_primary");
+        return true;
+      },
+    );
+    assert.deepEqual(
+      fake.calls.map((c) => `${c.op}:${c.rail}:${c.outcome}`),
+      ["lookup:rail_primary:unavailable", "lookup:rail_secondary:lookup_miss"],
+      "the miss on rail_secondary did not turn the error into a null",
+    );
+    assert.equal((await breakerStatus("rail_primary")).failureCount, 1, "the unanswered lookup counted");
+    assert.equal((await breakerStatus("rail_secondary")).failureCount, 0, "a miss is an answer, not a failure");
+
+    // The stamp IS held (on the fake, any rail's GET finds it): primary
+    // still cannot answer, secondary hits — a hit anywhere wins.
+    fake.hold(INV.invoiceNumber);
+    fake.script(INV.invoiceNumber, { op: "lookup", outcome: "unavailable", times: 1 });
+    const found = await recoverExistingStamp(INV, key);
+    assert.equal(found?.status, "accepted");
+    assert.equal(found?.rail, "rail_secondary");
+    assert.match(found?.irn ?? "", /^IRN-[0-9A-F]{16}$/);
+    assert.equal((await breakerStatus("rail_primary")).failureCount, 2);
+    assert.deepEqual([(await breakerStatus("rail_secondary")).state, (await breakerStatus("rail_secondary")).failureCount], ["closed", 0]);
+
+    // The third unanswered lookup opens rail_primary's breaker; the hit on
+    // rail_secondary still answers.
+    fake.script(INV.invoiceNumber, { op: "lookup", outcome: "unavailable", times: 1 });
+    assert.equal((await recoverExistingStamp(INV, key))?.rail, "rail_secondary");
+    const primary = await breakerStatus("rail_primary");
+    assert.equal(primary.state, "open", "three lookup errors open the breaker");
+    assert.equal(primary.failureCount, 3);
+    assert.ok(primary.openedAt && primary.retryAt);
+
+    // While open, rail_primary is not even asked.
+    const before = fake.calls.length;
+    assert.equal((await recoverExistingStamp(INV, key))?.rail, "rail_secondary");
+    assert.deepEqual(
+      fake.calls.slice(before).map((c) => `${c.op}:${c.rail}:${c.outcome}`),
+      ["lookup:rail_secondary:lookup_hit"],
+    );
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+test("submitWithFailover reports the rails SENT apart from the rails TRIED: a breaker refusal is tried, never sent", async () => {
+  await closeBreakers();
+  const fake = scriptedRail({ name: "sent-vs-tried" });
+  setRailTransport(fake);
+  try {
+    await getDb()
+      .update(railStatesTable)
+      .set({ state: "open", failureCount: 3, openedAt: new Date(Date.now() - 10_000), retryAt: new Date(Date.now() + 60_000) })
+      .where(eq(railStatesTable.rail, "rail_primary"));
+    const key = `${INV.invoiceNumber}:sent-vs-tried`;
+    const { result, tried, sent, circuitOpen } = await submitWithFailover(INV, key);
+    assert.equal(result.status, "accepted");
+    assert.equal(circuitOpen, false, "one refusal is not a full outage");
+    assert.equal(tried.length, 2, "both rails were considered");
+    assert.deepEqual(tried[0]?.raw, { circuit: "open" }, "the refusal is on the tried list");
+    assert.equal(tried[0]?.rail, "rail_primary");
+    assert.equal(sent.length, 1, "only the rail actually called is on the sent list");
+    assert.equal(sent[0]?.rail, "rail_secondary");
+    assert.equal(sent[0], result, "the accepted result is the one sent");
+    assert.deepEqual(
+      fake.calls.map((c) => c.rail),
+      ["rail_secondary"],
+    );
+  } finally {
+    setRailTransport(null);
+    await closeBreakers();
+  }
+});
+
+test("the scripted fake runs a scripted rejection code through the shared sanitiser: garbage falls back to MBS_SCHEMA_INVALID, a wire-shaped code passes", async () => {
+  await closeBreakers();
+  const fake = scriptedRail({ name: "sanitised" });
+  setRailTransport(fake);
+  try {
+    const key = `${INV.invoiceNumber}:sanitised`;
+    fake.script(INV.invoiceNumber, { outcome: "reject", code: "not a code!", times: 1 });
+    const garbage = await submitWithFailover(INV, key);
+    assert.equal(garbage.result.status, "rejected");
+    assert.equal(garbage.result.errorCode, "MBS_SCHEMA_INVALID", "spaces and punctuation the wire never carries");
+    assert.equal(garbage.result.raw.code, "MBS_SCHEMA_INVALID", "raw carries the sanitised code, not the script's");
+
+    fake.script(INV.invoiceNumber, { outcome: "reject", code: "E-1001", times: 1 });
+    const wire = await submitWithFailover(INV, key);
+    assert.equal(wire.result.status, "rejected");
+    assert.equal(wire.result.errorCode, "E-1001", "an access point's own reference passes through");
   } finally {
     setRailTransport(null);
     await closeBreakers();

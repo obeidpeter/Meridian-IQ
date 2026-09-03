@@ -1,16 +1,17 @@
 import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  numeric,
-  integer,
+  bigserial,
   boolean,
   index,
+  integer,
   jsonb,
+  numeric,
   pgEnum,
+  pgTable,
+  text,
+  timestamp,
   unique,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { invoicesTable, invoiceStatusEnum } from "./invoices.ts";
@@ -44,6 +45,10 @@ export const submissionAttemptsTable = pgTable(
     responsePayload: jsonb("response_payload").$type<Record<string, unknown>>(),
     errorCode: text("error_code"),
     createdAt: createdAt(),
+    // Rows of one try share attempt_no and created_at (they commit together),
+    // so "the latest attempt" needs a monotonic tiebreak (R95): the order the
+    // rails were called, the terminal answer last.
+    seq: bigserial("seq", { mode: "number" }).notNull(),
     // Read by invoice on every detail/status view; append-only, so it only grows.
     // The firm-keyed RLS policy probes invoices per candidate row (EXISTS), which
     // makes an unindexed scan pay twice — same reasoning for the two sibling

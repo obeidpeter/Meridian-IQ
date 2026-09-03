@@ -20,7 +20,9 @@ export interface StatusLightResult {
 
 export interface StatusLightInput {
   invoice: Pick<Invoice, "status" | "dueDate">;
-  attempts: Pick<SubmissionAttempt, "status" | "errorCode" | "createdAt">[];
+  attempts: (Pick<SubmissionAttempt, "status" | "errorCode" | "createdAt"> & {
+    seq?: number;
+  })[];
   confirmations: Pick<Confirmation, "state" | "note" | "createdAt">[];
   stamp: Pick<StampRecord, "irn"> | null;
   today?: Date;
@@ -30,9 +32,14 @@ export interface StatusLightInput {
   awaitingApproval?: boolean;
 }
 
-function latest<T extends { createdAt: Date }>(rows: T[]): T | null {
+// Rows of one try share created_at (R95), so the sequence — the order the
+// rails were called, the terminal answer last — breaks the tie when present.
+function latest<T extends { createdAt: Date; seq?: number }>(rows: T[]): T | null {
   if (rows.length === 0) return null;
-  return rows.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  return rows.reduce((a, b) => {
+    if (a.seq !== undefined && b.seq !== undefined) return b.seq > a.seq ? b : a;
+    return a.createdAt > b.createdAt ? a : b;
+  });
 }
 
 export function computeStatusLight(input: StatusLightInput): StatusLightResult {

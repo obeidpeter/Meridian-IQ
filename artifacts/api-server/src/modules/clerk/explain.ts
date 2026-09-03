@@ -121,7 +121,7 @@ export async function explainInvoiceFailure(
         isNotNull(submissionAttemptsTable.errorCode),
       ),
     )
-    .orderBy(desc(submissionAttemptsTable.createdAt))
+    .orderBy(desc(submissionAttemptsTable.seq))
     .limit(1);
   if (!attempt?.errorCode) {
     throw new DomainError(

@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.87.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.93.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.87.0</title>
+<title>MeridianIQ API reference — v0.93.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.87.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.93.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -157,7 +157,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">13</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">5</span></a><a href="#tag-operator">operator<span class="count">24</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">13</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">7</span></a><a href="#tag-operator">operator<span class="count">24</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -566,9 +566,17 @@ request's writes were rolled back.</li>
 <summary><span class="method m-patch">PATCH</span><code class="path">/api/feature-flags/{key}</code><span class="sum">updateFeatureFlag</span></summary>
 <div class="opbody"><div class="req">Request body: <code>FeatureFlagUpdate</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Updated</span></li></ul></div>
 </details>
+<details class="op" id="listFeatureFlagOverrides">
+<summary><span class="method m-get">GET</span><code class="path">/api/feature-flags/{key}/overrides</code><span class="sum">listFeatureFlagOverrides</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FeatureFlagOverride[]</code> <span class="dim">Overrides</span></li></ul></div>
+</details>
 <details class="op" id="setFeatureFlagOverride">
 <summary><span class="method m-post">POST</span><code class="path">/api/feature-flags/{key}/override</code><span class="sum">setFeatureFlagOverride</span></summary>
-<div class="opbody"><div class="req">Request body: <code>FeatureFlagOverrideInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Set</span></li></ul></div>
+<div class="opbody"><div class="req">Request body: <code>FeatureFlagOverrideInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>FeatureFlagOverride</code> <span class="dim">The override as stored</span></li></ul></div>
+</details>
+<details class="op" id="clearFeatureFlagOverride">
+<summary><span class="method m-delete">DELETE</span><code class="path">/api/feature-flags/{key}/override/{firmId}</code><span class="sum">clearFeatureFlagOverride</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Cleared</span></li></ul></div>
 </details>
 </section>
 <section id="tag-operator">
@@ -602,7 +610,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>HealthAlert[]</code> <span class="dim">Health alerts</span></li></ul></div>
 </details>
 <details class="op" id="getRailConfig">
-<summary><span class="method m-get">GET</span><code class="path">/api/operator/rail-config</code><span class="sum">Which env-lit rails are configured on this deployment (booleans only — never values)</span></summary>
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/rail-config</code><span class="sum">Which env-lit rails are configured on this deployment (booleans and key ids only — never values)</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RailConfigEntry[]</code> <span class="dim">Per-rail configuration state</span></li></ul></div>
 </details>
 <details class="op" id="getGateMetrics">
@@ -1646,7 +1654,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.87.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.93.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>
