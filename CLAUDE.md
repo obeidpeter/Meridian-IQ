@@ -24,6 +24,11 @@ lib/
   api-spec          openapi.yaml — the CONTRACT — + codegen (orval)
   api-zod           GENERATED request/response zod (do not edit)
   api-client-react  GENERATED react-query hooks (do not edit)
+  api-errors        Shared error codes + envelopes (server and apps)
+  format            Money/date/copy formatting shared by server and apps
+  web-ui            Design-system primitives + shell shared by the web apps
+  web-config        The one Vite config (PORT/BASE_PATH contract, CSP)
+  integrations-openai-ai-server   Model-provider client (imported ONLY by modules/clerk/provider.ts)
 scripts/            e2e harness (Playwright) + dev tooling
 ```
 
@@ -73,8 +78,11 @@ Every request runs in a per-request transaction as the non-BYPASSRLS
 principal — firm isolation is enforced by RLS at the data layer. Tables come
 from `drizzle push`; RLS policies/triggers come from the numbered guardrail
 migrations in `lib/db/src/migrations` (a new tenant table needs a policy
-migration; production applies migrations manually, not at boot). Two gotchas
-you must not learn the hard way:
+migration). Every production boot re-applies the guardrail migrations
+idempotently under an advisory lock and holds readiness until they verify
+(D5) — the post-merge script and `ops:release` run them too, so a merge
+never leaves the RLS window open. Two gotchas you must not learn the hard
+way:
 
 - **SEC-03.** Firm-keyed RLS shares a firm across all its `client_user`s, so
   a client route must ALSO call `assertClientPartyScope` / filter by

@@ -9,10 +9,20 @@ answer; dark rails fail closed. Paths in this document are relative to
 
 ## Gateway & guardrails
 
-- Every model call flows through `modules/clerk/gateway.ts`: kill switch
-  (`clerk_ai` feature flag), append-only inference ledger, schema-validated
-  output, fail closed. A disabled Clerk fails with 503 `CLERK_DISABLED`
-  before any model call or case insert.
+- Every model call flows through `modules/clerk/gateway.ts`: kill switch,
+  append-only inference ledger, schema-validated output, fail closed. Clerk
+  has TWO independent flags (`modules/flags/flags.ts`): `clerk_ai_runtime`
+  is the global safety wall the gateway checks (`CLERK_FLAG_KEY`) — the
+  watchdog or an operator can stop every model call with it, and a per-firm
+  override can never bypass it — while `clerk_ai` is the per-firm rollout
+  entitlement that decides which firms may see and use Clerk. A disabled
+  Clerk fails with 503 `CLERK_DISABLED` before any model call or case insert.
+- The provider client (`lib/integrations-openai-ai-server`, imported ONLY by
+  `modules/clerk/provider.ts` — the architecture conformance test pins that)
+  reads `AI_INTEGRATIONS_OPENAI_API_KEY` and `AI_INTEGRATIONS_OPENAI_BASE_URL`;
+  with either unset the client throws at first use and the Clerk assurance
+  card reports the provider as unconfigured. `CLERK_MODEL` names the model,
+  `CLERK_MODEL_TIERS` the optional per-purpose routing (below).
 - The gateway writes the inference ledger on the **RAW pool** so spend
   accounting survives any request rollback; consequence: a `caseId` passed to
   `infer()` must reference an already COMMITTED case row.
@@ -21,9 +31,11 @@ answer; dark rails fail closed. Paths in this document are relative to
   commits in its own short firm-scoped transaction (`modules/clerk/scope.ts`,
   same RLS posture) so a multi-second provider call never pins a pooled
   connection or hits the 30s transaction cap.
-- Client-facing surfaces (`clerk.capture` on all firm roles, `clerk.ask` on
-  firm_admin/staff) are pinned to their firm by route filters plus migration
-  0009's firm-keyed RLS. Review/decide, evals, metrics and party suggestions
+- Client-facing surfaces (`clerk.capture` on all firm roles; `clerk.ask` on
+  the firm roles AND on `client_user`, where a client asker is offered only
+  the client-safe data intents and every lookup is pinned to its own party —
+  see Client access below) are pinned to their firm by route filters plus
+  migration 0009's firm-keyed RLS. Review/decide, evals, metrics and party suggestions
   stay operator-only (`clerk.use`).
 
 ### Route layout
@@ -63,7 +75,12 @@ Every intake path ends at the same place: a `clerk_cases` row awaiting human
 review.
 
 - **Capture** (`modules/clerk/cases/`) — text or vision extraction from an
-  uploaded document (5MB/type caps, duplicate guard).
+  uploaded document (5MB/type caps, duplicate guard). A case's `sourceType`
+  is `image | pdf | text | voice`: a **voice note** is a first-class source
+  (transcribed at intake; the audio itself is never persisted, only the
+  transcript and the recorder-reported length), except that a voice note
+  cannot capture a tax-authority notice — the letter is the authoritative
+  text, so the case refuses it and asks for a photo, scan or the text.
 - **Pre-flight** (`modules/clerk/preflight.ts`) — pure model-free validation
   stored on the case at extraction time (empty list = review fast lane).
 - **Register-history pre-flight** (`modules/clerk/register-preflight.ts`,
@@ -80,7 +97,8 @@ review.
 - **Scanned-PDF intake** (`rasterizePdfScan` in `modules/clerk/cases/documents.ts`) —
   renders a textless PDF's pages (max 4) to images and walks the ordinary
   vision-extraction path. Pages are stored on the case for retry
-  (`source_scan_pages_b64`, purged by the content-retention sweep, stripped
+  (`source_scan_pages_b64`, purged by the content-retention sweep —
+  `CLERK_CONTENT_RETENTION_DAYS`, default 30 — stripped
   from ordinary case responses — the review pane reads them through the
   operator-only source-pages route, see Review & approval); text detection
   relies on `pageJoiner: ""` (pdf-parse's
@@ -113,8 +131,10 @@ review.
   ORDINARY capture path (budget pre-check, 5MB/type caps, duplicate guard
   absorbing provider redelivery) with masked-sender pointer-only audits.
 - **Inbound WhatsApp rail** (`modules/inbound/whatsapp.ts`,
-  `POST /api/inbound/whatsapp`, same posture, `INBOUND_WHATSAPP_TOKEN`
-  fail-closed) — resolves the sender phone through the shared E.164
+  `POST /api/inbound/whatsapp`, same posture, `INBOUND_WHATSAPP_TOKEN` /
+  `INBOUND_WHATSAPP_KEYS` fail-closed; each rail also has its own per-day
+  intake cap, `INBOUND_EMAIL_DAILY_CAP` / `INBOUND_WHATSAPP_DAILY_CAP`,
+  default 100, read per call) — resolves the sender phone through the shared E.164
   normalizer (`src/lib/phone.ts`, Nigerian 0-prefix → +234) against stored
   alert-preference numbers **that the client set themselves**
   (`alert_preferences.contact_set_by_role = 'client_user'`, recorded by the
@@ -213,8 +233,8 @@ of the letter.
   that fallback.
 - **Proposal.** `noticeExtraction` (its own jsonb column; `extraction` stays
   invoice-only): ExtractionField-shaped candidates over the closed
-  NOTICE_FIELDS catalogue (reference, authority, taxType, period, amount,
-  currency, issueDate, responseDueDate) plus a model-classified
+  NOTICE_FIELDS catalogue (referenceNumber, authority, taxType, period,
+  amountDemanded, currency, issueDate, responseDueDate) plus a model-classified
   `noticeType` from the closed list. `noticePreflightChecks` is pure and
   deterministic: missing criticals and impossible dates block; a
   response deadline already in the past is an _advisory_ ("overdue on
@@ -757,7 +777,9 @@ And the **agreement watch** (`modules/clerk/agreement-watch.ts`) closes
 the loop for LIT firms: humans keep deciding the cap overflow, so their
 monthly agreement rate on ≥threshold receipt proposals — the evidence
 engine's exact predicates — stays measurable; a month-over-month collapse
-alerts operators once per (firm, month) through the watch ledger
+(`AGREEMENT_ALERT_DROP_POINTS`, default 0.2 = twenty points, over at least
+`AGREEMENT_ALERT_MIN_DECISIONS`, default 10, decisions both sides) alerts
+operators once per (firm, month) through the watch ledger
 (`clerk.reconcile_agreement.drop`, on the Desk's health-alert list). No
 sweep writes a flag: the alert asks for a human judgement, doctrine
 unchanged.
@@ -970,6 +992,19 @@ unchanged.
   ask.ts produces to its code, so a reworded refusal fails there instead
   of silently landing in `other`.
 
+- **The Clerk dock** (`lib/web-ui/src/clerk-dock.tsx`, wrapped per app in
+  `sme-compliance/src/components/clerk-dock.tsx` and
+  `console/src/components/clerk-dock.tsx`, R93) is the same Ask surface as
+  a floating "Ask Clerk" button on every page except the Clerk pages
+  themselves — rendered only for a principal with `clerk.ask` (SME) or
+  `clerk.use` (console) AND the `clerk_ai` feature lit. The wrapper supplies
+  the app's voice (page-contextual suggestions from the current route, a
+  source line phrased exactly as the full Ask page phrases it, the error
+  taxonomy copy) and submits with Ctrl/Cmd+Enter; the dock view is
+  deliberately partial — facts past its cap, deep links, section titles and
+  proposed actions are dropped with a "more in the workspace" cue
+  (`hasMore`) so it never implies it showed everything.
+
 ## Drafting & phrasing assists (digest posture)
 
 Common contract: facts/grounding are deterministic, the model only phrases or
@@ -1044,7 +1079,9 @@ entries.
   `POST /clerk/narration-suggestions`, `reconciliation.act`, contract
   0.58.0) — the assist's CLASSIFYING sibling, and deliberately NOT digest
   posture: it is a real spend (fail-closed `getClerkGateway` + budget
-  pre-check, NO_CONTEXT + model-rate-limited, capped 20 lines/call). For
+  pre-check, NO_CONTEXT + model-rate-limited — the MODEL rate class is
+  `RATE_LIMIT_MODEL_PER_MIN`, default 60, beside the general class
+  `RATE_LIMIT_GENERAL_PER_MIN`, default 600 — capped 20 lines/call). For
   middle-band lines only (`[PROPOSAL_THRESHOLD, DEFAULT_BULK_ACCEPT_THRESHOLD)`
   — each bound owned by the module that enforces it) the model reads the
   fenced narration against a POSITIONAL candidate list (Candidate 1..3; it
@@ -1180,9 +1217,13 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   the week's unmatched collection-account payments — and lets the model
   phrase them, falling back to deterministic template text. Each fact added
   to the user facts bumps the prompt version so the model path can never
-  lag the template path (currently `digest.v6`, the money-risk round: the
-  s.104 penalty-exposure floor — small band, null when clean — and the
-  missing-recurring-bills count joined the facts). The
+  lag the template path (currently `digest.v11`: after the money-risk
+  round's s.104 penalty-exposure floor — small band, null when clean — and
+  missing-recurring-bills count, the Filing Desk's due-soon and overdue
+  filings, the WHT Desk's deductions still awaiting a buyer credit note
+  (`countWhtChase`, the one WHT chase fact, so digest and ledger cannot
+  disagree) and the count of client onboarding runs still in progress
+  joined the facts). The
   digest's unsubmitted/overdue compliance facts use the explicit
   receivable-orientation predicate, so captured supplier bills never count
   as "invoices to file" (`docs/platform.md` § Payables).
@@ -1577,8 +1618,10 @@ discipline applies.
   wiring; the tier report special-cases the lane — it reports
   `CLERK_EMBEDDING_MODEL` and a fixed "keep", since `CLERK_MODEL_TIERS`
   cannot route embeddings and validity-based tiering does not apply; the
-  USD estimate prices embed tokens at the completion input rate, a
-  documented over-approximation), and a mis-sized response is discarded
+  USD estimate — `CLERK_COST_PER_1M_INPUT_USD` /
+  `CLERK_COST_PER_1M_OUTPUT_USD`, both unset = no estimate, tokens only —
+  prices embed tokens at the completion input rate, a documented
+  over-approximation), and a mis-sized response is discarded
   whole —
   `vector(1536)` is a DDL constant, never negotiated at runtime. Own
   purpose (`embed_memory`), own prompt version (`embed.v1`), own env knob
@@ -1693,8 +1736,9 @@ shared computation as the corresponding chart.
   shared with metrics so banner and alert can never disagree) and raises a
   durable alert — one audit event per degraded month — when a measured
   month's resistance falls ≥10 points below the previous one (≥5 injection
-  fixtures both sides, env-tunable); `metrics.resistanceAlert` drives a red
-  banner on the health page.
+  fixtures both sides; `RESISTANCE_ALERT_DROP`, default 0.1, and
+  `RESISTANCE_ALERT_MIN_FIXTURES`, default 5); `metrics.resistanceAlert`
+  drives a red banner on the health page.
 - **Firm spend anomaly watch** (`modules/clerk/spend-watch.ts`) buckets
   firm-funded ledger tokens into UTC days (the same token expression
   budget.ts charges) and flags a latest day both over an absolute floor
@@ -1707,8 +1751,18 @@ shared computation as the corresponding chart.
   samples) and alerts when the newest measured month's kept-rate falls ≥10
   points below the previous (`QUALITY_ALERT_DROP_POINTS` /
   `QUALITY_ALERT_MIN_FIELDS`, ≥50-field months only).
-- The **Clerk watchdog** sweeps (`modules/clerk/watchdog.ts`) handle stuck
-  pending cases, expired claims and expired case content retention.
+- The **Clerk watchdog** (`modules/clerk/watchdog.ts`, CLK-OBS-03, the
+  severity-zero reflex) is the automatic kill switch: pure rules over the
+  inference ledger — when, inside `CLERK_WATCHDOG_WINDOW_MINUTES` (default
+  60), at least `CLERK_WATCHDOG_MIN_SAMPLE` calls (default 10) have run and
+  the share with outcome `invalid_discarded` or `error` reaches
+  `CLERK_WATCHDOG_TRIP_RATE` (default 0.5), it flips `clerk_ai_runtime` off
+  and appends `clerk.kill_switch.auto_tripped` (bad rate, sample, window)
+  to the audit chain. It never turns Clerk back on; re-enabling is a human
+  act on the flag after reading the ledger. Its sibling sweeps release
+  cases stuck in `pending` past `CLERK_STUCK_PENDING_MINUTES` (default 15),
+  expire stale review claims, and purge case content past
+  `CLERK_CONTENT_RETENTION_DAYS` (default 30).
 
 ## Evals, canaries & curation
 
@@ -1772,7 +1826,8 @@ shared computation as the corresponding chart.
   compares each newest run's grounded/resistance RATES against the
   aggregate of up to five prior runs (rate-based, so corpus growth never
   reads as regression) and raises the resistance-watch style once-only
-  audit alert on a material drop. Scoring is
+  audit alert on a material drop (`PHRASING_ALERT_DROP`, default 0.1, over
+  at least `PHRASING_ALERT_MIN_RUNS`, default 3, prior runs). Scoring is
   DETERMINISTIC: number grounding via the production check itself
   (`numberGroundingViolations`, so the eval measures how often production
   would have fallen back to the template), required canonical numerals and
