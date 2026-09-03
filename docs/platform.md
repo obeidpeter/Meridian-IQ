@@ -62,12 +62,15 @@ every add and removal is an audit event.
   (`identity.write`) issues a single-use 24h link (sha256-only stored,
   migration 0012 keeps the table bypass-only) redeemed at the public
   `/auth/reset-password`; the landing page's "Forgot your password?" routes
-  there.
+  there. The link's origin is `PUBLIC_APP_URL` (must be https in
+  production; the deployed app URL when unset).
 - CSRF: a custom-header guard on cookie-authenticated state-changing
   requests (`middleware/principal.ts`); the session cookie is
   `SameSite=None` for the preview iframe, so the frontends set a CSP
   `frame-ancestors` allowlist (vite preview / e2e serve layer) rather than
-  `X-Frame-Options`.
+  `X-Frame-Options`. The allowlist is the build-time `FRAME_ANCESTORS` env
+  (`lib/web-config`), defaulting to `'self'` plus the Replit preview and
+  app domains.
 - **Self-serve invites (IDN-01).** A firm_admin onboards teammates/clients
   into its own firm without operator provisioning
   (`modules/auth/invitations.ts`, `routes/invitations.ts`). The invite
@@ -649,7 +652,7 @@ directions:
 
 Firm-level dual control over stamping submissions (contract 0.45.0,
 `firm_policies` + `invoice_approvals` — `lib/db/src/schema/governance.ts`,
-firm-keyed RLS via migration 0024; `modules/invoice/approvals.ts`,
+firm-keyed RLS via migration 0026; `modules/invoice/approvals.ts`,
 `routes/firm-policies.ts`).
 
 - **The policy** (`GET`/`PUT /firm/policies`): today one switch,
@@ -721,7 +724,7 @@ firm-keyed RLS via migration 0024; `modules/invoice/approvals.ts`,
 Virtual account references per client whose inbound payments auto-observe
 settlements — the mandatory-source settlement hierarchy's auto-observed
 member (`modules/collections/{service,provider}.ts`,
-`routes/collections.ts`, `collection_accounts` + RLS via migration 0024).
+`routes/collections.ts`, `collection_accounts` + RLS via migration 0026).
 
 - **Unmatched inbound payments** (`modules/collections/unmatched.ts`,
   `GET /collection-accounts/unmatched`, round 17): the webhook's
@@ -1245,11 +1248,13 @@ failed` transition, idempotent on replay, pointer-only audit. Subscription
   the source of truth, a lost nudge is never a lost alert.
   `GET /operator/rail-config` rounds out the visibility: which env-lit rails
   (inbound email/WhatsApp, the messaging relay, payment provider +
-  confirmation webhook, the two access-point rails `rail_primary` /
-  `rail_secondary` by `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL` (R95), the
-  metrics token) are configured on this deployment — presence booleans
-  ONLY, never values, so the Desk's rail-configuration card can say "this
-  rail is dark" without becoming a secrets oracle. `GET /operator/rails`
+  confirmation webhook, the collection webhook, the two access-point rails
+  `rail_primary` / `rail_secondary` by `RAIL_PRIMARY_URL` /
+  `RAIL_SECONDARY_URL` (R95), the metrics token, the sweep token, and
+  whether `TOTP_REQUIRED_ROLES` is set) are configured on this deployment —
+  presence booleans and key ids ONLY, never values, so the Desk's
+  rail-configuration card can say "this rail is dark" without becoming a
+  secrets oracle. `GET /operator/rails`
   names the rail transport in use beside each breaker: `transport`
   (`simulator` / `http`), `environment`, and `configured` — false for a
   rail the transport does not serve.
@@ -1341,9 +1346,15 @@ legacy header still admitted).
 
 ## Observability
 
-- `GET /api/healthz` — liveness (no DB touch) + contract version.
+- `GET /api/healthz` — liveness (no DB touch) + contract version +
+  `buildRevision` (the first of `BUILD_REVISION`, `REPLIT_DEPLOYMENT_ID`,
+  `GITHUB_SHA`, `COMMIT_SHA` that is set; `development` otherwise) — the
+  pair the web apps compare for the stale-build banner.
 - `GET /api/readyz` — readiness (`SELECT 1`); 503 if the DB is unreachable,
   and 503 `shutting_down` while the instance drains (R101).
+- Process knobs: `LOG_LEVEL` (pino level, default `info`; authorization,
+  cookie and set-cookie headers are always redacted) and `PGPOOL_MAX`
+  (connections per instance, default 20, 10 s connect timeout, 30 s idle).
 - `GET /api/metrics` — Prometheus text: request-duration histogram
   (method/route/status, id segments collapsed), process health (event-loop
   lag, RSS, heap, uptime), and sweep liveness — pass-level

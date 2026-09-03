@@ -206,12 +206,17 @@ the firm connects. It carries only the capabilities the firm admin granted it
 
 ## 4. The Compliance App — for SMEs
 
-Sign in as the SME owner or firm staff and you land at `/app/`. The sidebar:
-**Dashboard, Invoices, Bills, VAT, Recurring, Import, Send to Clerk, Ask
-Clerk, Reconciliation, B2C reports, Obligations, Calendar, Alert settings,
-Consent** (the two Clerk entries appear only for accounts with Clerk access). A **notification
-bell** in the header collects every alert the platform has sent you — see
-"Notifications" below.
+Sign in as the SME owner or firm staff and you land at `/app/` on **Today**.
+The sidebar is grouped into Work, Compliance, Clerk AI and Workspace and
+lists: **Today, Month-end, Invoices, Bills, Collections, Recurring, Import,
+VAT, Reconciliation, B2C reports, Obligations, Filings, WHT credits, Send to
+Clerk, Ask Clerk, Calendar, Analytics, Notifications, Activity, Alert
+settings, Consent** — an entry appears only when its feature is switched on
+and your account may use it (the two Clerk entries need Clerk access). A
+**notification bell** in the header collects every alert the platform has
+sent you — see "Notifications" below. Press **?** anywhere for the
+keyboard-shortcut sheet, which also names the shortcut that opens the
+command menu.
 
 ### Dashboard
 
@@ -1046,11 +1051,15 @@ the `clerk_ai` feature flag; the product keeps working without it.
 
 Sign in as the firm admin and you land at `/console/` on the **Portfolio**.
 The sidebar is grouped: **Practice** (Portfolio, Onboarding, Client import,
-Advisory, Invitations, Access review, Integrations, API & webhooks), **Growth &
-revenue** (Plans & billing, Statements, Unearned income, White-label,
-Certification), and **Platform** (the operator/auditor pages, plus Feature
-flags and the Claims register, which firm accounts can read). A
-**notification bell** in the header works exactly as in the SME app.
+Advisory, Filing desk, Collections, Analytics, Invitations, Access review,
+Integrations, API & webhooks, Notifications, Activity), **Growth & revenue**
+(Plans & billing, Statements, Unearned income, White-label, Certification),
+and **Platform** (the operator/auditor pages — Operator queue, Party
+integrity, Error catalogue, Platform ops, Control centre, Audit & evidence —
+plus Feature flags and the Claims register, which firm accounts can read).
+Entries appear only when their feature is switched on and your role may use
+them. A **notification bell** in the header works exactly as in the SME
+app, and **?** opens the same keyboard-shortcut sheet.
 
 ### Portfolio
 
@@ -1617,16 +1626,37 @@ try a candidate system prompt or a candidate model side-by-side against the
 incumbent on the same fixtures, and only promote on evidence. A watchdog
 sweep trips the kill switch automatically if extraction quality collapses.
 
+### Control centre
+
+**Control centre** (Platform group) is the operator's read-only view of the
+platform as a whole, in six workspaces, each capability-gated and built from
+bounded lists that count what they hide rather than loading everything:
+
+- **Activation** — evidence and activation: the release-gate scorecard read
+  live from the data spine (the same figures the roadmap's gates name).
+- **Buyer pilots** — Buyer Rails pilot readiness per anchor buyer.
+- **Cases** — compliance case orchestration: the exception queue ranked by
+  SLA, with the cases that need a hand first.
+- **Reliability** — integration reliability: rails, connectors, webhooks and
+  the pipeline's health side by side.
+- **Evidence vault** — evidence and trust: the audit chain, attestations and
+  exports an auditor will ask for.
+- **Clerk assurance** — Clerk's operational assurance: provider
+  configuration, failure and latency rates, budget posture and the watchdog.
+
+Nothing in the Control centre changes state; every action it suggests links
+to the page that owns it.
+
 ---
 
 ## 8. Buyer Rails — for buyer finance teams
 
 Sign in as a buyer and you land at `/buyer/`. _(Feature-flagged — the
 operator switches Buyer Rails on.)_ A buyer account sees **only invoices
-addressed to its own organisation**. Three pages: **Confirmations,
-Suppliers, Scoreboard** — plus a **notification bell** in the header that
-collects alerts addressed to your organisation, exactly as in the other
-apps.
+addressed to its own organisation**. Four pages: **Confirmations,
+Suppliers, Scoreboard, Notifications** — plus a **notification bell** in the
+header that collects alerts addressed to your organisation, exactly as in
+the other apps.
 
 ### Confirmations
 
@@ -1990,9 +2020,9 @@ pnpm --filter @workspace/api-spec run codegen       # regenerate API clients aft
 
 On boot the server applies schema changes and its guardrail migrations
 (append-only triggers, row-level security, retention) and — **only when demo
-seeding is enabled** (`SEED_DEMO`, on by default outside production, off in
-production) — seeds the demo tenant: flags, demo firm and clients, the demo
-accounts, invoices in every lifecycle state, operator cases, billing tiers,
+seeding is enabled** (`SEED_DEMO=true`; off by default everywhere, and
+ignored in production whatever it is set to) — seeds the demo tenant:
+flags, demo firm and clients, the demo accounts, invoices in every lifecycle state, operator cases, billing tiers,
 CPD content. Seeding is idempotent — restarts never duplicate data.
 
 ### Environment switches that light features
@@ -2016,6 +2046,13 @@ unreachable (404), not broken:
 | `MESSAGES_RETENTION_DAYS`                                       | Message-ledger retention sweep (default 180 days; malformed values disable the sweep).                                                                     |
 | `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN`       | Per-principal rate limits (defaults 600 / 60; `0` disables a class).                                                                                       |
 | `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance.                                                       |
+| `AI_INTEGRATIONS_OPENAI_API_KEY` / `AI_INTEGRATIONS_OPENAI_BASE_URL` | The model provider behind Clerk. Both required for any model call; with either unset the Clerk assurance card reports the provider as unconfigured. |
+| `CLERK_EMBEDDING_MODEL` | The embedding model behind Clerk memories (default `text-embedding-3-small`). |
+| `CLERK_WATCHDOG_WINDOW_MINUTES` / `CLERK_WATCHDOG_MIN_SAMPLE` / `CLERK_WATCHDOG_TRIP_RATE` | The automatic kill switch: inside the window (default 60 min), once at least the sample (default 10) of calls has run, a bad-outcome share at or above the rate (default 0.5) switches `clerk_ai_runtime` off and writes an audit event. Re-enabling is always a human act. |
+| `CLERK_STUCK_PENDING_MINUTES` / `CLERK_CONTENT_RETENTION_DAYS` | Clerk housekeeping: release cases stuck in pending after (default 15 min); purge stored case content after (default 30 days). |
+| `CLERK_COST_PER_1M_INPUT_USD` / `CLERK_COST_PER_1M_OUTPUT_USD` | Price the economics meter uses for its USD estimate; both unset shows tokens only. |
+| `PUBLIC_APP_URL` | Origin of the links the server writes into password-reset messages (https required in production; the deployed app URL when unset). |
+| `LOG_LEVEL` / `PGPOOL_MAX` | Server log level (default `info`) and the database pool size per instance (default 20). |
 | `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Optional metrics secret and required sweep secret (`METRICS_KEYS` / `SWEEP_KEYS` rings, or the single tokens). Signed requests or the `x-op-token` header only — never a URL; the sweep endpoint is unavailable while its ring is empty. |
 | `CLERK_SECRET_KEY` (+ `CLERK_AUTHORIZED_PARTIES`)               | The hosted identity provider (unrelated to the AI assistant). In production the key without authorized parties (or `REPLIT_DOMAINS`) disables it.          |
 | `FRAME_ANCESTORS`                                               | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                       |
@@ -2083,11 +2120,13 @@ if the running server's version differs, every app shows a dismissible
 - **quality-gate** — a production-dependency security audit, a
   codegen-drift check (the committed API clients must match
   `openapi.yaml`), typecheck, lint, the unit suites for the api-server and
-  all five web/mobile packages plus the shared libs, the migration
-  rollback test against a real Postgres, and all **five** production web
-  builds.
+  all six app packages (mobile, SME app, console, buyer portal, landing,
+  penalty calculator) plus the shared libs, the migration rollback test
+  against a real Postgres, the restore drill (pg_dump → pg_restore →
+  assert, see "Backups, restore drill and release" below), and all
+  **five** production web builds.
 - **e2e** — boots the built API server and five built frontends behind a
-  path-router and drives **107 headless user-journey checks** on the
+  path-router and drives **183 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
@@ -2146,6 +2185,32 @@ DATABASE_URL=postgres://... pnpm --filter @workspace/scripts run e2e
   secrets (API keys, webhook secrets, invite/reset links, 2FA recovery
   codes) are shown once and stored only as hashes.
 - Demo/dev header identities are honoured only outside production.
+
+### Backups, restore drill and release
+
+Three scripts in `scripts/src/ops/` are the operator's database toolkit;
+each needs `DATABASE_URL` set explicitly and prints a redacted target first.
+
+```bash
+DATABASE_URL=… pnpm --filter @workspace/scripts run ops:backup            # pg_dump (custom format) → BACKUP_DIR, verified, sha256, pruned to BACKUP_KEEP
+DATABASE_URL=<source> DRILL_DATABASE_URL=<scratch> pnpm --filter @workspace/scripts run ops:restore-drill   # dump → restore into the scratch → assert
+DATABASE_URL=… pnpm --filter @workspace/scripts run ops:release -- --yes  # schema push → guardrail migrations → verify the migration ledger
+```
+
+- **Backup** dumps to `BACKUP_DIR` (default `./backups`), verifies the
+  archive with `pg_restore --list`, writes a `.sha256`, and keeps the newest
+  `BACKUP_KEEP` (default 14). Run it outside the app's failure domain and
+  copy dumps off-box.
+- **Restore drill** proves a backup: it dumps the source, drops and
+  recreates the drill target, restores with `--exit-on-error`, then asserts
+  the migration ledger, key row counts, and that row-level security is still
+  enabled and forced on `invoices`. CI runs it on every merge; run it
+  per release too.
+- **Release** runs the two production database steps as one verified
+  command — `push` (or `push-force` with `RELEASE_PUSH_FORCE=1`) then
+  `migrate` — refuses without `--yes`, optionally takes a pre-flight dump
+  (`RELEASE_BACKUP=1`), and prints the contract version to compare with
+  `/api/healthz` after the Redeploy or workflow restart.
 
 ### Resetting demo data
 
