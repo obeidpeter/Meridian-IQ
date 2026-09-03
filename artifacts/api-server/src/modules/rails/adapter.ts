@@ -42,11 +42,12 @@ export interface StampResult {
 /**
  * The transport seam (R97). Everything that actually talks to an access point
  * lives behind this interface; the pipeline and the recovery paths only ever
- * see StampResults. Today the one implementation is the simulator below; the
- * accreditation round binds real HTTP transports here without touching the
- * callers. `lookup` answers "did this rail already issue a stamp for this
- * submission?" — the operation a duplicate recovery needs and a resubmission
- * must consult before sending again.
+ * see StampResults. Three implementations sit behind it — the simulator
+ * below, the HTTP transport (transports/http.ts) and the scripted test fake
+ * (transports/scripted.ts) — resolved per call by currentRailTransport(); see
+ * "Transport resolution (R95)" below. `lookup` answers "did this rail already
+ * issue a stamp for this submission?" — the operation a duplicate recovery
+ * needs and a resubmission must consult before sending again.
  */
 export interface RailTransport {
   readonly name: string;

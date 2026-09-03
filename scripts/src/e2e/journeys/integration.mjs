@@ -1,9 +1,12 @@
 // The integration-layer journey: API keys, webhook endpoints (HMAC
-// signatures verified end to end) and payment intents.
+// signatures verified end to end), the access-point rail's rejected path
+// (R95: the whole run stamps over HTTP through the conformance fake rail)
+// and payment intents.
 import { createHash, createHmac } from "node:crypto";
 import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
+  apiLogin,
   apiLogout,
   createDraftInvoice,
   pollUntil,
@@ -16,17 +19,27 @@ import {
 // key and prove bearer auth + instant revocation with cookie-free fetches,
 // register a webhook pointing at the harness's local receiver, drive a fresh
 // invoice through validate → submit → stamp and verify the signed
-// pointer-only delivery, then collect the demo firm's platform bill through
-// the payment-intent + confirmation-webhook rail (run.mjs sets
-// PAYMENT_WEBHOOK_TOKEN on the api-server env — read per call server-side —
-// and threads the same value in here as paymentWebhookToken).
+// pointer-only delivery, prove the stamp came over the HTTP transport and
+// drive a SECOND probe into the rail's rejected path (the fake rail is
+// scripted to refuse it, so the platform must fail the invoice with the
+// catalogue code and open a Desk case), then collect the demo firm's
+// platform bill through the payment-intent + confirmation-webhook rail
+// (run.mjs sets PAYMENT_WEBHOOK_TOKEN on the api-server env — read per call
+// server-side — and threads the same value in here as paymentWebhookToken).
+// fakeRailUrl / fakeRailToken are the conformance rail run.mjs booted and
+// pointed RAIL_PRIMARY_URL / RAIL_PRIMARY_TOKEN at; its /__fake control
+// endpoints need no credentials (loopback tooling), so the token is only
+// what the rail's calls log must report the api-server as having presented.
 //
 // Runs AFTER the staff/password journeys: it must not add invoices before the
 // credit-note journey picks its target, and the password journeys need
 // demo.staff's session/password chain undisturbed. Rerun-clean: the key is
 // revoked, the webhook disabled (so a kept database never keeps POSTing at a
-// dead port), the probe invoice number is fresh per run, and the payment leg
-// accepts the 409 an already-collected month answers on reruns.
+// dead port), both probe invoice numbers are fresh per run, and the payment
+// leg accepts the 409 an already-collected month answers on reruns. The
+// rejected probe and its Desk case stay behind on purpose — like the
+// payables journey's flags they are append-only evidence, and no journey
+// reads the queue by position.
 //
 // Bearer probes ride the harness's PLAIN fetch, not page.request: Node keeps
 // no cookie jar, so the request provably carries ONLY the Authorization
@@ -41,6 +54,8 @@ async function journeyIntegrationLayer(
   hookReceiver,
   paymentWebhookToken,
   sweepToken,
+  fakeRailUrl,
+  fakeRailToken,
 ) {
   // The reset journey leaves an ops session in the browser context (API
   // login); drop it so the portal shows the demo buttons again.
@@ -219,6 +234,160 @@ async function journeyIntegrationLayer(
     history.some((d) => d.status === "delivered") && disabled?.active === false,
     `history rows: ${history.length}`,
   );
+
+  // -- Rail transport (R95): provenance, then the rejected path -------------
+  // The webhook probe above was stamped by the api-server's HTTP transport
+  // talking to the conformance fake rail run.mjs booted (RAIL_PRIMARY_URL),
+  // so its stamp record must carry THAT provenance — provider "http" and the
+  // RAIL_ENVIRONMENT the harness set — rather than the simulator's. A stamp
+  // that still read "simulator" would mean boot-time transport selection
+  // silently fell back, which no unit test can catch.
+  const stampRes = await page.request.get(
+    BASE + `/api/invoices/${invoiceId}/stamp`,
+  );
+  const stamp = stampRes.status() === 200 ? await stampRes.json() : null;
+  check(
+    "the stamped probe carries the HTTP transport's provenance",
+    stamp?.provider === "http" &&
+      stamp?.environment === "sandbox" &&
+      stamp?.rail === "rail_primary",
+    `status ${stampRes.status()}: ${stamp?.provider ?? "?"}/${stamp?.environment ?? "?"} via ${stamp?.rail ?? "?"}`,
+  );
+
+  // Rejected path: script the fake rail to refuse the NEXT submission of
+  // this invoice number with a terminal catalogue code BEFORE the platform
+  // ever sees the invoice (the script is keyed by invoice number, so it
+  // cannot leak onto any other probe), then drive the same
+  // create → validate → submit path and let the sweep drain it. A rejection
+  // is a "dead" pipeline disposition: the invoice goes `failed`, the attempt
+  // row records the code, and the dead-lettered submit opens a Desk case.
+  const rejectedNumber = `E2E-REJ-${Date.now()}`;
+  const scripted = await fetch(`${fakeRailUrl}/__fake/script`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      invoiceNumber: rejectedNumber,
+      outcome: "reject",
+      code: "MBS_INVALID_TIN",
+    }),
+  });
+  if (scripted.status !== 204) {
+    throw new Error(
+      `integration journey: fake rail refused the rejection script (${scripted.status})`,
+    );
+  }
+  const rejected = await createDraftInvoice(page, BASE, {
+    supplierPartyId: pattern.supplierPartyId,
+    buyerPartyId: pattern.buyerPartyId,
+    invoiceNumber: rejectedNumber,
+    issueDate: new Date().toISOString().slice(0, 10),
+    description: "E2E rejection probe",
+    unitPrice: "12000",
+  });
+  const rejectedId = rejected.invoiceId;
+  if (rejectedId) {
+    await page.request.post(BASE + `/api/invoices/${rejectedId}/validate`, {
+      headers: CSRF,
+    });
+    await page.request.post(BASE + `/api/invoices/${rejectedId}/submit`, {
+      headers: CSRF,
+    });
+  }
+  const readRejected = async () => {
+    const r = await page.request.get(BASE + `/api/invoices/${rejectedId}`);
+    return r.status() === 200 ? await r.json() : null;
+  };
+  const failedInTime = Boolean(rejectedId) && (await pollUntil(
+    async () => {
+      await page.request.get(BASE + "/api/internal/sweep", {
+        headers: { "x-op-token": sweepToken },
+      });
+      return (await readRejected())?.invoice?.status === "failed";
+    },
+    { tries: 15, delayMs: 1000, page },
+  ));
+  const attemptsRes = await page.request.get(
+    BASE + `/api/invoices/${rejectedId}/attempts`,
+  );
+  const attempts = attemptsRes.status() === 200 ? await attemptsRes.json() : [];
+  const lastAttempt = attempts.length ? attempts[attempts.length - 1] : null;
+  const lightRes = await page.request.get(
+    BASE + `/api/invoices/${rejectedId}/status-light`,
+  );
+  const light = lightRes.status() === 200 ? await lightRes.json() : null;
+  check(
+    "a rail rejection fails the invoice with its catalogue code",
+    failedInTime &&
+      lastAttempt?.status === "rejected" &&
+      lastAttempt?.errorCode === "MBS_INVALID_TIN" &&
+      lastAttempt?.rail === "rail_primary" &&
+      light?.light === "red" &&
+      String(light?.reasons?.[0] ?? "").includes("MBS_INVALID_TIN"),
+    rejectedId
+      ? `failed in time: ${failedInTime}; attempts: ${attempts.length}; last ${lastAttempt?.status ?? "?"}/${lastAttempt?.errorCode ?? "?"}; light ${light?.light ?? "?"}`
+      : `rejection probe not created (${rejected.status})`,
+  );
+
+  // The rail's own view: exactly one submission for the number (a terminal
+  // rejection is never retried), presented with the bearer run.mjs set as
+  // RAIL_PRIMARY_TOKEN and with the idempotency key on the wire header
+  // matching the body — the two halves of the protocol a real access point
+  // dedupes on.
+  const callsRes = await fetch(`${fakeRailUrl}/__fake/calls`);
+  const calls = callsRes.status === 200 ? await callsRes.json() : [];
+  const railCalls = calls.filter((c) => c.invoiceNumber === rejectedNumber);
+  const railCall = railCalls[0] ?? null;
+  check(
+    "the fake rail saw exactly one authorized submission for it",
+    railCalls.length === 1 &&
+      railCall?.outcome === "reject" &&
+      railCall?.authorized === true &&
+      Boolean(railCall?.idempotencyKey) &&
+      railCall?.idempotencyHeader === railCall?.idempotencyKey,
+    `calls for ${rejectedNumber}: ${railCalls.length} (fake rail token ${fakeRailToken ? "set" : "unset"})`,
+  );
+
+  // Operator view: the dead-lettered submit opened one high-priority Desk
+  // case carrying the code, and platform ops names the live transport and
+  // which rail it serves. Operator endpoints need an ops session; the API
+  // login swaps the browser context's cookie, and the admin session is
+  // restored the same way before the payment leg below.
+  await apiLogin(page, BASE, "ops@meridianiq.example");
+  const casesRes = await page.request.get(
+    BASE + "/api/operator/cases?status=open",
+  );
+  const openCases = casesRes.status() === 200 ? await casesRes.json() : [];
+  const probeCases = openCases.filter((c) => c.invoiceId === rejectedId);
+  check(
+    "the rejection opens one high-priority Desk case",
+    Boolean(rejectedId) &&
+      probeCases.length === 1 &&
+      probeCases[0]?.errorCode === "MBS_INVALID_TIN" &&
+      probeCases[0]?.priority === "high",
+    `open cases for the probe: ${probeCases.length} of ${openCases.length}`,
+  );
+
+  const railsRes = await page.request.get(BASE + "/api/operator/rails");
+  const rails = railsRes.status() === 200 ? await railsRes.json() : [];
+  const primary = rails.find((r) => r.rail === "rail_primary") ?? null;
+  // rail_secondary is only gated (and so only gets a breaker row) after a
+  // failover attempt; with one lit rail it is absent or reads unconfigured.
+  const secondary = rails.find((r) => r.rail === "rail_secondary") ?? null;
+  const configRes = await page.request.get(BASE + "/api/operator/rail-config");
+  const railConfig = configRes.status() === 200 ? await configRes.json() : [];
+  const configured = (key) =>
+    railConfig.find((e) => e.key === key)?.configured ?? null;
+  check(
+    "platform ops reports the HTTP transport and which rail is lit",
+    primary?.transport === "http" &&
+      primary?.environment === "sandbox" &&
+      primary?.configured === true &&
+      (secondary === null || secondary.configured === false) &&
+      configured("rail_primary") === true &&
+      configured("rail_secondary") === false,
+    `rails: ${rails.map((r) => `${r.rail}=${r.transport}/${r.environment}/${r.configured}`).join(", ") || "none"}; config primary ${configured("rail_primary")}, secondary ${configured("rail_secondary")}`,
+  );
+  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
 
   // -- Payments: intent for a closed month, settled by the machine rail -----
   // The statement's default month is the newest closed Lagos month; if its

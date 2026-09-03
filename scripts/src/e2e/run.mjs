@@ -1,4 +1,5 @@
-// E2E harness: boots the BUILT api-server and the BUILT frontends behind a
+// E2E harness: boots the conformance fake rail, then the BUILT api-server
+// (stamping over HTTP through that rail) and the BUILT frontends behind a
 // path-router (mirroring the production origin), then drives the user
 // journeys headless. Requires DATABASE_URL pointing at a scratch database —
 // the server seeds demo data at boot and journeys assume that seed.
@@ -29,6 +30,11 @@ const API_PORT = Number(process.env.E2E_API_PORT ?? 5100);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 8091);
 // Local receiver the integration journey registers a firm webhook against.
 const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 8093);
+// The conformance fake rail (R95): the api-server's rail_primary points at it
+// so the WHOLE run stamps over HTTP through a scriptable access point — the
+// boot-time transport selection is proven end to end, not just in unit tests.
+const RAIL_PORT = Number(process.env.E2E_RAIL_PORT ?? 5199);
+const RAIL_URL = `http://127.0.0.1:${RAIL_PORT}`;
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
 
 // Machine-rail credentials, defined once: set on the api-server env below
@@ -44,6 +50,11 @@ const COLLECTION_WEBHOOK_KEY = {
 };
 const COLLECTION_WEBHOOK_KEYS = `${COLLECTION_WEBHOOK_KEY.id}:${COLLECTION_WEBHOOK_KEY.secret}`;
 const SWEEP_TOKEN = "e2e-sweep-trigger";
+// The bearer the fake rail demands and the api-server presents on every
+// submission (RAIL_PRIMARY_TOKEN): an unauthorized call would surface as
+// RAIL_UNAUTHORIZED retries, so the credential half of the transport is
+// exercised by every stamping in the run.
+const FAKE_RAIL_TOKEN = "e2e-rail-token";
 
 const REQUIRED = [
   "artifacts/api-server/dist/index.mjs",
@@ -80,18 +91,20 @@ function check(name, ok, detail = "") {
   );
 }
 
-async function waitForApi(timeoutMs = 30000) {
+// Poll a health URL until it answers 2xx (both spawned processes print a
+// ready line, but a port that ANSWERS is the only readiness that matters).
+async function waitForOk(url, what, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${API_PORT}/api/healthz`);
+      const res = await fetch(url);
       if (res.ok) return;
     } catch {
       /* not up yet */
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error("api-server did not become healthy in time");
+  throw new Error(`${what} did not become healthy in time`);
 }
 
 // Prefer an explicitly provided browser, then the preinstalled one, then
@@ -104,49 +117,77 @@ function browserExecutable() {
   return undefined;
 }
 
-const api = spawn(
-  "node",
-  ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
+// The fake rail is a dev tool, not part of the api-server's built dist: it
+// runs from source via tsx (a workspace dev dependency, so CI has it after
+// `pnpm install`). It boots FIRST and must answer before the api-server is
+// spawned, so the server's first rail call never races the rail's listen.
+const rail = spawn(
+  path.join(ROOT, "node_modules/.bin/tsx"),
+  ["artifacts/api-server/src/fake-rail-main.ts"],
   {
     cwd: ROOT,
-    env: {
-      ...process.env,
-      PORT: String(API_PORT),
-      NODE_ENV: "development",
-      SEED_DEMO: "true",
-      DEMO_PASSWORD,
-      // The suite signs in as many roles from one loopback address. Preserve
-      // the per-credential throttle assertions while preventing the aggregate
-      // production IP cap from terminating unrelated later journeys.
-      LOGIN_IP_ATTEMPT_MAX: "1000",
-      // Lights the payment-confirmation machine rail (fail-closed: 404 while
-      // unset). The env is read per call server-side; the integration journey
-      // presents this token as x-op-token to settle its payment intent.
-      PAYMENT_WEBHOOK_TOKEN,
-      // Lights the inbound collection webhook (same fail-closed posture: the
-      // rail 404s while its ring is empty). The collections journey SIGNS its
-      // settlement with this key (x-op-key-id / x-op-timestamp /
-      // x-op-signature) and also proves the legacy x-op-token path still
-      // admits the ring's secret.
-      COLLECTION_WEBHOOK_KEYS,
-      // Lights /api/internal/sweep (fail-closed: 404 while unset). The
-      // integration journey polls the sweep to drain the pipeline + webhook
-      // outbox synchronously, presenting this token as x-op-token.
-      SWEEP_TOKEN,
-    },
+    env: { ...process.env, PORT: String(RAIL_PORT), FAKE_RAIL_TOKEN },
     stdio: ["ignore", "pipe", "pipe"],
   },
 );
-let apiLog = "";
-api.stdout.on("data", (d) => (apiLog += d));
-api.stderr.on("data", (d) => (apiLog += d));
+let railLog = "";
+rail.stdout.on("data", (d) => (railLog += d));
+rail.stderr.on("data", (d) => (railLog += d));
 
+let api;
+let apiLog = "";
 let staticServer;
 let hookReceiver;
 let browser;
 let exitCode;
 try {
-  await waitForApi();
+  await waitForOk(`${RAIL_URL}/__fake/healthz`, "fake rail");
+
+  api = spawn(
+    "node",
+    ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
+    {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        PORT: String(API_PORT),
+        NODE_ENV: "development",
+        SEED_DEMO: "true",
+        DEMO_PASSWORD,
+        // The suite signs in as many roles from one loopback address. Preserve
+        // the per-credential throttle assertions while preventing the aggregate
+        // production IP cap from terminating unrelated later journeys.
+        LOGIN_IP_ATTEMPT_MAX: "1000",
+        // Lights the payment-confirmation machine rail (fail-closed: 404 while
+        // unset). The env is read per call server-side; the integration journey
+        // presents this token as x-op-token to settle its payment intent.
+        PAYMENT_WEBHOOK_TOKEN,
+        // Lights the inbound collection webhook (same fail-closed posture: the
+        // rail 404s while its ring is empty). The collections journey SIGNS its
+        // settlement with this key (x-op-key-id / x-op-timestamp /
+        // x-op-signature) and also proves the legacy x-op-token path still
+        // admits the ring's secret.
+        COLLECTION_WEBHOOK_KEYS,
+        // Lights /api/internal/sweep (fail-closed: 404 while unset). The
+        // integration journey polls the sweep to drain the pipeline + webhook
+        // outbox synchronously, presenting this token as x-op-token.
+        SWEEP_TOKEN,
+        // Binds the HTTP rail transport to the fake rail for rail_primary ONLY
+        // (RAIL_SECONDARY_URL deliberately unset): one lit rail, so
+        // /operator/rail-config shows rail_secondary Dark and every stamping
+        // in the run rides rail_primary over HTTP. The environment is stamp
+        // provenance, never inferred from the URL.
+        RAIL_PRIMARY_URL: RAIL_URL,
+        RAIL_PRIMARY_TOKEN: FAKE_RAIL_TOKEN,
+        RAIL_ENVIRONMENT: "sandbox",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  api.stdout.on("data", (d) => (apiLog += d));
+  api.stderr.on("data", (d) => (apiLog += d));
+
+  await waitForOk(`http://127.0.0.1:${API_PORT}/api/healthz`, "api-server");
   staticServer = await startStaticServer({ port: WEB_PORT, apiPort: API_PORT });
   hookReceiver = await startWebhookReceiver({ port: HOOK_PORT });
 
@@ -163,6 +204,8 @@ try {
     paymentWebhookToken: PAYMENT_WEBHOOK_TOKEN,
     collectionWebhookKey: COLLECTION_WEBHOOK_KEY,
     sweepToken: SWEEP_TOKEN,
+    fakeRailUrl: RAIL_URL,
+    fakeRailToken: FAKE_RAIL_TOKEN,
   });
 
   const failed = results.filter((r) => !r.ok);
@@ -175,11 +218,15 @@ try {
   console.error(
     "--- api-server log tail ---\n" + apiLog.split("\n").slice(-30).join("\n"),
   );
+  console.error(
+    "--- fake rail log tail ---\n" + railLog.split("\n").slice(-30).join("\n"),
+  );
   exitCode = 2;
 } finally {
   await browser?.close().catch(() => {});
   hookReceiver?.close();
   staticServer?.close();
-  api.kill("SIGTERM");
+  api?.kill("SIGTERM");
+  rail.kill("SIGTERM");
 }
 process.exit(exitCode);

@@ -14,7 +14,8 @@ import {
   type Rail,
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { setRailTransport, type RailTransport } from "../rails/adapter.ts";
+import { setRailTransport } from "../rails/adapter.ts";
+import { scriptedRail } from "../rails/transports/scripted.ts";
 import {
   backoffMs,
   drain,
@@ -38,16 +39,10 @@ const supplier = randomUUID();
 const buyer = randomUUID();
 const RAILS: Rail[] = ["rail_primary", "rail_secondary"];
 
-const failingRail: RailTransport = {
-  name: "failing-rail",
-  environment: "sandbox",
-  async submit(rail) {
-    return { status: "error", rail, errorCode: "RAIL_TIMEOUT", raw: { timeout: true } };
-  },
-  async lookup() {
-    return null;
-  },
-};
+// Every submit times out: the wildcard script applies to any invoice (R95
+// scripted fake; a "timeout" answers RAIL_TIMEOUT without waiting).
+const failingRail = scriptedRail({ name: "failing-rail" });
+failingRail.script("*", { outcome: "timeout" });
 
 async function seedInvoice(n: number) {
   const id = randomUUID();
@@ -158,18 +153,9 @@ test("backoff is capped and jittered; the disposition needs both the minimum tri
 test("every breaker open: the submission parks — nothing sent, no attempt burned, wake at retry-at", async () => {
   const retryAt = new Date(Date.now() + 60_000);
   await setBreakers("open", retryAt);
-  const calls: string[] = [];
-  setRailTransport({
-    name: "must-not-be-called",
-    environment: "sandbox",
-    async submit(rail) {
-      calls.push(rail);
-      return { status: "error", rail, errorCode: "RAIL_TIMEOUT", raw: {} };
-    },
-    async lookup() {
-      return null;
-    },
-  });
+  const mustNotBeCalled = scriptedRail({ name: "must-not-be-called" });
+  mustNotBeCalled.script("*", { outcome: "timeout" });
+  setRailTransport(mustNotBeCalled);
   const invoiceId = await seedInvoice(1);
   const id = await enqueue(invoiceId);
   try {
@@ -186,7 +172,7 @@ test("every breaker open: the submission parks — nothing sent, no attempt burn
   assert.ok(row.parkedUntil && row.parkedUntil.getTime() <= retryAt.getTime() + 2_500, "jitter is bounded");
   assert.equal(row.nextAttemptAt.getTime(), row.parkedUntil!.getTime());
   assert.match(row.lastError ?? "", /^RAIL_UNAVAILABLE: parked until /);
-  assert.deepEqual(calls, [], "the rail was never called");
+  assert.deepEqual(mustNotBeCalled.calls, [], "the rail was never called");
   const attempts = await getDb().select().from(submissionAttemptsTable).where(eq(submissionAttemptsTable.invoiceId, invoiceId));
   assert.equal(attempts.length, 0, "a park is not a submission attempt");
   const [inv] = await getDb().select({ status: invoicesTable.status }).from(invoicesTable).where(eq(invoicesTable.id, invoiceId));

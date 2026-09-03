@@ -101,6 +101,28 @@ export function railKeyIdsLine(entry: {
   return `Keys: ${ring.join(", ")} — ${plain}`;
 }
 
+// ---- Rail transport (R95) ----------------------------------------------------
+// Every rail row names the transport serving it and the provenance every
+// stamp will carry: "simulator · sandbox" until a RAIL_*_URL is lit, then
+// "http · sandbox" or "http · live". An HTTP transport serves only the rails
+// it has a URL for, so an unserved rail says so in the line AND wears a
+// neutral pill in place of its breaker badge — a closed breaker on a rail the
+// transport never touches must not read as "ready to stamp".
+export const RAIL_NOT_CONFIGURED_LABEL = "Not configured";
+
+export function railTransportLine(rail: {
+  transport: string;
+  environment: string;
+  configured: boolean;
+}): string {
+  const line = `${rail.transport} · ${rail.environment}`;
+  return rail.configured ? line : `${line} · not configured`;
+}
+
+export function railNotConfiguredBadgeClasses(): string {
+  return pillClasses("slate");
+}
+
 function RailsSection() {
   const { data, isLoading, error, refetch } = useListRailStates();
 
@@ -129,8 +151,14 @@ function RailsSection() {
                 className="border rounded-md p-3 flex items-start justify-between gap-3"
                 data-testid={`rail-${rail.rail}`}
               >
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium">{rail.rail}</p>
+                  <p
+                    className="text-xs text-muted-foreground font-mono mt-0.5"
+                    data-testid={`rail-transport-${rail.rail}`}
+                  >
+                    {railTransportLine(rail)}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {rail.failureCount} recent failure
                     {rail.failureCount === 1 ? "" : "s"}
@@ -142,9 +170,18 @@ function RailsSection() {
                       : ""}
                   </p>
                 </div>
-                <span className={`${railBadgeClasses(rail.state)} shrink-0`}>
-                  {railStateLabel(rail.state)}
-                </span>
+                {rail.configured ? (
+                  <span className={`${railBadgeClasses(rail.state)} shrink-0`}>
+                    {railStateLabel(rail.state)}
+                  </span>
+                ) : (
+                  <span
+                    className={`${railNotConfiguredBadgeClasses()} shrink-0`}
+                    data-testid={`rail-not-configured-${rail.rail}`}
+                  >
+                    {RAIL_NOT_CONFIGURED_LABEL}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -215,7 +252,10 @@ function HealthAlertsSection() {
 
 // Which env-lit rails this deployment has configured — presence booleans
 // only, so a fail-closed rail (token unset → dark) is visible at a glance
-// without the endpoint ever returning a value.
+// without the endpoint ever returning a value. The access-point rails
+// (RAIL_PRIMARY_URL / RAIL_SECONDARY_URL, R95) arrive from the same
+// endpoint: "Dark" there means the rail stays on the in-process simulator,
+// and the entry's note says so.
 function RailConfigSection() {
   const { data, isLoading, error, refetch } = useGetRailConfig();
 

@@ -19,7 +19,7 @@
 //   controls.mjs     maker-checker governance, collections + inbound rail,
 //                    Clerk automation (proposals + standing approvals)
 //   lifecycle.mjs    credit note + workflow, the two password journeys
-//   integration.mjs  API keys, webhooks, payments
+//   integration.mjs  API keys, webhooks, the rail's rejected path, payments
 
 import {
   journeyPortalAuth,
@@ -57,7 +57,14 @@ export async function runJourneys(
   page,
   BASE,
   check,
-  { hookReceiver, paymentWebhookToken, collectionWebhookKey, sweepToken } = {},
+  {
+    hookReceiver,
+    paymentWebhookToken,
+    collectionWebhookKey,
+    sweepToken,
+    fakeRailUrl,
+    fakeRailToken,
+  } = {},
 ) {
   await journeyPortalAuth(page, BASE, check);
   await journeyOperatorDesk(page, BASE, check);
@@ -93,5 +100,14 @@ export async function runJourneys(
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);
-  await journeyIntegrationLayer(page, BASE, check, hookReceiver, paymentWebhookToken, sweepToken);
+  await journeyIntegrationLayer(
+    page,
+    BASE,
+    check,
+    hookReceiver,
+    paymentWebhookToken,
+    sweepToken,
+    fakeRailUrl,
+    fakeRailToken,
+  );
 }
