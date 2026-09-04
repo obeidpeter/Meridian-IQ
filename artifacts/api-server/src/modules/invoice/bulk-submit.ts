@@ -20,14 +20,14 @@ import type { FieldError } from "./canonical";
 // sees exactly which invoices need attention.
 //
 // Transaction shape (posture round — the last batch surface to convert):
-// the route runs OUTSIDE the request transaction (app.ts NO_CONTEXT_ROUTES)
+// the route runs OUTSIDE the request transaction (middleware/request-policy.ts NO_CONTEXT_ROUTES)
 // and every stage below commits in its own short runRequestContext
 // transaction bound to the CALLER's posture — the bulk-approve /
 // proposed-actions discipline. Inside one request transaction, the first
 // row's appendAudit held the GLOBAL audit advisory lock until the whole
 // 200-row batch committed: a platform-wide appendAudit convoy plus a real
 // deadlock window against the row-lock→audit-lock order of concurrent
-// single submits (the app.ts NO_CONTEXT comments' documented class). The
+// single submits (the request-policy NO_CONTEXT comments' documented class). The
 // trade is the sibling batches': a submitted row is durable IMMEDIATELY —
 // nothing later in the batch (or a response failure) can undo it, exactly
 // as if the operator had clicked the 200 single submits by hand. The

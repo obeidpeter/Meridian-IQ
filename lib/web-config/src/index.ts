@@ -4,39 +4,59 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+export interface WebAppDefaults {
+  basePath: string;
+  port: number;
+}
+
+export interface WebAppEnvironment {
+  basePath: string;
+  port: number;
+}
+
+function validBasePath(value: string): boolean {
+  return value.startsWith("/") && value.endsWith("/") && !value.includes("?");
+}
+
+/** Resolve deployment overrides without making local builds environment-bound. */
+export function resolveWebAppEnvironment(
+  defaults: WebAppDefaults,
+  env: NodeJS.ProcessEnv = process.env,
+): WebAppEnvironment {
+  const rawPort = env.PORT ?? String(defaults.port);
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error(`Invalid PORT value: "${rawPort}"`);
+  }
+
+  const basePath = env.BASE_PATH ?? defaults.basePath;
+  if (!validBasePath(basePath)) {
+    throw new Error(
+      `Invalid BASE_PATH value: "${basePath}". Expected an absolute path ending in /.`,
+    );
+  }
+
+  return { basePath, port };
+}
+
 /**
  * The one Vite config for the five web apps (landing, console, SME, buyer
  * portal, penalty calculator). Each app's vite.config.ts calls
  * this with its own directory:
  *
- *   export default webAppViteConfig(import.meta.dirname);
+ *   export default webAppViteConfig(import.meta.dirname, {
+ *     basePath: "/console/",
+ *     port: 3001,
+ *   });
  *
- * PORT and BASE_PATH are required (the dev/build contract): the per-app build
- * commands set them, and failing loudly here beats silently serving the wrong
- * base path behind the path-router.
+ * Checked-in defaults make a clean checkout buildable. Replit/deployment
+ * workflows can override either value through PORT and BASE_PATH.
  */
-export async function webAppViteConfig(appDir: string): Promise<UserConfig> {
-  const rawPort = process.env.PORT;
-
-  if (!rawPort) {
-    throw new Error(
-      "PORT environment variable is required but was not provided.",
-    );
-  }
-
-  const port = Number(rawPort);
-
-  if (Number.isNaN(port) || port <= 0) {
-    throw new Error(`Invalid PORT value: "${rawPort}"`);
-  }
-
-  const basePath = process.env.BASE_PATH;
-
-  if (!basePath) {
-    throw new Error(
-      "BASE_PATH environment variable is required but was not provided.",
-    );
-  }
+export async function webAppViteConfig(
+  appDir: string,
+  defaults: WebAppDefaults,
+): Promise<UserConfig> {
+  const { basePath, port } = resolveWebAppEnvironment(defaults);
 
   // Clickjacking defence (SEC-02). The session cookie is SameSite=None so the
   // apps work inside the Replit preview iframe, which re-opens framing; a CSP

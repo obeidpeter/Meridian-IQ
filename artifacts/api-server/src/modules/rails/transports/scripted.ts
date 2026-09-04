@@ -1,6 +1,6 @@
 import type { Rail } from "@workspace/db";
 import type { CanonicalInvoice } from "../../invoice/canonical";
-import type { RailTransport, StampResult } from "../adapter";
+import type { RailTransport, StampResult } from "../contracts";
 import {
   FaultScript,
   RAIL_FAULT_TABLE,

@@ -1,5 +1,4 @@
 import { webAppVitestConfig } from "@workspace/web-config/vitest";
 
-// Standalone so vitest does not auto-load vite.config.ts (which throws when
-// PORT / BASE_PATH are unset) — shared shape in lib/web-config.
+// Standalone so tests do not load the plugin-heavy application Vite config.
 export default webAppVitestConfig(import.meta.dirname);

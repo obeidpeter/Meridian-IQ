@@ -19,6 +19,20 @@ import type {
 // the re-export further down); policyStatusLine below composes it with the
 // Intl-backed formatDateTime.
 import { policyPauseReasonLabel } from "./action-copy";
+import {
+  formatDateTime,
+  humanize,
+  pillClasses,
+  type BadgeTone,
+} from "./primitives";
+
+export {
+  formatDate,
+  formatDateTime,
+  humanize,
+  pillClasses,
+  type BadgeTone,
+} from "./primitives";
 
 // One public contact address across the landing, recovery and calculator
 // surfaces. Its operational verification is tracked by Release Readiness.
@@ -37,20 +51,6 @@ const COMPACT_NAIRA_FORMAT = new Intl.NumberFormat("en-NG", {
   currency: "NGN",
   notation: "compact",
   maximumFractionDigits: 1,
-});
-
-const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
 });
 
 export function formatNaira(value: string | number | null | undefined): string {
@@ -107,22 +107,6 @@ export function formatPct(
   return `${(n * 100).toFixed(digits)}%`;
 }
 
-export function formatDate(value: string | Date | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return DATE_FORMAT.format(d);
-}
-
-export function formatDateTime(
-  value: string | Date | null | undefined,
-): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return DATE_TIME_FORMAT.format(d);
-}
-
 // Statutory deadlines are Lagos-midnight instants (the server's
 // lib/lagos-time); rendering them in the viewer's zone shows the eve of the
 // statutory day from anywhere west of WAT, and a wall-clock-ms countdown
@@ -173,47 +157,9 @@ export function lagosDayDiff(
   return Math.round((toUtcDay(d) - toUtcDay(from)) / 86_400_000);
 }
 
-/** Humanize a raw enum value: "buyer_flag" → "Buyer flag". */
-export function humanize(raw: string | null | undefined): string {
-  const s = (raw ?? "").replace(/[_-]+/g, " ").trim();
-  if (!s) return "Unknown";
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 // ---- Status pills (design language §8) -----------------------------------
 // The single home for tone maps and the pill recipe. Every tone ships both
 // light and dark classes so flipping `.dark` never breaks a badge.
-
-export type BadgeTone =
-  | "emerald"
-  | "teal"
-  | "violet"
-  | "amber"
-  | "blue"
-  | "red"
-  | "slate";
-
-const PILL =
-  "inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border";
-
-const TONE_CLASSES: Record<BadgeTone, string> = {
-  emerald:
-    "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-900",
-  teal: "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-900",
-  violet:
-    "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-900",
-  amber:
-    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
-  blue: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900",
-  red: "bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900",
-  slate:
-    "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800",
-};
-
-/** Full pill class string for a tone: recipe + colors. */
-export function pillClasses(tone: BadgeTone): string {
-  return `${PILL} ${TONE_CLASSES[tone]}`;
-}
 
 /**
  * Borderless summary pill for a card-HEADER count ("3 to review",

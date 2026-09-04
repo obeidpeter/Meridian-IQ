@@ -54,6 +54,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Architecture boundaries
+        run: pnpm run architecture:check
+
+      - name: Tracked secret scan
+        run: pnpm run security:secrets
+
+      - name: Documentation inventory
+        run: pnpm run docs:check
+
       # Supply-chain gate: fail the build on a HIGH/CRITICAL advisory in a
       # production dependency so a new CVE cannot land silently. Scoped to
       # --prod (build/dev tooling is not shipped) and --audit-level=high so
@@ -158,7 +167,7 @@ jobs:
       # plumbing live in workspace libs (the apps re-export them); their
       # suites are the single home for those behaviors.
       - name: Shared lib unit tests
-        run: pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
+        run: pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-config --filter @workspace/web-ui run test
 
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.
@@ -177,23 +186,18 @@ jobs:
 
       - name: Build landing
         run: pnpm --filter @workspace/landing run build
-        env: { BASE_PATH: /, PORT: "3000" }
 
       - name: Build console
         run: pnpm --filter @workspace/console run build
-        env: { BASE_PATH: /console/, PORT: "3000" }
 
       - name: Build SME app
         run: pnpm --filter @workspace/sme-compliance run build
-        env: { BASE_PATH: /app/, PORT: "3000" }
 
       - name: Build buyer portal
         run: pnpm --filter @workspace/buyer-portal run build
-        env: { BASE_PATH: /buyer/, PORT: "3000" }
 
       - name: Build penalty calculator
         run: pnpm --filter @workspace/penalty-calculator run build
-        env: { BASE_PATH: /penalty-calculator/, PORT: "3000" }
 
   # End-to-end user journeys against real builds and a real database — runs
   # the full journey suite; see scripts/src/e2e/journeys/ for the current

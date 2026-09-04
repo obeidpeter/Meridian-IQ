@@ -38,7 +38,7 @@ test("every Invoice Room browser route is public only behind its opaque credenti
 });
 
 test("browser writes leave the ambient transaction but retain CSRF and raw-pool throttles", () => {
-  const noContext = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const noContext = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
   for (const path of PUBLIC_BROWSER_PATHS.filter(
     (path) => !path.endsWith("/pdf") && path !== "/api/public/invoice-room",
   )) {

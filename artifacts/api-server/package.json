@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "pretest": "tsx ./src/test-helpers/seed-release-flags.ts",
-    "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev": "pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test": "tsx --test --test-force-exit --test-concurrency=1 \"src/**/*.test.ts\"",
+    "test:pure": "tsx --test src/middleware/request-policy.test.ts src/modules/clerk/eval-scoring.test.ts src/modules/desk/release-readiness-checks.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "benchmark": "tsx ./src/bench/pipeline-benchmark.ts",
     "fake-rail": "tsx ./src/fake-rail-main.ts",

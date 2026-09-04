@@ -65,7 +65,7 @@ export async function draftCatalogueEntryWithClerk(
 ): Promise<CatalogueEntryDraft> {
   await assertClerkEnabled();
 
-  // The route runs outside the request transaction (app.ts NO_CONTEXT_ROUTES)
+  // The route runs outside the request transaction (middleware/request-policy.ts NO_CONTEXT_ROUTES)
   // like every model-calling Clerk path; reads commit in a short bypass scope
   // (catalogue work is operator-only and spans rails, not tenants).
   const attempts = await inClerkScope(null, () =>

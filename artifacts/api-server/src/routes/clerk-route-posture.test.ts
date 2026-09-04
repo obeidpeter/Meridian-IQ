@@ -14,7 +14,7 @@ import { routeBlock, setBlock, src } from "../test-helpers/source-pins.ts";
 //  - /clerk/draft-invoice must check the firm budget BEFORE the module runs,
 //    or an exhausted firm still pays for a transcription and only then 429s;
 //  - the voice path makes two sequential provider calls, so the route must
-//    run OUTSIDE the per-request transaction (app.ts NO_CONTEXT_ROUTES) or a
+//    run OUTSIDE the per-request transaction (middleware/request-policy.ts NO_CONTEXT_ROUTES) or a
 //    long voice note hits the 30s transaction cap and pins a pooled
 //    connection for its whole duration.
 //
@@ -57,7 +57,7 @@ test("draft-invoice checks the firm budget before any provider spend", () => {
 
 test("draft-invoice runs outside the per-request transaction", () => {
   assert.ok(
-    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+    setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
       '"POST /api/clerk/draft-invoice"',
     ),
     "two sequential provider calls (transcription + inference) must not hold a pooled connection under the 30s request-transaction cap",
@@ -140,7 +140,7 @@ test("bulk approval is operator-gated and runs OUTSIDE the request transaction",
   // own short bypass transaction (bulk-approve.ts), so the route must skip
   // the ambient transaction.
   assert.ok(
-    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+    setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
       '"POST /api/clerk/cases/bulk-approve"',
     ),
     "bulk-approve must run outside the request transaction: per-item commits keep the global audit lock per-item and a decided item durable (bulk-submit semantics)",
@@ -157,7 +157,7 @@ test("BOTH inbound rails run outside the request transaction", () => {
   // Each rail commits a durable outbox row before returning 202. The request
   // must be NO_CONTEXT so queue insertion and later worker processing own
   // independent transactions and cannot inherit a tenant request connection.
-  const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const set = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/inbound/email"'),
     "the inbound email webhook must skip the request transaction",
@@ -174,13 +174,13 @@ test("statement import runs outside the request transaction, in the MODEL class,
   // token-spending route (the CSV branch shares the class — the
   // /clerk/batches precedent), and the route re-establishes write atomicity
   // itself by running ingestStatement inside its own bypass transaction.
-  const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const set = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/statements"'),
     "POST /api/statements must skip the request transaction (bounded model call)",
   );
   const rlSet = setBlock(
-    src("middleware/rate-limit.ts"),
+    src("middleware/request-policy.ts"),
     "MODEL_RATE_LIMITED_ROUTES",
   );
   assert.ok(
@@ -203,7 +203,7 @@ test("case retry runs outside the request transaction via the pattern list", () 
   // NO_CONTEXT_ROUTE_PATTERNS. Retry re-runs a full extraction (up to a
   // 4-page vision call) and must not pin a pooled connection under the 30s
   // request-transaction cap.
-  const appSrc = src("app.ts");
+  const appSrc = src("middleware/request-policy.ts");
   const listStart = appSrc.indexOf("NO_CONTEXT_ROUTE_PATTERNS");
   assert.ok(listStart >= 0, "the parameterized NO_CONTEXT list exists");
   const listEnd = appSrc.indexOf("];", listStart);
@@ -214,7 +214,7 @@ test("case retry runs outside the request transaction via the pattern list", () 
     "POST /api/clerk/cases/:id/retry must be exempted from the request transaction",
   );
   assert.ok(
-    appSrc.includes("NO_CONTEXT_ROUTE_PATTERNS.some"),
+    appSrc.includes("matches(method, path, NO_CONTEXT_ROUTES, NO_CONTEXT_ROUTE_PATTERNS)"),
     "tenantContext must actually consult the pattern list",
   );
 });
@@ -227,7 +227,7 @@ test("case retry runs outside the request transaction via the pattern list", () 
 // chaser MODEL call to run outside any transaction at all.
 test("action execution runs outside the request transaction, model call outside any transaction", () => {
   assert.ok(
-    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+    setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
       '"POST /api/clerk/action-proposals/execute"',
     ),
     "the execute route must be exempted from the request transaction",
@@ -448,7 +448,7 @@ test("bulk submit runs outside the request transaction with per-item caller-post
   // lock for the whole 200-row batch — the convoy/deadlock class the
   // bulk-approve and execute-route blocks above document.
   assert.ok(
-    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+    setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
       '"POST /api/invoices/bulk-submit"',
     ),
     "bulk-submit must be exempted from the request transaction",

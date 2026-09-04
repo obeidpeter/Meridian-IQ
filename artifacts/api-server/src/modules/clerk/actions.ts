@@ -62,7 +62,7 @@ import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
 //    involve no model call and genuinely live nowhere.
 //
 // Transaction shape (round 22): the execute route runs OUTSIDE the request
-// transaction (app.ts NO_CONTEXT_ROUTES) and every stage below commits in
+// transaction (middleware/request-policy.ts NO_CONTEXT_ROUTES) and every stage below commits in
 // its own short runRequestContext transaction bound to the CALLER's firm —
 // the bulk-approve posture. The honest crash window that buys: a crash
 // after per-target commits but before stage Z leaves REAL submits/drafts

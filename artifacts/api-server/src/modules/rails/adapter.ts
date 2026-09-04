@@ -18,6 +18,9 @@ import {
   httpRailConfigFromEnv,
   railTimeoutMs,
 } from "./transports/http";
+import type { RailTransport, StampResult } from "./contracts";
+
+export type { RailTransport, StampResult } from "./contracts";
 
 // One adapter interface over two accredited access-point rails (INT-01, C3).
 // The rails are simulated by default (no real MBS/APP reachable until
@@ -28,49 +31,8 @@ import {
 
 const RAILS: Rail[] = ["rail_primary", "rail_secondary"];
 
-export interface StampResult {
-  status: "accepted" | "rejected" | "error";
-  rail: Rail;
-  irn?: string;
-  csid?: string;
-  qrPayload?: string;
-  signedArtifactRef?: string;
-  errorCode?: string;
-  raw: Record<string, unknown>;
-  // Provenance (R97): which transport answered and in which environment. The
-  // pipeline copies both onto the stamp record so a sandbox stamp can never be
-  // mistaken for a live one after accreditation.
-  provider?: string;
-  environment?: string;
-}
-
-/**
- * The transport seam (R97). Everything that actually talks to an access point
- * lives behind this interface; the pipeline and the recovery paths only ever
- * see StampResults. Three implementations sit behind it — the simulator
- * below, the HTTP transport (transports/http.ts) and the scripted test fake
- * (transports/scripted.ts) — resolved per call by currentRailTransport(); see
- * "Transport resolution (R95)" below. `lookup` answers "did this rail already
- * issue a stamp for this submission?" — the operation a duplicate recovery
- * needs and a resubmission must consult before sending again.
- */
-export interface RailTransport {
-  readonly name: string;
-  readonly environment: string;
-  /**
-   * The rails this transport serves (R95); undefined = every rail. Failover
-   * and recovery iterate only served rails, so a deployment with one access
-   * point lit never counts the other rail as a failure.
-   */
-  readonly rails?: readonly Rail[];
-  submit(rail: Rail, inv: CanonicalInvoice, idempotencyKey: string): Promise<StampResult>;
-  lookup(
-    rail: Rail,
-    inv: CanonicalInvoice,
-    idempotencyKey: string,
-  ): Promise<StampResult | null>;
-}
-
+// Sandbox signing material for deterministic simulator output only. Live
+// transports own deployment credentials outside this module.
 const RAIL_SECRET: Record<Rail, string> = {
   rail_primary: "sandbox-rail-primary-secret",
   rail_secondary: "sandbox-rail-secondary-secret",

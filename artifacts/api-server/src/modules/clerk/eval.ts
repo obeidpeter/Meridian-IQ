@@ -20,7 +20,6 @@ import {
   EXTRACT_PROMPT_VERSION,
   EXTRACT_SYSTEM,
   extractionOutputSchema,
-  type CanonicalField,
   type ExtractionOutput,
 } from "./prompts";
 import {
@@ -40,6 +39,9 @@ import {
 import { loadGrownFixtures } from "./eval-growth";
 import { loadRedTeamFixtures } from "./red-team";
 import { loadVisionFixtures } from "./vision-fixtures";
+import { fieldMatches, valuesMatch } from "./eval-scoring";
+
+export { fieldMatches } from "./eval-scoring";
 
 // Evaluation-run harness (§13.1). An operator presses "run evaluation"; the
 // synthetic corpus goes through the LIVE gateway — same prompt version, same
@@ -51,16 +53,6 @@ import { loadVisionFixtures } from "./vision-fixtures";
 //
 // Scoring is deterministic, pure and separately testable: no model involvement
 // in judging the model.
-
-const NUMERIC_FIELDS: ReadonlySet<CanonicalField> = new Set([
-  "subtotal",
-  "vatTotal",
-  "grandTotal",
-] as CanonicalField[]);
-
-function blank(v: string | null): boolean {
-  return v === null || v.trim() === "";
-}
 
 // The one rule for how a failed gateway call is bucketed in an eval result
 // row — shared by every lane that stores per-fixture outcomes (extraction
@@ -78,30 +70,6 @@ export function failureOutcome(
 // error), and an expected null matched by an invented value is WRONG — a
 // hallucinated field is an error, not a bonus. One comparator for both
 // document lanes; each lane names which of its fields are numeric.
-function valuesMatch(
-  numeric: boolean,
-  expected: string | null,
-  actual: string | null,
-): boolean {
-  if (blank(expected) || blank(actual)) return blank(expected) === blank(actual);
-  if (numeric) {
-    const ne = Number(expected!.replace(/[,\s]/g, ""));
-    const na = Number(actual!.replace(/[,\s]/g, ""));
-    if (Number.isFinite(ne) && Number.isFinite(na)) {
-      return Math.abs(ne - na) < 0.005;
-    }
-  }
-  return expected!.trim().toUpperCase() === actual!.trim().toUpperCase();
-}
-
-export function fieldMatches(
-  field: CanonicalField,
-  expected: string | null,
-  actual: string | null,
-): boolean {
-  return valuesMatch(NUMERIC_FIELDS.has(field), expected, actual);
-}
-
 export function scoreFixture(
   fixture: EvalFixture,
   output: ExtractionOutput,
