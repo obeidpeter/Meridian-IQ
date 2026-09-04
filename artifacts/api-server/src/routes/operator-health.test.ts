@@ -509,7 +509,6 @@ test("GET /operator/dead-letters returns a page, redacts inbound payloads and re
     const base = await listen(appFor(operator, operatorRouter));
     type DeadLetter = {
       id: string;
-      payload: unknown;
       correlationId: string | null;
     };
     let cursor: string | null = null;
@@ -533,7 +532,11 @@ test("GET /operator/dead-letters returns a page, redacts inbound payloads and re
         seenCursors.add(cursor);
       }
     } while (!event && cursor);
-    assert.deepEqual(event?.payload, { redacted: true });
+    assert.ok(event, "the inserted dead letter is reachable through pagination");
+    assert.ok(
+      !("payload" in event),
+      "operator responses omit payloads instead of returning sensitive content",
+    );
     assert.equal(event?.correlationId, correlationId);
     assert.equal(
       (await fetch(`${base}/operator/dead-letters?cursor=bad`)).status,

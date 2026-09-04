@@ -96,7 +96,8 @@ before(async () => {
     basis: "contract",
     channel: "test",
   });
-  // The flag stays globally dark (opt-in); firmId activates via override.
+  // Both flags stay globally dark (opt-in). Activate the reconciliation
+  // prerequisite before bank feeds for this fixture firm only.
   await db
     .insert(featureFlagsTable)
     .values({ key: "bank_feeds", enabled: false, releaseTag: "R2" })
@@ -107,7 +108,10 @@ before(async () => {
     .where(eq(featureFlagsTable.key, "bank_feeds"));
   await db
     .insert(featureFlagOverridesTable)
-    .values({ flagKey: "bank_feeds", firmId, enabled: true })
+    .values([
+      { flagKey: "reconciliation", firmId, enabled: true },
+      { flagKey: "bank_feeds", firmId, enabled: true },
+    ])
     .onConflictDoNothing();
 });
 
