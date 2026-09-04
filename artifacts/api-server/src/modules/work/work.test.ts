@@ -203,7 +203,14 @@ test("visible text is required and comments remain append-only", async () => {
       .update(workItemCommentsTable)
       .set({ body: "Mutation must be rejected" })
       .where(eq(workItemCommentsTable.id, commentId)),
-    /append_only_violation/,
+    (err: unknown) => {
+      const cause = (err as { cause?: { message?: string } }).cause;
+      assert.match(
+        cause?.message ?? (err instanceof Error ? err.message : String(err)),
+        /append_only_violation/,
+      );
+      return true;
+    },
   );
 });
 
