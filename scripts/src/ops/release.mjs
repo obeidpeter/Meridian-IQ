@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { psql, run, dbNameFromUrl, hostPortFromUrl } from "./common.mjs";
 import { loadManifest, verifyLocalArtifact, ROOT } from "./build-manifest.mjs";
+import { recoveryMode, loadMaintenancePlan } from "./recovery-plan.mjs";
 import {
   compareSecurityCatalog,
   readSecurityCatalog,
@@ -31,15 +32,16 @@ export function releaseOptions(args, env) {
     env.RELEASE_MANIFEST && env.RELEASE_MANIFEST_SHA256,
     "a trusted CI manifest and checksum are required",
   );
-  assert.match(
-    env.RELEASE_ROLLBACK_REVISION ?? "",
-    /^[a-f0-9]{40}$/,
-    "document and set RELEASE_ROLLBACK_REVISION to the compatible rollback build's full SHA",
+  const mode = recoveryMode(env);
+  assert.ok(
+    !(offline && mode === "maintenance-forward"),
+    "maintenance-forward never enables schema push; apply separately reviewed versioned migrations",
   );
   return { offline };
 }
 
 export function assertRecoveryEvidence(rows, now = Date.now()) {
+  assert.ok(Array.isArray(rows), "recovery evidence must be an array");
   for (const [key, maxAge] of [
     ["backup", 24 * 3600_000],
     ["restore_drill", 30 * 86400_000],
@@ -54,13 +56,64 @@ export function assertRecoveryEvidence(rows, now = Date.now()) {
         age <= maxAge,
       `missing, failed, or stale ${key} evidence`,
     );
-    if (key === "backup")
-      assert.match(
-        row.metadata?.sha256 ?? "",
-        /^[a-f0-9]{64}$/,
-        "backup checksum missing",
-      );
+    assert.equal(
+      row.metadata?.evidenceVersion,
+      2,
+      `${key} evidence format is unverified`,
+    );
   }
+  const backup = rows.find((row) => row.key === "backup");
+  const drill = rows.find((row) => row.key === "restore_drill");
+  for (const key of ["sha256", "snapshotSha256", "manifestSha256"]) {
+    assert.match(
+      backup.metadata[key] ?? "",
+      /^[a-f0-9]{64}$/,
+      `backup ${key} missing`,
+    );
+  }
+  assert.equal(
+    drill.metadata.backupSha256,
+    backup.metadata.sha256,
+    "restore drill did not verify the current retained backup",
+  );
+  assert.equal(
+    drill.metadata.snapshotSha256,
+    backup.metadata.snapshotSha256,
+    "restore snapshot baseline mismatch",
+  );
+  assert.equal(
+    drill.metadata.backupManifestSha256,
+    backup.metadata.manifestSha256,
+    "restore backup manifest mismatch",
+  );
+  assert.equal(
+    drill.metadata.securityCatalogVerified,
+    true,
+    "restored security catalog was not verified",
+  );
+  assert.equal(
+    drill.metadata.allTableCountsVerified,
+    true,
+    "restored table counts were not verified",
+  );
+  const createdAt = Date.parse(backup.metadata.createdAt);
+  const backedUpAt = Date.parse(backup.last_succeeded_at);
+  const restoredAt = Date.parse(drill.last_succeeded_at);
+  assert.ok(
+    Number.isFinite(createdAt) &&
+      createdAt <= backedUpAt &&
+      now - createdAt <= 24 * 3600_000,
+    "backup snapshot is stale or newer than its completion evidence",
+  );
+  assert.equal(
+    Date.parse(drill.metadata.backupCreatedAt),
+    createdAt,
+    "restore backup timestamp mismatch",
+  );
+  assert.ok(
+    restoredAt >= backedUpAt,
+    "restore drill predates the retained backup",
+  );
 }
 
 export function release(
@@ -85,8 +138,26 @@ export function release(
     ),
   );
   assertRecoveryEvidence(evidence);
+  const mode = recoveryMode(env);
+  if (mode === "maintenance-forward") {
+    const backup = evidence.find((row) => row.key === "backup");
+    const plan = loadMaintenancePlan(env, {
+      revision: manifest.source.revision,
+      backupSha256: backup.metadata.sha256,
+    });
+    assert.equal(
+      Date.parse(plan.backup.completedAt),
+      Date.parse(backup.last_succeeded_at),
+      "maintenance plan backup completion differs from verified evidence",
+    );
+    assert.ok(
+      Date.parse(backup.metadata.createdAt) >=
+        Date.parse(plan.drain.confirmedAt),
+      "maintenance backup snapshot predates the confirmed writer drain",
+    );
+  }
   console.log(
-    `release: target ${hostPortFromUrl(env.DATABASE_URL)}/${dbNameFromUrl(env.DATABASE_URL)}; rollback ${env.RELEASE_ROLLBACK_REVISION}`,
+    `release: target ${hostPortFromUrl(env.DATABASE_URL)}/${dbNameFromUrl(env.DATABASE_URL)}; recovery ${mode}${mode === "rollback" ? ` ${env.RELEASE_ROLLBACK_REVISION}` : "; writers remain stopped until verified forward recovery"}`,
   );
   if (offline) {
     // Explicitly not a migration converter or an online release path.

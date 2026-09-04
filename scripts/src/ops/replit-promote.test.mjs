@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import {
   copyFileSync,
   mkdirSync,
@@ -131,6 +132,10 @@ function fixture(t) {
     "security-catalog",
     "common",
     "mobile-artifact",
+    "recovery-plan",
+    "activation-permit",
+    "postdeploy",
+    "maintenance-server",
   ]) {
     const file = `scripts/src/ops/${name}.mjs`;
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
@@ -200,6 +205,10 @@ function fixture(t) {
     NODE_ENV: "production",
     DATABASE_URL: "postgres://localhost/disposable",
     RELEASE_ROLLBACK_REVISION: "a".repeat(40),
+    RELEASE_BASE_URL: "https://fixture.invalid",
+    REPL_ID: "11111111-1111-4111-8111-111111111111",
+    RELEASE_RECOVERY_PLAN_SHA256: "c".repeat(64),
+    RELEASE_BACKUP_SHA256: "b".repeat(64),
   };
   const stamp = (value = manifest) => {
     const bytes = JSON.stringify(value);
@@ -218,18 +227,141 @@ function fixture(t) {
         timeout: 15_000,
       },
     );
-  return { root, write, git, manifest, env, stamp, cli };
+  const authorize = (offset = 0) => {
+    const at = (minutes) =>
+      new Date(Date.now() + offset + minutes * 60_000).toISOString();
+    const stopped = (name) => ({
+      state: "stopped",
+      targets: [`fixture/${name}`],
+      evidence: "Synthetic stopped-writer observation",
+    });
+    const plan = {
+      format: 1,
+      mode: "maintenance-forward",
+      revision: manifest.source.revision,
+      approved: true,
+      approvedBy: "synthetic-approver",
+      approvedAt: at(-10),
+      window: { start: at(-30), end: at(60) },
+      drain: {
+        confirmedBy: "synthetic-operator",
+        confirmedAt: at(-20),
+        api: stopped("api"),
+        workers: stopped("workers"),
+        schedules: stopped("schedules"),
+        otherWriters: {
+          state: "absent",
+          targets: [],
+          evidence: "Synthetic inventory",
+        },
+      },
+      backup: {
+        sha256: "b".repeat(64),
+        preChange: true,
+        completedAt: at(-15),
+        evidence: "Synthetic archive",
+      },
+      forwardFix: {
+        approved: true,
+        owner: "synthetic-owner",
+        procedure: "Review an offline forward fix",
+        writersRemainStopped: true,
+        automaticResume: false,
+        resumeCriteria: {
+          artifactIdentity: "Exact artifact",
+          migrationIntegrity: "Retained migrations",
+          securityCatalog: "Catalog parity",
+          applicationChecks: "Recovery checks",
+          operatorSignoff: "Explicit approval",
+        },
+      },
+    };
+    const record = (name, variable, value) => {
+      const bytes = JSON.stringify(value);
+      const file = `release/${name}.json`;
+      write(file, bytes);
+      env[variable] = path.join(root, file);
+      env[`${variable}_SHA256`] = digest(bytes);
+    };
+    record("recovery-plan", "RELEASE_RECOVERY_PLAN", plan);
+    env.RELEASE_RECOVERY_MODE = "maintenance-forward";
+    env.RELEASE_TRAFFIC_DRAINED = "1";
+    env.RELEASE_RUNTIME_STATE = "RUN";
+    const held = {
+      format: 1,
+      kind: "held-verification",
+      revision: manifest.source.revision,
+      manifestSha256: env.RELEASE_MANIFEST_SHA256,
+      target: { origin: env.RELEASE_BASE_URL, replId: env.REPL_ID },
+      recoveryPlanSha256: env.RELEASE_RECOVERY_PLAN_SHA256,
+      backupSha256: env.RELEASE_BACKUP_SHA256,
+      verifiedAt: at(-5),
+      apiReadinessVerified: false,
+      checks: {
+        maintenanceHealth: true,
+        businessRejected: true,
+        readinessRejected: true,
+        immutableAssets: true,
+        securityCatalog: true,
+        ciProvenance: true,
+      },
+    };
+    record("held-evidence", "RELEASE_HELD_EVIDENCE", held);
+    env.RELEASE_ACTIVATION_ID = "22222222-2222-4222-8222-222222222222";
+    const permit = {
+      format: 1,
+      mode: "maintenance-forward",
+      activationId: env.RELEASE_ACTIVATION_ID,
+      revision: manifest.source.revision,
+      manifestSha256: env.RELEASE_MANIFEST_SHA256,
+      target: held.target,
+      recoveryPlanSha256: env.RELEASE_RECOVERY_PLAN_SHA256,
+      backupSha256: env.RELEASE_BACKUP_SHA256,
+      heldEvidenceSha256: env.RELEASE_HELD_EVIDENCE_SHA256,
+      approved: true,
+      approvedBy: "synthetic-approver",
+      approvedAt: at(-1),
+      expiresAt: at(10),
+      authorizeStartupWrites: true,
+      externalIngressAndSchedulesRemainHeld: true,
+      requirePostRunReadiness: true,
+    };
+    record("activation-permit", "RELEASE_ACTIVATION_PERMIT", permit);
+    return { plan, held, permit, record };
+  };
+  return { root, write, git, manifest, env, stamp, cli, authorize };
 }
 
-function recovery() {
-  return JSON.stringify(
-    ["backup", "restore_drill"].map((key) => ({
-      key,
-      last_succeeded_at: new Date(Date.now() - 1000).toISOString(),
+function recovery(completedAt = new Date(Date.now() - 1000).toISOString()) {
+  const createdAt = new Date(Date.parse(completedAt) - 60_000).toISOString();
+  return JSON.stringify([
+    {
+      key: "backup",
+      last_succeeded_at: completedAt,
       last_error: null,
-      metadata: { sha256: "b".repeat(64) },
-    })),
-  );
+      metadata: {
+        evidenceVersion: 2,
+        sha256: "b".repeat(64),
+        snapshotSha256: "c".repeat(64),
+        manifestSha256: "d".repeat(64),
+        createdAt,
+      },
+    },
+    {
+      key: "restore_drill",
+      last_succeeded_at: new Date().toISOString(),
+      last_error: null,
+      metadata: {
+        evidenceVersion: 2,
+        backupSha256: "b".repeat(64),
+        snapshotSha256: "c".repeat(64),
+        backupManifestSha256: "d".repeat(64),
+        backupCreatedAt: createdAt,
+        securityCatalogVerified: true,
+        allTableCountsVerified: true,
+      },
+    },
+  ]);
 }
 
 test("all seven native builds promote the identical staged bytes; API retains read-only release checks", (t) => {
@@ -394,7 +526,10 @@ test("missing sibling build and symlinked dist roots refuse", (t) => {
     directory,
     process.platform === "win32" ? "junction" : "dir",
   );
-  assert.throws(() => assetInventory(f.root), /artifact directory must be real/);
+  assert.throws(
+    () => assetInventory(f.root),
+    /artifact directory must be real/,
+  );
   // Git reports Linux directory symlinks as untracked files; Windows junctions
   // reach the inventory guard instead. Both must refuse before promotion.
   assert.throws(
@@ -405,6 +540,7 @@ test("missing sibling build and symlinked dist roots refuse", (t) => {
 
 test("API startup needs no Git and sets exact CI revision before importing unchanged dist", (t) => {
   const f = fixture(t);
+  f.authorize();
   rmSync(path.join(f.root, ".git"), { recursive: true });
   const build = f.cli("build", "api-server");
   assert.notEqual(build.status, 0);
@@ -444,7 +580,7 @@ test("runtime fails closed before executing API on missing checksum, missing man
 test("native API promotion cannot bypass missing recovery, drift or rollback configuration", (t) => {
   const f = fixture(t);
   const dependencies = {
-    query: recovery,
+    query: () => recovery(),
     catalog: () => structuredClone(catalog),
     execute: () => assert.fail("native Publish is read-only"),
   };
@@ -635,7 +771,7 @@ test("Replit empty metadata commits preserve the CI deployed revision; strict re
     /source or schema differs/,
   );
   const dependencies = {
-    query: recovery,
+    query: () => recovery(),
     catalog: () => structuredClone(catalog),
     execute: () =>
       assert.fail("metadata promotion must not execute migrations"),
@@ -645,6 +781,7 @@ test("Replit empty metadata commits preserve the CI deployed revision; strict re
       promoteReplit(app, f.env, f.root, dependencies),
       f.manifest,
     );
+  f.authorize();
   const started = f.cli("start", "api-server");
   assert.equal(started.status, 0, started.stderr);
   assert.deepEqual(JSON.parse(started.stdout.trim().split("\n").at(-1)), {
@@ -660,4 +797,295 @@ test("Replit empty metadata commits preserve the CI deployed revision; strict re
     () => promoteReplit("landing", f.env, f.root),
     /source or schema differs/,
   );
+});
+
+test("default HOLD serves health only without Git, DB clients, API evaluation or a resume route", async (t) => {
+  const f = fixture(t);
+  f.authorize(-7 * 86400_000);
+  const reservation = createServer();
+  await new Promise((resolve) => reservation.listen(0, "127.0.0.1", resolve));
+  const port = reservation.address().port;
+  await new Promise((resolve) => reservation.close(resolve));
+  rmSync(path.join(f.root, ".git"), { recursive: true });
+  const child = spawn(
+    process.execPath,
+    ["scripts/src/ops/replit-promote.mjs", "start", "api-server"],
+    {
+      cwd: f.root,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        ...f.env,
+        PORT: String(port),
+        PATH: "",
+        DATABASE_URL: "invalid-no-db-client",
+        RELEASE_RUNTIME_STATE: undefined,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
+  const closed = new Promise((resolve) => child.once("close", resolve));
+  try {
+    const base = `http://127.0.0.1:${port}`;
+    let health;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        health = await fetch(`${base}/api/healthz`);
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    assert.ok(health, output);
+    assert.equal(health.status, 200);
+    const body = await health.json();
+    assert.equal(body.status, "maintenance");
+    assert.equal(body.apiImported, false);
+    assert.equal(body.mode, "hold");
+    assert.equal(body.buildRevision, f.manifest.source.revision);
+    assert.equal(body.manifestSha256, f.env.RELEASE_MANIFEST_SHA256);
+    assert.deepEqual(body.target, {
+      origin: f.env.RELEASE_BASE_URL,
+      replId: f.env.REPL_ID,
+    });
+    assert.match(health.headers.get("cache-control"), /no-store/);
+    for (const route of [
+      "/api/readyz",
+      "/api/invoices",
+      "/api/auth/login",
+      "/resume",
+      "/activate",
+      "/api/healthz?resume=1",
+      "/",
+      "/index.html",
+    ]) {
+      for (const method of [
+        "GET",
+        "POST",
+        "PATCH",
+        "PUT",
+        "DELETE",
+        "OPTIONS",
+        "HEAD",
+      ]) {
+        const response = await fetch(`${base}${route}`, { method });
+        assert.equal(response.status, 503, `${method} ${route}`);
+        if (method === "HEAD") assert.equal(await response.text(), "");
+        else assert.deepEqual(await response.json(), body);
+      }
+    }
+    assert.equal(
+      (await fetch(`${base}/api/healthz`, { method: "POST" })).status,
+      503,
+    );
+    assert.equal(
+      (await fetch(`${base}/api/healthz`, { method: "HEAD" })).status,
+      200,
+    );
+    assert.doesNotMatch(output, /"executed":true/);
+    assert.deepEqual(assetInventory(f.root), f.manifest.assets);
+  } finally {
+    if (child.exitCode === null) child.kill();
+    await closed;
+  }
+});
+
+test("held Publish then repeated active RUN Publish is one logical activation and never changes assets", (t) => {
+  const f = fixture(t);
+  const { plan } = f.authorize();
+  let queries = 0;
+  let catalogs = 0;
+  const deps = {
+    query: () => {
+      queries++;
+      return recovery(plan.backup.completedAt);
+    },
+    catalog: () => {
+      catalogs++;
+      return catalog;
+    },
+    execute: () =>
+      assert.fail(
+        "no migrations, build or writer startup in Publish verification",
+      ),
+  };
+  f.env.RELEASE_RUNTIME_STATE = "HOLD";
+  promoteReplit("api-server", f.env, f.root, deps);
+  f.env.RELEASE_RUNTIME_STATE = "RUN";
+  const originalPermit = readFileSync(f.env.RELEASE_ACTIVATION_PERMIT);
+  for (let repeat = 0; repeat < 2; repeat++)
+    promoteReplit("api-server", f.env, f.root, deps);
+  assert.equal(queries, 3);
+  assert.equal(catalogs, 3);
+  assert.deepEqual(
+    readFileSync(f.env.RELEASE_ACTIVATION_PERMIT),
+    originalPermit,
+  );
+  assert.deepEqual(assetInventory(f.root), f.manifest.assets);
+});
+
+test("expired permits refuse new Publish but bound cold starts remain admitted after all approval TTLs", (t) => {
+  const f = fixture(t);
+  f.authorize(-7 * 86400_000);
+  assert.throws(
+    () =>
+      promoteReplit("api-server", f.env, f.root, {
+        query: () => assert.fail("expired promotion stops before DB preflight"),
+      }),
+    /expired for promotion/,
+  );
+  rmSync(path.join(f.root, ".git"), { recursive: true });
+  rmSync(f.env.RELEASE_RECOVERY_PLAN);
+  rmSync(f.env.RELEASE_HELD_EVIDENCE);
+  f.env.PATH = "";
+  f.env.DATABASE_URL = "invalid-no-db-client";
+  const started = f.cli("start", "api-server");
+  assert.equal(started.status, 0, started.stderr);
+  assert.equal(
+    JSON.parse(started.stdout.trim().split("\n").at(-1)).executed,
+    true,
+  );
+  assert.deepEqual(assetInventory(f.root), f.manifest.assets);
+});
+
+test("runtime scope, control-plane admission and invalid actions fail before API import", (t) => {
+  const f = fixture(t);
+  f.authorize();
+  const original = { ...f.env };
+  for (const changes of [
+    { RELEASE_RUNTIME_STATE: "run" },
+    { RELEASE_RUNTIME_STATE: "" },
+    { RELEASE_RUNTIME_STATE: "RESUME" },
+    { RELEASE_RECOVERY_MODE: "rollback" },
+    { RELEASE_RECOVERY_MODE: undefined },
+    { RELEASE_TRAFFIC_DRAINED: "0" },
+    { RELEASE_ACTIVATION_PERMIT_SHA256: undefined },
+    { RELEASE_ACTIVATION_PERMIT_SHA256: "0".repeat(64) },
+    { RELEASE_ACTIVATION_ID: "33333333-3333-4333-8333-333333333333" },
+    { RELEASE_BASE_URL: "https://elsewhere.invalid" },
+    { REPL_ID: "different-target" },
+    { RELEASE_RECOVERY_PLAN_SHA256: "0".repeat(64) },
+    { RELEASE_BACKUP_SHA256: "0".repeat(64) },
+    { RELEASE_HELD_EVIDENCE_SHA256: "0".repeat(64) },
+  ]) {
+    Object.assign(f.env, original, changes);
+    const result = f.cli("start", "api-server");
+    assert.notEqual(result.status, 0, JSON.stringify(changes));
+    assert.match(result.stderr, /REFUSED/);
+    assert.doesNotMatch(result.stdout, /"executed":true/);
+  }
+  Object.assign(f.env, original);
+  for (const args of [
+    ["resume", "api-server"],
+    ["activate", "api-server"],
+    ["start", "landing"],
+    ["start", "api-server", "RUN"],
+    ["build", "api-server", "--skip-checks"],
+    ["start", "../api-server"],
+    [],
+  ]) {
+    const result = f.cli(...args);
+    assert.notEqual(result.status, 0, args.join(" "));
+    assert.doesNotMatch(result.stdout, /"executed":true/);
+  }
+});
+
+test("activation binds actual backup heartbeat, plan, verified held evidence and approval ordering", (t) => {
+  const f = fixture(t);
+  const initial = f.authorize();
+  const deps = {
+    query: () => recovery(initial.plan.backup.completedAt),
+    catalog: () => catalog,
+  };
+  const { permit, record } = initial;
+  const backupWrong = { ...permit, backupSha256: "0".repeat(64) };
+  f.env.RELEASE_BACKUP_SHA256 = backupWrong.backupSha256;
+  record("activation-permit", "RELEASE_ACTIVATION_PERMIT", backupWrong);
+  assert.throws(
+    () => promoteReplit("api-server", f.env, f.root, deps),
+    /pre-change backup checksum mismatch/,
+  );
+  f.env.RELEASE_BACKUP_SHA256 = "b".repeat(64);
+  record("activation-permit", "RELEASE_ACTIVATION_PERMIT", permit);
+  assert.throws(
+    () =>
+      promoteReplit("api-server", f.env, f.root, {
+        ...deps,
+        query: () => recovery(),
+      }),
+    /backup completion differs/,
+  );
+  for (const mutate of [
+    (held) => {
+      held.apiReadinessVerified = true;
+    },
+    (held) => {
+      held.checks.securityCatalog = false;
+    },
+    (held) => {
+      held.checks.extra = true;
+    },
+    (held) => {
+      held.verifiedAt = new Date(
+        Date.parse(permit.approvedAt) + 1000,
+      ).toISOString();
+    },
+    (held) => {
+      held.verifiedAt = new Date(
+        Date.parse(initial.plan.approvedAt) - 1000,
+      ).toISOString();
+    },
+    (held) => {
+      held.target.origin = "https://elsewhere.invalid";
+    },
+  ]) {
+    const held = structuredClone(initial.held);
+    mutate(held);
+    record("held-evidence", "RELEASE_HELD_EVIDENCE", held);
+    record("activation-permit", "RELEASE_ACTIVATION_PERMIT", {
+      ...permit,
+      heldEvidenceSha256: f.env.RELEASE_HELD_EVIDENCE_SHA256,
+    });
+    assert.throws(() => promoteReplit("api-server", f.env, f.root, deps));
+  }
+  record("held-evidence", "RELEASE_HELD_EVIDENCE", initial.held);
+  record("activation-permit", "RELEASE_ACTIVATION_PERMIT", permit);
+  f.write("release/held-evidence.json", "{}");
+  assert.throws(
+    () => promoteReplit("api-server", f.env, f.root, deps),
+    /held evidence checksum mismatch/,
+  );
+});
+
+test("CI production origin and available Repl ID bindings cannot drift", async (t) => {
+  const f = fixture(t);
+  const { manifest } = f;
+  const mobile = {
+    ...manifest.mobile,
+    replId: "44444444-4444-4444-8444-444444444444",
+  };
+  const changed = { ...manifest, mobile };
+  f.stamp(changed);
+  assert.throws(
+    () => promoteReplit("api-server", f.env, f.root),
+    /REPL_ID differs/,
+  );
+  f.stamp();
+  for (const origin of [
+    "https://wrong.invalid",
+    "https://fixture.invalid/app",
+    "https://user:pass@fixture.invalid",
+    "https://fixture.invalid?x=1",
+  ]) {
+    await assert.rejects(
+      startReplitApi({ ...f.env, RELEASE_BASE_URL: origin }, f.root),
+    );
+  }
 });

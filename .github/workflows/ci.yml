@@ -186,15 +186,34 @@ jobs:
       - name: Migration-only upgrade matches the release catalog
         run: node node_modules/tsx/dist/cli.mjs --test scripts/src/ops/migration-upgrade.integration.mjs
 
-      # Data durability: an untested backup is a hope, not a backup. Dump the
-      # fully-migrated CI database, restore it into a scratch DB on the same
-      # service (the drill drops/creates it via the service superuser), and
-      # assert the migration ledger, sentinel row counts and the RLS posture
-      # survive the round-trip. Fails loud on any assertion.
-      - name: Restore drill (pg_dump → pg_restore → assert)
+      # The producer exports one snapshot for pg_dump, catalog and all row counts.
+      # Keep backup data outside the checkout and trust the producer step output,
+      # never a checksum read from an independently supplied sidecar.
+      - name: Verify backup snapshot consistency and retained restore
+        run: node --test scripts/src/ops/backup-restore.integration.mjs
+
+      # Provision only this known login on the disposable CI service, never via restore.
+      - name: Provision isolated backup runtime role
+        run: >-
+          node --input-type=module -e
+          'import { psql } from "./scripts/src/ops/common.mjs";
+          psql(process.env.DATABASE_URL, "CREATE ROLE meridian_backup_runtime LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; GRANT meridian_app TO meridian_backup_runtime WITH SET TRUE");'
+
+      - name: Retain snapshot-consistent backup
+        id: retained-backup
+        run: pnpm --filter @workspace/scripts run ops:backup
+        env:
+          BACKUP_DIR: ${{ runner.temp }}/meridian-backups
+          BACKUP_RUNTIME_ROLE: meridian_backup_runtime
+
+      - name: Restore retained backup and verify full semantic catalog
         run: pnpm --filter @workspace/scripts run ops:restore-drill
         env:
-          DRILL_DATABASE_URL: postgresql://meridian:meridian@127.0.0.1:5432/meridian_drill
+          BACKUP_MANIFEST: ${{ steps.retained-backup.outputs.manifest }}
+          BACKUP_MANIFEST_SHA256: ${{ steps.retained-backup.outputs.manifest_sha256 }}
+          DRILL_DATABASE_DISPOSABLE: '1'
+          DRILL_CONFIRM_TARGET: meridian_drill_${{ github.run_id }}_${{ github.run_attempt }}
+          DRILL_DATABASE_URL: postgresql://meridian:meridian@127.0.0.1:5432/meridian_drill_${{ github.run_id }}_${{ github.run_attempt }}
 
       - name: Build landing
         run: pnpm --filter @workspace/landing run build

@@ -8,10 +8,18 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 
+// Two full schema/security catalogs exceed Node's default 1 MiB pipe limit.
+export const OPS_OUTPUT_LIMIT = 16 * 1024 * 1024;
+
 // Run a child process synchronously, capturing output. Never throws on a
 // non-zero exit (callers decide); throws only when the binary cannot start.
 export function run(cmd, args, opts = {}) {
-  const res = spawnSync(cmd, args, { encoding: "utf8", ...opts });
+  const res = spawnSync(cmd, args, {
+    encoding: "utf8",
+    maxBuffer: OPS_OUTPUT_LIMIT,
+    windowsHide: true,
+    ...opts,
+  });
   if (res.error) {
     throw new Error(`${cmd} could not be started: ${res.error.message}`);
   }
@@ -21,10 +29,88 @@ export function run(cmd, args, opts = {}) {
 // Single-statement query helper over the psql binary. -X skips psqlrc,
 // -A -t gives bare machine-readable tuples, ON_ERROR_STOP makes SQL errors
 // fatal. Throws (with stderr) on failure.
-export function psql(url, sql) {
-  const res = run("psql", [url, "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", sql]);
+export function postgresConnection(raw, environment = process.env) {
+  let url;
+  try {
+    url = new URL(raw);
+    if (!["postgres:", "postgresql:"].includes(url.protocol)) throw new Error();
+  } catch {
+    throw new Error("invalid PostgreSQL connection URL");
+  }
+  for (const key of url.searchParams.keys())
+    if (/password|passfile|service/i.test(key))
+      throw new Error(
+        "password/service connection query parameters are not permitted",
+      );
+  const encoded = url.password;
+  let password;
+  try {
+    password = encoded ? decodeURIComponent(encoded) : environment.PGPASSWORD;
+  } catch {
+    throw new Error("invalid PostgreSQL password encoding");
+  }
+  url.password = "";
+  const env = { ...environment };
+  if (password !== undefined) env.PGPASSWORD = password;
+  else delete env.PGPASSWORD;
+  const secrets = [
+    ...new Set(
+      [raw, encoded, password].filter(
+        (value) => typeof value === "string" && value.length,
+      ),
+    ),
+  ];
+  return {
+    url: url.toString(),
+    env,
+    redact: (message) =>
+      secrets.reduce(
+        (text, secret) => text.replaceAll(secret, "[redacted]"),
+        String(message),
+      ),
+  };
+}
+
+export function redactedPostgresError(error, ...connections) {
+  const redact = (value) =>
+    connections.reduce(
+      (text, connection) => connection.redact(text),
+      String(value),
+    );
+  // Preserve useful cause/stack context without retaining a credential-bearing
+  // original Error object anywhere in the exception chain.
+  const cause = new Error(redact(error.stack ?? error.message));
+  return new Error(redact(error.message), { cause });
+}
+
+export function psql(url, sql, execute = run) {
+  const connection = postgresConnection(url);
+  let res;
+  try {
+    res = execute(
+      "psql",
+      [
+        connection.url,
+        "-X",
+        "-A",
+        "-t",
+        "-w",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        sql,
+      ],
+      { env: connection.env },
+    );
+  } catch (error) {
+    throw redactedPostgresError(error, connection);
+  }
   if (res.status !== 0) {
-    throw new Error(`psql failed: ${(res.stderr || "").trim() || `exit ${res.status}`}`);
+    throw new Error(
+      connection.redact(
+        `psql failed: ${(res.stderr || "").trim() || `exit ${res.status}`}`,
+      ),
+    );
   }
   return res.stdout.trim();
 }
@@ -70,7 +156,10 @@ export function hostPortFromUrl(raw) {
 // UTC timestamp that is filesystem-safe and lexically sortable:
 // 2026-07-30T12:34:56.789Z -> 20260730T123456Z
 export function utcStamp(date = new Date()) {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  return date
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
 }
 
 export function fail(prefix, msg, code = 1) {

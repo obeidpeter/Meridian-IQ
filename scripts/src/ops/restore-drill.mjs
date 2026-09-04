@@ -1,237 +1,212 @@
-// MeridianIQ restore drill: an untested backup is a hope, not a backup —
-// this drill IS the test. Run it per-release (CI runs it on every merge):
-// pg_dump the source -> sha256 round-trip -> drop/recreate the drill target
-// -> pg_restore -> assert the migration ledger, sentinel row counts and the
-// RLS posture all survived. The measured wall-clock it prints is your
-// restore-time (RTO) shape at the current data volume.
-//
-// Env:
-//   DATABASE_URL        (required) the SOURCE to dump (e.g. meridian_ci).
-//                       Use a role that can bypass RLS (superuser/BYPASSRLS)
-//                       or pg_dump fails closed on FORCE ROW LEVEL SECURITY
-//                       tables and the row-count assertions see zero rows.
-//   DRILL_DATABASE_URL  (required) the TARGET. THIS DATABASE IS DROPPED AND
-//                       RECREATED — point it at a scratch name, never prod.
-//   DRILL_ADMIN_URL     (optional) maintenance connection for DROP/CREATE
-//                       DATABASE; defaults to DRILL_DATABASE_URL with the
-//                       database swapped for `postgres`.
-//
-// Usage: pnpm --filter @workspace/scripts run ops:restore-drill
-// Exit:  0 only when every assertion PASSes; 1 on any FAIL or step error.
-import { mkdtempSync, rmSync } from "node:fs";
+// Restore a specific retained archive. Never create a new dump or overwrite a database.
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { copyFileSync, lstatSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  dbNameFromUrl,
-  fail,
-  hostPortFromUrl,
-  migrationLedgerSummary,
+  postgresConnection,
+  redactedPostgresError,
   psql,
-  redactUrl,
   run,
   sha256File,
 } from "./common.mjs";
+import {
+  AVAILABLE_EXTENSIONS_SQL,
+  INSTALLED_EXTENSIONS_SQL,
+  assertExtensionAvailability,
+  compareExtensions,
+  compareRolePrerequisites,
+  rolePrerequisitesSql,
+} from "./backup-prerequisites.mjs";
+import {
+  DATABASE_SNAPSHOT_SQL,
+  compareDatabaseCreation,
+  compareDatabaseSnapshot,
+  createDatabaseSql,
+  restoreDatabaseSql,
+} from "./backup-database.mjs";
+import {
+  compareSecurityCatalog,
+  readSecurityCatalog,
+} from "./security-catalog.mjs";
+import {
+  drillTarget,
+  loadBackupManifest,
+  recordRecoveryHeartbeat,
+} from "./recovery-evidence.mjs";
 
-const P = "restore-drill";
+const literal = (value) => `'${value.replaceAll("'", "''")}'`;
+const identifier = (value) => `"${value.replaceAll('"', '""')}"`;
 
-const sourceUrl = process.env.DATABASE_URL;
-const targetUrl = process.env.DRILL_DATABASE_URL;
-if (!sourceUrl) fail(P, "DATABASE_URL (the source) is not set.", 2);
-if (!targetUrl) {
-  fail(
-    P,
-    "DRILL_DATABASE_URL (the scratch target) is not set. It will be DROPPED and recreated — point it at a scratch database.",
-    2,
+export async function restoreDrill(env = process.env, dependencies = {}) {
+  const { manifest, archive } = loadBackupManifest(
+    env.BACKUP_MANIFEST,
+    env.BACKUP_MANIFEST_SHA256,
   );
-}
-
-const targetDb = dbNameFromUrl(targetUrl);
-if (!/^[a-z_][a-z0-9_]*$/i.test(targetDb)) {
-  fail(
-    P,
-    `refusing drill target database name ${JSON.stringify(targetDb)} — expected a plain identifier.`,
-    2,
+  const { database, targetUrl, adminUrl } = drillTarget(env, manifest);
+  const connection = postgresConnection(targetUrl);
+  const sourceConnection = postgresConnection(env.DATABASE_URL);
+  const adminConnection = postgresConnection(adminUrl);
+  const query = dependencies.query ?? psql;
+  const execute = dependencies.run ?? run;
+  const catalog = dependencies.catalog ?? readSecurityCatalog;
+  const log = dependencies.log ?? console.log;
+  const started = Date.now();
+  const stat = lstatSync(archive);
+  assert.ok(
+    stat.isFile() && !stat.isSymbolicLink(),
+    "backup archive must be a regular file",
   );
-}
-// Never let the "drill" drop its own source.
-if (
-  targetDb === dbNameFromUrl(sourceUrl) &&
-  hostPortFromUrl(targetUrl) === hostPortFromUrl(sourceUrl)
-) {
-  fail(
-    P,
-    "DRILL_DATABASE_URL points at the SOURCE database — refusing to drop it.",
-    2,
+  assert.equal(
+    stat.size,
+    manifest.archive.bytes,
+    "backup archive size differs",
   );
-}
-
-// Maintenance connection: you cannot drop a database you are connected to.
-const adminUrl =
-  process.env.DRILL_ADMIN_URL ||
-  (() => {
-    const u = new URL(targetUrl);
-    u.pathname = "/postgres";
-    return u.toString();
-  })();
-
-console.log(`${P}: source ${redactUrl(sourceUrl)}`);
-console.log(
-  `${P}: target ${redactUrl(targetUrl)} (will be dropped + recreated)`,
-);
-
-const t0 = Date.now();
-const tmp = mkdtempSync(path.join(os.tmpdir(), "meridian-drill-"));
-const dumpFile = path.join(tmp, "drill.dump");
-
-let failures = 0;
-function check(name, ok, detail = "") {
-  console.log(
-    `${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`,
+  const temporary = mkdtempSync(
+    path.join(os.tmpdir(), "meridian-verified-restore-"),
   );
-  if (!ok) failures += 1;
-}
-
-try {
-  // 1. Dump the source (custom format).
-  const dump = run("pg_dump", [
-    "--format=custom",
-    "--file",
-    dumpFile,
-    "--dbname",
-    sourceUrl,
-  ]);
-  if (dump.status !== 0)
-    fail(P, `pg_dump of source failed: ${(dump.stderr || "").trim()}`);
-  const dumpSecs = ((Date.now() - t0) / 1000).toFixed(1);
-
-  // 2. Integrity: the archive must list, and its checksum must round-trip
-  //    (hash it, re-read it, hash again — catches torn writes/short reads
-  //    before we bet a restore on it).
-  const list = run("pg_restore", ["--list", dumpFile]);
-  check(
-    "dump archive lists (pg_restore --list)",
-    list.status === 0,
-    (list.stderr || "").trim(),
-  );
-  const h1 = await sha256File(dumpFile);
-  const h2 = await sha256File(dumpFile);
-  check(
-    "sha256 round-trip stable",
-    h1 === h2,
-    h1 === h2 ? h1.slice(0, 16) : `${h1} != ${h2}`,
-  );
-  if (failures)
-    throw new Error("dump integrity failed — not attempting a restore from it");
-
-  // 3. Drop + recreate the target via the maintenance connection.
-  psql(adminUrl, `DROP DATABASE IF EXISTS "${targetDb}" WITH (FORCE)`);
-  psql(adminUrl, `CREATE DATABASE "${targetDb}"`);
-
-  // 4. Restore. --exit-on-error: a restore that limps past errors is not a
-  //    proven restore path.
-  const tRestore = Date.now();
-  const restore = run("pg_restore", [
-    "--exit-on-error",
-    "--dbname",
-    targetUrl,
-    dumpFile,
-  ]);
-  check(
-    "pg_restore completed without error",
-    restore.status === 0,
-    (restore.stderr || "").trim().split("\n").pop() || "",
-  );
-  if (restore.status !== 0)
-    throw new Error("restore failed — skipping content assertions");
-  const restoreSecs = ((Date.now() - tRestore) / 1000).toFixed(1);
-
-  // 5. Content assertions, source vs restored target.
-  const srcMig = migrationLedgerSummary(sourceUrl);
-  const tgtMig = migrationLedgerSummary(targetUrl);
-  check(
-    "_schema_migrations count|max(version) match",
-    srcMig === tgtMig,
-    `source ${srcMig}, target ${tgtMig}`,
-  );
-
-  for (const table of ["invoices", "audit_events", "clerk_action_decisions"]) {
-    const q = `SELECT count(*) FROM ${table}`;
-    const src = psql(sourceUrl, q);
-    const tgt = psql(targetUrl, q);
-    check(
-      `${table} row count matches`,
-      src === tgt,
-      `source ${src}, target ${tgt}`,
+  const verifiedCopy = path.join(temporary, "verified.dump");
+  try {
+    // A private verified copy prevents a later path replacement changing the restored bytes.
+    copyFileSync(archive, verifiedCopy);
+    assert.equal(
+      await sha256File(verifiedCopy),
+      manifest.archive.sha256,
+      "backup archive checksum mismatch",
     );
+    assert.equal(
+      execute("pg_restore", ["--list", verifiedCopy]).status,
+      0,
+      "backup archive is not readable",
+    );
+    assert.equal(
+      query(env.DATABASE_URL, "SELECT current_database()"),
+      manifest.source.database,
+      "source database differs from backup",
+    );
+    const roleSql = rolePrerequisitesSql(
+      manifest.runtimeLogin.name,
+      manifest.roleRoots,
+    );
+    const verifyRoles = () =>
+      compareRolePrerequisites(manifest, JSON.parse(query(adminUrl, roleSql)));
+    verifyRoles();
+    assertExtensionAvailability(
+      manifest.extensions,
+      JSON.parse(query(adminUrl, AVAILABLE_EXTENSIONS_SQL)),
+    );
+    // No DROP, --clean, or IF NOT EXISTS: an occupied target is always refused.
+    query(adminUrl, createDatabaseSql(manifest.databaseProperties, database));
+    const marker = `meridian-restore-drill:${randomUUID()}`;
+    query(
+      adminUrl,
+      `COMMENT ON DATABASE ${identifier(database)} IS ${literal(marker)}`,
+    );
+    const actual = JSON.parse(
+      query(
+        targetUrl,
+        "SELECT json_build_object('database',current_database(),'marker',shobj_description(oid,'pg_database')) FROM pg_database WHERE datname=current_database()",
+      ),
+    );
+    assert.deepEqual(
+      actual,
+      { database, marker },
+      "target connection did not reach the newly created drill database",
+    );
+    compareDatabaseCreation(
+      manifest.databaseProperties,
+      JSON.parse(query(targetUrl, DATABASE_SNAPSHOT_SQL)),
+      database,
+    );
+    const restored = execute(
+      "pg_restore",
+      [
+        "--exit-on-error",
+        "--no-password",
+        "--dbname",
+        connection.url,
+        verifiedCopy,
+      ],
+      { timeout: 14 * 60_000, env: connection.env },
+    );
+    assert.equal(restored.status, 0, "retained archive restore failed");
+    query(adminUrl, restoreDatabaseSql(manifest.databaseProperties, database));
+    compareDatabaseSnapshot(
+      manifest.databaseProperties,
+      JSON.parse(query(targetUrl, DATABASE_SNAPSHOT_SQL)),
+      database,
+    );
+    compareExtensions(
+      manifest.extensions,
+      JSON.parse(query(targetUrl, INSTALLED_EXTENSIONS_SQL)),
+    );
+    verifyRoles();
+    // Impersonation checks actual SET ROLE permissions without exporting passwords.
+    // The isolated target connection must be its admin or the intended login.
+    const probe = query(
+      targetUrl,
+      `BEGIN READ ONLY;
+      SET LOCAL SESSION AUTHORIZATION ${identifier(manifest.runtimeLogin.name)};
+      SET LOCAL ROLE meridian_app;
+      SELECT json_build_object('sessionUser',session_user,'currentUser',current_user);
+      ROLLBACK;`,
+    );
+    assert.deepEqual(
+      JSON.parse(probe.split("\n").find((line) => line.startsWith("{"))),
+      { sessionUser: manifest.runtimeLogin.name, currentUser: "meridian_app" },
+      "intended runtime login could not assume meridian_app",
+    );
+    // The source may now be on a newer migration. Only the backup-time baseline is valid here.
+    compareSecurityCatalog(manifest.catalog, catalog(targetUrl));
+    for (const [table, rows] of Object.entries(manifest.rowCounts)) {
+      assert.equal(
+        query(
+          targetUrl,
+          `SELECT count(*)::text FROM public.${identifier(table)}`,
+        ),
+        rows,
+        `restored count differs: ${table}`,
+      );
+    }
+    const metadata = {
+      evidenceVersion: 2,
+      backupSha256: manifest.archive.sha256,
+      snapshotSha256: manifest.snapshotSha256,
+      backupManifestSha256: env.BACKUP_MANIFEST_SHA256,
+      backupCreatedAt: manifest.createdAt,
+      targetDatabase: database,
+      durationSeconds: (Date.now() - started) / 1000,
+      securityCatalogVerified: true,
+      allTableCountsVerified: true,
+    };
+    recordRecoveryHeartbeat(env.DATABASE_URL, "restore_drill", metadata, query);
+    log(
+      `restore-drill: retained archive, backup-time catalog and all table counts verified in ${database}`,
+    );
+    log(
+      "restore-drill: database retained for inspection; this tool never drops databases",
+    );
+    return metadata;
+  } catch (error) {
+    throw redactedPostgresError(
+      error,
+      sourceConnection,
+      adminConnection,
+      connection,
+    );
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
   }
-
-  // 6. RLS posture: pg_restore carries ENABLE/FORCE ROW LEVEL SECURITY and
-  //    CREATE POLICY — prove it, because a restore that silently sheds the
-  //    tenant-isolation guardrails is a security incident, not a recovery.
-  const rls = psql(
-    targetUrl,
-    "SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relname = 'invoices'",
-  );
-  check(
-    "invoices RLS enabled + forced on restored target",
-    rls === "t",
-    `got ${JSON.stringify(rls)}`,
-  );
-  const policies = psql(
-    targetUrl,
-    "SELECT count(*) FROM pg_policy p JOIN pg_class c ON p.polrelid = c.oid WHERE c.relname = 'invoices'",
-  );
-  check(
-    "invoices policies survived restore (count > 0)",
-    Number(policies) > 0,
-    `${policies} policy(ies)`,
-  );
-
-  const totalSecs = ((Date.now() - t0) / 1000).toFixed(1);
-  console.log(
-    `${P}: dump ${dumpSecs}s, restore ${restoreSecs}s, total ${totalSecs}s`,
-  );
-} catch (err) {
-  console.error(`${P}: ${err.message}`);
-  failures += 1;
-} finally {
-  rmSync(tmp, { recursive: true, force: true });
 }
 
-if (failures) {
-  console.error(
-    `${P}: FAILED (${failures} failure(s)) — this backup path cannot be trusted for recovery.`,
-  );
-  process.exit(1);
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  restoreDrill().catch((error) => {
+    console.error(`restore-drill: FAILED: ${error.message}`);
+    process.exitCode = 1;
+  });
 }
-const drillMetadata = JSON.stringify({
-  targetDatabase: targetDb,
-  durationSeconds: Number(((Date.now() - t0) / 1000).toFixed(1)),
-});
-const drillMetadataBase64 = Buffer.from(drillMetadata, "utf8").toString(
-  "base64",
-);
-psql(
-  sourceUrl,
-  `BEGIN;
-   SET LOCAL ROLE meridian_app;
-   SELECT set_config('app.bypass', 'on', true);
-   INSERT INTO operational_heartbeats
-      (key, last_started_at, last_succeeded_at, last_error, metadata, updated_at)
-    VALUES (
-      'restore_drill',
-      now(),
-      now(),
-      NULL,
-      convert_from(decode('${drillMetadataBase64}', 'base64'), 'utf8')::jsonb,
-      now()
-    )
-    ON CONFLICT (key) DO UPDATE SET
-      last_succeeded_at = excluded.last_succeeded_at,
-      last_error = NULL,
-      metadata = excluded.metadata,
-      updated_at = now();
-   COMMIT;`,
-);
-console.log(`${P}: recorded durable restore-drill heartbeat`);
-console.log(`${P}: OK — backup/restore round-trip proven.`);

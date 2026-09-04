@@ -101,10 +101,28 @@ evidence warns in non-production and blocks where production policy requires.
 
 ## Backup and Release Tooling
 
-`BACKUP_DIR`, `BACKUP_KEEP`, `DRILL_DATABASE_URL`, `DRILL_ADMIN_URL`,
+`BACKUP_DIR`, `BACKUP_KEEP`, `BACKUP_RUNTIME_ROLE`, `BACKUP_MANIFEST`, `BACKUP_MANIFEST_SHA256`,
+`DRILL_DATABASE_URL`, `DRILL_ADMIN_URL`, `DRILL_DATABASE_DISPOSABLE`, `DRILL_CONFIRM_TARGET`,
 `RELEASE_BACKUP`, `RELEASE_PUSH_FORCE`.
 
-`DRILL_DATABASE_URL` must identify a disposable database. Keep backups outside
+`DRILL_DATABASE_URL` must identify a fresh disposable `meridian_drill_<unique>`
+database, acknowledged by `DRILL_DATABASE_DISPOSABLE=1` and an exact
+`DRILL_CONFIRM_TARGET` match. Existing databases are never dropped or reused.
+`DRILL_ADMIN_URL`, when set, must use the same host/port and a maintenance database.
+`BACKUP_DIR` is required, absolute and private. `BACKUP_MANIFEST_SHA256` must come
+from the trusted backup producer independently, not from an untrusted sidecar.
+`BACKUP_MANIFEST` identifies that retained archive's snapshot-consistent manifest.
+The manifest must be format 2. `BACKUP_RUNTIME_ROLE` explicitly names the intended
+non-superuser application login, whose recursive membership/SET ROLE capability
+is captured and verified on the isolated target. It is not an inspection credential.
+Format 2 also binds database owner/ACL/settings and exact extension/locale versions;
+the target must match rather than applying compatibility overrides.
+File and directory fsync support is mandatory; a sync error refuses publication.
+The destination parent directory must already exist. PostgreSQL URL passwords
+are removed from child argv and passed through child `PGPASSWORD`; password or
+service query overrides are refused, and no password file is created. TLS
+parameters and percent-encoded Unix-socket hosts remain intact.
+Keep backups outside
 the checkout and runtime directory. Force-push controls should remain unset.
 
 ## Authority Rails
@@ -171,7 +189,8 @@ Release verification uses `RELEASE_MANIFEST` (local CI manifest path),
 `RELEASE_ROLLBACK_REVISION` (full SHA of a reviewed compatible rollback build),
 and `RELEASE_BASE_URL` (deployment origin for read-only postdeploy checks).
 `RELEASE_TRAFFIC_DRAINED=1` is an operator assertion, not a traffic-control
-mechanism: it is required only with the explicit `--offline-bootstrap` flag.
+mechanism: it is required for maintenance-forward/RUN and for the separate
+explicit `--offline-bootstrap` path (which maintenance-forward refuses).
 All web instances, workers, scheduled tasks and external writers must already
 be stopped. `RELEASE_PUSH_FORCE` is retired and refused. `RELEASE_BACKUP` no
 longer bypasses backup requirements; durable backup/restore evidence is mandatory.
@@ -181,10 +200,35 @@ checkout and require `RELEASE_MANIFEST_SHA256` during every build verification
 and API startup. Provide the checksum independently through trusted Publish
 configuration; it is not a download credential and must not be client-bundled.
 The API build additionally requires the existing production `DATABASE_URL` and
-`RELEASE_ROLLBACK_REVISION` for the mandatory read-only release preflight. The
+the selected recovery-mode configuration for mandatory read-only preflight. The
 startup adapter sets `BUILD_REVISION` and `EXPECTED_BUILD_REVISION` from the
 checksum-verified manifest before loading the API, overriding a stale value or
 Replit deployment UUID. No new secret or download mechanism is introduced.
+
+`RELEASE_RECOVERY_MODE` defaults to `rollback`, which requires the qualified
+rollback SHA. Its explicit alternative is `maintenance-forward`, requiring
+`RELEASE_RECOVERY_PLAN` and independently trusted `RELEASE_RECOVERY_PLAN_SHA256`
+plus actual external drain evidence. Preparation approval is not a populated plan.
+
+`RELEASE_RUNTIME_STATE` defaults to `HOLD`. API HOLD and RUN require
+`RELEASE_BASE_URL` matching the CI mobile domain, `REPL_ID` matching its Repl ID,
+and independently trusted `RELEASE_MANIFEST_SHA256`,
+`RELEASE_RECOVERY_PLAN_SHA256` and `RELEASE_BACKUP_SHA256`. HOLD does not import
+the API, connect to the database or check plan TTL at runtime.
+
+RUN additionally requires maintenance-forward, `RELEASE_TRAFFIC_DRAINED=1`,
+`RELEASE_ACTIVATION_PERMIT`, `RELEASE_ACTIVATION_PERMIT_SHA256`,
+`RELEASE_ACTIVATION_ID` (canonical UUID) and `RELEASE_HELD_EVIDENCE_SHA256`.
+RUN promotion requires `RELEASE_HELD_EVIDENCE`; runtime only needs the verified
+permit and digest bindings, not the plan/held-evidence files. Every Publish
+checks approval TTL; later cold starts retain admission for the same bound
+release. Repeat use of the active permit is one logical activation, not
+single-use consumption. External ingress/schedules remain held until real API
+readiness and operator signoff. Local evidence may only use fixed
+`release/recovery-plan.json`, `release/held-evidence.json` and
+`release/activation-permit.json`, or paths outside the checkout. These are not
+client assets. See [HOLD/RUN operations](operations.md#hold-and-run).
+
 The mobile release package reads the public production `EXPO_PUBLIC_DOMAIN`
 and `EXPO_PUBLIC_REPL_ID` from `artifacts/mobile/eas.json`; it does not inherit
 development host/Repl overrides. Its manifest also binds `/mobile/`, and mobile
@@ -204,7 +248,9 @@ journeys, not the legacy suite's documented shared-seed order.
 before importing the app. Browser journeys use real seeded login sessions.
 
 `GITHUB_ACTIONS`, `GITHUB_SHA`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT` and
-`GITHUB_REPOSITORY` are CI-provided provenance, not secrets. Manifest stamping
+`GITHUB_REPOSITORY` are CI-provided provenance, not secrets. `GITHUB_OUTPUT` is
+the CI-managed step-output file; the backup producer appends its trusted manifest
+path/checksum there for the next restore step, never to tracked source. Manifest stamping
 refuses non-CI execution. CI sets `BUILD_REVISION` to the full source SHA.
 Do not manufacture CI variables to bless an untested local artifact.
 

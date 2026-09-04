@@ -70,13 +70,39 @@ const catalog = {
   ],
   migrations: [{ version: 50, name: "invoice_revisions" }],
 };
-const evidence = () =>
-  ["backup", "restore_drill"].map((key) => ({
-    key,
-    last_succeeded_at: new Date().toISOString(),
-    last_error: null,
-    metadata: { sha256: "a".repeat(64) },
-  }));
+const evidence = (backupCompletedAt = new Date().toISOString()) => {
+  const createdAt = new Date(
+    Date.parse(backupCompletedAt) - 60_000,
+  ).toISOString();
+  return [
+    {
+      key: "backup",
+      last_succeeded_at: backupCompletedAt,
+      last_error: null,
+      metadata: {
+        evidenceVersion: 2,
+        sha256: "a".repeat(64),
+        snapshotSha256: "b".repeat(64),
+        manifestSha256: "c".repeat(64),
+        createdAt,
+      },
+    },
+    {
+      key: "restore_drill",
+      last_succeeded_at: new Date().toISOString(),
+      last_error: null,
+      metadata: {
+        evidenceVersion: 2,
+        backupSha256: "a".repeat(64),
+        snapshotSha256: "b".repeat(64),
+        backupManifestSha256: "c".repeat(64),
+        backupCreatedAt: createdAt,
+        securityCatalogVerified: true,
+        allTableCountsVerified: true,
+      },
+    },
+  ];
+};
 const manifest = {
   format: 1,
   source: { revision },
@@ -119,6 +145,55 @@ test("backup and restore evidence fail closed for absence, failure, old and futu
   const rows = evidence();
   rows[1].last_error = "restore failed";
   assert.throws(() => assertRecoveryEvidence(rows), /restore_drill/);
+});
+
+test("recovery evidence requires the exact retained archive and complete restored security", () => {
+  for (const index of [0, 1]) {
+    const rows = evidence();
+    rows[index].metadata.evidenceVersion = 1;
+    assert.throws(
+      () => assertRecoveryEvidence(rows),
+      /evidence format is unverified/,
+    );
+  }
+  for (const mutate of [
+    (rows) => {
+      delete rows[0].metadata.evidenceVersion;
+    },
+    (rows) => {
+      rows[0].metadata.sha256 = "invalid";
+    },
+    (rows) => {
+      rows[1].metadata.backupSha256 = "f".repeat(64);
+    },
+    (rows) => {
+      rows[1].metadata.snapshotSha256 = "f".repeat(64);
+    },
+    (rows) => {
+      rows[1].metadata.backupManifestSha256 = "f".repeat(64);
+    },
+    (rows) => {
+      rows[1].metadata.securityCatalogVerified = false;
+    },
+    (rows) => {
+      rows[1].metadata.allTableCountsVerified = false;
+    },
+    (rows) => {
+      rows[0].metadata.createdAt = "2000-01-01T00:00:00Z";
+    },
+    (rows) => {
+      rows[1].metadata.backupCreatedAt = "2000-01-01T00:00:00Z";
+    },
+    (rows) => {
+      rows[1].last_succeeded_at = new Date(
+        Date.parse(rows[0].last_succeeded_at) - 1000,
+      ).toISOString();
+    },
+  ]) {
+    const rows = evidence();
+    mutate(rows);
+    assert.throws(() => assertRecoveryEvidence(rows));
+  }
 });
 
 test("semantic verification rejects weakened policies, role escalation, disabled triggers and constraint drift even with identical ledger", () => {
@@ -236,6 +311,162 @@ test("CI stamping and manifest tampering refuse; online mode executes zero migra
       commands,
       1,
       "failure stops before migrate or traffic restoration",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("maintenance release binds the approved plan to the candidate and backup without executing migrations", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "meridian-maintenance-test-"));
+  try {
+    const at = (minutes) =>
+      new Date(Date.now() + minutes * 60_000).toISOString();
+    const stopped = (name) => ({
+      state: "stopped",
+      targets: [`fixture/${name}`],
+      evidence: "Synthetic stopped-writer observation",
+    });
+    const plan = {
+      format: 1,
+      mode: "maintenance-forward",
+      revision,
+      approved: true,
+      approvedBy: "synthetic-approver",
+      approvedAt: at(-1),
+      window: { start: at(-20), end: at(60) },
+      drain: {
+        confirmedBy: "synthetic-operator",
+        confirmedAt: at(-15),
+        api: stopped("api"),
+        workers: stopped("workers"),
+        schedules: stopped("schedules"),
+        otherWriters: {
+          state: "absent",
+          targets: [],
+          evidence: "Synthetic inventory only",
+        },
+      },
+      backup: {
+        sha256: "a".repeat(64),
+        preChange: true,
+        completedAt: at(-10),
+        evidence: "Synthetic archive only",
+      },
+      forwardFix: {
+        approved: true,
+        owner: "synthetic-recovery-owner",
+        procedure: "Review and verify an offline forward fix",
+        writersRemainStopped: true,
+        automaticResume: false,
+        resumeCriteria: {
+          artifactIdentity: "Exact approved artifact",
+          migrationIntegrity: "Retained migration safeguards",
+          securityCatalog: "Full catalog parity",
+          applicationChecks: "Isolated recovery journeys",
+          operatorSignoff: "Explicit final operator approval",
+        },
+      },
+    };
+    const manifestFile = path.join(dir, "manifest.json");
+    const manifestBytes = JSON.stringify(manifest);
+    writeFileSync(manifestFile, manifestBytes);
+    const planFile = path.join(dir, "synthetic-plan.json");
+    const optionsFor = (value) => {
+      const bytes = JSON.stringify(value);
+      writeFileSync(planFile, bytes);
+      return {
+        ...env,
+        RELEASE_ROLLBACK_REVISION: undefined,
+        RELEASE_MANIFEST: manifestFile,
+        RELEASE_MANIFEST_SHA256: digest(manifestBytes),
+        RELEASE_RECOVERY_MODE: "maintenance-forward",
+        RELEASE_TRAFFIC_DRAINED: "1",
+        RELEASE_RECOVERY_PLAN: planFile,
+        RELEASE_RECOVERY_PLAN_SHA256: digest(bytes),
+      };
+    };
+    let catalogReads = 0;
+    const deps = {
+      verifyArtifact() {},
+      query: () => JSON.stringify(evidence(plan.backup.completedAt)),
+      catalog: () => {
+        catalogReads++;
+        return structuredClone(catalog);
+      },
+      execute: () =>
+        assert.fail(
+          "maintenance preflight must not run migrations or resume traffic",
+        ),
+    };
+    release(["--yes"], optionsFor(plan), deps);
+    assert.equal(catalogReads, 1);
+    assert.throws(
+      () => release(["--yes", "--offline-bootstrap"], optionsFor(plan), deps),
+      /never enables schema push/,
+    );
+    for (const mutate of [
+      (copy) => {
+        copy.revision = "f".repeat(40);
+      },
+      (copy) => {
+        copy.backup.sha256 = "f".repeat(64);
+      },
+      (copy) => {
+        copy.approved = false;
+      },
+      (copy) => {
+        copy.window.end = at(-2);
+      },
+      (copy) => {
+        copy.forwardFix.automaticResume = true;
+      },
+      (copy) => {
+        copy.backup.completedAt = at(-9);
+      },
+    ]) {
+      const copy = structuredClone(plan);
+      mutate(copy);
+      catalogReads = 0;
+      assert.throws(() => release(["--yes"], optionsFor(copy), deps));
+      assert.equal(catalogReads, 0, "an invalid recovery plan stops preflight");
+    }
+    const validOptions = optionsFor(plan);
+    const preDrainRows = evidence(plan.backup.completedAt);
+    const preDrainSnapshot = at(-16);
+    preDrainRows[0].metadata.createdAt = preDrainSnapshot;
+    preDrainRows[1].metadata.backupCreatedAt = preDrainSnapshot;
+    catalogReads = 0;
+    assert.throws(
+      () =>
+        release(["--yes"], validOptions, {
+          ...deps,
+          query: () => JSON.stringify(preDrainRows),
+        }),
+      /snapshot predates the confirmed writer drain/,
+    );
+    assert.equal(
+      catalogReads,
+      0,
+      "pre-drain snapshots stop preflight even when backup completes after drain",
+    );
+    assert.throws(
+      () =>
+        release(
+          ["--yes"],
+          { ...validOptions, RELEASE_RECOVERY_PLAN_SHA256: "0".repeat(64) },
+          deps,
+        ),
+      /checksum mismatch/,
+    );
+    assert.throws(
+      () =>
+        release(
+          ["--yes"],
+          { ...validOptions, RELEASE_TRAFFIC_DRAINED: "0" },
+          deps,
+        ),
+      /TRAFFIC_DRAINED/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

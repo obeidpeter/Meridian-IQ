@@ -757,3 +757,271 @@ atomic cross-service deployment or production database/recovery readiness.
 Real PostgreSQL CI, target migration 50-54 application, genuine backup/restore
 evidence and postdeploy parity remain mandatory; the parent-reported production
 database is still migration 49. No quality gate was weakened.
+
+## Retained Snapshot Recovery Evidence (2026-09-05)
+
+The backup producer and restore drill now share a versioned evidence contract.
+One held read-only REPEATABLE READ transaction exports the MVCC snapshot used
+by `pg_dump --snapshot`, the semantic security catalog, referenced role
+attributes and every public-table row count. Schema, ACL and role changes must
+remain stopped during capture; normal committed DML may continue. A persistent
+`psql` process holds the snapshot until the dump finishes. No npm dependency
+was added. Catalog/process capture is bounded at 16 MiB, rather than Node's
+default 1 MiB subprocess buffer.
+
+Archives use UUID-suffixed names and exclusive private file descriptors in a
+required private directory outside the checkout. Retention rejects symlinked
+bundles, leaves incomplete captures/unrelated files untouched and serializes the
+entire same-directory operation with a lock acquired before snapshot capture.
+An abandoned lock refuses automatically; its removal requires operator
+investigation. Cross-directory operations are not globally serialized: the
+source heartbeat update instead atomically rejects an older snapshot timestamp.
+Verified archives survive publication/retention errors, and rejected publication
+does not prune files or emit successful CI outputs.
+
+The drill consumes a specific retained archive and a manifest checksum supplied
+independently by its trusted producer. A sidecar cannot establish trust. It
+checks manifest freshness (non-future and at most 24 hours), archive size/hash
+and role prerequisites before creating a fresh explicitly confirmed scratch
+database. It never drops/reuses a database or bootstraps roles/grants. Source
+database names are forbidden regardless of hostname aliases; admin host/port
+must exactly match the target. A random database marker verifies the target
+connection before restore. Full catalog and all table counts are compared with
+the backup-time baseline, never the source's later migrated state. The target
+remains for separately approved inspection/cleanup.
+
+Final producer interface, confirmed with the parent's release integration:
+
+- `backup.metadata`: `evidenceVersion: 1`, `sha256`, `snapshotSha256`,
+  `manifestSha256`, `file`, `manifestFile`, `bytes`, `tocEntries`, `createdAt`.
+- `restore_drill.metadata`: `evidenceVersion: 1`, matching `backupSha256`,
+  `snapshotSha256`, `backupManifestSha256`, `backupCreatedAt`, `targetDatabase`,
+  `durationSeconds`, `securityCatalogVerified: true`, `allTableCountsVerified: true`.
+- `snapshotSha256` hashes the exact JSON object `{catalog,rowCounts,roles}`.
+  Completion times remain database-recorded `last_succeeded_at` values. Parent
+  integration binds restore completion to backup completion and the approved
+  plan's exact backup completion time. This work did not edit release gates.
+
+CI now first exercises a real exported snapshot: it commits a fixture insert
+after snapshot export but before dump, then changes the source fixture schema
+after backup. Restoring must recover the old empty table and old schema. CI
+then produces a separate retained backup and passes that producer step's exact
+manifest path/hash to the final drill. Backups stay in the private runner
+temporary directory, outside source/artifact stamping. These PostgreSQL steps
+have not run locally because this machine has no PostgreSQL binaries/service.
+
+| Exact command | Actual local outcome |
+| --- | --- |
+| `node --test scripts/src/ops/recovery.test.mjs` | Exit 0; 11 passed, 0 failed/skipped; 669.4787ms. Covers trust/hash/freshness, retained baseline, destructive-target guards, roles, catalog/count drift, retention, concurrent filenames and snapshot-process success/failure cleanup. |
+| `node --test scripts/src/ops/*.test.mjs scripts/src/load-smoke.test.mjs scripts/src/e2e/service-worker.test.mjs` | Exit 1; 99 tests, 93 passed, 6 failed, 0 skipped; 26,930.8988ms. All 11 recovery tests and 8 release tests passed. Six Replit fixture integration failures are detailed below; no gate or assertion was relaxed. |
+| `node node_modules/eslint/bin/eslint.js scripts/src/ops/common.mjs scripts/src/ops/backup.mjs scripts/src/ops/restore-drill.mjs scripts/src/ops/backup-snapshot.mjs scripts/src/ops/recovery-evidence.mjs scripts/src/ops/recovery.test.mjs scripts/src/ops/backup-restore.integration.mjs` | Exit 0; 0.997s command wall time. |
+| `node scripts/src/quality/architecture.mjs` | Exit 0; 2,385 source files, 5,111 relative import edges; no cycles or boundary violations. |
+| `node scripts/src/quality/docs.mjs` (before this evidence entry) | Exit 0; 13 required files, 137 documented environment variables, every workspace mapped. |
+
+The parent identified a retention race in the initial late publication lock:
+an older slow snapshot could publish after a newer one and prune it at
+`BACKUP_KEEP=1`. That implementation is superseded by the pre-capture directory
+lock and atomic source-heartbeat timestamp guard described above. Same-directory
+overlap is refused before capture. Different directories may capture in parallel,
+but an older snapshot cannot replace a newer heartbeat; its verified files remain
+available after refusal, and no pruning follows. This is not a claim of global
+per-source serialization. The real PostgreSQL integration now also attempts an
+older heartbeat publication and asserts the entire newer row, including its
+completion timestamp, is unchanged.
+
+| Verification after retention-race repair | Actual local outcome |
+| --- | --- |
+| `node --test scripts/src/ops/recovery.test.mjs` | Exit 0; 13 passed, 0 failed/skipped; 848.8536ms. Adds duplicate-before-capture refusal, cross-directory SQL-guard contract and verified-file preservation after publication/retention failures. The actual SQL guard remains a required CI assertion, not locally demonstrated PostgreSQL behavior. |
+| Focused seven-file ESLint command above | Exit 0; 1.863s command wall time. |
+| `node scripts/src/quality/docs.mjs` | Exit 0; 13 required files, 137 documented environment variables, every workspace mapped. |
+| `git diff --check -- .github/workflows/ci.yml scripts/src/ops/common.mjs scripts/src/ops/backup.mjs scripts/src/ops/restore-drill.mjs scripts/src/ops/backup-snapshot.mjs scripts/src/ops/recovery-evidence.mjs scripts/src/ops/recovery.test.mjs scripts/src/ops/backup-restore.integration.mjs docs/operations.md docs/environment.md docs/runtime-evidence-r198.md` | Exit 0; no whitespace errors, normal Windows line-ending notices only. |
+
+The HOLD/RUN wrapper and permit integration are still being implemented by other
+owners. Shared release-sequence documentation is not declared deployment-ready
+before those interfaces and tests are finalized. The parent reports the current
+CI run passed API tests and reached frontend tests; it does not yet contain this
+uncommitted snapshot/retention work, so it cannot validate these new PG steps.
+
+Combined-run failures all occur in `scripts/src/ops/replit-promote.test.mjs`:
+the seven-build positive test, the negative recovery/drift test and the empty
+metadata-commit test still construct old heartbeat fixtures without
+`evidenceVersion` and the new hashes (`backup evidence format is unverified`).
+The API startup, runtime refusal and native mobile tests copy a runtime fixture
+without the newly imported `recovery-plan.mjs` (`ERR_MODULE_NOT_FOUND`). These
+were reported to the parent while their release/Replit integration checks were
+active. The production gate is intentionally unchanged by this report.
+
+Exact files changed by this recovery-evidence work:
+
+- `.github/workflows/ci.yml`
+- `scripts/src/ops/common.mjs`
+- `scripts/src/ops/backup.mjs`
+- `scripts/src/ops/restore-drill.mjs`
+- `scripts/src/ops/backup-snapshot.mjs` (new)
+- `scripts/src/ops/recovery-evidence.mjs` (new)
+- `scripts/src/ops/recovery.test.mjs` (new)
+- `scripts/src/ops/backup-restore.integration.mjs` (new)
+- `docs/operations.md`
+- `docs/environment.md`
+- `docs/runtime-evidence-r198.md`
+
+Parent-reported read-only host metadata is PostgreSQL 16.15 and vector 0.8.0.
+The inspection connection's superuser/BYPASS privileges do not establish the
+application runtime credential's role or permission to perform a production
+dump. No production data, credentials or exports were read by this work, and
+production backup approval remains pending. A migration-49 backup/drill checks
+its own migration-49 baseline; candidate-schema validation remains a separate
+release check. Maintenance-forward policy preparation is not authorization to
+drain writers, publish or migrate. Current CI and deployment remain parent-led;
+no commit, push, production operation or CI cancellation was performed here.
+
+### Final Owned Review and Freeze
+
+The final owned review re-read the backup producer, held-snapshot protocol,
+retained-archive loader/drill, monotonic heartbeat SQL and real-PG integration
+fixture. No further backup/recovery code change was needed after the retention
+repair. The implementation and tests are complete locally; actual PostgreSQL
+execution is still a required unverified integration case, not a claimed pass.
+
+- `node --test scripts/src/ops/recovery.test.mjs`: exit 0, 13 passed,
+  0 failed/skipped, 629.1804ms on the final focused run.
+- The exact seven-file ESLint command above: exit 0, 1.857s command wall time.
+- `node scripts/src/quality/architecture.mjs`: exit 0, 2,389 source files,
+  5,122 relative import edges, no cycles or boundary violations. This observes
+  other agents' newly added modules without claiming ownership of them.
+
+Pending PG cases are `node --test scripts/src/ops/backup-restore.integration.mjs`
+and the CI retained `ops:backup` -> `ops:restore-drill` sequence. They must prove
+real snapshot import across connections despite a concurrent insert, recovery
+of the backup-time schema after source DDL, full restored semantic catalog and
+all-table counts, and atomic rejection of an older heartbeat without changing
+the newer row or its completion time. Negative host/target/role cases already
+pass locally with injected command fixtures; real isolated role provisioning
+and archive round-trip remain integration prerequisites. Never run the fixture
+integration test on production: it deliberately creates/changes a test table.
+
+Residual operational requirements: use one private retention directory per
+source; stop concurrent DDL/ACL/role administration during capture; supply an
+independently authenticated manifest digest; provision reviewed roles and
+compatible PostgreSQL/extension prerequisites separately. This is not cluster
+globals/PITR recovery. Directory locks are local to a canonical directory, not
+a global lock; cross-directory ordering is enforced only at heartbeat publication.
+The 16 MiB capture bound, statement/lock timeouts and fourteen-minute dump/restore
+limits fail closed and may need separately reviewed changes for larger sources.
+An abandoned lock or retained failed-drill database needs operator inspection,
+not automatic removal. No claim of live runtime-credential safety is made.
+
+The latest user message supersedes earlier approval-pending status: the parent
+is now authorized to perform the initial production backup, isolated restore
+and local download, including the scripts' operational-heartbeat writes. This
+agent performs none of those host/credential/data operations. No maintenance
+drain has occurred. The initial capability drill does not satisfy a maintenance
+plan requiring a new pre-change snapshot taken after drain; that later archive
+needs its own matching drill. Backup/recovery code is frozen for parent review;
+this is not a whole-deployment readiness declaration.
+
+The final shared-doc update incorporates A/D's completed HOLD/RUN interface:
+default HOLD, exact CI origin/Repl and independent digest bindings, explicit
+RUN permit/activation UUID, held verification with
+`apiReadinessVerified: false`, fixed evidence staging paths, Publish-only TTL
+checks, durable same-release cold-start admission, and the current inability to
+attest the activation UUID remotely. `docs/operations.md` and
+`docs/environment.md` now describe those contracts; no activation code was edited
+by this backup/recovery work.
+
+The final combined ops command was attempted again after other agents' changes.
+All 13 recovery tests and the previously failing six Replit fixtures reported
+passes. The new `default HOLD serves health only without Git, DB clients, API
+evaluation or a resume route` test reported a failure while files were still
+being integrated, and the process did not exit after further tests. The local
+run was interrupted with exit 1; no aggregate count or complete pass is claimed.
+No GitHub CI run was interrupted. Fresh isolated reproduction then passed:
+
+| Final follow-up | Actual local outcome |
+| --- | --- |
+| `node --test --test-reporter=tap --test-name-pattern="default HOLD serves health" scripts/src/ops/replit-promote.test.mjs` | Exit 0; 1 passed, 0 failed/skipped; 795.5312ms. The earlier failure was not reproduced. Parent/A retain responsibility for the final integrated wrapper suite. |
+| `node scripts/src/quality/docs.mjs` after HOLD/RUN handoff | Exit 0; 13 required files, 137 environment variables, every workspace mapped. |
+
+The final metadata API is unchanged by the race repair or HOLD/RUN integration.
+No source/schema, dependency, generated API, migration or release-gate file was
+changed by this final backup/recovery closeout. The exact eleven owned files
+listed above constitute the completed implementation, CI registration and docs.
+
+## Version 2 Recovery Closure
+
+This section supersedes the earlier version-1 freeze. No production archive had
+been exported when the user requested these additional safeguards. Both
+heartbeat types now have `evidenceVersion: 2`; the archive manifest is `format: 2`
+and format-1 manifests are refused. Other heartbeat field names are unchanged.
+The snapshot digest now hashes this exact property order:
+
+```text
+{catalog,rowCounts,roles,roleRoots,memberships,runtimeLogin,extensions,databaseProperties}
+```
+
+The producer fsyncs the completed archive descriptor (pg_dump stdout does not
+do that), then its manifest and checksum descriptors, then the destination
+directory and parent, before heartbeat publication or pruning. The destination
+parent must already exist. Every sync failure refuses success. Windows directory
+fsync refusal was actually exercised; Windows unit fixtures inject only that
+boundary to test subsequent behavior. The CLI has no durability bypass. Real
+POSIX flush/PG round-trip remains an integration requirement.
+
+Backup requires explicit `BACKUP_RUNTIME_ROLE`, a non-superuser login capable
+of SET ROLE meridian_app. Source snapshot evidence records all needed recursive
+incoming/outgoing membership edges, grantors, ADMIN/INHERIT/SET options, role
+attributes and database ACL/settings role roots. Restore checks exact target
+prerequisites before creation and again after restoring, then performs a
+transaction-local session-authorization/SET ROLE probe as the intended login.
+Passwords/HBA authentication are not copied or claimed verified.
+
+Installed extension names/versions/schemas are captured in the held snapshot.
+Target availability and defaults must match before creation; installed versions
+are compared after restore. A vector 0.8.6 default cannot satisfy a 0.8.0 baseline.
+The parent-reported isolated image/socket preparation is external evidence, not
+execution by this agent. Matching extension versions alone do not establish
+database locale/ACL/settings or complete restore parity.
+
+B's `backup-database.mjs` and its tests are integrated without edits by this
+agent. `databaseProperties` covers database owner, semantic ACLs, database and
+role-in-database settings, encoding, locale provider/collation/ctype, ICU options,
+and recorded/actual collation versions. The drill explicitly creates only its
+guarded scratch name with TEMPLATE template0, compares creation metadata before
+data restore, applies scoped metadata after restore, and compares it all before
+the success heartbeat. No pg_restore --create, global setting mutation or
+collation-version override exists.
+
+The connection helper removes URL passwords from psql, snapshot-spawn, pg_dump
+and pg_restore argv and passes them only through child PGPASSWORD. Password,
+passfile and service query overrides refuse. Percent-encoded Unix-socket hosts
+and TLS parameters remain intact. Error messages and nested cause context are
+redacted; no password file is created. Existing sensitive environment values
+remain an operator responsibility. The 16 MiB subprocess capture limit remains.
+
+The real-PG fixture now also revokes the incoming non-superuser runtime edge and
+requires refusal before scratch creation despite using a CI superuser. It then
+restores that edge, verifies the actual runtime SET ROLE probe, and exercises
+revoked PUBLIC CONNECT/TEMP plus non-default database/role-database settings.
+The fixture restores the modified source settings/ACL entries afterward and
+leaves any referenced scratch role/database for disposable CI service teardown.
+It must never run against production. CI explicitly provisions one known
+non-superuser fixture login for the subsequent retained-backup/drill step;
+the production scripts never bootstrap roles or grants.
+
+| Version-2 verification | Actual outcome |
+| --- | --- |
+| `node --test scripts/src/ops/recovery.test.mjs scripts/src/ops/postgres-connection.test.mjs scripts/src/ops/backup-database.test.mjs` | Exit 0; 38 passed, 0 failed/skipped; 971.5119ms. Includes 26 owned backup/connection tests and B's 12 database-property tests. An earlier 37/38 run exposed an invalid wrong-owner test fixture; its ACL was corrected to represent a valid different owner, preserving the specific drift assertion. |
+| `node --test scripts/src/ops/release.test.mjs` | Exit 0; 8 passed, 0 failed/skipped; 135.8835ms. Parent-owned v2 release code/fixtures were not edited here. |
+| `node node_modules/eslint/bin/eslint.js scripts/src/ops/common.mjs scripts/src/ops/backup.mjs scripts/src/ops/backup-snapshot.mjs scripts/src/ops/backup-durability.mjs scripts/src/ops/backup-prerequisites.mjs scripts/src/ops/recovery-evidence.mjs scripts/src/ops/restore-drill.mjs scripts/src/ops/recovery.test.mjs scripts/src/ops/postgres-connection.test.mjs scripts/src/ops/backup-restore.integration.mjs scripts/src/ops/backup-database.mjs scripts/src/ops/backup-database.test.mjs` | Exit 0; 1.175s command wall time. |
+| `node scripts/src/quality/architecture.mjs` | Exit 0; 2,394 source files, 5,136 relative import edges; no cycles or boundary violations. |
+| `node scripts/src/quality/docs.mjs` | Exit 0; 13 required files, 137 environment variables, every workspace mapped. |
+
+This closure changes the original eleven owned files plus three new owned files:
+`scripts/src/ops/backup-durability.mjs`, `scripts/src/ops/backup-prerequisites.mjs`
+and `scripts/src/ops/postgres-connection.test.mjs`. B's two new database helper
+files must be integrated with them. No dependency install, lockfile edit,
+generated API change, migration change, release/adapter edit, commit, push,
+production read/export/write or CI cancellation was performed by this closure.
+Real PostgreSQL execution of this version-2 bundle is still pending; the previous
+pushed CI failed in old common.mjs at its 1 MiB capture limit, before actual
+upgrade comparison. No whole-deployment readiness is claimed.
