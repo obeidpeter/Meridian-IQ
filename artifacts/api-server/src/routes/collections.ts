@@ -154,7 +154,7 @@ router.post(
 // Local (non-generated) schema: this webhook is off-contract by design.
 const InboundCollectionBody = z.object({
   accountReference: z.string().min(1).max(256),
-  amount: z.string().refine(isPositiveMoney),
+  amount: z.string().max(32).refine(isPositiveMoney),
   invoiceNumber: z.string().min(1).max(256),
   reference: z.string().min(1).max(200),
   paidAt: z.string().datetime().optional(),

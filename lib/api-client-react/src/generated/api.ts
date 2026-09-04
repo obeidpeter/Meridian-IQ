@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.97.0
+ * OpenAPI spec version: 0.98.0
  */
 import {
   useMutation,
@@ -45,6 +45,9 @@ import type {
   B2cReportBatch,
   B2cReportItem,
   BadRequestResponse,
+  BankDataRoom,
+  BankDataRoomAccess,
+  BankDataRoomAccessLogEntry,
   BankStatement,
   BankStatementLine,
   BatchClerkCasesInput,
@@ -110,6 +113,7 @@ import type {
   ClientPortfolioDetail,
   ClientVatPosition,
   CollectionAccount,
+  CollectionFeedSpecification,
   ComplianceCalendar,
   ComplianceDeadline,
   ComplianceOperationsWorkspace,
@@ -145,6 +149,10 @@ import type {
   CreateWorkItemCommentInput,
   CreateWorkItemInput,
   CreatedClient,
+  CreditAssessment,
+  CreditBacktest,
+  CreditGovernance,
+  CreditKybCheck,
   CreditNoteInput,
   DashboardSummary,
   DigestImpactReport,
@@ -287,6 +295,7 @@ import type {
   LineItemSuggestion,
   ListAdvisoryBriefsParams,
   ListB2cReportsParams,
+  ListBankDataRoomAccessParams,
   ListBankStatementsParams,
   ListBillsParams,
   ListBuyerInvoicesParams,
@@ -384,6 +393,8 @@ import type {
   RailState,
   ReceivablesSummary,
   ReconcileResult,
+  RecordBankDataRoomAccessInput,
+  RecordCreditKybInput,
   RecurringInvoiceTemplate,
   RecurringInvoiceTemplateInput,
   RecurringInvoiceTemplateUpdateInput,
@@ -398,6 +409,8 @@ import type {
   RevenueShareStatement,
   RevokeInvoiceRoom200,
   RunAssessmentInput,
+  RunCreditAssessmentInput,
+  RunCreditBacktestInput,
   RunIntentEvalInput,
   RunModelCanaryInput,
   RunPhrasingEvalInput,
@@ -637,6 +650,605 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCreditGovernanceUrl = () => {
+
+
+
+
+  return `/api/operator/credit/governance`
+}
+
+/**
+ * @summary Read R3 credit activation, evidence quality and bank-access posture
+ */
+export const getCreditGovernance = async ( options?: RequestInit): Promise<CreditGovernance> => {
+
+  return customFetch<CreditGovernance>(getGetCreditGovernanceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreditGovernanceQueryKey = () => {
+    return [
+    `/api/operator/credit/governance`
+    ] as const;
+    }
+
+
+export const getGetCreditGovernanceQueryOptions = <TData = Awaited<ReturnType<typeof getCreditGovernance>>, TError = ErrorType<ForbiddenResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreditGovernance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreditGovernanceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreditGovernance>>> = ({ signal }) => getCreditGovernance({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreditGovernance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreditGovernanceQueryResult = NonNullable<Awaited<ReturnType<typeof getCreditGovernance>>>
+export type GetCreditGovernanceQueryError = ErrorType<ForbiddenResponse>
+
+
+/**
+ * @summary Read R3 credit activation, evidence quality and bank-access posture
+ */
+
+export function useGetCreditGovernance<TData = Awaited<ReturnType<typeof getCreditGovernance>>, TError = ErrorType<ForbiddenResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreditGovernance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreditGovernanceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunCreditAssessmentUrl = () => {
+
+
+
+
+  return `/api/operator/credit/assessments/run`
+}
+
+/**
+ * @summary Append an idempotent, replayable eligibility assessment
+ */
+export const runCreditAssessment = async (runCreditAssessmentInput: RunCreditAssessmentInput, options?: RequestInit): Promise<CreditAssessment> => {
+
+  return customFetch<CreditAssessment>(getRunCreditAssessmentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runCreditAssessmentInput)
+  }
+);}
+
+
+
+
+
+export const getRunCreditAssessmentMutationOptions = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runCreditAssessment>>, TError,{data: BodyType<RunCreditAssessmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runCreditAssessment>>, TError,{data: BodyType<RunCreditAssessmentInput>}, TContext> => {
+
+const mutationKey = ['runCreditAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runCreditAssessment>>, {data: BodyType<RunCreditAssessmentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runCreditAssessment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunCreditAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof runCreditAssessment>>>
+    export type RunCreditAssessmentMutationBody = BodyType<RunCreditAssessmentInput>
+    export type RunCreditAssessmentMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Append an idempotent, replayable eligibility assessment
+ */
+export const useRunCreditAssessment = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runCreditAssessment>>, TError,{data: BodyType<RunCreditAssessmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runCreditAssessment>>,
+        TError,
+        {data: BodyType<RunCreditAssessmentInput>},
+        TContext
+      > => {
+      return useMutation(getRunCreditAssessmentMutationOptions(options));
+    }
+
+export const getRecordCreditKybCheckUrl = () => {
+
+
+
+
+  return `/api/operator/credit/kyb-checks`
+}
+
+/**
+ * @summary Append a data-minimal financing-grade KYB check
+ */
+export const recordCreditKybCheck = async (recordCreditKybInput: RecordCreditKybInput, options?: RequestInit): Promise<CreditKybCheck> => {
+
+  return customFetch<CreditKybCheck>(getRecordCreditKybCheckUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recordCreditKybInput)
+  }
+);}
+
+
+
+
+
+export const getRecordCreditKybCheckMutationOptions = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordCreditKybCheck>>, TError,{data: BodyType<RecordCreditKybInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordCreditKybCheck>>, TError,{data: BodyType<RecordCreditKybInput>}, TContext> => {
+
+const mutationKey = ['recordCreditKybCheck'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordCreditKybCheck>>, {data: BodyType<RecordCreditKybInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordCreditKybCheck(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordCreditKybCheckMutationResult = NonNullable<Awaited<ReturnType<typeof recordCreditKybCheck>>>
+    export type RecordCreditKybCheckMutationBody = BodyType<RecordCreditKybInput>
+    export type RecordCreditKybCheckMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Append a data-minimal financing-grade KYB check
+ */
+export const useRecordCreditKybCheck = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordCreditKybCheck>>, TError,{data: BodyType<RecordCreditKybInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordCreditKybCheck>>,
+        TError,
+        {data: BodyType<RecordCreditKybInput>},
+        TContext
+      > => {
+      return useMutation(getRecordCreditKybCheckMutationOptions(options));
+    }
+
+export const getRecordBankDataRoomAccessUrl = () => {
+
+
+
+
+  return `/api/operator/credit/bank-access`
+}
+
+/**
+ * @summary Append a grant, suspension or revocation for a bank user
+ */
+export const recordBankDataRoomAccess = async (recordBankDataRoomAccessInput: RecordBankDataRoomAccessInput, options?: RequestInit): Promise<BankDataRoomAccess> => {
+
+  return customFetch<BankDataRoomAccess>(getRecordBankDataRoomAccessUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recordBankDataRoomAccessInput)
+  }
+);}
+
+
+
+
+
+export const getRecordBankDataRoomAccessMutationOptions = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordBankDataRoomAccess>>, TError,{data: BodyType<RecordBankDataRoomAccessInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordBankDataRoomAccess>>, TError,{data: BodyType<RecordBankDataRoomAccessInput>}, TContext> => {
+
+const mutationKey = ['recordBankDataRoomAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordBankDataRoomAccess>>, {data: BodyType<RecordBankDataRoomAccessInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordBankDataRoomAccess(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordBankDataRoomAccessMutationResult = NonNullable<Awaited<ReturnType<typeof recordBankDataRoomAccess>>>
+    export type RecordBankDataRoomAccessMutationBody = BodyType<RecordBankDataRoomAccessInput>
+    export type RecordBankDataRoomAccessMutationError = ErrorType<ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Append a grant, suspension or revocation for a bank user
+ */
+export const useRecordBankDataRoomAccess = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordBankDataRoomAccess>>, TError,{data: BodyType<RecordBankDataRoomAccessInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordBankDataRoomAccess>>,
+        TError,
+        {data: BodyType<RecordBankDataRoomAccessInput>},
+        TContext
+      > => {
+      return useMutation(getRecordBankDataRoomAccessMutationOptions(options));
+    }
+
+export const getRunCreditBacktestUrl = () => {
+
+
+
+
+  return `/api/operator/credit/backtests`
+}
+
+/**
+ * @summary Replay scorecard inputs and append a structural back-test result
+ */
+export const runCreditBacktest = async (runCreditBacktestInput: RunCreditBacktestInput, options?: RequestInit): Promise<CreditBacktest> => {
+
+  return customFetch<CreditBacktest>(getRunCreditBacktestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runCreditBacktestInput)
+  }
+);}
+
+
+
+
+
+export const getRunCreditBacktestMutationOptions = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runCreditBacktest>>, TError,{data: BodyType<RunCreditBacktestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runCreditBacktest>>, TError,{data: BodyType<RunCreditBacktestInput>}, TContext> => {
+
+const mutationKey = ['runCreditBacktest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runCreditBacktest>>, {data: BodyType<RunCreditBacktestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runCreditBacktest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunCreditBacktestMutationResult = NonNullable<Awaited<ReturnType<typeof runCreditBacktest>>>
+    export type RunCreditBacktestMutationBody = BodyType<RunCreditBacktestInput>
+    export type RunCreditBacktestMutationError = ErrorType<ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Replay scorecard inputs and append a structural back-test result
+ */
+export const useRunCreditBacktest = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runCreditBacktest>>, TError,{data: BodyType<RunCreditBacktestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runCreditBacktest>>,
+        TError,
+        {data: BodyType<RunCreditBacktestInput>},
+        TContext
+      > => {
+      return useMutation(getRunCreditBacktestMutationOptions(options));
+    }
+
+export const getGetCollectionFeedSpecificationUrl = () => {
+
+
+
+
+  return `/api/operator/credit/collection-feed-specification`
+}
+
+/**
+ * @summary Read the versioned collection-account feed profile
+ */
+export const getCollectionFeedSpecification = async ( options?: RequestInit): Promise<CollectionFeedSpecification> => {
+
+  return customFetch<CollectionFeedSpecification>(getGetCollectionFeedSpecificationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCollectionFeedSpecificationQueryKey = () => {
+    return [
+    `/api/operator/credit/collection-feed-specification`
+    ] as const;
+    }
+
+
+export const getGetCollectionFeedSpecificationQueryOptions = <TData = Awaited<ReturnType<typeof getCollectionFeedSpecification>>, TError = ErrorType<ForbiddenResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCollectionFeedSpecification>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCollectionFeedSpecificationQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCollectionFeedSpecification>>> = ({ signal }) => getCollectionFeedSpecification({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCollectionFeedSpecification>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCollectionFeedSpecificationQueryResult = NonNullable<Awaited<ReturnType<typeof getCollectionFeedSpecification>>>
+export type GetCollectionFeedSpecificationQueryError = ErrorType<ForbiddenResponse>
+
+
+/**
+ * @summary Read the versioned collection-account feed profile
+ */
+
+export function useGetCollectionFeedSpecification<TData = Awaited<ReturnType<typeof getCollectionFeedSpecification>>, TError = ErrorType<ForbiddenResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCollectionFeedSpecification>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCollectionFeedSpecificationQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBankDataRoomUrl = () => {
+
+
+
+
+  return `/api/credit/data-room`
+}
+
+/**
+ * @summary Read fixed, consented and privacy-protected credit cohorts
+ */
+export const getBankDataRoom = async ( options?: RequestInit): Promise<BankDataRoom> => {
+
+  return customFetch<BankDataRoom>(getGetBankDataRoomUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBankDataRoomQueryKey = () => {
+    return [
+    `/api/credit/data-room`
+    ] as const;
+    }
+
+
+export const getGetBankDataRoomQueryOptions = <TData = Awaited<ReturnType<typeof getBankDataRoom>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBankDataRoom>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBankDataRoomQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBankDataRoom>>> = ({ signal }) => getBankDataRoom({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBankDataRoom>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBankDataRoomQueryResult = NonNullable<Awaited<ReturnType<typeof getBankDataRoom>>>
+export type GetBankDataRoomQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>
+
+
+/**
+ * @summary Read fixed, consented and privacy-protected credit cohorts
+ */
+
+export function useGetBankDataRoom<TData = Awaited<ReturnType<typeof getBankDataRoom>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBankDataRoom>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBankDataRoomQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListBankDataRoomAccessUrl = (params?: ListBankDataRoomAccessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/credit/data-room/access-log?${stringifiedParams}` : `/api/credit/data-room/access-log`
+}
+
+/**
+ * @summary List bounded access events for the caller's bank
+ */
+export const listBankDataRoomAccess = async (params?: ListBankDataRoomAccessParams, options?: RequestInit): Promise<BankDataRoomAccessLogEntry[]> => {
+
+  return customFetch<BankDataRoomAccessLogEntry[]>(getListBankDataRoomAccessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBankDataRoomAccessQueryKey = (params?: ListBankDataRoomAccessParams,) => {
+    return [
+    `/api/credit/data-room/access-log`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBankDataRoomAccessQueryOptions = <TData = Awaited<ReturnType<typeof listBankDataRoomAccess>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(params?: ListBankDataRoomAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBankDataRoomAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBankDataRoomAccessQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBankDataRoomAccess>>> = ({ signal }) => listBankDataRoomAccess(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBankDataRoomAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBankDataRoomAccessQueryResult = NonNullable<Awaited<ReturnType<typeof listBankDataRoomAccess>>>
+export type ListBankDataRoomAccessQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>
+
+
+/**
+ * @summary List bounded access events for the caller's bank
+ */
+
+export function useListBankDataRoomAccess<TData = Awaited<ReturnType<typeof listBankDataRoomAccess>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(
+ params?: ListBankDataRoomAccessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBankDataRoomAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBankDataRoomAccessQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

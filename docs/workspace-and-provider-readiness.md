@@ -1,8 +1,8 @@
 # Workspace and provider readiness
 
 This document is the operating contract for Meridian Today, universal search,
-collaborative work, Invoice Room, and the production provider relays available
-with API contract `0.97.0`.
+collaborative work, Invoice Room, the R3 credit evidence perimeter, and the
+production provider relays available with API contract `0.98.0`.
 
 ## User-facing workspace
 
@@ -108,6 +108,8 @@ relay URLs must use HTTPS and must not contain user information.
 | Open banking                  | `BANK_FEED_URL`                           | `BANK_FEED_TOKEN`                                                 |
 | Messaging and access requests | `MESSAGING_WEBHOOK_URL`                   | `MESSAGING_WEBHOOK_TOKEN`                                         |
 | Hosted payments               | `PAYMENT_PROVIDER_URL`                    | `PAYMENT_PROVIDER_TOKEN`                                          |
+| Collection accounts           | `COLLECTION_PROVIDER_URL`                 | `COLLECTION_PROVIDER_TOKEN`                                       |
+| Collection payment callback   | `/api/collections/inbound`                | `COLLECTION_WEBHOOK_KEYS`                                         |
 | Invoice Room public links     | `PUBLIC_APP_URL`                          | `INVOICE_ROOM_ENCRYPTION_KEY`                                     |
 | Invoice Room buyer checkout   | `INVOICE_PAYMENT_PROVIDER_URL`            | `INVOICE_PAYMENT_PROVIDER_TOKEN`                                  |
 | Invoice Room payment callback | `/api/invoice-room/payments/confirm`      | `INVOICE_PAYMENT_WEBHOOK_KEYS` or `INVOICE_PAYMENT_WEBHOOK_TOKEN` |
@@ -207,10 +209,71 @@ size, and validate response shape. Connectivity tests run outside the request's
 tenant transaction so a slow provider does not hold a database connection.
 Workers authenticate again before each pull.
 
+### Collection-account settlement feed
+
+The bank or PSP posts observed payments to `POST /api/collections/inbound`.
+The route is absent (`404`) while both `COLLECTION_WEBHOOK_KEYS` and the legacy
+`COLLECTION_WEBHOOK_TOKEN` are empty. Production must use the key ring and keep
+`OP_LEGACY_TOKENS=off`.
+
+Required headers are `x-op-key-id`, `x-op-timestamp` (Unix seconds) and
+`x-op-signature`. The signature is `v1=` plus the hex HMAC-SHA256 of
+`timestamp.METHOD.path.sha256(rawBody)`. It is bound to the exact bytes and
+accepted only inside `OP_SIGNATURE_WINDOW_SECONDS` (default 300). The body is:
+
+```json
+{
+  "accountReference": "provider-account-reference",
+  "amount": "250000.00",
+  "invoiceNumber": "INV-1001",
+  "reference": "provider-unique-payment-reference",
+  "paidAt": "2026-09-04T10:30:00.000Z"
+}
+```
+
+The provider must deliver at least once and reuse `reference` on a retry.
+MeridianIQ durably records before returning `202 {"received":true}`; a replay
+does not create a second settlement. Unknown, inactive and mismatched account
+references receive the same acknowledgement and no invoice detail. Raw payloads
+and credentials are not logged. The executable profile and version are visible
+to operators under **Control centre > Credit**.
+
+### Credit and bank Data Room readiness
+
+The `credit_readiness` pilot evaluates only invoices with explicit Layer-3
+consent. Auto-eligibility requires a live canonical stamp, buyer confirmation
+and no-set-off, settlement from statement match, paid buyer flag or collection
+account, and a current verified KYB outcome. Uploaded evidence never satisfies
+the settlement source. Every decision stores the exact scorecard, ruleset,
+source facts, policy and hash for deterministic replay.
+
+`bank_data_room` is a dependent R3 flag and must stay globally dark until the
+Credit governance check passes. A bank identity has no invoice, party or audit
+capabilities. Each request independently verifies TOTP plus the latest DPA-bound
+access event, then returns only fixed quarterly/amount-band cohorts with at
+least five distinct currently consenting businesses. There are no arbitrary
+filters, raw exports, exact amounts or business identifiers. Every served or
+suppressed view is appended to the bank access ledger.
+
+Deployment evidence variables:
+
+| Variable                               | Meaning                                                             |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| `CREDIT_PILOT_MIN_BUSINESSES`          | Minimum observable pilot businesses; default `300`.                 |
+| `CREDIT_COHORT_MIN_SIZE`               | Privacy threshold; may raise but never lower the hard floor of `5`. |
+| `CREDIT_DPIA_APPROVED_AT`              | ISO timestamp of the retained, approved R3 DPIA.                    |
+| `CREDIT_BANK_MOU_REFERENCE`            | Opaque reference to the retained conditional bank MOU.              |
+| `CREDIT_COLLECTION_FEED_AGREED_AT`     | ISO timestamp when the signed settlement profile was agreed.        |
+| `CREDIT_COLLECTION_FEED_AGREEMENT_REF` | Opaque reference to the retained feed agreement.                    |
+| `TOTP_REQUIRED_ROLES`                  | Must include `bank_user` before a bank pilot is activated.          |
+
+None of these variables enables lending. R4 applications, offers, pricing,
+funding, repayment and marketplace behavior have no route or user interface.
+
 ## Rollout checklist
 
-1. Build contract `0.97.0` and all web artifacts from the same revision.
-2. Apply the database schema, then run guardrail migrations through `0048`.
+1. Build contract `0.98.0` and all web artifacts from the same revision.
+2. Apply the database schema, then run guardrail migrations through `0049`.
 3. Confirm `/api/readyz` and the operator release-readiness panel are healthy.
 4. Add provider URL/token pairs in Replit Secrets. Never paste the server token
    into a client connection form.
@@ -230,6 +293,10 @@ Workers authenticate again before each pull.
     browser, verify the intended channel, submit one response, retry that same
     request, and confirm only one event exists. Revoke the link and verify both
     the original URL and its prior room session return `410`.
+12. For an R3 credit pilot, complete the activation sequence in
+    [Release readiness](release-readiness.md), verify a sub-five cohort is
+    suppressed, verify a five-business cohort contains no identifiers or exact
+    amounts, revoke the bank grant, and confirm the next request is `403`.
 
 ## Identity boundary
 

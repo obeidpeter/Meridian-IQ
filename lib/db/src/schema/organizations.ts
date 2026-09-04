@@ -60,7 +60,8 @@ export const usersTable = pgTable("users", {
   updatedAt: updatedAt(),
 });
 
-// Role-permission matrix (Appendix C). bank_user is dormant until R4.
+// Role-permission matrix (Appendix C). bank_user is the R3 aggregate-only
+// Data Room principal; financing execution remains dormant until R4.
 // buyer_user is the Buyer Rails role (BR-01..BR-05): a buyer-organization
 // principal scoped to a buyer Party rather than a tenant firm.
 export const roleEnum = pgEnum("role", [

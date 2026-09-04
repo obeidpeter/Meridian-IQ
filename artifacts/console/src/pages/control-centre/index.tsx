@@ -7,6 +7,7 @@ import {
   Fingerprint,
   Gauge,
   Network,
+  Landmark,
   type LucideIcon,
 } from "lucide-react";
 import { WorkspaceHeader } from "@workspace/web-ui";
@@ -18,6 +19,7 @@ import { ComplianceOperationsWorkspace } from "./cases";
 import { IntegrationReliabilityWorkspace } from "./reliability";
 import { EvidenceVaultWorkspace } from "./evidence";
 import { ClerkAssuranceWorkspace } from "./clerk";
+import { CreditGovernanceWorkspace } from "./credit";
 
 export type ControlCentreSection =
   | "activation"
@@ -25,7 +27,8 @@ export type ControlCentreSection =
   | "cases"
   | "reliability"
   | "evidence"
-  | "clerk";
+  | "clerk"
+  | "credit";
 
 const SECTIONS: Array<{
   key: ControlCentreSection;
@@ -82,6 +85,14 @@ const SECTIONS: Array<{
       "Human-review boundaries, eval quality, grounding and deployment guardrails.",
     icon: Bot,
   },
+  {
+    key: "credit",
+    label: "Credit",
+    title: "Credit data governance",
+    description:
+      "Rules-first eligibility, KYB, structural replay and bank Data Room controls.",
+    icon: Landmark,
+  },
 ];
 
 const CONTENT: Record<ControlCentreSection, ComponentType> = {
@@ -91,6 +102,7 @@ const CONTENT: Record<ControlCentreSection, ComponentType> = {
   reliability: IntegrationReliabilityWorkspace,
   evidence: EvidenceVaultWorkspace,
   clerk: ClerkAssuranceWorkspace,
+  credit: CreditGovernanceWorkspace,
 };
 
 export function ControlCentre({ section }: { section: ControlCentreSection }) {
@@ -111,7 +123,7 @@ export function ControlCentre({ section }: { section: ControlCentreSection }) {
         className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1"
         aria-label="Control centre workspaces"
       >
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:min-w-[54rem] lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:min-w-[62rem] lg:grid-cols-7">
           {SECTIONS.map((item, index) => {
             const Icon = item.icon;
             const selected = item.key === active.key;

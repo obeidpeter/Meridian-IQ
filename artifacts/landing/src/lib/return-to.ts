@@ -24,6 +24,7 @@ export interface WorkspaceTarget {
 // staff belong in the Compliance App.
 const DEFAULT_WORKSPACE: Readonly<Record<string, WorkspaceTarget>> = {
   operator: { href: "/console/operator-queue", label: "Operator queue" },
+  bank_user: { href: "/console/data-room", label: "Bank Data Room" },
   firm_admin: { href: "/console/", label: "Accountant Console" },
   firm_staff: { href: "/app/", label: "Compliance App" },
   client_user: { href: "/app/", label: "Compliance App" },

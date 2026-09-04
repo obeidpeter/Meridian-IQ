@@ -58,6 +58,7 @@ import onboardingRouter from "./onboarding";
 import workspaceRouter from "./workspace";
 import workRouter from "./work";
 import invoiceRoomRouter from "./invoice-room";
+import creditRouter from "./credit";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -141,5 +142,6 @@ router.use(onboardingRouter);
 router.use(workspaceRouter);
 router.use(workRouter);
 router.use(invoiceRoomRouter);
+router.use(creditRouter);
 
 export default router;

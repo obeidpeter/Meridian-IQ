@@ -22,8 +22,8 @@ test("the launch profile amounts to R0 (the Field Kit core)", () => {
   assert.equal(activationReleaseTag(launchLit), "R0");
 });
 
-test("a fully lit manifest reaches R4; nothing lit floors at R0", () => {
-  assert.equal(activationReleaseTag(RELEASE_FLAGS.map((f) => f.key)), "R4");
+test("a fully lit implemented manifest reaches R3; an unimplemented R4 is not vacuously active", () => {
+  assert.equal(activationReleaseTag(RELEASE_FLAGS.map((f) => f.key)), "R3");
   assert.equal(activationReleaseTag([]), "R0");
   assert.equal(activationReleaseTag(["not-a-real-flag"]), "R0");
 });

@@ -509,6 +509,43 @@ const LADDER: LadderStep[] = [
       not(appendOnly("invoice_room_events")),
     ],
   },
+  {
+    version: 49, // R3 credit evidence and bank Data Room guardrails
+    atTop: [
+      bypass("eligibility_assessments"),
+      pol("credit_eligibility_assessments"),
+      pol("credit_kyb_checks"),
+      bypass("credit_bank_access_events"),
+      bypass("credit_data_room_access_events"),
+      bypass("credit_backtest_runs"),
+      bypass("financing_requests"),
+      bypass("facility_positions"),
+      bypass("repayment_events"),
+      appendOnly("eligibility_assessments"),
+      appendOnly("credit_eligibility_assessments"),
+      appendOnly("credit_kyb_checks"),
+      appendOnly("credit_bank_access_events"),
+      appendOnly("credit_data_room_access_events"),
+      appendOnly("credit_backtest_runs"),
+    ],
+    afterRollback: [
+      not(bypass("eligibility_assessments")),
+      not(pol("credit_eligibility_assessments")),
+      not(pol("credit_kyb_checks")),
+      not(bypass("credit_bank_access_events")),
+      not(bypass("credit_data_room_access_events")),
+      not(bypass("credit_backtest_runs")),
+      not(bypass("financing_requests")),
+      not(bypass("facility_positions")),
+      not(bypass("repayment_events")),
+      not(appendOnly("eligibility_assessments")),
+      not(appendOnly("credit_eligibility_assessments")),
+      not(appendOnly("credit_kyb_checks")),
+      not(appendOnly("credit_bank_access_events")),
+      not(appendOnly("credit_data_room_access_events")),
+      not(appendOnly("credit_backtest_runs")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

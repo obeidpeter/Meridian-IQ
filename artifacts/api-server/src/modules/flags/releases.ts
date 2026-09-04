@@ -184,8 +184,9 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
   },
   {
     key: "bank_data_room",
-    releaseTag: "R4",
-    description: "Bank data room and financing origination",
+    releaseTag: "R3",
+    description:
+      "Privacy-protected bank Data Room for consented credit-readiness cohorts; no offers or financing execution",
     launchDefault: false,
     devDefault: false,
     requires: ["credit_readiness"],
@@ -355,9 +356,11 @@ export function activationReleaseTag(litKeys: Iterable<string>): ReleaseTag {
   const lit = new Set(litKeys);
   let stage: ReleaseTag = "R0";
   for (const tag of RELEASE_ORDER) {
-    const complete = RELEASE_FLAGS.filter((f) => f.releaseTag === tag).every(
-      (f) => lit.has(f.key),
-    );
+    const releaseFlags = RELEASE_FLAGS.filter((f) => f.releaseTag === tag);
+    // A future release with no implemented flags is not "vacuously" active.
+    // This matters while R4 financing execution intentionally has no code.
+    const complete =
+      releaseFlags.length > 0 && releaseFlags.every((f) => lit.has(f.key));
     if (!complete) break;
     stage = tag;
   }

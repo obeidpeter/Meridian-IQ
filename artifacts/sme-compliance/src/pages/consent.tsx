@@ -31,7 +31,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShieldCheck,
   ShieldOff,
-  Lock,
   Info,
   FileCheck2,
   BarChart3,
@@ -44,7 +43,9 @@ import { formatDate, humanize, pillClasses } from "@/lib/format";
 
 // Consent flows v1 (R1, CORE-03/C6): the three-layer architecture surfaced.
 // Layer 1 powers submission/vault/alerts; layer 2 anonymized benchmarking;
-// layer 3 (credit readiness) ships dark and is presented as a future benefit.
+// layer 3 is the separate, optional R3 credit-readiness permission. The
+// feature remains dark until its operational gates pass, but a business can
+// decide before pilot activation and can revoke at any time.
 
 const LAYERS = [
   {
@@ -71,8 +72,8 @@ const LAYERS = [
     scope: "credit_scoring",
     icon: Landmark,
     description:
-      "One day, your compliance history could help you get paid early against invoices you've already earned. This layer activates later, only with your explicit consent.",
-    dormant: true,
+      "Allows MeridianIQ to evaluate your verified invoice history for credit readiness and include it only in privacy-protected bank cohorts. It does not apply for finance, share your identity, or move money.",
+    dormant: false,
   },
 ] as const;
 
@@ -85,11 +86,11 @@ function scopeTitle(scope: string): string {
 }
 
 // The consequence a client accepts when revoking each layer — shown in the
-// confirm dialog before the ledger event is recorded. Layer 3 is dormant and
-// never shows a revoke button.
+// confirm dialog before the ledger event is recorded.
 const REVOKE_CONSEQUENCES: Record<number, string> = {
   1: "MeridianIQ stops validating, submitting and vaulting your invoices, and deadline alerts stop.",
   2: "Your data stops feeding anonymized industry benchmarks.",
+  3: "Credit-readiness assessment stops immediately and your records leave future bank Data Room cohorts.",
 };
 
 // Save in-memory bytes as a named download — the console's downloadBlob idiom
@@ -111,7 +112,10 @@ function actionLabel(r: Pick<ConsentRecord, "action" | "channel">): string {
 }
 
 // Latest grant/revoke wins per layer.
-function layerStatus(records: ConsentRecord[], layer: number): ConsentRecord | null {
+function layerStatus(
+  records: ConsentRecord[],
+  layer: number,
+): ConsentRecord | null {
   const forLayer = records
     .filter((r) => r.layer === layer)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -206,8 +210,8 @@ export function Consent() {
         title="Consent"
         description={
           <>
-            Every permission you've given us, with a full history — changes
-            are always recorded, never overwritten.{" "}
+            Every permission you've given us, with a full history — changes are
+            always recorded, never overwritten.{" "}
             <Link
               href="/help#consent"
               className="font-bold text-teal-800 underline underline-offset-2"
@@ -227,13 +231,17 @@ export function Consent() {
               data-testid="text-consent-readonly"
             >
               <Info className="w-4 h-4" aria-hidden="true" />
-              Read-only view — granting or revoking consent is for the client's own
-              account (or the firm admin).
+              Read-only view — granting or revoking consent is for the client's
+              own account (or the firm admin).
             </p>
           )}
 
           {isLoading ? (
-            <SkeletonList count={3} itemClassName="h-32" className="space-y-4" />
+            <SkeletonList
+              count={3}
+              itemClassName="h-32"
+              className="space-y-4"
+            />
           ) : isError ? (
             <QueryError thing="the consent ledger" onRetry={() => refetch()} />
           ) : (
@@ -245,40 +253,53 @@ export function Consent() {
                   const granted = current?.action === "grant";
                   const acting = actingLayer === l.layer && record.isPending;
                   return (
-                    <Card key={l.layer} data-testid={`consent-layer-${l.layer}`}>
+                    <Card
+                      key={l.layer}
+                      data-testid={`consent-layer-${l.layer}`}
+                    >
                       <CardHeader>
                         <h2 className="flex items-center justify-between gap-2 text-base font-semibold leading-snug">
                           <span className="flex items-center gap-2">
-                            <Icon className="w-4 h-4 text-primary" aria-hidden="true" />
+                            <Icon
+                              className="w-4 h-4 text-primary"
+                              aria-hidden="true"
+                            />
                             {l.title}
                             <span className="text-xs font-normal text-muted-foreground">
                               Layer {l.layer}
                             </span>
                           </span>
-                          {l.dormant ? (
-                            <span className={pillClasses("slate")}>
-                              <Lock className="w-3 h-3" aria-hidden="true" /> Not yet available
-                            </span>
-                          ) : granted ? (
+                          {granted ? (
                             <span className={pillClasses("emerald")}>
-                              <ShieldCheck className="w-3 h-3" aria-hidden="true" /> Granted
+                              <ShieldCheck
+                                className="w-3 h-3"
+                                aria-hidden="true"
+                              />{" "}
+                              Granted
                             </span>
                           ) : (
                             <span className={pillClasses("slate")}>
-                              <ShieldOff className="w-3 h-3" aria-hidden="true" /> Not granted
+                              <ShieldOff
+                                className="w-3 h-3"
+                                aria-hidden="true"
+                              />{" "}
+                              Not granted
                             </span>
                           )}
                         </h2>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        <p className="text-sm text-muted-foreground">{l.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {l.description}
+                        </p>
                         {current && (
                           <p className="text-xs text-muted-foreground">
                             Last change: {actionLabel(current)} ·{" "}
-                            {formatDate(current.createdAt)} via {humanize(current.channel)}
+                            {formatDate(current.createdAt)} via{" "}
+                            {humanize(current.channel)}
                           </p>
                         )}
-                        {!l.dormant && canWrite && (
+                        {canWrite && (
                           <div className="flex gap-2">
                             {granted ? (
                               <Button
@@ -289,7 +310,10 @@ export function Consent() {
                                 onClick={() => setRevokeTarget(l)}
                                 data-testid={`button-revoke-${l.layer}`}
                               >
-                                <ShieldOff className="w-4 h-4 mr-1" aria-hidden="true" />
+                                <ShieldOff
+                                  className="w-4 h-4 mr-1"
+                                  aria-hidden="true"
+                                />
                                 {acting ? "Revoking…" : "Revoke"}
                               </Button>
                             ) : (
@@ -299,7 +323,10 @@ export function Consent() {
                                 onClick={() => act(l.layer, l.scope, "grant")}
                                 data-testid={`button-grant-${l.layer}`}
                               >
-                                <ShieldCheck className="w-4 h-4 mr-1" aria-hidden="true" />
+                                <ShieldCheck
+                                  className="w-4 h-4 mr-1"
+                                  aria-hidden="true"
+                                />
                                 {acting ? "Granting…" : "Grant"}
                               </Button>
                             )}
@@ -393,12 +420,14 @@ export function Consent() {
 
           <Card>
             <CardHeader>
-              <h2 className="text-base font-semibold leading-snug">Your data</h2>
+              <h2 className="text-base font-semibold leading-snug">
+                Your data
+              </h2>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Download a complete copy of the data MeridianIQ holds about
-                your business.
+                Download a complete copy of the data MeridianIQ holds about your
+                business.
               </p>
               {exportFailed ? (
                 <QueryError

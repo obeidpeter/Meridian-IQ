@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.97.0
+  version: 0.98.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -44,6 +44,7 @@ tags:
   - name: workspace
   - name: work
   - name: invoice-room
+  - name: credit
 paths:
   /healthz:
     get:
@@ -73,6 +74,181 @@ paths:
                 $ref: "#/components/schemas/Me"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /operator/credit/governance:
+    get:
+      operationId: getCreditGovernance
+      tags: [credit, operator]
+      summary: Read R3 credit activation, evidence quality and bank-access posture
+      responses:
+        "200":
+          description: Credit governance workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditGovernance"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /operator/credit/assessments/run:
+    post:
+      operationId: runCreditAssessment
+      tags: [credit, operator]
+      summary: Append an idempotent, replayable eligibility assessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunCreditAssessmentInput"
+      responses:
+        "201":
+          description: Assessment created or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditAssessment"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operator/credit/kyb-checks:
+    post:
+      operationId: recordCreditKybCheck
+      tags: [credit, operator]
+      summary: Append a data-minimal financing-grade KYB check
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordCreditKybInput"
+      responses:
+        "201":
+          description: KYB check recorded or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditKybCheck"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operator/credit/bank-access:
+    post:
+      operationId: recordBankDataRoomAccess
+      tags: [credit, operator]
+      summary: Append a grant, suspension or revocation for a bank user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordBankDataRoomAccessInput"
+      responses:
+        "201":
+          description: Bank access event recorded or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankDataRoomAccess"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operator/credit/backtests:
+    post:
+      operationId: runCreditBacktest
+      tags: [credit, operator]
+      summary: Replay scorecard inputs and append a structural back-test result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunCreditBacktestInput"
+      responses:
+        "201":
+          description: Structural back-test created or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreditBacktest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operator/credit/collection-feed-specification:
+    get:
+      operationId: getCollectionFeedSpecification
+      tags: [credit, operator]
+      summary: Read the versioned collection-account feed profile
+      responses:
+        "200":
+          description: Collection-account feed specification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionFeedSpecification"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /credit/data-room:
+    get:
+      operationId: getBankDataRoom
+      tags: [credit]
+      summary: Read fixed, consented and privacy-protected credit cohorts
+      responses:
+        "200":
+          description: Aggregate-only bank Data Room
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankDataRoom"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /credit/data-room/access-log:
+    get:
+      operationId: listBankDataRoomAccess
+      tags: [credit]
+      summary: List bounded access events for the caller's bank
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Bank Data Room access history
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: "#/components/schemas/BankDataRoomAccessLogEntry"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /workspace/today:
     get:
@@ -19631,5 +19807,761 @@ components:
       properties:
         # ISO timestamp; every feed item at or before it is marked read for the caller.
         upToCreatedAt:
+          type: string
+          format: date-time
+
+    RunCreditAssessmentInput:
+      type: object
+      additionalProperties: false
+      required: [invoiceId, idempotencyKey]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          type: string
+          format: uuid
+
+    CreditRuleResult:
+      type: object
+      additionalProperties: false
+      required: [key, outcome, reason, observed, threshold, weight, points]
+      properties:
+        key:
+          type: string
+        outcome:
+          type: string
+          enum: [pass, fail, review]
+        reason:
+          type: string
+        observed:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: "null"
+        threshold:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: "null"
+        weight:
+          type: integer
+          minimum: 0
+          maximum: 100
+        points:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    CreditAssessment:
+      type: object
+      required:
+        [
+          id,
+          invoiceId,
+          firmId,
+          decision,
+          score,
+          scorecardVersion,
+          rulesetVersion,
+          features,
+          rules,
+          reasons,
+          inputHash,
+          evaluatedAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [eligible, ineligible, manual_review]
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        scorecardVersion:
+          type: string
+        rulesetVersion:
+          type: string
+        features:
+          type: object
+          additionalProperties: true
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreditRuleResult"
+        reasons:
+          type: array
+          items:
+            type: string
+        inputHash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        evaluatedAt:
+          type: string
+          format: date-time
+
+    CreditVerificationState:
+      type: string
+      enum: [not_checked, verified, review, failed]
+
+    RecordCreditKybInput:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          firmId,
+          partyId,
+          idempotencyKey,
+          beneficialOwnerCount,
+          ownershipCoverageBps,
+          beneficialOwnersVerified,
+          bankAccountOwnership,
+          sanctionsScreening,
+          pepScreening,
+          adverseMediaScreening,
+          provider,
+          evidenceRefs,
+          checkedAt,
+          expiresAt,
+        ]
+      properties:
+        firmId:
+          type: string
+          format: uuid
+        partyId:
+          type: string
+          format: uuid
+        idempotencyKey:
+          type: string
+          format: uuid
+        beneficialOwnerCount:
+          type: integer
+          minimum: 0
+          maximum: 100
+        ownershipCoverageBps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        beneficialOwnersVerified:
+          type: boolean
+        bankAccountOwnership:
+          $ref: "#/components/schemas/CreditVerificationState"
+        sanctionsScreening:
+          $ref: "#/components/schemas/CreditVerificationState"
+        pepScreening:
+          $ref: "#/components/schemas/CreditVerificationState"
+        adverseMediaScreening:
+          $ref: "#/components/schemas/CreditVerificationState"
+        provider:
+          type: string
+          minLength: 1
+          maxLength: 80
+        providerReference:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 200
+        evidenceRefs:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+            pattern: "^[A-Za-z0-9._:/-]+$"
+        checkedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    CreditKybCheck:
+      allOf:
+        - $ref: "#/components/schemas/RecordCreditKybInput"
+        - type: object
+          required: [id, status, createdAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [verified, review, failed, expired]
+            createdAt:
+              type: string
+              format: date-time
+
+    RecordBankDataRoomAccessInput:
+      type: object
+      additionalProperties: false
+      required: [bankPartyId, userId, action, reason, idempotencyKey]
+      properties:
+        bankPartyId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [grant, suspend, revoke]
+        dpaReference:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 160
+        dpaExecutedAt:
+          type: ["string", "null"]
+          format: date-time
+        validUntil:
+          type: ["string", "null"]
+          format: date-time
+        reason:
+          type: string
+          minLength: 4
+          maxLength: 500
+        idempotencyKey:
+          type: string
+          format: uuid
+
+    BankDataRoomAccess:
+      type: object
+      required:
+        [
+          id,
+          bankPartyId,
+          userId,
+          action,
+          dpaReference,
+          dpaExecutedAt,
+          validUntil,
+          reason,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        bankPartyId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [grant, suspend, revoke]
+        dpaReference:
+          type: ["string", "null"]
+        dpaExecutedAt:
+          type: ["string", "null"]
+          format: date-time
+        validUntil:
+          type: ["string", "null"]
+          format: date-time
+        reason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    RunCreditBacktestInput:
+      type: object
+      additionalProperties: false
+      required: [fromDate, toDate, idempotencyKey]
+      properties:
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+        idempotencyKey:
+          type: string
+          format: uuid
+
+    CreditBacktest:
+      type: object
+      required:
+        [
+          id,
+          fromDate,
+          toDate,
+          scorecardVersion,
+          rulesetVersion,
+          structuralOnly,
+          sampleSize,
+          passed,
+          metrics,
+          inputHash,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+        scorecardVersion:
+          type: string
+        rulesetVersion:
+          type: string
+        structuralOnly:
+          type: boolean
+        sampleSize:
+          type: integer
+        passed:
+          type: boolean
+        metrics:
+          type: object
+          additionalProperties: true
+        inputHash:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        createdAt:
+          type: string
+          format: date-time
+
+    CreditGovernance:
+      type: object
+      required:
+        [
+          generatedAt,
+          activationReady,
+          blockers,
+          versions,
+          policy,
+          featurePosture,
+          activationEvidence,
+          assessments,
+          kyb,
+          bankAccess,
+          latestBacktest,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        activationReady:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            type: string
+        versions:
+          type: object
+          required: [scorecard, ruleset, collectionFeed]
+          properties:
+            scorecard:
+              type: string
+            ruleset:
+              type: string
+            collectionFeed:
+              type: string
+        policy:
+          type: object
+          required:
+            [
+              maxInvoiceAmountNgn,
+              maxSupplierOutstandingNgn,
+              maxBuyerConcentrationBps,
+              volumeAnomalyMultiplierBps,
+              minimumHistoryInvoices,
+              permittedSettlementSources,
+            ]
+          properties:
+            maxInvoiceAmountNgn:
+              type: string
+            maxSupplierOutstandingNgn:
+              type: string
+            maxBuyerConcentrationBps:
+              type: integer
+            volumeAnomalyMultiplierBps:
+              type: integer
+            minimumHistoryInvoices:
+              type: integer
+            permittedSettlementSources:
+              type: array
+              items:
+                type: string
+                enum: [statement_match, buyer_flag, collection_account]
+        featurePosture:
+          type: object
+          required:
+            [
+              creditReadinessEnabled,
+              creditPilotFirms,
+              bankDataRoomEnabled,
+              bankDataRoomPilotFirms,
+            ]
+          properties:
+            creditReadinessEnabled:
+              type: boolean
+            creditPilotFirms:
+              type: integer
+            bankDataRoomEnabled:
+              type: boolean
+            bankDataRoomPilotFirms:
+              type: integer
+        activationEvidence:
+          type: object
+          required:
+            [
+              targetBusinesses,
+              observableBusinesses,
+              observableInvoices,
+              mandatorySourceComplete,
+              dpiaApprovedAt,
+              bankMouReference,
+              collectionFeedAgreedAt,
+              collectionFeedAgreementReference,
+            ]
+          properties:
+            targetBusinesses:
+              type: integer
+            observableBusinesses:
+              type: integer
+            observableInvoices:
+              type: integer
+            mandatorySourceComplete:
+              type: integer
+            dpiaApprovedAt:
+              type: ["string", "null"]
+              format: date-time
+            bankMouReference:
+              type: ["string", "null"]
+            collectionFeedAgreedAt:
+              type: ["string", "null"]
+              format: date-time
+            collectionFeedAgreementReference:
+              type: ["string", "null"]
+        assessments:
+          type: object
+          required:
+            [
+              total,
+              businesses,
+              consentingBusinesses,
+              eligible,
+              manualReview,
+              ineligible,
+              buyerConfirmationCoverage,
+              settlementObservationCoverage,
+              kybCoverage,
+              dataThrough,
+            ]
+          properties:
+            total:
+              type: integer
+            businesses:
+              type: integer
+            consentingBusinesses:
+              type: integer
+            eligible:
+              type: integer
+            manualReview:
+              type: integer
+            ineligible:
+              type: integer
+            buyerConfirmationCoverage:
+              type: ["number", "null"]
+            settlementObservationCoverage:
+              type: ["number", "null"]
+            kybCoverage:
+              type: ["number", "null"]
+            dataThrough:
+              type: ["string", "null"]
+              format: date-time
+        kyb:
+          type: object
+          required: [checked, verified, expired, attention]
+          properties:
+            checked:
+              type: integer
+            verified:
+              type: integer
+            expired:
+              type: integer
+            attention:
+              type: integer
+        bankAccess:
+          type: object
+          required:
+            [
+              governedUsers,
+              mfaUsers,
+              activeUsers,
+              views30d,
+              viewers30d,
+              suppressedViews30d,
+              lastAccessAt,
+            ]
+          properties:
+            governedUsers:
+              type: integer
+            mfaUsers:
+              type: integer
+            activeUsers:
+              type: integer
+            views30d:
+              type: integer
+            viewers30d:
+              type: integer
+            suppressedViews30d:
+              type: integer
+            lastAccessAt:
+              type: ["string", "null"]
+              format: date-time
+        latestBacktest:
+          oneOf:
+            - $ref: "#/components/schemas/CreditBacktest"
+            - type: "null"
+
+    CollectionFeedSpecification:
+      type: object
+      required:
+        [
+          version,
+          status,
+          transport,
+          path,
+          acknowledgementStatus,
+          semantics,
+          authentication,
+          payload,
+          idempotency,
+          privacy,
+        ]
+      properties:
+        version:
+          type: string
+        status:
+          type: string
+          enum: [ready_for_bank_agreement]
+        transport:
+          type: string
+        path:
+          type: string
+        acknowledgementStatus:
+          type: integer
+        semantics:
+          type: string
+          enum: [at_least_once]
+        authentication:
+          type: object
+          additionalProperties: true
+        payload:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        idempotency:
+          type: object
+          additionalProperties: true
+        privacy:
+          type: object
+          additionalProperties: true
+
+    BankDataRoomMetrics:
+      type: object
+      required:
+        [
+          consentingBusinesses,
+          assessedInvoices,
+          eligibleInvoices,
+          manualReviewInvoices,
+          ineligibleInvoices,
+          eligibleRate,
+          buyerConfirmationCoverage,
+          settlementObservationCoverage,
+          kybCoverage,
+        ]
+      properties:
+        consentingBusinesses:
+          type: integer
+        assessedInvoices:
+          type: integer
+        eligibleInvoices:
+          type: integer
+        manualReviewInvoices:
+          type: integer
+        ineligibleInvoices:
+          type: integer
+        eligibleRate:
+          type: ["number", "null"]
+        buyerConfirmationCoverage:
+          type: ["number", "null"]
+        settlementObservationCoverage:
+          type: ["number", "null"]
+        kybCoverage:
+          type: ["number", "null"]
+
+    BankDataRoomCohort:
+      type: object
+      required:
+        [
+          period,
+          amountBand,
+          businesses,
+          assessedInvoices,
+          eligibleRate,
+          manualReviewRate,
+          ineligibleRate,
+          buyerConfirmationCoverage,
+          settlementObservationCoverage,
+          kybCoverage,
+        ]
+      properties:
+        period:
+          type: string
+        amountBand:
+          type: string
+          enum:
+            [unavailable, under_250k, 250k_to_1m, 1m_to_5m, 5m_to_20m, 20m_plus]
+        businesses:
+          type: integer
+        assessedInvoices:
+          type: integer
+        eligibleRate:
+          type: ["number", "null"]
+        manualReviewRate:
+          type: ["number", "null"]
+        ineligibleRate:
+          type: ["number", "null"]
+        buyerConfirmationCoverage:
+          type: ["number", "null"]
+        settlementObservationCoverage:
+          type: ["number", "null"]
+        kybCoverage:
+          type: ["number", "null"]
+
+    BankDataRoom:
+      type: object
+      required:
+        [
+          generatedAt,
+          dataThrough,
+          available,
+          accessEventId,
+          privacy,
+          assurance,
+          metrics,
+          cohorts,
+        ]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        dataThrough:
+          type: ["string", "null"]
+          format: date-time
+        available:
+          type: boolean
+        accessEventId:
+          type: string
+          format: uuid
+        privacy:
+          type: object
+          required:
+            [
+              minimumCohortSize,
+              suppressedCells,
+              exactAmountsShared,
+              directIdentifiersShared,
+              rawExportsEnabled,
+              layer3ConsentRequired,
+              dateGranularity,
+              amountGranularity,
+            ]
+          properties:
+            minimumCohortSize:
+              type: integer
+              minimum: 5
+            suppressedCells:
+              type: integer
+            exactAmountsShared:
+              type: boolean
+            directIdentifiersShared:
+              type: boolean
+            rawExportsEnabled:
+              type: boolean
+            layer3ConsentRequired:
+              type: boolean
+            dateGranularity:
+              type: string
+              enum: [quarter]
+            amountGranularity:
+              type: string
+              enum: [fixed_band]
+        assurance:
+          type: object
+          required:
+            [
+              dpaReference,
+              accessValidUntil,
+              scorecardVersions,
+              rulesetVersions,
+              decisionsAreDeterministic,
+              backtestsAreStructuralOnly,
+            ]
+          properties:
+            dpaReference:
+              type: string
+            accessValidUntil:
+              type: ["string", "null"]
+              format: date-time
+            scorecardVersions:
+              type: array
+              items:
+                type: string
+            rulesetVersions:
+              type: array
+              items:
+                type: string
+            decisionsAreDeterministic:
+              type: boolean
+            backtestsAreStructuralOnly:
+              type: boolean
+        metrics:
+          oneOf:
+            - $ref: "#/components/schemas/BankDataRoomMetrics"
+            - type: "null"
+        cohorts:
+          type: array
+          maxItems: 80
+          items:
+            $ref: "#/components/schemas/BankDataRoomCohort"
+
+    BankDataRoomAccessLogEntry:
+      type: object
+      required: [id, userId, action, outcome, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [overview, access_log]
+        outcome:
+          type: string
+          enum: [served, suppressed]
+        createdAt:
           type: string
           format: date-time

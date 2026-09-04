@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.97.0
+ * OpenAPI spec version: 0.98.0
  */
 export interface HealthStatus {
   status: string;
@@ -8075,6 +8075,464 @@ export interface MarkNotificationsReadInput {
   upToCreatedAt: string;
 }
 
+export interface RunCreditAssessmentInput {
+  invoiceId: string;
+  idempotencyKey: string;
+}
+
+export type CreditRuleResultOutcome = typeof CreditRuleResultOutcome[keyof typeof CreditRuleResultOutcome];
+
+
+export const CreditRuleResultOutcome = {
+  pass: 'pass',
+  fail: 'fail',
+  review: 'review',
+} as const;
+
+export interface CreditRuleResult {
+  key: string;
+  outcome: CreditRuleResultOutcome;
+  reason: string;
+  observed: string | number | boolean | null;
+  threshold: string | number | boolean | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  weight: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  points: number;
+}
+
+export type CreditAssessmentDecision = typeof CreditAssessmentDecision[keyof typeof CreditAssessmentDecision];
+
+
+export const CreditAssessmentDecision = {
+  eligible: 'eligible',
+  ineligible: 'ineligible',
+  manual_review: 'manual_review',
+} as const;
+
+export type CreditAssessmentFeatures = { [key: string]: unknown };
+
+export interface CreditAssessment {
+  id: string;
+  invoiceId: string;
+  firmId: string;
+  decision: CreditAssessmentDecision;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  score: number;
+  scorecardVersion: string;
+  rulesetVersion: string;
+  features: CreditAssessmentFeatures;
+  rules: CreditRuleResult[];
+  reasons: string[];
+  /** @pattern ^[a-f0-9]{64}$ */
+  inputHash: string;
+  evaluatedAt: string;
+}
+
+export type CreditVerificationState = typeof CreditVerificationState[keyof typeof CreditVerificationState];
+
+
+export const CreditVerificationState = {
+  not_checked: 'not_checked',
+  verified: 'verified',
+  review: 'review',
+  failed: 'failed',
+} as const;
+
+export interface RecordCreditKybInput {
+  firmId: string;
+  partyId: string;
+  idempotencyKey: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  beneficialOwnerCount: number;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  ownershipCoverageBps: number;
+  beneficialOwnersVerified: boolean;
+  bankAccountOwnership: CreditVerificationState;
+  sanctionsScreening: CreditVerificationState;
+  pepScreening: CreditVerificationState;
+  adverseMediaScreening: CreditVerificationState;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  provider: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     * @nullable
+     */
+  providerReference?: string | null;
+  /**
+     * @maxItems 20
+     * @items.minLength 1
+     * @items.maxLength 200
+     * @items.pattern ^[A-Za-z0-9._:/-]+$
+     */
+  evidenceRefs: string[];
+  checkedAt: string;
+  expiresAt: string;
+}
+
+export type CreditKybCheckStatus = typeof CreditKybCheckStatus[keyof typeof CreditKybCheckStatus];
+
+
+export const CreditKybCheckStatus = {
+  verified: 'verified',
+  review: 'review',
+  failed: 'failed',
+  expired: 'expired',
+} as const;
+
+export type CreditKybCheck = RecordCreditKybInput & {
+  id: string;
+  status: CreditKybCheckStatus;
+  createdAt: string;
+};
+
+export type RecordBankDataRoomAccessInputAction = typeof RecordBankDataRoomAccessInputAction[keyof typeof RecordBankDataRoomAccessInputAction];
+
+
+export const RecordBankDataRoomAccessInputAction = {
+  grant: 'grant',
+  suspend: 'suspend',
+  revoke: 'revoke',
+} as const;
+
+export interface RecordBankDataRoomAccessInput {
+  bankPartyId: string;
+  userId: string;
+  action: RecordBankDataRoomAccessInputAction;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     * @nullable
+     */
+  dpaReference?: string | null;
+  /** @nullable */
+  dpaExecutedAt?: string | null;
+  /** @nullable */
+  validUntil?: string | null;
+  /**
+     * @minLength 4
+     * @maxLength 500
+     */
+  reason: string;
+  idempotencyKey: string;
+}
+
+export type BankDataRoomAccessAction = typeof BankDataRoomAccessAction[keyof typeof BankDataRoomAccessAction];
+
+
+export const BankDataRoomAccessAction = {
+  grant: 'grant',
+  suspend: 'suspend',
+  revoke: 'revoke',
+} as const;
+
+export interface BankDataRoomAccess {
+  id: string;
+  bankPartyId: string;
+  userId: string;
+  action: BankDataRoomAccessAction;
+  /** @nullable */
+  dpaReference: string | null;
+  /** @nullable */
+  dpaExecutedAt: string | null;
+  /** @nullable */
+  validUntil: string | null;
+  reason: string;
+  createdAt: string;
+}
+
+export interface RunCreditBacktestInput {
+  fromDate: string;
+  toDate: string;
+  idempotencyKey: string;
+}
+
+export type CreditBacktestMetrics = { [key: string]: unknown };
+
+export interface CreditBacktest {
+  id: string;
+  fromDate: string;
+  toDate: string;
+  scorecardVersion: string;
+  rulesetVersion: string;
+  structuralOnly: boolean;
+  sampleSize: number;
+  passed: boolean;
+  metrics: CreditBacktestMetrics;
+  /** @pattern ^[a-f0-9]{64}$ */
+  inputHash: string;
+  createdAt: string;
+}
+
+export type CreditGovernanceVersions = {
+  scorecard: string;
+  ruleset: string;
+  collectionFeed: string;
+};
+
+export type CreditGovernancePolicyPermittedSettlementSourcesItem = typeof CreditGovernancePolicyPermittedSettlementSourcesItem[keyof typeof CreditGovernancePolicyPermittedSettlementSourcesItem];
+
+
+export const CreditGovernancePolicyPermittedSettlementSourcesItem = {
+  statement_match: 'statement_match',
+  buyer_flag: 'buyer_flag',
+  collection_account: 'collection_account',
+} as const;
+
+export type CreditGovernancePolicy = {
+  maxInvoiceAmountNgn: string;
+  maxSupplierOutstandingNgn: string;
+  maxBuyerConcentrationBps: number;
+  volumeAnomalyMultiplierBps: number;
+  minimumHistoryInvoices: number;
+  permittedSettlementSources: CreditGovernancePolicyPermittedSettlementSourcesItem[];
+};
+
+export type CreditGovernanceFeaturePosture = {
+  creditReadinessEnabled: boolean;
+  creditPilotFirms: number;
+  bankDataRoomEnabled: boolean;
+  bankDataRoomPilotFirms: number;
+};
+
+export type CreditGovernanceActivationEvidence = {
+  targetBusinesses: number;
+  observableBusinesses: number;
+  observableInvoices: number;
+  mandatorySourceComplete: number;
+  /** @nullable */
+  dpiaApprovedAt: string | null;
+  /** @nullable */
+  bankMouReference: string | null;
+  /** @nullable */
+  collectionFeedAgreedAt: string | null;
+  /** @nullable */
+  collectionFeedAgreementReference: string | null;
+};
+
+export type CreditGovernanceAssessments = {
+  total: number;
+  businesses: number;
+  consentingBusinesses: number;
+  eligible: number;
+  manualReview: number;
+  ineligible: number;
+  /** @nullable */
+  buyerConfirmationCoverage: number | null;
+  /** @nullable */
+  settlementObservationCoverage: number | null;
+  /** @nullable */
+  kybCoverage: number | null;
+  /** @nullable */
+  dataThrough: string | null;
+};
+
+export type CreditGovernanceKyb = {
+  checked: number;
+  verified: number;
+  expired: number;
+  attention: number;
+};
+
+export type CreditGovernanceBankAccess = {
+  governedUsers: number;
+  mfaUsers: number;
+  activeUsers: number;
+  views30d: number;
+  viewers30d: number;
+  suppressedViews30d: number;
+  /** @nullable */
+  lastAccessAt: string | null;
+};
+
+export interface CreditGovernance {
+  generatedAt: string;
+  activationReady: boolean;
+  blockers: string[];
+  versions: CreditGovernanceVersions;
+  policy: CreditGovernancePolicy;
+  featurePosture: CreditGovernanceFeaturePosture;
+  activationEvidence: CreditGovernanceActivationEvidence;
+  assessments: CreditGovernanceAssessments;
+  kyb: CreditGovernanceKyb;
+  bankAccess: CreditGovernanceBankAccess;
+  latestBacktest: CreditBacktest | null;
+}
+
+export type CollectionFeedSpecificationStatus = typeof CollectionFeedSpecificationStatus[keyof typeof CollectionFeedSpecificationStatus];
+
+
+export const CollectionFeedSpecificationStatus = {
+  ready_for_bank_agreement: 'ready_for_bank_agreement',
+} as const;
+
+export type CollectionFeedSpecificationSemantics = typeof CollectionFeedSpecificationSemantics[keyof typeof CollectionFeedSpecificationSemantics];
+
+
+export const CollectionFeedSpecificationSemantics = {
+  at_least_once: 'at_least_once',
+} as const;
+
+export type CollectionFeedSpecificationAuthentication = { [key: string]: unknown };
+
+export type CollectionFeedSpecificationPayloadItem = { [key: string]: unknown };
+
+export type CollectionFeedSpecificationIdempotency = { [key: string]: unknown };
+
+export type CollectionFeedSpecificationPrivacy = { [key: string]: unknown };
+
+export interface CollectionFeedSpecification {
+  version: string;
+  status: CollectionFeedSpecificationStatus;
+  transport: string;
+  path: string;
+  acknowledgementStatus: number;
+  semantics: CollectionFeedSpecificationSemantics;
+  authentication: CollectionFeedSpecificationAuthentication;
+  payload: CollectionFeedSpecificationPayloadItem[];
+  idempotency: CollectionFeedSpecificationIdempotency;
+  privacy: CollectionFeedSpecificationPrivacy;
+}
+
+export interface BankDataRoomMetrics {
+  consentingBusinesses: number;
+  assessedInvoices: number;
+  eligibleInvoices: number;
+  manualReviewInvoices: number;
+  ineligibleInvoices: number;
+  /** @nullable */
+  eligibleRate: number | null;
+  /** @nullable */
+  buyerConfirmationCoverage: number | null;
+  /** @nullable */
+  settlementObservationCoverage: number | null;
+  /** @nullable */
+  kybCoverage: number | null;
+}
+
+export type BankDataRoomCohortAmountBand = typeof BankDataRoomCohortAmountBand[keyof typeof BankDataRoomCohortAmountBand];
+
+
+export const BankDataRoomCohortAmountBand = {
+  unavailable: 'unavailable',
+  under_250k: 'under_250k',
+  '250k_to_1m': '250k_to_1m',
+  '1m_to_5m': '1m_to_5m',
+  '5m_to_20m': '5m_to_20m',
+  '20m_plus': '20m_plus',
+} as const;
+
+export interface BankDataRoomCohort {
+  period: string;
+  amountBand: BankDataRoomCohortAmountBand;
+  businesses: number;
+  assessedInvoices: number;
+  /** @nullable */
+  eligibleRate: number | null;
+  /** @nullable */
+  manualReviewRate: number | null;
+  /** @nullable */
+  ineligibleRate: number | null;
+  /** @nullable */
+  buyerConfirmationCoverage: number | null;
+  /** @nullable */
+  settlementObservationCoverage: number | null;
+  /** @nullable */
+  kybCoverage: number | null;
+}
+
+export type BankDataRoomPrivacyDateGranularity = typeof BankDataRoomPrivacyDateGranularity[keyof typeof BankDataRoomPrivacyDateGranularity];
+
+
+export const BankDataRoomPrivacyDateGranularity = {
+  quarter: 'quarter',
+} as const;
+
+export type BankDataRoomPrivacyAmountGranularity = typeof BankDataRoomPrivacyAmountGranularity[keyof typeof BankDataRoomPrivacyAmountGranularity];
+
+
+export const BankDataRoomPrivacyAmountGranularity = {
+  fixed_band: 'fixed_band',
+} as const;
+
+export type BankDataRoomPrivacy = {
+  /** @minimum 5 */
+  minimumCohortSize: number;
+  suppressedCells: number;
+  exactAmountsShared: boolean;
+  directIdentifiersShared: boolean;
+  rawExportsEnabled: boolean;
+  layer3ConsentRequired: boolean;
+  dateGranularity: BankDataRoomPrivacyDateGranularity;
+  amountGranularity: BankDataRoomPrivacyAmountGranularity;
+};
+
+export type BankDataRoomAssurance = {
+  dpaReference: string;
+  /** @nullable */
+  accessValidUntil: string | null;
+  scorecardVersions: string[];
+  rulesetVersions: string[];
+  decisionsAreDeterministic: boolean;
+  backtestsAreStructuralOnly: boolean;
+};
+
+export interface BankDataRoom {
+  generatedAt: string;
+  /** @nullable */
+  dataThrough: string | null;
+  available: boolean;
+  accessEventId: string;
+  privacy: BankDataRoomPrivacy;
+  assurance: BankDataRoomAssurance;
+  metrics: BankDataRoomMetrics | null;
+  /** @maxItems 80 */
+  cohorts: BankDataRoomCohort[];
+}
+
+export type BankDataRoomAccessLogEntryAction = typeof BankDataRoomAccessLogEntryAction[keyof typeof BankDataRoomAccessLogEntryAction];
+
+
+export const BankDataRoomAccessLogEntryAction = {
+  overview: 'overview',
+  access_log: 'access_log',
+} as const;
+
+export type BankDataRoomAccessLogEntryOutcome = typeof BankDataRoomAccessLogEntryOutcome[keyof typeof BankDataRoomAccessLogEntryOutcome];
+
+
+export const BankDataRoomAccessLogEntryOutcome = {
+  served: 'served',
+  suppressed: 'suppressed',
+} as const;
+
+export interface BankDataRoomAccessLogEntry {
+  id: string;
+  userId: string;
+  action: BankDataRoomAccessLogEntryAction;
+  outcome: BankDataRoomAccessLogEntryOutcome;
+  createdAt: string;
+}
+
 /**
  * Bad request
  */
@@ -8104,6 +8562,14 @@ export type ConflictResponse = Error;
  * The request is valid JSON but cannot be accepted
  */
 export type UnprocessableEntityResponse = Error;
+
+export type ListBankDataRoomAccessParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
 
 export type GetWorkspaceTodayParams = {
 /**

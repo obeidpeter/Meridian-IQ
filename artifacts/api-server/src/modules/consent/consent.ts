@@ -17,8 +17,8 @@ export const CONSENT_LAYERS = {
 
 // Every processing purpose declares the consent layer it requires. The
 // permission query answers, for a given record right now, whether a purpose is
-// permitted. Layer three (credit) purposes are dormant until R3 but the gate is
-// enforced here from day one.
+// permitted. Layer three powers the dark R3 credit-readiness surfaces and is
+// enforced before either assessment or aggregate disclosure.
 export const PURPOSE_LAYER: Record<string, number> = {
   compliance_submission: CONSENT_LAYERS.COMPLIANCE,
   vault_storage: CONSENT_LAYERS.COMPLIANCE,
