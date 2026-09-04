@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.96.0
+  version: 0.97.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -43,6 +43,7 @@ tags:
   - name: invitation
   - name: workspace
   - name: work
+  - name: invoice-room
 paths:
   /healthz:
     get:
@@ -1984,6 +1985,264 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SettlementEvent"
+
+  /invoice-rooms:
+    get:
+      operationId: listInvoiceRooms
+      tags: [invoice-room]
+      summary: List secure buyer rooms for invoices in the caller's supplier scope
+      responses:
+        "200":
+          description: Invoice Room control-centre rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomList"
+
+  /invoices/{id}/invoice-rooms:
+    get:
+      operationId: listInvoiceRoomsForInvoice
+      tags: [invoice-room]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Current and historical rooms for this invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomList"
+    post:
+      operationId: createInvoiceRoom
+      tags: [invoice-room]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomCreateInput"
+      responses:
+        "201":
+          description: Room created; the fragment-bearing secure URL is returned to this authorized caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomCreated"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /invoice-rooms/{id}/revoke:
+    post:
+      operationId: revokeInvoiceRoom
+      tags: [invoice-room]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Revoked room
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [room]
+                properties:
+                  room:
+                    $ref: "#/components/schemas/InvoiceRoomSummary"
+
+  /invoice-rooms/{id}/replace:
+    post:
+      operationId: replaceInvoiceRoom
+      tags: [invoice-room]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomCreateInput"
+      responses:
+        "201":
+          description: Previous room revoked and a fresh secure link issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomCreated"
+
+  /public/invoice-room/exchange:
+    post:
+      operationId: exchangeInvoiceRoomToken
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomExchangeInput"
+      responses:
+        "200":
+          description: Share credential exchanged for an HttpOnly room session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomDetail"
+        "410":
+          description: Link expired or revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /public/invoice-room:
+    get:
+      operationId: getPublicInvoiceRoom
+      tags: [invoice-room]
+      responses:
+        "200":
+          description: Buyer-safe invoice room view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /public/invoice-room/otp:
+    post:
+      operationId: requestInvoiceRoomOtp
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomOtpInput"
+      responses:
+        "202":
+          description: Verification code dispatched to the room's pre-bound contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomOtpDispatch"
+
+  /public/invoice-room/verify:
+    post:
+      operationId: verifyInvoiceRoomOtp
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomVerifyInput"
+      responses:
+        "200":
+          description: Verified room with consequential actions unlocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /public/invoice-room/respond:
+    post:
+      operationId: respondInvoiceRoom
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomResponseInput"
+      responses:
+        "200":
+          description: Confirmation response recorded in the canonical invoice lineage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomDetail"
+
+  /public/invoice-room/payment-reports:
+    post:
+      operationId: reportInvoiceRoomPayment
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomPaymentReportInput"
+      responses:
+        "200":
+          description: Buyer-reported remittance appended to settlement evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomDetail"
+
+  /public/invoice-room/payment-link:
+    post:
+      operationId: createInvoiceRoomPaymentLink
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdempotentRoomAction"
+      responses:
+        "201":
+          description: Hosted checkout initialized with the configured payment provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomPaymentRequest"
+        "503":
+          description: Hosted checkout is not configured; payment instructions remain available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /public/invoice-room/claim:
+    post:
+      operationId: claimInvoiceRoomAccount
+      tags: [invoice-room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceRoomClaimInput"
+      responses:
+        "200":
+          description: Existing account linked; sign-in is still required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomClaimResult"
+        "201":
+          description: Buyer account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceRoomClaimResult"
+
+  /public/invoice-room/pdf:
+    get:
+      operationId: getInvoiceRoomPdf
+      tags: [invoice-room]
+      responses:
+        "200":
+          description: Branded invoice PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
 
   /verify-stamp:
     post:
@@ -7595,7 +7854,8 @@ components:
 
     WorkspaceTodaySummary:
       type: object
-      required: [total, urgent, dueSoon, blocked, completedSetupSteps, totalSetupSteps]
+      required:
+        [total, urgent, dueSoon, blocked, completedSetupSteps, totalSetupSteps]
       properties:
         total:
           type: integer
@@ -7619,7 +7879,21 @@ components:
     WorkspaceTodayItem:
       type: object
       required:
-        [id, source, kind, title, description, priority, status, dueAt, href, clientPartyId, clientName, entityType, entityId]
+        [
+          id,
+          source,
+          kind,
+          title,
+          description,
+          priority,
+          status,
+          dueAt,
+          href,
+          clientPartyId,
+          clientName,
+          entityType,
+          entityId,
+        ]
       properties:
         id:
           type: string
@@ -7687,7 +7961,28 @@ components:
     WorkItem:
       type: object
       required:
-        [id, firmId, clientPartyId, clientName, title, description, status, priority, dueAt, assignedTo, assignedToName, createdBy, createdByName, entityType, entityId, href, version, completedAt, createdAt, updatedAt]
+        [
+          id,
+          firmId,
+          clientPartyId,
+          clientName,
+          title,
+          description,
+          status,
+          priority,
+          dueAt,
+          assignedTo,
+          assignedToName,
+          createdBy,
+          createdByName,
+          entityType,
+          entityId,
+          href,
+          version,
+          completedAt,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -7779,7 +8074,7 @@ components:
           format: uuid
         href:
           type: string
-          pattern: '^/'
+          pattern: "^/"
           maxLength: 300
 
     UpdateWorkItemInput:
@@ -7812,7 +8107,16 @@ components:
 
     WorkItemComment:
       type: object
-      required: [id, workItemId, authorId, authorName, body, mentionedUserIds, createdAt]
+      required:
+        [
+          id,
+          workItemId,
+          authorId,
+          authorName,
+          body,
+          mentionedUserIds,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -8063,7 +8367,18 @@ components:
 
     ConsentRecord:
       type: object
-      required: [id, partyId, layer, action, scope, basis, channel, commandId, createdAt]
+      required:
+        [
+          id,
+          partyId,
+          layer,
+          action,
+          scope,
+          basis,
+          channel,
+          commandId,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -8206,6 +8521,555 @@ components:
         findings:
           type: object
           additionalProperties: true
+
+    InvoiceRoomCreateInput:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          clientRequestId,
+          deliveryChannel,
+          expiresInDays,
+          sendNow,
+          remindersEnabled,
+          contactConsent,
+        ]
+      properties:
+        clientRequestId:
+          type: string
+          format: uuid
+        recipientEmail:
+          type: ["string", "null"]
+          format: email
+          maxLength: 254
+        recipientPhone:
+          type: ["string", "null"]
+          minLength: 8
+          maxLength: 40
+        deliveryChannel:
+          type: string
+          enum: [email, whatsapp, copy]
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 90
+        sendNow:
+          type: boolean
+        remindersEnabled:
+          type: boolean
+        contactConsent:
+          type: boolean
+
+    InvoiceRoomExchangeInput:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 32
+          maxLength: 128
+
+    InvoiceRoomOtpInput:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel:
+          type: string
+          enum: [email, whatsapp]
+
+    InvoiceRoomVerifyInput:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+
+    InvoiceRoomSummary:
+      type: object
+      required:
+        [
+          id,
+          invoiceId,
+          invoiceNumber,
+          buyerName,
+          amount,
+          currency,
+          invoiceStatus,
+          status,
+          deliveryChannel,
+          recipient,
+          remindersEnabled,
+          expiresAt,
+          createdAt,
+          lastDeliveredAt,
+          lastActivityAt,
+          openedAt,
+          verifiedAt,
+          responseState,
+          paymentStatus,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        buyerName:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        invoiceStatus:
+          type: string
+        status:
+          type: string
+          enum: [active, expired, revoked]
+        deliveryChannel:
+          type: string
+          enum: [email, whatsapp, copy]
+        recipient:
+          type: ["string", "null"]
+        remindersEnabled:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        lastDeliveredAt:
+          type: ["string", "null"]
+          format: date-time
+        lastActivityAt:
+          type: ["string", "null"]
+          format: date-time
+        openedAt:
+          type: ["string", "null"]
+          format: date-time
+        verifiedAt:
+          type: ["string", "null"]
+          format: date-time
+        responseState:
+          type: ["string", "null"]
+        paymentStatus:
+          type: ["string", "null"]
+
+    InvoiceRoomList:
+      type: object
+      required: [rooms]
+      properties:
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceRoomSummary"
+
+    InvoiceRoomDelivery:
+      type: object
+      required: [attempted, status]
+      properties:
+        attempted:
+          type: boolean
+        status:
+          type: string
+          enum: [not_requested, sent, failed]
+        error:
+          type: string
+
+    InvoiceRoomCreated:
+      type: object
+      required: [room, url, delivery]
+      properties:
+        room:
+          $ref: "#/components/schemas/InvoiceRoomSummary"
+        url:
+          type: string
+          format: uri
+        delivery:
+          $ref: "#/components/schemas/InvoiceRoomDelivery"
+
+    InvoiceRoomSession:
+      type: object
+      required:
+        [
+          id,
+          status,
+          expiresAt,
+          identityVerified,
+          verifiedChannel,
+          recipientEmail,
+          recipientPhone,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, expired, revoked]
+        expiresAt:
+          type: string
+          format: date-time
+        identityVerified:
+          type: boolean
+        verifiedChannel:
+          type: ["string", "null"]
+          enum: [email, whatsapp, null]
+        recipientEmail:
+          type: ["string", "null"]
+        recipientPhone:
+          type: ["string", "null"]
+
+    InvoiceRoomInvoice:
+      type: object
+      required:
+        [
+          invoiceNumber,
+          kind,
+          issueDate,
+          dueDate,
+          currency,
+          subtotal,
+          vatTotal,
+          grandTotal,
+          status,
+          notes,
+        ]
+      properties:
+        invoiceNumber:
+          type: string
+        kind:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        currency:
+          type: string
+        subtotal:
+          type: string
+        vatTotal:
+          type: string
+        grandTotal:
+          type: string
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+
+    InvoiceRoomLine:
+      type: object
+      required:
+        [
+          lineNo,
+          description,
+          quantity,
+          unitPrice,
+          vatRate,
+          lineExtension,
+          vatAmount,
+        ]
+      properties:
+        lineNo:
+          type: integer
+        description:
+          type: string
+        quantity:
+          type: string
+        unitPrice:
+          type: string
+        vatRate:
+          type: string
+        lineExtension:
+          type: string
+        vatAmount:
+          type: string
+
+    InvoiceRoomSupplier:
+      type: object
+      required: [legalName, tin, tinValidated]
+      properties:
+        legalName:
+          type: string
+        tin:
+          type: ["string", "null"]
+        tinValidated:
+          type: boolean
+
+    InvoiceRoomBuyer:
+      type: object
+      required: [legalName]
+      properties:
+        legalName:
+          type: string
+
+    InvoiceRoomStamp:
+      type: object
+      required: [irn, csid, rail, provider, environment, stampedAt]
+      properties:
+        irn:
+          type: string
+        csid:
+          type: string
+        rail:
+          type: string
+        provider:
+          type: string
+        environment:
+          type: string
+        stampedAt:
+          type: string
+          format: date-time
+
+    InvoiceRoomConfirmation:
+      type: object
+      required: [state, note, noSetOff, createdAt]
+      properties:
+        state:
+          type: string
+          enum: [requested, confirmed, queried, rejected]
+        note:
+          type: ["string", "null"]
+        noSetOff:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    InvoiceRoomPaymentInstructions:
+      type: object
+      required: [provider, accountReference, label]
+      properties:
+        provider:
+          type: string
+        accountReference:
+          type: string
+        label:
+          type: ["string", "null"]
+
+    InvoiceRoomPaymentRequest:
+      type: object
+      required:
+        [
+          id,
+          provider,
+          amount,
+          currency,
+          status,
+          checkoutUrl,
+          expiresAt,
+          confirmedAt,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, failed, expired]
+        checkoutUrl:
+          type: ["string", "null"]
+          format: uri
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+        confirmedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    InvoiceRoomPayment:
+      type: object
+      required: [settled, latestEvidenceAt, instructions, requests]
+      properties:
+        settled:
+          type: boolean
+        latestEvidenceAt:
+          type: ["string", "null"]
+          format: date-time
+        instructions:
+          oneOf:
+            - $ref: "#/components/schemas/InvoiceRoomPaymentInstructions"
+            - type: "null"
+        requests:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceRoomPaymentRequest"
+
+    InvoiceRoomPermissions:
+      type: object
+      required:
+        [canRespond, canReportPayment, canCreatePaymentLink, canClaimAccount]
+      properties:
+        canRespond:
+          type: boolean
+        canReportPayment:
+          type: boolean
+        canCreatePaymentLink:
+          type: boolean
+        canClaimAccount:
+          type: boolean
+
+    InvoiceRoomTimelineEvent:
+      type: object
+      required: [id, kind, detail, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    InvoiceRoomDetail:
+      type: object
+      required:
+        [
+          room,
+          invoice,
+          lines,
+          supplier,
+          buyer,
+          stamp,
+          confirmation,
+          payment,
+          permissions,
+          timeline,
+        ]
+      properties:
+        room:
+          $ref: "#/components/schemas/InvoiceRoomSession"
+        invoice:
+          $ref: "#/components/schemas/InvoiceRoomInvoice"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceRoomLine"
+        supplier:
+          $ref: "#/components/schemas/InvoiceRoomSupplier"
+        buyer:
+          $ref: "#/components/schemas/InvoiceRoomBuyer"
+        stamp:
+          oneOf:
+            - $ref: "#/components/schemas/InvoiceRoomStamp"
+            - type: "null"
+        confirmation:
+          oneOf:
+            - $ref: "#/components/schemas/InvoiceRoomConfirmation"
+            - type: "null"
+        payment:
+          $ref: "#/components/schemas/InvoiceRoomPayment"
+        permissions:
+          $ref: "#/components/schemas/InvoiceRoomPermissions"
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceRoomTimelineEvent"
+
+    InvoiceRoomOtpDispatch:
+      type: object
+      required: [sentTo, expiresAt]
+      properties:
+        sentTo:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        debugCode:
+          type: string
+          description: Returned only outside production for local testing
+
+    IdempotentRoomAction:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey]
+      properties:
+        idempotencyKey:
+          type: string
+          format: uuid
+
+    InvoiceRoomResponseInput:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey, state]
+      properties:
+        idempotencyKey:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [confirmed, queried, rejected]
+        note:
+          type: ["string", "null"]
+          maxLength: 2000
+        noSetOff:
+          type: boolean
+
+    InvoiceRoomPaymentReportInput:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey, paidAt, reference]
+      properties:
+        idempotencyKey:
+          type: string
+          format: uuid
+        amount:
+          type: string
+        paidAt:
+          type: string
+          format: date-time
+        reference:
+          type: string
+          minLength: 1
+          maxLength: 200
+        note:
+          type: ["string", "null"]
+          maxLength: 2000
+
+    InvoiceRoomClaimInput:
+      type: object
+      additionalProperties: false
+      properties:
+        fullName:
+          type: ["string", "null"]
+          minLength: 2
+          maxLength: 160
+        password:
+          type: ["string", "null"]
+          minLength: 12
+          maxLength: 256
+
+    InvoiceRoomClaimResult:
+      type: object
+      required: [created, loginRequired, buyerPath]
+      properties:
+        created:
+          type: boolean
+        loginRequired:
+          type: boolean
+        buyerPath:
+          type: string
 
     Invoice:
       type: object
@@ -8586,7 +9450,16 @@ components:
     SubmissionAttempt:
       type: object
       required:
-        [id, invoiceId, rail, attemptNo, idempotencyKey, correlationId, status, createdAt]
+        [
+          id,
+          invoiceId,
+          rail,
+          attemptNo,
+          idempotencyKey,
+          correlationId,
+          status,
+          createdAt,
+        ]
       properties:
         id:
           type: string
@@ -10029,7 +10902,15 @@ components:
     FeatureFlag:
       type: object
       required:
-        [key, enabled, releaseTag, updatedAt, overrideCount, requires, unmetPrerequisites]
+        [
+          key,
+          enabled,
+          releaseTag,
+          updatedAt,
+          overrideCount,
+          requires,
+          unmetPrerequisites,
+        ]
       properties:
         key:
           type: string
@@ -10079,7 +10960,17 @@ components:
           description: Why this firm is in (or out of) the pilot — recorded on the audit chain.
     FeatureFlagOverride:
       type: object
-      required: [flagKey, firmId, firmName, enabled, reason, setByUserId, createdAt, updatedAt]
+      required:
+        [
+          flagKey,
+          firmId,
+          firmName,
+          enabled,
+          reason,
+          setByUserId,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         flagKey:
           type: string
@@ -10497,7 +11388,14 @@ components:
     OperationalReadiness:
       type: object
       required:
-        [status, generatedAt, buildRevision, expectedBuildRevision, contractVersion, checks]
+        [
+          status,
+          generatedAt,
+          buildRevision,
+          expectedBuildRevision,
+          contractVersion,
+          checks,
+        ]
       properties:
         status:
           type: string
@@ -10523,7 +11421,16 @@ components:
           type: integer
     RailState:
       type: object
-      required: [rail, state, failureCount, updatedAt, transport, environment, configured]
+      required:
+        [
+          rail,
+          state,
+          failureCount,
+          updatedAt,
+          transport,
+          environment,
+          configured,
+        ]
       properties:
         rail:
           type: string

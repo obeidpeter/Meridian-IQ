@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.96.0
+ * OpenAPI spec version: 0.97.0
  */
 
 export * from './acceptInvitationInput';
@@ -485,6 +485,7 @@ export * from './graphNodeKind';
 export * from './healthAlert';
 export * from './healthAlertDetail';
 export * from './healthStatus';
+export * from './idempotentRoomAction';
 export * from './identifierCheck';
 export * from './integrationConnectionHealth';
 export * from './integrationConnectionHealthOperationalState';
@@ -532,6 +533,43 @@ export * from './invoiceInputWhtCategory';
 export * from './invoiceKind';
 export * from './invoiceLine';
 export * from './invoiceLineInput';
+export * from './invoiceRoomBuyer';
+export * from './invoiceRoomClaimInput';
+export * from './invoiceRoomClaimResult';
+export * from './invoiceRoomConfirmation';
+export * from './invoiceRoomConfirmationState';
+export * from './invoiceRoomCreated';
+export * from './invoiceRoomCreateInput';
+export * from './invoiceRoomCreateInputDeliveryChannel';
+export * from './invoiceRoomDelivery';
+export * from './invoiceRoomDeliveryStatus';
+export * from './invoiceRoomDetail';
+export * from './invoiceRoomExchangeInput';
+export * from './invoiceRoomInvoice';
+export * from './invoiceRoomLine';
+export * from './invoiceRoomList';
+export * from './invoiceRoomOtpDispatch';
+export * from './invoiceRoomOtpInput';
+export * from './invoiceRoomOtpInputChannel';
+export * from './invoiceRoomPayment';
+export * from './invoiceRoomPaymentInstructions';
+export * from './invoiceRoomPaymentReportInput';
+export * from './invoiceRoomPaymentRequest';
+export * from './invoiceRoomPaymentRequestStatus';
+export * from './invoiceRoomPermissions';
+export * from './invoiceRoomResponseInput';
+export * from './invoiceRoomResponseInputState';
+export * from './invoiceRoomSession';
+export * from './invoiceRoomSessionStatus';
+export * from './invoiceRoomSessionVerifiedChannel';
+export * from './invoiceRoomStamp';
+export * from './invoiceRoomSummary';
+export * from './invoiceRoomSummaryDeliveryChannel';
+export * from './invoiceRoomSummaryStatus';
+export * from './invoiceRoomSupplier';
+export * from './invoiceRoomTimelineEvent';
+export * from './invoiceRoomTimelineEventDetail';
+export * from './invoiceRoomVerifyInput';
 export * from './invoiceStatus';
 export * from './invoiceUpdateInput';
 export * from './invoiceUpdateInputWhtCategory';
@@ -779,6 +817,7 @@ export * from './resolveCaseInput';
 export * from './retrievalEvalFixtureResult';
 export * from './retrievalEvalRun';
 export * from './revenueShareStatement';
+export * from './revokeInvoiceRoom200';
 export * from './runAssessmentInput';
 export * from './runIntentEvalInput';
 export * from './runModelCanaryInput';

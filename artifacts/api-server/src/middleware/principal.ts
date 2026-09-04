@@ -91,6 +91,16 @@ export const PUBLIC_PATHS = new Set([
   // machine-caller posture — COLLECTION_WEBHOOK_TOKEN is the credential; the
   // route fails closed (404) while the secret is unconfigured.
   "/api/collections/inbound",
+  "/api/public/invoice-room/exchange",
+  "/api/public/invoice-room",
+  "/api/public/invoice-room/otp",
+  "/api/public/invoice-room/verify",
+  "/api/public/invoice-room/respond",
+  "/api/public/invoice-room/payment-reports",
+  "/api/public/invoice-room/payment-link",
+  "/api/public/invoice-room/claim",
+  "/api/public/invoice-room/pdf",
+  "/api/invoice-room/payments/confirm",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -121,6 +131,7 @@ const MACHINE_PATHS = new Set([
   "/api/inbound/whatsapp",
   "/api/billing/payments/confirm",
   "/api/collections/inbound",
+  "/api/invoice-room/payments/confirm",
 ]);
 
 // CSRF guard (SEC-02). The first-party session cookie is issued SameSite=None so
@@ -177,9 +188,12 @@ async function principalFromMembership(
   if (memberships.length === 0) return null;
 
   const requestedFirm = header(req, "x-firm-id");
+  const requestedWorkspace = header(req, "x-meridian-workspace");
   const membership = requestedFirm
     ? memberships.find((m) => m.firmId === requestedFirm)
-    : memberships[0];
+    : requestedWorkspace === "buyer"
+      ? memberships.find((m) => m.role === "buyer_user")
+      : memberships[0];
   if (!membership) return null;
 
   return {

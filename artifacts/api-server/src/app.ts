@@ -140,6 +140,17 @@ const NO_CONTEXT_ROUTES = new Set([
   // (modules/collections/service.ts recordInboundCollection) and the 202
   // goes out only after the settle is durably committed.
   "POST /api/collections/inbound",
+  // Account-optional Invoice Room writes own short bypass/tenant scopes.
+  // Provider and relay calls therefore never hold the ambient request
+  // transaction, and OTP/KDF work cannot pin a pooled connection.
+  "POST /api/public/invoice-room/exchange",
+  "POST /api/public/invoice-room/otp",
+  "POST /api/public/invoice-room/verify",
+  "POST /api/public/invoice-room/respond",
+  "POST /api/public/invoice-room/payment-reports",
+  "POST /api/public/invoice-room/payment-link",
+  "POST /api/public/invoice-room/claim",
+  "POST /api/invoice-room/payments/confirm",
   // Provider-backed creation uses three stages: a short tenant-scoped
   // reservation transaction, the external call, then a short finalization
   // transaction. Keeping these routes out of the ambient request transaction
@@ -184,6 +195,11 @@ const NO_CONTEXT_ROUTE_PATTERNS: ReadonlyArray<{
   // routes above are exempted for; its writes commit via inClerkScope and
   // the audit row lands on the raw pool.
   { method: "POST", pattern: /^\/api\/clerk\/cases\/[^/]+\/retry$/ },
+  { method: "POST", pattern: /^\/api\/invoices\/[^/]+\/invoice-rooms$/ },
+  {
+    method: "POST",
+    pattern: /^\/api\/invoice-rooms\/[^/]+\/(?:replace|revoke)$/,
+  },
 ];
 
 // Hard cap on how long a request may hold its transaction open. A handler that

@@ -477,6 +477,28 @@ export async function customFetch<T = unknown>(
     headers.set("x-meridian-csrf", "1");
   }
 
+  // A user can hold several platform memberships. Buyer Rails has no firm id,
+  // so it cannot use x-firm-id for selection; this non-secret hint asks the
+  // server to choose the caller's VERIFIED buyer membership. The server still
+  // resolves only rows actually bound to the authenticated user.
+  if (
+    apiTarget &&
+    typeof window !== "undefined" &&
+    !headers.has("x-meridian-workspace")
+  ) {
+    const path = window.location.pathname;
+    const requested = new URLSearchParams(window.location.search).get(
+      "returnTo",
+    );
+    if (
+      path === "/buyer" ||
+      path.startsWith("/buyer/") ||
+      requested?.startsWith("/buyer/")
+    ) {
+      headers.set("x-meridian-workspace", "buyer");
+    }
+  }
+
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (apiTarget && _authTokenGetter && !headers.has("authorization")) {

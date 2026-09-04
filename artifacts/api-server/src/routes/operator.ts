@@ -249,6 +249,18 @@ const RAIL_CONFIG_ENTRIES: {
     note: "Unset keeps every send on the in-process simulator.",
   },
   {
+    key: "invoice_room_encryption",
+    label: "Invoice Room token encryption",
+    env: "INVOICE_ROOM_ENCRYPTION_KEY",
+    note: "Required in production before secure Invoice Room links can be created or opened.",
+  },
+  {
+    key: "invoice_payment_provider",
+    label: "Invoice Room payment provider",
+    env: "INVOICE_PAYMENT_PROVIDER_URL",
+    note: "Unset leaves hosted invoice checkout dark; bank-transfer instructions remain available.",
+  },
+  {
     key: "payment_provider",
     label: "Payment provider",
     env: "PAYMENT_PROVIDER_URL",
@@ -271,6 +283,13 @@ const RAIL_CONFIG_ENTRIES: {
     label: "Payment settlement webhook",
     env: "PAYMENT_WEBHOOK_TOKEN",
     note: "Fail-closed: unset means no settlement webhook exists at all.",
+    keyRing: true,
+  },
+  {
+    key: "invoice_payment_webhook",
+    label: "Invoice Room payment webhook",
+    env: "INVOICE_PAYMENT_WEBHOOK_TOKEN",
+    note: "Fail-closed: unset means a hosted invoice payment cannot be confirmed by the provider.",
     keyRing: true,
   },
   {

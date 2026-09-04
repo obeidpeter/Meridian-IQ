@@ -33,6 +33,7 @@ import {
   Upload,
   Pin,
   ListChecks,
+  PanelsTopLeft,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
 import {
@@ -102,6 +103,12 @@ const NAV_GROUPS: NavGroup[] = [
       },
       { href: "/month-end", label: "Month-end", icon: CalendarCheck2 },
       { href: "/invoices", label: "Invoices", icon: FileText },
+      {
+        href: "/invoice-rooms",
+        label: "Invoice Rooms",
+        icon: PanelsTopLeft,
+        feature: "invoice_room",
+      },
       {
         href: "/bills",
         label: "Bills",
@@ -690,7 +697,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const remoteSearch = useCallback(
     async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
       trackUsabilityEvent("global_search_started", "global_search");
-      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      const results = await searchWorkspace(
+        { q: query, limit: 14 },
+        { signal },
+      );
       if (results.length === 0) {
         trackUsabilityEvent("zero_result_search", "global_search");
       }

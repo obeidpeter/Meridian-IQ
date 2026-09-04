@@ -1,8 +1,8 @@
 # Workspace and provider readiness
 
 This document is the operating contract for Meridian Today, universal search,
-collaborative work and the production provider relays introduced with API
-contract `0.96.0`.
+collaborative work, Invoice Room, and the production provider relays available
+with API contract `0.97.0`.
 
 ## User-facing workspace
 
@@ -58,9 +58,35 @@ Key integrity rules:
 - User-supplied links must be relative application paths; absolute, protocol-
   relative, control-character and backslash paths are rejected.
 
-Apply the Drizzle schema before guardrail migration `0047`. Production startup
-will re-assert the RLS policy after the table exists, but the release is not
-complete until migration status reports all registered guardrails applied.
+Apply the Drizzle schema before guardrail migrations `0047` and `0048`.
+Production startup will re-assert the RLS policies after the tables exist, but
+the release is not complete until migration status reports every registered
+guardrail applied.
+
+### Invoice Room
+
+Invoice Room gives the recipient of a stamped invoice a secure, account-optional
+workspace at `/invoice-room`. Suppliers create, replace, revoke, and monitor
+links from the invoice or **Invoice Rooms** control centre. Buyers can inspect
+the canonical lines and stamp, download the PDF, verify their saved email or
+WhatsApp destination, respond, create a hosted payment link, report payment,
+and attach the invoice to Buyer Rails.
+
+The URL credential is generated from cryptographic randomness, stored only as
+a SHA-256 digest for lookup, and placed after `#` so it is not sent in HTTP
+requests, proxy logs, or referrers. The landing app exchanges it immediately
+for a 30-minute, path-scoped HttpOnly cookie and removes the fragment. OTPs
+expire after 10 minutes, are bound to that room session, and gate every action
+that changes invoice state. Replacing or revoking a link invalidates its active
+sessions. Public responses are `no-store` and `noindex`; room events are
+append-only and payment/response writes are idempotent.
+
+Migration `0048` enables and forces tenant RLS on supplier-owned room tables,
+keeps public sessions bypass-only, and installs the append-only event trigger.
+The `invoice_room` flag ships dark in production and requires
+`invoice_lifecycle` plus `buyer_confirmations`. Do not enable it until the
+security settings below are reported configured in **Platform operations >
+Rail configuration**.
 
 ## Provider readiness
 
@@ -76,18 +102,29 @@ relay URLs must use HTTPS and must not contain user information.
 
 ### Required deployment secrets
 
-| Capability | URL | Server credential |
-| --- | --- | --- |
-| ERP/accounting | `ERP_CONNECTOR_URL` | `ERP_CONNECTOR_TOKEN` |
-| Open banking | `BANK_FEED_URL` | `BANK_FEED_TOKEN` |
-| Messaging and access requests | `MESSAGING_WEBHOOK_URL` | `MESSAGING_WEBHOOK_TOKEN` |
-| Hosted payments | `PAYMENT_PROVIDER_URL` | `PAYMENT_PROVIDER_TOKEN` |
-| Tax access point | `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL` | The corresponding rail token or signed key ring |
+| Capability                    | URL                                       | Server credential                                                 |
+| ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------- |
+| ERP/accounting                | `ERP_CONNECTOR_URL`                       | `ERP_CONNECTOR_TOKEN`                                             |
+| Open banking                  | `BANK_FEED_URL`                           | `BANK_FEED_TOKEN`                                                 |
+| Messaging and access requests | `MESSAGING_WEBHOOK_URL`                   | `MESSAGING_WEBHOOK_TOKEN`                                         |
+| Hosted payments               | `PAYMENT_PROVIDER_URL`                    | `PAYMENT_PROVIDER_TOKEN`                                          |
+| Invoice Room public links     | `PUBLIC_APP_URL`                          | `INVOICE_ROOM_ENCRYPTION_KEY`                                     |
+| Invoice Room buyer checkout   | `INVOICE_PAYMENT_PROVIDER_URL`            | `INVOICE_PAYMENT_PROVIDER_TOKEN`                                  |
+| Invoice Room payment callback | `/api/invoice-room/payments/confirm`      | `INVOICE_PAYMENT_WEBHOOK_KEYS` or `INVOICE_PAYMENT_WEBHOOK_TOKEN` |
+| Tax access point              | `RAIL_PRIMARY_URL` / `RAIL_SECONDARY_URL` | The corresponding rail token or signed key ring                   |
 
 Provider credentials belong in Replit Secrets or the deployment secret store,
 never source, browser environment variables, connection forms or database
 rows. Live ERP and bank connection rows store only a non-secret `accountRef`;
 vendor OAuth and token rotation remain behind the relay.
+
+`INVOICE_ROOM_ENCRYPTION_KEY` must decode to exactly 32 bytes (64 hexadecimal
+characters or standard base64). `PUBLIC_APP_URL` must be the externally
+reachable HTTPS origin; production fails closed instead of issuing links to a
+fallback host. The payment callback uses the standard signed machine-request
+contract. A deployment may omit the Invoice Room payment provider and still
+offer verified responses, payment reporting, PDF download, and the supplier's
+bank-transfer instructions.
 
 ### ERP relay protocol
 
@@ -172,13 +209,14 @@ Workers authenticate again before each pull.
 
 ## Rollout checklist
 
-1. Build contract `0.96.0` and all web artifacts from the same revision.
-2. Apply the database schema, then run guardrail migrations through `0047`.
+1. Build contract `0.97.0` and all web artifacts from the same revision.
+2. Apply the database schema, then run guardrail migrations through `0048`.
 3. Confirm `/api/readyz` and the operator release-readiness panel are healthy.
 4. Add provider URL/token pairs in Replit Secrets. Never paste the server token
    into a client connection form.
-5. Enable `erp_connectors`, `bank_feeds`, `reconciliation` and
-   `statutory_desks` only for their intended cohorts.
+5. Enable `erp_connectors`, `bank_feeds`, `reconciliation`, `statutory_desks`,
+   and `invoice_room` only for their intended cohorts and after each one's
+   prerequisites are ready.
 6. In Connection centre, select a live adapter, enter the non-secret account
    reference, run **Test connection**, then save and run one sync.
 7. Verify the imported record passed the normal validation/consent path and
@@ -188,6 +226,10 @@ Workers authenticate again before each pull.
 9. Run a poor-network retry and verify only one task/comment was created.
 10. Record moderated keyboard, screen-reader and mobile evidence before setting
     `USABILITY_VALIDATED_AT`.
+11. For Invoice Room, create a short-lived test link, open it in a private
+    browser, verify the intended channel, submit one response, retry that same
+    request, and confirm only one event exists. Revoke the link and verify both
+    the original URL and its prior room session return `410`.
 
 ## Identity boundary
 

@@ -57,6 +57,7 @@ import whtRouter from "./wht";
 import onboardingRouter from "./onboarding";
 import workspaceRouter from "./workspace";
 import workRouter from "./work";
+import invoiceRoomRouter from "./invoice-room";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -89,6 +90,7 @@ import "../modules/clerk/memory";
 // Registers the retrieval eval nightly sweep + drop watch (round 47).
 import "../modules/clerk/retrieval-eval";
 import "../modules/messaging/retention";
+import "../modules/invoice-room/register";
 
 const router: IRouter = Router();
 
@@ -138,5 +140,6 @@ router.use(whtRouter);
 router.use(onboardingRouter);
 router.use(workspaceRouter);
 router.use(workRouter);
+router.use(invoiceRoomRouter);
 
 export default router;
