@@ -39,6 +39,18 @@ async function policyExists(pool: pg.Pool, table: string): Promise<boolean> {
   return res.rowCount! > 0;
 }
 
+async function namedPolicyExists(
+  pool: pg.Pool,
+  table: string,
+  policy: string,
+): Promise<boolean> {
+  const res = await pool.query(
+    "SELECT 1 FROM pg_policies WHERE tablename = $1 AND policyname = $2 LIMIT 1",
+    [table, policy],
+  );
+  return res.rowCount! > 0;
+}
+
 // 0005's Clerk tables are bypass-only (operators/auditors), not firm-keyed.
 async function bypassPolicyExists(
   pool: pg.Pool,
@@ -90,6 +102,11 @@ const pol = (table: string): Probe => ({
   desc: `RLS policy on ${table} exists`,
   expect: true,
   check: (pool) => policyExists(pool, table),
+});
+const namedPolicy = (table: string, policy: string): Probe => ({
+  desc: `policy ${policy} on ${table} exists`,
+  expect: true,
+  check: (pool) => namedPolicyExists(pool, table, policy),
 });
 const bypass = (table: string): Probe => ({
   desc: `bypass-only policy on ${table} exists`,
@@ -452,6 +469,15 @@ const LADDER: LadderStep[] = [
     version: 45, // per-staff client assignment register (D12)
     atTop: [pol("client_assignments")],
     afterRollback: [not(pol("client_assignments"))],
+  },
+  {
+    version: 46, // operational readiness heartbeat guardrails
+    atTop: [
+      namedPolicy("operational_heartbeats", "meridian_operational_bypass"),
+    ],
+    afterRollback: [
+      not(namedPolicy("operational_heartbeats", "meridian_operational_bypass")),
+    ],
   },
 ];
 
