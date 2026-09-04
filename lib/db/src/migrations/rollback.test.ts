@@ -479,6 +479,19 @@ const LADDER: LadderStep[] = [
       not(namedPolicy("operational_heartbeats", "meridian_operational_bypass")),
     ],
   },
+  {
+    version: 47, // shared work and append-only collaboration guardrails
+    atTop: [
+      pol("work_items"),
+      pol("work_item_comments"),
+      appendOnly("work_item_comments"),
+    ],
+    afterRollback: [
+      not(pol("work_items")),
+      not(pol("work_item_comments")),
+      not(appendOnly("work_item_comments")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

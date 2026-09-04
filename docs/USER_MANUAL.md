@@ -59,7 +59,8 @@ mobile companion app:
 
 | Address                | Workspace                                          | For                              |
 | ---------------------- | -------------------------------------------------- | -------------------------------- |
-| `/`                    | **The Portal** — sign in, pick a workspace         | Everyone                         |
+| `/`                    | **Public site** — product, trust and access request | Everyone                         |
+| `/login`               | **The Portal** — sign in, pick a workspace         | Account holders                  |
 | `/app/`                | **Compliance App**                                 | SME owners, firm staff           |
 | `/console/`            | **Accountant Console** (incl. the Compliance Desk) | Firms, operators, auditors       |
 | `/buyer/`              | **Buyer Rails**                                    | Buyer finance teams              |
@@ -105,7 +106,9 @@ exercised in the demo.
 
 Every workspace has a **Sign out** button at the bottom of its left sidebar
 (next to **All apps**, which takes you back to the portal). Signing out ends
-the session everywhere.
+the session on that device. From the signed-in account panel at `/login`,
+**Sign out every device** invalidates every browser and mobile session,
+including the current one, after an explicit confirmation.
 
 ### Changing your password
 
@@ -208,7 +211,7 @@ the firm connects. It carries only the capabilities the firm admin granted it
 
 Sign in as the SME owner or firm staff and you land at `/app/` on **Today**.
 The sidebar is grouped into Work, Compliance, Clerk AI and Workspace and
-lists: **Today, Month-end, Invoices, Bills, Collections, Recurring, Import,
+lists: **Today, Team work, Month-end, Invoices, Bills, Collections, Recurring, Import,
 VAT, Reconciliation, B2C reports, Obligations, Filings, WHT credits, Send to
 Clerk, Ask Clerk, Calendar, Analytics, Notifications, Activity, Alert
 settings, Consent** — an entry appears only when its feature is switched on
@@ -218,7 +221,17 @@ sent you — see "Notifications" below. Press **?** anywhere for the
 keyboard-shortcut sheet, which also names the shortcut that opens the
 command menu.
 
-### Dashboard
+### Today and Dashboard
+
+**Today** is the default home. It combines urgent and due-soon invoices,
+statutory work and shared tasks into one prioritised list and shows a setup
+checklist based on records that actually exist. **Team work** holds tasks shared
+with the accounting firm: status, owner, due date and an append-only discussion.
+An unfinished new task is saved on the current device; retrying after a lost
+network response does not create a duplicate.
+
+The previous analytical dashboard remains available as **Dashboard** at
+`/app/dashboard`.
 
 Four tiles summarise the book at a glance — **Awaiting stamp** (submitted,
 not yet stamped), **Stamped & valid**, **Drafts**, and **At risk** — plus a
@@ -1049,8 +1062,9 @@ the `clerk_ai` feature flag; the product keeps working without it.
 
 ## 6. The Accountant Console — for firms
 
-Sign in as the firm admin and you land at `/console/` on the **Portfolio**.
-The sidebar is grouped: **Practice** (Portfolio, Onboarding, Client import,
+Sign in as firm staff or an admin and you land at `/console/` on **Today**.
+The sidebar is grouped: **Practice** (Today, Portfolio, Team work,
+Onboarding, Client import,
 Advisory, Filing desk, Collections, Analytics, Invitations, Access review,
 Integrations, API & webhooks, Notifications, Activity), **Growth & revenue**
 (Plans & billing, Statements, Unearned income, White-label, Certification),
@@ -1060,6 +1074,11 @@ plus Feature flags and the Claims register, which firm accounts can read).
 Entries appear only when their feature is switched on and your role may use
 them. A **notification bell** in the header works exactly as in the SME
 app, and **?** opens the same keyboard-shortcut sheet.
+
+Press **Ctrl+K** (or **Command+K** on macOS) from the SME, firm or buyer
+workspace to search both navigation and accessible records. Search is limited to
+the signed-in tenant and role; the platform never records the entered query in
+usability telemetry.
 
 ### Portfolio
 
@@ -1425,10 +1444,14 @@ validate-then-commit.
 
 ### Integrations _(feature-flagged)_
 
-Connect a client's accounting package (SagePro and QuickLite ship first) and
-pull their AR invoices on demand. **Sync now** imports through the standard
-path — validation still runs before anything is submitted. The page shows
-each connection's status, last sync and any errors.
+The **Connection centre** distinguishes deterministic sandboxes from live
+deployment relays and shows presence-only readiness for tax, payments, banking,
+messaging and accounting providers. Choose a provider, complete its named fields
+and run **Test connection** before saving. Live forms accept only the non-secret
+provider account reference; deployment tokens never appear in the browser.
+**Sync now** imports through the standard validation path. Bank-feed setup uses
+the same guided fields and test-before-save flow, and statement lines still pass
+through consent, parsing and reconciliation.
 
 ### White-label _(feature-flagged)_
 
@@ -1651,9 +1674,9 @@ to the page that owns it.
 
 ## 8. Buyer Rails — for buyer finance teams
 
-Sign in as a buyer and you land at `/buyer/`. _(Feature-flagged — the
-operator switches Buyer Rails on.)_ A buyer account sees **only invoices
-addressed to its own organisation**. Four pages: **Confirmations,
+Sign in as a buyer and you land at `/buyer/` on **Today**. _(Feature-flagged
+— the operator switches Buyer Rails on.)_ A buyer account sees **only
+invoices addressed to its own organisation**. Four pages: **Today, Confirmations,
 Suppliers, Scoreboard, Notifications** — plus a **notification bell** in the
 header that collects alerts addressed to your organisation, exactly as in
 the other apps.

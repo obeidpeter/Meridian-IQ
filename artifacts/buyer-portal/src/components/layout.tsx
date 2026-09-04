@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   CircleUserRound,
@@ -12,9 +12,14 @@ import {
   Search,
   ShieldCheck,
   Trophy,
+  ListChecks,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
-import { useGetMe, useLogout } from "@workspace/api-client-react";
+import {
+  searchWorkspace,
+  useGetMe,
+  useLogout,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -24,10 +29,16 @@ import {
 } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/notification-bell";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
-import { CommandMenu, type CommandItem } from "@workspace/web-ui";
+import {
+  CommandMenu,
+  NetworkStatus,
+  trackUsabilityEvent,
+  type CommandItem,
+} from "@workspace/web-ui";
 
 const LINKS = [
-  { href: "/", label: "Confirmations", icon: ClipboardCheck },
+  { href: "/", label: "Today", icon: ListChecks },
+  { href: "/confirmations", label: "Confirmations", icon: ClipboardCheck },
   { href: "/suppliers", label: "Suppliers", icon: ShieldCheck },
   { href: "/scoreboard", label: "Scoreboard", icon: Trophy },
   { href: "/notifications", label: "Notifications", icon: Inbox },
@@ -218,6 +229,27 @@ export function Layout({ children }: { children: ReactNode }) {
       onSelect: () => navigate(link.href),
     };
   });
+  const remoteSearch = useCallback(
+    async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
+      trackUsabilityEvent("global_search_started", "global_search");
+      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      if (results.length === 0) {
+        trackUsabilityEvent("zero_result_search", "global_search");
+      }
+      return results.map((result) => ({
+        id: `buyer-search-${result.id}`,
+        label: result.label,
+        description: result.description,
+        group: result.group,
+        icon: <Search className="size-4" aria-hidden="true" />,
+        onSelect: () => {
+          trackUsabilityEvent("global_search_result_opened", "global_search");
+          navigate(result.href);
+        },
+      }));
+    },
+    [navigate],
+  );
   const navProps = {
     location,
     me,
@@ -233,6 +265,7 @@ export function Layout({ children }: { children: ReactNode }) {
         onOpenChange={setCommandOpen}
         title="Find buyer work"
         placeholder="Search confirmations and suppliers"
+        remoteSearch={remoteSearch}
       />
       <a
         href="#main-content"
@@ -351,6 +384,7 @@ export function Layout({ children }: { children: ReactNode }) {
           className="mx-auto w-full max-w-[90rem] px-4 py-5 focus:outline-none sm:px-6 md:px-8 md:py-8 lg:px-10"
         >
           <StaleBuildBanner />
+          <NetworkStatus />
           {children}
         </main>
       </div>

@@ -757,6 +757,39 @@ router.post("/auth/logout", (req, res): void => {
   res.sendStatus(204);
 });
 
+// Account security centre: invalidate every outstanding cookie and mobile
+// bearer token in one atomic epoch bump, including the caller. Unlike password
+// and TOTP changes there is intentionally no replacement token; the user asked
+// to end every session and must sign in again on this device too.
+router.post("/auth/revoke-sessions", async (req, res): Promise<void> => {
+  if (req.principal.capabilities !== undefined) {
+    throw new DomainError(
+      "HUMAN_ACCOUNT_REQUIRED",
+      "Session controls are available only to signed-in user accounts",
+      403,
+    );
+  }
+  const [updated] = await getDb()
+    .update(usersTable)
+    .set({ sessionEpoch: sql`${usersTable.sessionEpoch} + 1` })
+    .where(eq(usersTable.id, req.principal.userId))
+    .returning({ sessionEpoch: usersTable.sessionEpoch });
+  if (!updated) {
+    throw new DomainError("UNAUTHENTICATED", "Account not found", 401);
+  }
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId: req.principal.firmId,
+    action: "auth.sessions_revoked",
+    entityType: "user",
+    entityId: req.principal.userId,
+    after: { allSessions: true },
+  });
+  const { maxAge: _maxAge, ...clearOpts } = cookieOptions(req);
+  res.clearCookie(SESSION_COOKIE, clearOpts);
+  res.sendStatus(204);
+});
+
 // Authenticated password change (SEC-02). Requires the current password —
 // possession of a session cookie alone must not be enough to take over the
 // account. Bumping session_epoch invalidates every previously-issued token

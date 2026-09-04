@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.95.0
+ * OpenAPI spec version: 0.96.0
  */
 
 export type UsabilityEventInputSurface = typeof UsabilityEventInputSurface[keyof typeof UsabilityEventInputSurface];
@@ -19,4 +19,11 @@ export const UsabilityEventInputSurface = {
   invoice_import: 'invoice_import',
   console_help: 'console_help',
   sme_help: 'sme_help',
+  access_request: 'access_request',
+  today: 'today',
+  global_search: 'global_search',
+  collaboration: 'collaboration',
+  integrations: 'integrations',
+  account_security: 'account_security',
+  app_shell: 'app_shell',
 } as const;

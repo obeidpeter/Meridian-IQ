@@ -3,11 +3,16 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.95.0
+ * OpenAPI spec version: 0.96.0
  */
+import type { ConnectorConfigurationField } from './connectorConfigurationField';
+import type { ConnectorInfoMode } from './connectorInfoMode';
 
 export interface ConnectorInfo {
   key: string;
   name: string;
   description: string;
+  mode: ConnectorInfoMode;
+  configured: boolean;
+  configurationFields: ConnectorConfigurationField[];
 }

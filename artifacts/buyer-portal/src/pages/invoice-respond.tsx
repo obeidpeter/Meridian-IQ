@@ -127,7 +127,7 @@ export function InvoiceRespond() {
 
   const backLink = (
     <Link
-      href="/"
+      href="/confirmations"
       className="inline-flex items-center gap-2 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
       data-testid="link-back"
     >
@@ -211,7 +211,7 @@ export function InvoiceRespond() {
               variant="outline"
               data-testid="button-back-to-queue"
             >
-              <Link href="/">Back to confirmations</Link>
+              <Link href="/confirmations">Back to confirmations</Link>
             </Button>
           </CardContent>
         </Card>
@@ -407,7 +407,7 @@ export function InvoiceRespond() {
               className="mt-2"
               data-testid="button-recorded-back"
             >
-              <Link href="/">Back to confirmations</Link>
+              <Link href="/confirmations">Back to confirmations</Link>
             </Button>
           </CardContent>
         </Card>

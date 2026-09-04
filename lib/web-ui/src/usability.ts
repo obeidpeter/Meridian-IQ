@@ -14,7 +14,20 @@ export type UsabilityEvent =
   | "help_opened"
   | "help_search_no_result"
   | "help_helpful"
-  | "help_unhelpful";
+  | "help_unhelpful"
+  | "access_request_started"
+  | "access_request_submitted"
+  | "access_request_failed"
+  | "today_item_opened"
+  | "work_item_created"
+  | "work_item_completed"
+  | "collaboration_comment_added"
+  | "global_search_started"
+  | "global_search_result_opened"
+  | "integration_tested"
+  | "offline_detected"
+  | "online_restored"
+  | "sessions_revoked";
 
 export type UsabilitySurface =
   | "landing"
@@ -25,7 +38,14 @@ export type UsabilitySurface =
   | "client_import"
   | "invoice_import"
   | "console_help"
-  | "sme_help";
+  | "sme_help"
+  | "access_request"
+  | "today"
+  | "global_search"
+  | "collaboration"
+  | "integrations"
+  | "account_security"
+  | "app_shell";
 
 // Fire-and-forget, aggregate-only telemetry. The closed payload contains no
 // user, tenant, field value, free text, URL, or identifier. Failures never

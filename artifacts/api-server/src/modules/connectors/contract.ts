@@ -29,6 +29,16 @@ export interface Connector {
   key: string;
   name: string;
   description: string;
+  mode: "sandbox" | "live";
+  isConfigured(): boolean;
+  configurationFields: Array<{
+    key: string;
+    label: string;
+    required: boolean;
+    secret: boolean;
+    placeholder: string;
+    help: string;
+  }>;
   // Validate the connection's auth configuration.
   authenticate(
     config: Record<string, unknown>,

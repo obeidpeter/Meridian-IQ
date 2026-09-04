@@ -55,6 +55,8 @@ import filingMatrixRouter from "./filing-matrix";
 // WHT Desk: the withholding credit ledger + remittance schedule (0.69.0).
 import whtRouter from "./wht";
 import onboardingRouter from "./onboarding";
+import workspaceRouter from "./workspace";
+import workRouter from "./work";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -134,5 +136,7 @@ router.use(filingsRouter);
 router.use(filingMatrixRouter);
 router.use(whtRouter);
 router.use(onboardingRouter);
+router.use(workspaceRouter);
+router.use(workRouter);
 
 export default router;

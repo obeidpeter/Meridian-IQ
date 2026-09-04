@@ -482,7 +482,7 @@ export function ClientImport() {
           <p className="font-semibold">The import may have completed.</p>
           <p className="mt-1">
             The connection ended before MeridianIQ answered. Check the{" "}
-            <Link href="/?view=clients" className="font-semibold underline">
+            <Link href="/portfolio?view=clients" className="font-semibold underline">
               client portfolio
             </Link>{" "}
             before importing again to avoid duplicate client records.

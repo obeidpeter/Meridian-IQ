@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Users,
@@ -51,7 +51,11 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import type { Me } from "@workspace/api-client-react";
-import { useGetMe, useLogout } from "@workspace/api-client-react";
+import {
+  searchWorkspace,
+  useGetMe,
+  useLogout,
+} from "@workspace/api-client-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { roleLabel } from "@/components/capability-gate";
 import { PORTAL_URL } from "@/components/require-session";
@@ -59,6 +63,7 @@ import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
+  NetworkStatus,
   readRecentItems,
   ReleaseBadge,
   ShortcutsDialog,
@@ -67,6 +72,7 @@ import {
   useGlobalShortcuts,
   WorkspaceChip,
   type CommandItem,
+  trackUsabilityEvent,
 } from "@workspace/web-ui";
 import { HELP_TOPICS } from "@/pages/help";
 
@@ -103,10 +109,22 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Practice",
     links: [
       {
-        href: "/",
+        href: "/today",
+        label: "Today",
+        icon: Compass,
+        capability: "console.portfolio.read",
+      },
+      {
+        href: "/portfolio",
         label: "Portfolio",
         icon: Users,
         capability: "console.portfolio.read",
+      },
+      {
+        href: "/work",
+        label: "Team work",
+        icon: ListChecks,
+        capability: "work.read",
       },
       {
         href: "/pipeline",
@@ -164,7 +182,6 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Integrations",
         icon: Plug,
         capability: "connector.read",
-        feature: "erp_connectors",
       },
       {
         href: "/api-access",
@@ -356,7 +373,7 @@ function isLinkActive(location: string, href: string) {
   if (href !== "/" && location.startsWith(`${href}/`)) return true;
   // Client detail pages live under the Portfolio entry (import is its own).
   if (
-    href === "/" &&
+    href === "/portfolio" &&
     location.startsWith("/clients/") &&
     !location.startsWith("/clients/import")
   )
@@ -591,7 +608,8 @@ export function Layout({ children }: { children: ReactNode }) {
         key?.startsWith("meridianiq:recent-") ||
         key?.startsWith("meridianiq:pinned-") ||
         key?.startsWith("meridianiq:saved-view-") ||
-        key?.startsWith("meridianiq:operations:")
+        key?.startsWith("meridianiq:operations:") ||
+        key?.startsWith("meridianiq:work-draft:")
       ) {
         window.localStorage.removeItem(key);
       }
@@ -693,7 +711,7 @@ export function Layout({ children }: { children: ReactNode }) {
             group: "Actions",
             icon: <Users className="size-4" aria-hidden="true" />,
             keywords: ["new", "client", "intake"],
-            onSelect: () => navigate("/?action=add-client"),
+            onSelect: () => navigate("/portfolio?action=add-client"),
           },
         ]
       : []),
@@ -750,6 +768,27 @@ export function Layout({ children }: { children: ReactNode }) {
       onSelect: () => setShortcutsOpen(true),
     },
   ];
+  const remoteSearch = useCallback(
+    async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
+      trackUsabilityEvent("global_search_started", "global_search");
+      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      if (results.length === 0) {
+        trackUsabilityEvent("zero_result_search", "global_search");
+      }
+      return results.map((result) => ({
+        id: `console-search-${result.id}`,
+        label: result.label,
+        description: result.description,
+        group: result.group,
+        icon: <Search className="size-4" aria-hidden="true" />,
+        onSelect: () => {
+          trackUsabilityEvent("global_search_result_opened", "global_search");
+          navigate(result.href);
+        },
+      }));
+    },
+    [navigate],
+  );
 
   const navProps = {
     groups,
@@ -768,6 +807,7 @@ export function Layout({ children }: { children: ReactNode }) {
         onOpenChange={setCommandOpen}
         title="Go to a workspace"
         placeholder="Search pages and tools"
+        remoteSearch={remoteSearch}
       />
       <ShortcutsDialog
         open={shortcutsOpen}
@@ -877,6 +917,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {/* App-wide: a stale api-server build breaks pages in confusing
               ways, so the version-skew warning sits above every page. */}
           <StaleBuildBanner />
+          <NetworkStatus />
           {children}
         </main>
       </div>

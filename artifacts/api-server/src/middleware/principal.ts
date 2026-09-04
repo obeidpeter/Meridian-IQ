@@ -70,6 +70,7 @@ export const PUBLIC_PATHS = new Set([
   "/api/auth/request-password-reset",
   "/api/public/advisory-requests",
   "/api/public/usability-events",
+  "/api/public/access-requests",
   // TOTP challenge: like accept-invite, the signed short-lived mfaToken issued
   // by /auth/login IS the credential — the caller by definition holds no
   // session yet (the cookie is only issued once the second factor passes).

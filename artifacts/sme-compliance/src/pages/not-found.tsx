@@ -18,7 +18,7 @@ export default function NotFound() {
             The link may be out of date, or the page may have moved.
           </p>
           <Button asChild className="mt-2">
-            <Link href="/">Back to dashboard</Link>
+            <Link href="/">Back to Today</Link>
           </Button>
         </CardContent>
       </Card>

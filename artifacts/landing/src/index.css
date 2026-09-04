@@ -121,7 +121,6 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    min-width: 320px;
     overflow-x: clip;
   }
 

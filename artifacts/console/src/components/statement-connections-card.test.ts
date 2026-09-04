@@ -1,52 +1,65 @@
 import { test, expect, describe } from "vitest";
-import type { StatementSyncRun } from "@workspace/api-client-react";
+import type {
+  StatementConnectorInfo,
+  StatementSyncRun,
+} from "@workspace/api-client-react";
 import {
   CONNECTION_STATUS_TONE,
   SYNC_RUN_TONE,
+  connectorConfigurationComplete,
   connectorFieldState,
   connectorLabel,
   lastSyncLabel,
-  parseConnectionConfig,
   syncRunSummary,
 } from "./statement-connections-card";
 
-// Bank-feed connections: the JSON-config gate and the small display helpers.
+// Bank-feed connections: declared-field validation and small display helpers.
 // The card itself is render-on-success (a 404 from a server without the rail
 // hides the whole section), which the e2e journeys cover.
 
-describe("parseConnectionConfig", () => {
-  test("an empty or whitespace-only field is simply 'no config'", () => {
-    expect(parseConnectionConfig("")).toEqual({ ok: true, config: undefined });
-    expect(parseConnectionConfig("   ")).toEqual({
-      ok: true,
-      config: undefined,
-    });
+const connector = (
+  over: Partial<StatementConnectorInfo> = {},
+): StatementConnectorInfo => ({
+  key: "mono",
+  name: "Mono",
+  description: "Open banking",
+  mode: "sandbox",
+  configured: true,
+  configurationFields: [
+    {
+      key: "apiKey",
+      label: "API key",
+      required: true,
+      secret: true,
+      placeholder: "demo_…",
+      help: "Provider credential",
+    },
+  ],
+  ...over,
+});
+
+describe("connectorConfigurationComplete", () => {
+  test("requires every declared required field", () => {
+    expect(connectorConfigurationComplete(connector(), {})).toBe(false);
+    expect(connectorConfigurationComplete(connector(), { apiKey: "  " })).toBe(
+      false,
+    );
+    expect(
+      connectorConfigurationComplete(connector(), { apiKey: "demo_key" }),
+    ).toBe(true);
   });
 
-  test("a JSON object passes through parsed", () => {
-    expect(parseConnectionConfig('{"apiKey": "k1", "n": 2}')).toEqual({
-      ok: true,
-      config: { apiKey: "k1", n: 2 },
-    });
-  });
-
-  test("malformed JSON fails with the not-valid-JSON message", () => {
-    const res = parseConnectionConfig("{nope");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toBe("Config is not valid JSON.");
-  });
-
-  test("valid JSON that is not a plain object fails — the server would 400 it", () => {
-    for (const text of ['"a string"', "[1,2]", "42", "null", "true"]) {
-      const res = parseConnectionConfig(text);
-      expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toContain("JSON object");
-    }
+  test("never enables an unconfigured live connector", () => {
+    expect(
+      connectorConfigurationComplete(connector({ configured: false }), {
+        apiKey: "demo_key",
+      }),
+    ).toBe(false);
   });
 });
 
 describe("connectorFieldState", () => {
-  const one = [{ key: "mono", name: "Mono", description: "Open banking" }];
+  const one = [connector()];
 
   test("still-loading registry shows the skeleton", () => {
     expect(connectorFieldState(undefined, false)).toBe("loading");
@@ -63,9 +76,7 @@ describe("connectorFieldState", () => {
 });
 
 describe("connectorLabel", () => {
-  const connectors = [
-    { key: "mono", name: "Mono", description: "Nigerian open banking" },
-  ];
+  const connectors = [connector({ description: "Nigerian open banking" })];
 
   test("resolves the human name from the registry", () => {
     expect(connectorLabel("mono", connectors)).toBe("Mono");

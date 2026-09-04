@@ -63,6 +63,11 @@ const NON_MODEL_NO_CONTEXT = new Set([
   // rate class.
   "POST /api/billing/payments",
   "POST /api/collection-accounts",
+  // Test-first integration setup performs bounded calls to deployment-owned
+  // ERP and bank relays. These are authenticated provider calls, not model
+  // calls, and remain under the general per-principal limit.
+  "POST /api/connections/test",
+  "POST /api/statement-connections/test",
   // Posture round: no model call — left the request transaction because a
   // 200-row batch would hold the global audit advisory lock batch-wide
   // (modules/invoice/bulk-submit.ts commits per stage instead).
@@ -82,6 +87,9 @@ const PUBLIC_NO_CONTEXT = new Set([
   "POST /api/inbound/whatsapp",
   "POST /api/auth/request-password-reset",
   "POST /api/public/advisory-requests",
+  // CRM handoff only; its dedicated raw-pool throttle and closed request
+  // schema apply before the deployment-owned messaging relay is called.
+  "POST /api/public/access-requests",
   "POST /api/public/usability-events",
 ]);
 

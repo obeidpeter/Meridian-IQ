@@ -4,6 +4,9 @@ The deep reference for everything below the product features: tenancy, auth,
 the pipeline worker, messaging, statements, billing/export surfaces and
 observability. Paths are relative to `artifacts/api-server/src` unless noted.
 The AI-assistant side lives in `docs/clerk-ai.md`.
+Workspace aggregation, Team work integrity, provider relay contracts, and
+their production rollout checks live in
+[`workspace-and-provider-readiness.md`](workspace-and-provider-readiness.md).
 
 ## Data layer & multi-tenant isolation (the part to get right)
 

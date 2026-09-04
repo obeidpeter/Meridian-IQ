@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.95.0
+  version: 0.96.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -41,6 +41,8 @@ tags:
   - name: wht
   - name: recurring
   - name: invitation
+  - name: workspace
+  - name: work
 paths:
   /healthz:
     get:
@@ -71,6 +73,174 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /workspace/today:
+    get:
+      operationId: getWorkspaceToday
+      tags: [workspace]
+      summary: Role-aware priority work, setup progress and collaboration for today
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 24
+      responses:
+        "200":
+          description: The caller's bounded, tenant-scoped workbench
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceToday"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /workspace/search:
+    get:
+      operationId: searchWorkspace
+      tags: [workspace]
+      summary: Search tenant-scoped records the current role is allowed to open
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 120
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 12
+      responses:
+        "200":
+          description: Bounded search matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspaceSearchResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /work-items:
+    get:
+      operationId: listWorkItems
+      tags: [work]
+      summary: List collaborative work items in the caller's firm and client scope
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, in_progress, blocked, done]
+        - name: clientPartyId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Work items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkItem"
+    post:
+      operationId: createWorkItem
+      tags: [work]
+      summary: Create a collaborative work item idempotently
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkItemInput"
+      responses:
+        "201":
+          description: Work item created, or the existing idempotent result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /work-items/{id}:
+    patch:
+      operationId: updateWorkItem
+      tags: [work]
+      summary: Update a work item using an optimistic version guard
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkItemInput"
+      responses:
+        "200":
+          description: Updated work item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItem"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /work-items/{id}/comments:
+    get:
+      operationId: listWorkItemComments
+      tags: [work]
+      summary: List append-only comments for one accessible work item
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Comments, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkItemComment"
+    post:
+      operationId: createWorkItemComment
+      tags: [work]
+      summary: Add a comment idempotently and validate mentioned users
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkItemCommentInput"
+      responses:
+        "201":
+          description: Comment created, or the existing idempotent result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemComment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /auth/login:
     post:
       operationId: login
@@ -99,6 +269,16 @@ paths:
       responses:
         "204":
           description: Signed out
+  /auth/revoke-sessions:
+    post:
+      operationId: revokeSessions
+      tags: [auth]
+      summary: Revoke every session for the signed-in account and clear this cookie
+      responses:
+        "204":
+          description: Every outstanding session revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /auth/totp/challenge:
     post:
       operationId: totpChallenge
@@ -365,6 +545,27 @@ paths:
           description: Event recorded
         "429":
           description: Too many events
+
+  /public/access-requests:
+    post:
+      operationId: requestPlatformAccess
+      tags: [platform]
+      summary: Send a consented pilot or account-access request to the configured relay
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlatformAccessRequestInput"
+      responses:
+        "202":
+          description: Access request accepted for delivery
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Too many access requests
+        "503":
+          description: Access-request delivery is not configured or temporarily unavailable
 
   /password-resets:
     post:
@@ -4334,6 +4535,18 @@ paths:
                   $ref: "#/components/schemas/CpdEnrollmentView"
 
   # ---- R2: ERP connectors (PL-03, INT-06) ----
+  /integration-readiness:
+    get:
+      operationId: getIntegrationReadiness
+      tags: [connectors]
+      summary: Presence-only readiness of this deployment's external service rails
+      responses:
+        "200":
+          description: Provider modes and setup state; never credential values
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationReadiness"
   /connectors:
     get:
       operationId: listConnectors
@@ -4348,6 +4561,26 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ConnectorInfo"
+  /connections/test:
+    post:
+      operationId: testErpConnection
+      tags: [connectors]
+      summary: Validate connector configuration without persisting it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpConnectionTestInput"
+      responses:
+        "200":
+          description: Connector accepted the configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpConnectionTestResult"
+        "422":
+          description: Connector is unavailable or rejected the configuration
   /connections:
     get:
       operationId: listErpConnections
@@ -5336,6 +5569,28 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/StatementConnectorInfo"
+  /statement-connections/test:
+    post:
+      operationId: testStatementConnection
+      tags: [statements]
+      summary: Test a bank-feed configuration without saving it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestStatementConnectionInput"
+      responses:
+        "200":
+          description: Connection test succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementConnectionTestResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
   /statement-connections:
     get:
       operationId: listStatementConnections
@@ -6886,6 +7141,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    UnprocessableEntity:
+      description: The request is valid JSON but cannot be accepted
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
@@ -7242,6 +7503,19 @@ components:
               help_search_no_result,
               help_helpful,
               help_unhelpful,
+              access_request_started,
+              access_request_submitted,
+              access_request_failed,
+              today_item_opened,
+              work_item_created,
+              work_item_completed,
+              collaboration_comment_added,
+              global_search_started,
+              global_search_result_opened,
+              integration_tested,
+              offline_detected,
+              online_restored,
+              sessions_revoked,
             ]
         surface:
           type: string
@@ -7256,7 +7530,331 @@ components:
               invoice_import,
               console_help,
               sme_help,
+              access_request,
+              today,
+              global_search,
+              collaboration,
+              integrations,
+              account_security,
+              app_shell,
             ]
+
+    PlatformAccessRequestInput:
+      type: object
+      additionalProperties: false
+      required: [name, email, businessName, interest, consent]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        businessName:
+          type: string
+          minLength: 2
+          maxLength: 140
+        interest:
+          type: string
+          enum: [business, accounting_firm, buyer, partnership]
+        teamSize:
+          type: string
+          enum: [one, two_to_ten, eleven_to_fifty, over_fifty]
+        message:
+          type: string
+          maxLength: 1200
+        consent:
+          type: boolean
+        # Honeypot: real clients leave this empty; a non-empty value is
+        # accepted generically but never relayed.
+        website:
+          type: string
+          maxLength: 200
+
+    WorkspaceToday:
+      type: object
+      required: [role, generatedAt, summary, items, setup]
+      properties:
+        role:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: "#/components/schemas/WorkspaceTodaySummary"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceTodayItem"
+        setup:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceSetupStep"
+
+    WorkspaceTodaySummary:
+      type: object
+      required: [total, urgent, dueSoon, blocked, completedSetupSteps, totalSetupSteps]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        urgent:
+          type: integer
+          minimum: 0
+        dueSoon:
+          type: integer
+          minimum: 0
+        blocked:
+          type: integer
+          minimum: 0
+        completedSetupSteps:
+          type: integer
+          minimum: 0
+        totalSetupSteps:
+          type: integer
+          minimum: 0
+
+    WorkspaceTodayItem:
+      type: object
+      required:
+        [id, source, kind, title, description, priority, status, dueAt, href, clientPartyId, clientName, entityType, entityId]
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+          enum: [work_item, invoice, filing, obligation]
+        kind:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        status:
+          type: string
+        dueAt:
+          type: ["string", "null"]
+          format: date-time
+        href:
+          type: string
+        clientPartyId:
+          type: ["string", "null"]
+        clientName:
+          type: ["string", "null"]
+        entityType:
+          type: ["string", "null"]
+        entityId:
+          type: ["string", "null"]
+
+    WorkspaceSetupStep:
+      type: object
+      required: [id, label, description, complete, href]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        complete:
+          type: boolean
+        href:
+          type: string
+
+    WorkspaceSearchResult:
+      type: object
+      required: [id, kind, label, description, group, href]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [client, supplier, invoice, filing, obligation, work_item, firm]
+        label:
+          type: string
+        description:
+          type: string
+        group:
+          type: string
+        href:
+          type: string
+
+    WorkItem:
+      type: object
+      required:
+        [id, firmId, clientPartyId, clientName, title, description, status, priority, dueAt, assignedTo, assignedToName, createdBy, createdByName, entityType, entityId, href, version, completedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: ["string", "null"]
+          format: uuid
+        clientName:
+          type: ["string", "null"]
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, in_progress, blocked, done]
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        dueAt:
+          type: ["string", "null"]
+          format: date-time
+        assignedTo:
+          type: ["string", "null"]
+          format: uuid
+        assignedToName:
+          type: ["string", "null"]
+        createdBy:
+          type: string
+          format: uuid
+        createdByName:
+          type: ["string", "null"]
+        entityType:
+          type: ["string", "null"]
+        entityId:
+          type: ["string", "null"]
+          format: uuid
+        href:
+          type: ["string", "null"]
+        version:
+          type: integer
+          minimum: 1
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateWorkItemInput:
+      type: object
+      additionalProperties: false
+      required: [clientRequestId, title]
+      properties:
+        clientRequestId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 2
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        dueAt:
+          type: string
+          format: date-time
+        assignedTo:
+          type: string
+          format: uuid
+        entityType:
+          type: string
+          minLength: 1
+          maxLength: 60
+        entityId:
+          type: string
+          format: uuid
+        href:
+          type: string
+          pattern: '^/'
+          maxLength: 300
+
+    UpdateWorkItemInput:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          minLength: 2
+          maxLength: 160
+        description:
+          type: ["string", "null"]
+          maxLength: 2000
+        status:
+          type: string
+          enum: [open, in_progress, blocked, done]
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+        dueAt:
+          type: ["string", "null"]
+          format: date-time
+        assignedTo:
+          type: ["string", "null"]
+          format: uuid
+
+    WorkItemComment:
+      type: object
+      required: [id, workItemId, authorId, authorName, body, mentionedUserIds, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workItemId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        authorName:
+          type: ["string", "null"]
+        body:
+          type: string
+        mentionedUserIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateWorkItemCommentInput:
+      type: object
+      additionalProperties: false
+      required: [clientRequestId, body]
+      properties:
+        clientRequestId:
+          type: string
+          format: uuid
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        mentionedUserIds:
+          type: array
+          uniqueItems: true
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
 
     Firm:
       type: object
@@ -12827,13 +13425,91 @@ components:
     # ---- R2 schemas: ERP connectors (PL-03, INT-06) ----
     ConnectorInfo:
       type: object
-      required: [key, name, description]
+      required: [key, name, description, mode, configured, configurationFields]
       properties:
         key:
           type: string
         name:
           type: string
         description:
+          type: string
+        mode:
+          type: string
+          enum: [sandbox, live]
+        configured:
+          type: boolean
+        configurationFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorConfigurationField"
+    ConnectorConfigurationField:
+      type: object
+      required: [key, label, required, secret, placeholder, help]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        required:
+          type: boolean
+        secret:
+          type: boolean
+        placeholder:
+          type: string
+        help:
+          type: string
+    ErpConnectionTestInput:
+      type: object
+      additionalProperties: false
+      required: [connectorKey]
+      properties:
+        connectorKey:
+          type: string
+        authConfig:
+          type: object
+          additionalProperties: true
+    ErpConnectionTestResult:
+      type: object
+      required: [ok, message]
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+    IntegrationReadiness:
+      type: object
+      required: [generatedAt, liveCount, totalCount, items]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        liveCount:
+          type: integer
+          minimum: 0
+        totalCount:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationReadinessItem"
+    IntegrationReadinessItem:
+      type: object
+      required: [key, label, category, status, note, setupHref]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        category:
+          type: string
+          enum: [tax, payments, banking, messaging, accounting]
+        status:
+          type: string
+          enum: [live, sandbox, setup_required]
+        note:
+          type: string
+        setupHref:
           type: string
     ErpConnection:
       type: object
@@ -16941,13 +17617,40 @@ components:
           type: integer
     StatementConnectorInfo:
       type: object
-      required: [key, name, description]
+      required: [key, name, description, mode, configured, configurationFields]
       properties:
         key:
           type: string
         name:
           type: string
         description:
+          type: string
+        mode:
+          type: string
+          enum: [sandbox, live]
+        configured:
+          type: boolean
+        configurationFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorConfigurationField"
+    TestStatementConnectionInput:
+      type: object
+      additionalProperties: false
+      required: [connectorKey, config]
+      properties:
+        connectorKey:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+    StatementConnectionTestResult:
+      type: object
+      required: [ok, message]
+      properties:
+        ok:
+          type: boolean
+        message:
           type: string
     StatementConnection:
       type: object
@@ -16970,6 +17673,7 @@ components:
           type: string
     CreateStatementConnectionInput:
       type: object
+      additionalProperties: false
       required: [connectorKey, clientPartyId]
       properties:
         connectorKey:

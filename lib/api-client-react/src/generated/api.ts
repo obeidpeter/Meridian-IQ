@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.95.0
+ * OpenAPI spec version: 0.96.0
  */
 import {
   useMutation,
@@ -142,6 +142,8 @@ import type {
   CreateStatementConnectionInput,
   CreateStatementFormatInput,
   CreateStatementFormatResult,
+  CreateWorkItemCommentInput,
+  CreateWorkItemInput,
   CreatedClient,
   CreditNoteInput,
   DashboardSummary,
@@ -162,6 +164,8 @@ import type {
   EngagementUpdate,
   ErpConnection,
   ErpConnectionInput,
+  ErpConnectionTestInput,
+  ErpConnectionTestResult,
   ErpSyncRun,
   Error,
   ErrorCatalogueEntry,
@@ -243,11 +247,13 @@ import type {
   GetVatPositionParams,
   GetVatSettlementCheckParams,
   GetWhtRemittanceParams,
+  GetWorkspaceTodayParams,
   GrantActionPolicyInput,
   GrantPlanPolicyInput,
   HealthAlert,
   HealthStatus,
   IdentifierCheck,
+  IntegrationReadiness,
   IntegrationReliabilityWorkspace,
   IntentEvalOutcome,
   IntentEvalRun,
@@ -293,6 +299,7 @@ import type {
   ListStatementsParams,
   ListUnbilledIncomeParams,
   ListWhtCreditsParams,
+  ListWorkItemsParams,
   LoginInput,
   MarkNotificationsReadInput,
   MatchAssist,
@@ -346,6 +353,7 @@ import type {
   PlanPolicyList,
   PlanRunList,
   PlanRunView,
+  PlatformAccessRequestInput,
   PortfolioSummary,
   PriceReview,
   ProjectionAccuracy,
@@ -380,6 +388,7 @@ import type {
   RunPhrasingEvalInput,
   RunPromptCanaryInput,
   ScoreboardRow,
+  SearchWorkspaceParams,
   SettlementEvent,
   SettlementInput,
   SkipOnboardingStepInput,
@@ -388,6 +397,7 @@ import type {
   StampVerifyInput,
   StampVerifyResult,
   StatementConnection,
+  StatementConnectionTestResult,
   StatementConnectorInfo,
   StatementFormatDraft,
   StatementFormatView,
@@ -399,6 +409,7 @@ import type {
   SubscriptionUpdate,
   SubscriptionView,
   SyncFilingsResult,
+  TestStatementConnectionInput,
   TierUpdate,
   TinCheckInput,
   TotpActivateInput,
@@ -413,10 +424,12 @@ import type {
   UnmappedErrorCode,
   UnmatchedCollections,
   UnmatchedCredits,
+  UnprocessableEntityResponse,
   UpdateFilingStatusInput,
   UpdateFirmPoliciesInput,
   UpdateObligationStatusInput,
   UpdateStaffNotificationPreferencesInput,
+  UpdateWorkItemInput,
   UsabilityEventInput,
   User,
   UserInput,
@@ -432,7 +445,11 @@ import type {
   WhtCreditCreateInput,
   WhtCreditList,
   WhtNoteInput,
-  WhtRemittance
+  WhtRemittance,
+  WorkItem,
+  WorkItemComment,
+  WorkspaceSearchResult,
+  WorkspaceToday
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -617,6 +634,550 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
 
 
 
+export const getGetWorkspaceTodayUrl = (params?: GetWorkspaceTodayParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/workspace/today?${stringifiedParams}` : `/api/workspace/today`
+}
+
+/**
+ * @summary Role-aware priority work, setup progress and collaboration for today
+ */
+export const getWorkspaceToday = async (params?: GetWorkspaceTodayParams, options?: RequestInit): Promise<WorkspaceToday> => {
+
+  return customFetch<WorkspaceToday>(getGetWorkspaceTodayUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceTodayQueryKey = (params?: GetWorkspaceTodayParams,) => {
+    return [
+    `/api/workspace/today`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorkspaceTodayQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceToday>>, TError = ErrorType<UnauthorizedResponse>>(params?: GetWorkspaceTodayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceToday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceTodayQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceToday>>> = ({ signal }) => getWorkspaceToday(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceToday>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceTodayQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceToday>>>
+export type GetWorkspaceTodayQueryError = ErrorType<UnauthorizedResponse>
+
+
+/**
+ * @summary Role-aware priority work, setup progress and collaboration for today
+ */
+
+export function useGetWorkspaceToday<TData = Awaited<ReturnType<typeof getWorkspaceToday>>, TError = ErrorType<UnauthorizedResponse>>(
+ params?: GetWorkspaceTodayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceToday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceTodayQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchWorkspaceUrl = (params: SearchWorkspaceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/workspace/search?${stringifiedParams}` : `/api/workspace/search`
+}
+
+/**
+ * @summary Search tenant-scoped records the current role is allowed to open
+ */
+export const searchWorkspace = async (params: SearchWorkspaceParams, options?: RequestInit): Promise<WorkspaceSearchResult[]> => {
+
+  return customFetch<WorkspaceSearchResult[]>(getSearchWorkspaceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchWorkspaceQueryKey = (params?: SearchWorkspaceParams,) => {
+    return [
+    `/api/workspace/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof searchWorkspace>>, TError = ErrorType<BadRequestResponse>>(params: SearchWorkspaceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchWorkspaceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchWorkspace>>> = ({ signal }) => searchWorkspace(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchWorkspace>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof searchWorkspace>>>
+export type SearchWorkspaceQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Search tenant-scoped records the current role is allowed to open
+ */
+
+export function useSearchWorkspace<TData = Awaited<ReturnType<typeof searchWorkspace>>, TError = ErrorType<BadRequestResponse>>(
+ params: SearchWorkspaceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchWorkspaceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListWorkItemsUrl = (params?: ListWorkItemsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/work-items?${stringifiedParams}` : `/api/work-items`
+}
+
+/**
+ * @summary List collaborative work items in the caller's firm and client scope
+ */
+export const listWorkItems = async (params?: ListWorkItemsParams, options?: RequestInit): Promise<WorkItem[]> => {
+
+  return customFetch<WorkItem[]>(getListWorkItemsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWorkItemsQueryKey = (params?: ListWorkItemsParams,) => {
+    return [
+    `/api/work-items`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWorkItemsQueryOptions = <TData = Awaited<ReturnType<typeof listWorkItems>>, TError = ErrorType<unknown>>(params?: ListWorkItemsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWorkItemsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWorkItems>>> = ({ signal }) => listWorkItems(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWorkItems>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWorkItemsQueryResult = NonNullable<Awaited<ReturnType<typeof listWorkItems>>>
+export type ListWorkItemsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List collaborative work items in the caller's firm and client scope
+ */
+
+export function useListWorkItems<TData = Awaited<ReturnType<typeof listWorkItems>>, TError = ErrorType<unknown>>(
+ params?: ListWorkItemsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWorkItemsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWorkItemUrl = () => {
+
+
+
+
+  return `/api/work-items`
+}
+
+/**
+ * @summary Create a collaborative work item idempotently
+ */
+export const createWorkItem = async (createWorkItemInput: CreateWorkItemInput, options?: RequestInit): Promise<WorkItem> => {
+
+  return customFetch<WorkItem>(getCreateWorkItemUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createWorkItemInput)
+  }
+);}
+
+
+
+
+
+export const getCreateWorkItemMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWorkItem>>, TError,{data: BodyType<CreateWorkItemInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWorkItem>>, TError,{data: BodyType<CreateWorkItemInput>}, TContext> => {
+
+const mutationKey = ['createWorkItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWorkItem>>, {data: BodyType<CreateWorkItemInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWorkItem(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWorkItemMutationResult = NonNullable<Awaited<ReturnType<typeof createWorkItem>>>
+    export type CreateWorkItemMutationBody = BodyType<CreateWorkItemInput>
+    export type CreateWorkItemMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Create a collaborative work item idempotently
+ */
+export const useCreateWorkItem = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWorkItem>>, TError,{data: BodyType<CreateWorkItemInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWorkItem>>,
+        TError,
+        {data: BodyType<CreateWorkItemInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWorkItemMutationOptions(options));
+    }
+
+export const getUpdateWorkItemUrl = (id: string,) => {
+
+
+
+
+  return `/api/work-items/${id}`
+}
+
+/**
+ * @summary Update a work item using an optimistic version guard
+ */
+export const updateWorkItem = async (id: string,
+    updateWorkItemInput: UpdateWorkItemInput, options?: RequestInit): Promise<WorkItem> => {
+
+  return customFetch<WorkItem>(getUpdateWorkItemUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateWorkItemInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateWorkItemMutationOptions = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWorkItem>>, TError,{id: string;data: BodyType<UpdateWorkItemInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWorkItem>>, TError,{id: string;data: BodyType<UpdateWorkItemInput>}, TContext> => {
+
+const mutationKey = ['updateWorkItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWorkItem>>, {id: string;data: BodyType<UpdateWorkItemInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWorkItem(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWorkItemMutationResult = NonNullable<Awaited<ReturnType<typeof updateWorkItem>>>
+    export type UpdateWorkItemMutationBody = BodyType<UpdateWorkItemInput>
+    export type UpdateWorkItemMutationError = ErrorType<ConflictResponse>
+
+    /**
+ * @summary Update a work item using an optimistic version guard
+ */
+export const useUpdateWorkItem = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWorkItem>>, TError,{id: string;data: BodyType<UpdateWorkItemInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWorkItem>>,
+        TError,
+        {id: string;data: BodyType<UpdateWorkItemInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateWorkItemMutationOptions(options));
+    }
+
+export const getListWorkItemCommentsUrl = (id: string,) => {
+
+
+
+
+  return `/api/work-items/${id}/comments`
+}
+
+/**
+ * @summary List append-only comments for one accessible work item
+ */
+export const listWorkItemComments = async (id: string, options?: RequestInit): Promise<WorkItemComment[]> => {
+
+  return customFetch<WorkItemComment[]>(getListWorkItemCommentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWorkItemCommentsQueryKey = (id: string,) => {
+    return [
+    `/api/work-items/${id}/comments`
+    ] as const;
+    }
+
+
+export const getListWorkItemCommentsQueryOptions = <TData = Awaited<ReturnType<typeof listWorkItemComments>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkItemComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWorkItemCommentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWorkItemComments>>> = ({ signal }) => listWorkItemComments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWorkItemComments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWorkItemCommentsQueryResult = NonNullable<Awaited<ReturnType<typeof listWorkItemComments>>>
+export type ListWorkItemCommentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List append-only comments for one accessible work item
+ */
+
+export function useListWorkItemComments<TData = Awaited<ReturnType<typeof listWorkItemComments>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkItemComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWorkItemCommentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWorkItemCommentUrl = (id: string,) => {
+
+
+
+
+  return `/api/work-items/${id}/comments`
+}
+
+/**
+ * @summary Add a comment idempotently and validate mentioned users
+ */
+export const createWorkItemComment = async (id: string,
+    createWorkItemCommentInput: CreateWorkItemCommentInput, options?: RequestInit): Promise<WorkItemComment> => {
+
+  return customFetch<WorkItemComment>(getCreateWorkItemCommentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createWorkItemCommentInput)
+  }
+);}
+
+
+
+
+
+export const getCreateWorkItemCommentMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWorkItemComment>>, TError,{id: string;data: BodyType<CreateWorkItemCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWorkItemComment>>, TError,{id: string;data: BodyType<CreateWorkItemCommentInput>}, TContext> => {
+
+const mutationKey = ['createWorkItemComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWorkItemComment>>, {id: string;data: BodyType<CreateWorkItemCommentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createWorkItemComment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWorkItemCommentMutationResult = NonNullable<Awaited<ReturnType<typeof createWorkItemComment>>>
+    export type CreateWorkItemCommentMutationBody = BodyType<CreateWorkItemCommentInput>
+    export type CreateWorkItemCommentMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Add a comment idempotently and validate mentioned users
+ */
+export const useCreateWorkItemComment = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWorkItemComment>>, TError,{id: string;data: BodyType<CreateWorkItemCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWorkItemComment>>,
+        TError,
+        {id: string;data: BodyType<CreateWorkItemCommentInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWorkItemCommentMutationOptions(options));
+    }
+
 export const getLoginUrl = () => {
 
 
@@ -757,6 +1318,77 @@ export const useLogout = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLogoutMutationOptions(options));
+    }
+
+export const getRevokeSessionsUrl = () => {
+
+
+
+
+  return `/api/auth/revoke-sessions`
+}
+
+/**
+ * @summary Revoke every session for the signed-in account and clear this cookie
+ */
+export const revokeSessions = async ( options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRevokeSessionsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeSessionsMutationOptions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeSessions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeSessions>>, TError,void, TContext> => {
+
+const mutationKey = ['revokeSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeSessions>>, void> = () => {
+
+
+          return  revokeSessions(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof revokeSessions>>>
+
+    export type RevokeSessionsMutationError = ErrorType<UnauthorizedResponse>
+
+    /**
+ * @summary Revoke every session for the signed-in account and clear this cookie
+ */
+export const useRevokeSessions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeSessions>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeSessions>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRevokeSessionsMutationOptions(options));
     }
 
 export const getTotpChallengeUrl = () => {
@@ -1834,6 +2466,77 @@ export const useRecordUsabilityEvent = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRecordUsabilityEventMutationOptions(options));
+    }
+
+export const getRequestPlatformAccessUrl = () => {
+
+
+
+
+  return `/api/public/access-requests`
+}
+
+/**
+ * @summary Send a consented pilot or account-access request to the configured relay
+ */
+export const requestPlatformAccess = async (platformAccessRequestInput: PlatformAccessRequestInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRequestPlatformAccessUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(platformAccessRequestInput)
+  }
+);}
+
+
+
+
+
+export const getRequestPlatformAccessMutationOptions = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPlatformAccess>>, TError,{data: BodyType<PlatformAccessRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPlatformAccess>>, TError,{data: BodyType<PlatformAccessRequestInput>}, TContext> => {
+
+const mutationKey = ['requestPlatformAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPlatformAccess>>, {data: BodyType<PlatformAccessRequestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPlatformAccess(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPlatformAccessMutationResult = NonNullable<Awaited<ReturnType<typeof requestPlatformAccess>>>
+    export type RequestPlatformAccessMutationBody = BodyType<PlatformAccessRequestInput>
+    export type RequestPlatformAccessMutationError = ErrorType<BadRequestResponse | void>
+
+    /**
+ * @summary Send a consented pilot or account-access request to the configured relay
+ */
+export const useRequestPlatformAccess = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPlatformAccess>>, TError,{data: BodyType<PlatformAccessRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPlatformAccess>>,
+        TError,
+        {data: BodyType<PlatformAccessRequestInput>},
+        TContext
+      > => {
+      return useMutation(getRequestPlatformAccessMutationOptions(options));
     }
 
 export const getCreatePasswordResetUrl = () => {
@@ -17679,6 +18382,83 @@ export function useListCpdEnrollments<TData = Awaited<ReturnType<typeof listCpdE
 
 
 
+export const getGetIntegrationReadinessUrl = () => {
+
+
+
+
+  return `/api/integration-readiness`
+}
+
+/**
+ * @summary Presence-only readiness of this deployment's external service rails
+ */
+export const getIntegrationReadiness = async ( options?: RequestInit): Promise<IntegrationReadiness> => {
+
+  return customFetch<IntegrationReadiness>(getGetIntegrationReadinessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIntegrationReadinessQueryKey = () => {
+    return [
+    `/api/integration-readiness`
+    ] as const;
+    }
+
+
+export const getGetIntegrationReadinessQueryOptions = <TData = Awaited<ReturnType<typeof getIntegrationReadiness>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntegrationReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIntegrationReadinessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIntegrationReadiness>>> = ({ signal }) => getIntegrationReadiness({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIntegrationReadiness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetIntegrationReadinessQueryResult = NonNullable<Awaited<ReturnType<typeof getIntegrationReadiness>>>
+export type GetIntegrationReadinessQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Presence-only readiness of this deployment's external service rails
+ */
+
+export function useGetIntegrationReadiness<TData = Awaited<ReturnType<typeof getIntegrationReadiness>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntegrationReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetIntegrationReadinessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListConnectorsUrl = () => {
 
 
@@ -17755,6 +18535,77 @@ export function useListConnectors<TData = Awaited<ReturnType<typeof listConnecto
 
 
 
+
+export const getTestErpConnectionUrl = () => {
+
+
+
+
+  return `/api/connections/test`
+}
+
+/**
+ * @summary Validate connector configuration without persisting it
+ */
+export const testErpConnection = async (erpConnectionTestInput: ErpConnectionTestInput, options?: RequestInit): Promise<ErpConnectionTestResult> => {
+
+  return customFetch<ErpConnectionTestResult>(getTestErpConnectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(erpConnectionTestInput)
+  }
+);}
+
+
+
+
+
+export const getTestErpConnectionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testErpConnection>>, TError,{data: BodyType<ErpConnectionTestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testErpConnection>>, TError,{data: BodyType<ErpConnectionTestInput>}, TContext> => {
+
+const mutationKey = ['testErpConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testErpConnection>>, {data: BodyType<ErpConnectionTestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  testErpConnection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestErpConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof testErpConnection>>>
+    export type TestErpConnectionMutationBody = BodyType<ErpConnectionTestInput>
+    export type TestErpConnectionMutationError = ErrorType<void>
+
+    /**
+ * @summary Validate connector configuration without persisting it
+ */
+export const useTestErpConnection = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testErpConnection>>, TError,{data: BodyType<ErpConnectionTestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testErpConnection>>,
+        TError,
+        {data: BodyType<ErpConnectionTestInput>},
+        TContext
+      > => {
+      return useMutation(getTestErpConnectionMutationOptions(options));
+    }
 
 export const getListErpConnectionsUrl = (params?: ListErpConnectionsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -21582,6 +22433,77 @@ export function useListStatementConnectors<TData = Awaited<ReturnType<typeof lis
 
 
 
+
+export const getTestStatementConnectionUrl = () => {
+
+
+
+
+  return `/api/statement-connections/test`
+}
+
+/**
+ * @summary Test a bank-feed configuration without saving it
+ */
+export const testStatementConnection = async (testStatementConnectionInput: TestStatementConnectionInput, options?: RequestInit): Promise<StatementConnectionTestResult> => {
+
+  return customFetch<StatementConnectionTestResult>(getTestStatementConnectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(testStatementConnectionInput)
+  }
+);}
+
+
+
+
+
+export const getTestStatementConnectionMutationOptions = <TError = ErrorType<BadRequestResponse | UnprocessableEntityResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testStatementConnection>>, TError,{data: BodyType<TestStatementConnectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testStatementConnection>>, TError,{data: BodyType<TestStatementConnectionInput>}, TContext> => {
+
+const mutationKey = ['testStatementConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testStatementConnection>>, {data: BodyType<TestStatementConnectionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  testStatementConnection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestStatementConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof testStatementConnection>>>
+    export type TestStatementConnectionMutationBody = BodyType<TestStatementConnectionInput>
+    export type TestStatementConnectionMutationError = ErrorType<BadRequestResponse | UnprocessableEntityResponse>
+
+    /**
+ * @summary Test a bank-feed configuration without saving it
+ */
+export const useTestStatementConnection = <TError = ErrorType<BadRequestResponse | UnprocessableEntityResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testStatementConnection>>, TError,{data: BodyType<TestStatementConnectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testStatementConnection>>,
+        TError,
+        {data: BodyType<TestStatementConnectionInput>},
+        TContext
+      > => {
+      return useMutation(getTestStatementConnectionMutationOptions(options));
+    }
 
 export const getListStatementConnectionsUrl = () => {
 

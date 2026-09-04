@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.95.0
+ * OpenAPI spec version: 0.96.0
  */
 export interface HealthStatus {
   status: string;
@@ -281,6 +281,19 @@ export const UsabilityEventInputEvent = {
   help_search_no_result: 'help_search_no_result',
   help_helpful: 'help_helpful',
   help_unhelpful: 'help_unhelpful',
+  access_request_started: 'access_request_started',
+  access_request_submitted: 'access_request_submitted',
+  access_request_failed: 'access_request_failed',
+  today_item_opened: 'today_item_opened',
+  work_item_created: 'work_item_created',
+  work_item_completed: 'work_item_completed',
+  collaboration_comment_added: 'collaboration_comment_added',
+  global_search_started: 'global_search_started',
+  global_search_result_opened: 'global_search_result_opened',
+  integration_tested: 'integration_tested',
+  offline_detected: 'offline_detected',
+  online_restored: 'online_restored',
+  sessions_revoked: 'sessions_revoked',
 } as const;
 
 export type UsabilityEventInputSurface = typeof UsabilityEventInputSurface[keyof typeof UsabilityEventInputSurface];
@@ -296,11 +309,308 @@ export const UsabilityEventInputSurface = {
   invoice_import: 'invoice_import',
   console_help: 'console_help',
   sme_help: 'sme_help',
+  access_request: 'access_request',
+  today: 'today',
+  global_search: 'global_search',
+  collaboration: 'collaboration',
+  integrations: 'integrations',
+  account_security: 'account_security',
+  app_shell: 'app_shell',
 } as const;
 
 export interface UsabilityEventInput {
   event: UsabilityEventInputEvent;
   surface: UsabilityEventInputSurface;
+}
+
+export type PlatformAccessRequestInputInterest = typeof PlatformAccessRequestInputInterest[keyof typeof PlatformAccessRequestInputInterest];
+
+
+export const PlatformAccessRequestInputInterest = {
+  business: 'business',
+  accounting_firm: 'accounting_firm',
+  buyer: 'buyer',
+  partnership: 'partnership',
+} as const;
+
+export type PlatformAccessRequestInputTeamSize = typeof PlatformAccessRequestInputTeamSize[keyof typeof PlatformAccessRequestInputTeamSize];
+
+
+export const PlatformAccessRequestInputTeamSize = {
+  one: 'one',
+  two_to_ten: 'two_to_ten',
+  eleven_to_fifty: 'eleven_to_fifty',
+  over_fifty: 'over_fifty',
+} as const;
+
+export interface PlatformAccessRequestInput {
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  name: string;
+  /** @maxLength 254 */
+  email: string;
+  /**
+     * @minLength 2
+     * @maxLength 140
+     */
+  businessName: string;
+  interest: PlatformAccessRequestInputInterest;
+  teamSize?: PlatformAccessRequestInputTeamSize;
+  /** @maxLength 1200 */
+  message?: string;
+  consent: boolean;
+  /** @maxLength 200 */
+  website?: string;
+}
+
+export interface WorkspaceTodaySummary {
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 0 */
+  urgent: number;
+  /** @minimum 0 */
+  dueSoon: number;
+  /** @minimum 0 */
+  blocked: number;
+  /** @minimum 0 */
+  completedSetupSteps: number;
+  /** @minimum 0 */
+  totalSetupSteps: number;
+}
+
+export type WorkspaceTodayItemSource = typeof WorkspaceTodayItemSource[keyof typeof WorkspaceTodayItemSource];
+
+
+export const WorkspaceTodayItemSource = {
+  work_item: 'work_item',
+  invoice: 'invoice',
+  filing: 'filing',
+  obligation: 'obligation',
+} as const;
+
+export type WorkspaceTodayItemPriority = typeof WorkspaceTodayItemPriority[keyof typeof WorkspaceTodayItemPriority];
+
+
+export const WorkspaceTodayItemPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export interface WorkspaceTodayItem {
+  id: string;
+  source: WorkspaceTodayItemSource;
+  kind: string;
+  title: string;
+  description: string;
+  priority: WorkspaceTodayItemPriority;
+  status: string;
+  /** @nullable */
+  dueAt: string | null;
+  href: string;
+  /** @nullable */
+  clientPartyId: string | null;
+  /** @nullable */
+  clientName: string | null;
+  /** @nullable */
+  entityType: string | null;
+  /** @nullable */
+  entityId: string | null;
+}
+
+export interface WorkspaceSetupStep {
+  id: string;
+  label: string;
+  description: string;
+  complete: boolean;
+  href: string;
+}
+
+export interface WorkspaceToday {
+  role: string;
+  generatedAt: string;
+  summary: WorkspaceTodaySummary;
+  items: WorkspaceTodayItem[];
+  setup: WorkspaceSetupStep[];
+}
+
+export type WorkspaceSearchResultKind = typeof WorkspaceSearchResultKind[keyof typeof WorkspaceSearchResultKind];
+
+
+export const WorkspaceSearchResultKind = {
+  client: 'client',
+  supplier: 'supplier',
+  invoice: 'invoice',
+  filing: 'filing',
+  obligation: 'obligation',
+  work_item: 'work_item',
+  firm: 'firm',
+} as const;
+
+export interface WorkspaceSearchResult {
+  id: string;
+  kind: WorkspaceSearchResultKind;
+  label: string;
+  description: string;
+  group: string;
+  href: string;
+}
+
+export type WorkItemStatus = typeof WorkItemStatus[keyof typeof WorkItemStatus];
+
+
+export const WorkItemStatus = {
+  open: 'open',
+  in_progress: 'in_progress',
+  blocked: 'blocked',
+  done: 'done',
+} as const;
+
+export type WorkItemPriority = typeof WorkItemPriority[keyof typeof WorkItemPriority];
+
+
+export const WorkItemPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export interface WorkItem {
+  id: string;
+  firmId: string;
+  /** @nullable */
+  clientPartyId: string | null;
+  /** @nullable */
+  clientName: string | null;
+  title: string;
+  /** @nullable */
+  description: string | null;
+  status: WorkItemStatus;
+  priority: WorkItemPriority;
+  /** @nullable */
+  dueAt: string | null;
+  /** @nullable */
+  assignedTo: string | null;
+  /** @nullable */
+  assignedToName: string | null;
+  createdBy: string;
+  /** @nullable */
+  createdByName: string | null;
+  /** @nullable */
+  entityType: string | null;
+  /** @nullable */
+  entityId: string | null;
+  /** @nullable */
+  href: string | null;
+  /** @minimum 1 */
+  version: number;
+  /** @nullable */
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateWorkItemInputPriority = typeof CreateWorkItemInputPriority[keyof typeof CreateWorkItemInputPriority];
+
+
+export const CreateWorkItemInputPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export interface CreateWorkItemInput {
+  clientRequestId: string;
+  clientPartyId?: string;
+  /**
+     * @minLength 2
+     * @maxLength 160
+     */
+  title: string;
+  /** @maxLength 2000 */
+  description?: string;
+  priority?: CreateWorkItemInputPriority;
+  dueAt?: string;
+  assignedTo?: string;
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  entityType?: string;
+  entityId?: string;
+  /**
+     * @maxLength 300
+     * @pattern ^/
+     */
+  href?: string;
+}
+
+export type UpdateWorkItemInputStatus = typeof UpdateWorkItemInputStatus[keyof typeof UpdateWorkItemInputStatus];
+
+
+export const UpdateWorkItemInputStatus = {
+  open: 'open',
+  in_progress: 'in_progress',
+  blocked: 'blocked',
+  done: 'done',
+} as const;
+
+export type UpdateWorkItemInputPriority = typeof UpdateWorkItemInputPriority[keyof typeof UpdateWorkItemInputPriority];
+
+
+export const UpdateWorkItemInputPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export interface UpdateWorkItemInput {
+  /** @minimum 1 */
+  version: number;
+  /**
+     * @minLength 2
+     * @maxLength 160
+     */
+  title?: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  description?: string | null;
+  status?: UpdateWorkItemInputStatus;
+  priority?: UpdateWorkItemInputPriority;
+  /** @nullable */
+  dueAt?: string | null;
+  /** @nullable */
+  assignedTo?: string | null;
+}
+
+export interface WorkItemComment {
+  id: string;
+  workItemId: string;
+  authorId: string;
+  /** @nullable */
+  authorName: string | null;
+  body: string;
+  mentionedUserIds: string[];
+  createdAt: string;
+}
+
+export interface CreateWorkItemCommentInput {
+  clientRequestId: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  body: string;
+  /** @maxItems 20 */
+  mentionedUserIds?: string[];
 }
 
 /**
@@ -3963,10 +4273,80 @@ export interface CpdEnrollmentView {
   createdAt: string;
 }
 
+export type ConnectorInfoMode = typeof ConnectorInfoMode[keyof typeof ConnectorInfoMode];
+
+
+export const ConnectorInfoMode = {
+  sandbox: 'sandbox',
+  live: 'live',
+} as const;
+
+export interface ConnectorConfigurationField {
+  key: string;
+  label: string;
+  required: boolean;
+  secret: boolean;
+  placeholder: string;
+  help: string;
+}
+
 export interface ConnectorInfo {
   key: string;
   name: string;
   description: string;
+  mode: ConnectorInfoMode;
+  configured: boolean;
+  configurationFields: ConnectorConfigurationField[];
+}
+
+export type ErpConnectionTestInputAuthConfig = { [key: string]: unknown };
+
+export interface ErpConnectionTestInput {
+  connectorKey: string;
+  authConfig?: ErpConnectionTestInputAuthConfig;
+}
+
+export interface ErpConnectionTestResult {
+  ok: boolean;
+  message: string;
+}
+
+export type IntegrationReadinessItemCategory = typeof IntegrationReadinessItemCategory[keyof typeof IntegrationReadinessItemCategory];
+
+
+export const IntegrationReadinessItemCategory = {
+  tax: 'tax',
+  payments: 'payments',
+  banking: 'banking',
+  messaging: 'messaging',
+  accounting: 'accounting',
+} as const;
+
+export type IntegrationReadinessItemStatus = typeof IntegrationReadinessItemStatus[keyof typeof IntegrationReadinessItemStatus];
+
+
+export const IntegrationReadinessItemStatus = {
+  live: 'live',
+  sandbox: 'sandbox',
+  setup_required: 'setup_required',
+} as const;
+
+export interface IntegrationReadinessItem {
+  key: string;
+  label: string;
+  category: IntegrationReadinessItemCategory;
+  status: IntegrationReadinessItemStatus;
+  note: string;
+  setupHref: string;
+}
+
+export interface IntegrationReadiness {
+  generatedAt: string;
+  /** @minimum 0 */
+  liveCount: number;
+  /** @minimum 0 */
+  totalCount: number;
+  items: IntegrationReadinessItem[];
 }
 
 export type ErpConnectionStatus = typeof ErpConnectionStatus[keyof typeof ErpConnectionStatus];
@@ -6745,10 +7125,33 @@ export interface EvalFixtureReport {
   runsScanned: number;
 }
 
+export type StatementConnectorInfoMode = typeof StatementConnectorInfoMode[keyof typeof StatementConnectorInfoMode];
+
+
+export const StatementConnectorInfoMode = {
+  sandbox: 'sandbox',
+  live: 'live',
+} as const;
+
 export interface StatementConnectorInfo {
   key: string;
   name: string;
   description: string;
+  mode: StatementConnectorInfoMode;
+  configured: boolean;
+  configurationFields: ConnectorConfigurationField[];
+}
+
+export type TestStatementConnectionInputConfig = { [key: string]: unknown };
+
+export interface TestStatementConnectionInput {
+  connectorKey: string;
+  config: TestStatementConnectionInputConfig;
+}
+
+export interface StatementConnectionTestResult {
+  ok: boolean;
+  message: string;
 }
 
 export type StatementConnectionStatus = typeof StatementConnectionStatus[keyof typeof StatementConnectionStatus];
@@ -7333,6 +7736,52 @@ export type NotFoundResponse = Error;
  * Conflict
  */
 export type ConflictResponse = Error;
+
+/**
+ * The request is valid JSON but cannot be accepted
+ */
+export type UnprocessableEntityResponse = Error;
+
+export type GetWorkspaceTodayParams = {
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+};
+
+export type SearchWorkspaceParams = {
+/**
+ * @minLength 2
+ * @maxLength 120
+ */
+q: string;
+/**
+ * @minimum 1
+ * @maximum 30
+ */
+limit?: number;
+};
+
+export type ListWorkItemsParams = {
+status?: ListWorkItemsStatus;
+clientPartyId?: string;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListWorkItemsStatus = typeof ListWorkItemsStatus[keyof typeof ListWorkItemsStatus];
+
+
+export const ListWorkItemsStatus = {
+  open: 'open',
+  in_progress: 'in_progress',
+  blocked: 'blocked',
+  done: 'done',
+} as const;
 
 export type ListPartiesParams = {
 /**

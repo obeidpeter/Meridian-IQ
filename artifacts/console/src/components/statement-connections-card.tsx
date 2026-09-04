@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListStatementConnections,
   useListStatementConnectors,
   useCreateStatementConnection,
+  useTestStatementConnection,
   useSyncStatementConnection,
   useListStatementSyncRuns,
   getListStatementConnectionsQueryKey,
@@ -18,7 +19,7 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -44,7 +45,13 @@ import {
   pillClasses,
   type BadgeTone,
 } from "@/lib/format";
-import { Landmark, Plus, RefreshCw } from "lucide-react";
+import {
+  CheckCircle2,
+  Landmark,
+  Plus,
+  RefreshCw,
+  TestTube2,
+} from "lucide-react";
 
 // Bank-feed connections: a connector pulls statement lines for a client
 // party on demand; the lines land through the ordinary statement-ingest flow
@@ -63,32 +70,16 @@ export const SYNC_RUN_TONE: Record<string, BadgeTone> = {
   failed: "red",
 };
 
-/**
- * The optional connector config travels as a JSON object. An empty field is
- * simply "no config"; anything typed must parse to a plain object — a bare
- * string/array/number would 400 server-side, so fail it client-side with a
- * message worth reading.
- */
-export function parseConnectionConfig(
-  text: string,
-):
-  | { ok: true; config: Record<string, unknown> | undefined }
-  | { ok: false; error: string } {
-  const trimmed = text.trim();
-  if (trimmed === "") return { ok: true, config: undefined };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    return { ok: false, error: "Config is not valid JSON." };
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return {
-      ok: false,
-      error: 'Config must be a JSON object, e.g. {"apiKey": "…"}.',
-    };
-  }
-  return { ok: true, config: parsed as Record<string, unknown> };
+export function connectorConfigurationComplete(
+  connector: StatementConnectorInfo | undefined,
+  config: Record<string, string>,
+): boolean {
+  return Boolean(
+    connector?.configured &&
+      connector.configurationFields.every(
+        (field) => !field.required || Boolean(config[field.key]?.trim()),
+      ),
+  );
 }
 
 export type ConnectorFieldState = "loading" | "error" | "empty" | "ready";
@@ -175,8 +166,16 @@ function StatementConnectionsBody({
   const [createOpen, setCreateOpen] = useState(false);
   const [connectorKey, setConnectorKey] = useState("");
   const [clientPartyId, setClientPartyId] = useState("");
-  const [configText, setConfigText] = useState("");
-  const configParse = parseConnectionConfig(configText);
+  const [config, setConfig] = useState<Record<string, string>>({});
+  const [tested, setTested] = useState(false);
+  const selectedConnector = useMemo(
+    () => connectors?.find((connector) => connector.key === connectorKey),
+    [connectorKey, connectors],
+  );
+  const requiredComplete = connectorConfigurationComplete(
+    selectedConnector,
+    config,
+  );
 
   const create = useCreateStatementConnection({
     mutation: {
@@ -185,7 +184,8 @@ function StatementConnectionsBody({
         setCreateOpen(false);
         setConnectorKey("");
         setClientPartyId("");
-        setConfigText("");
+        setConfig({});
+        setTested(false);
         toast({
           title: "Connection created",
           description: `${connectorLabel(conn.connectorKey, connectors)} for ${
@@ -199,6 +199,23 @@ function StatementConnectionsBody({
           description: serverErrorMessage(e) ?? "Check the config and try again.",
           variant: "destructive",
         }),
+    },
+  });
+  const testConnection = useTestStatementConnection({
+    mutation: {
+      onSuccess: () => {
+        setTested(true);
+        toast({ title: "Connection test passed" });
+      },
+      onError: (e) => {
+        setTested(false);
+        toast({
+          title: "Connection test failed",
+          description:
+            serverErrorMessage(e) ?? "Check the provider details and try again.",
+          variant: "destructive",
+        });
+      },
     },
   });
 
@@ -240,7 +257,7 @@ function StatementConnectionsBody({
     create.isPending ||
     connectorKey === "" ||
     clientPartyId === "" ||
-    !configParse.ok;
+    !tested;
 
   return (
     <Card
@@ -367,6 +384,12 @@ function StatementConnectionsBody({
         open={createOpen}
         onOpenChange={(o) => {
           setCreateOpen(o);
+          if (!o) {
+            setConnectorKey("");
+            setClientPartyId("");
+            setConfig({});
+            setTested(false);
+          }
         }}
       >
         <DialogContent>
@@ -397,7 +420,14 @@ function StatementConnectionsBody({
                   No connectors are registered on this server.
                 </p>
               ) : (
-                <Select value={connectorKey} onValueChange={setConnectorKey}>
+                <Select
+                  value={connectorKey}
+                  onValueChange={(value) => {
+                    setConnectorKey(value);
+                    setConfig({});
+                    setTested(false);
+                  }}
+                >
                   <SelectTrigger
                     aria-label="Connector"
                     data-testid="select-connector"
@@ -406,8 +436,13 @@ function StatementConnectionsBody({
                   </SelectTrigger>
                   <SelectContent>
                     {(connectors ?? []).map((c) => (
-                      <SelectItem key={c.key} value={c.key}>
+                      <SelectItem
+                        key={c.key}
+                        value={c.key}
+                        disabled={!c.configured}
+                      >
                         {c.name}
+                        {!c.configured ? " · setup needed" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -421,7 +456,13 @@ function StatementConnectionsBody({
             </div>
             <div className="space-y-1">
               <Label>Client</Label>
-              <Select value={clientPartyId} onValueChange={setClientPartyId}>
+              <Select
+                value={clientPartyId}
+                onValueChange={(value) => {
+                  setClientPartyId(value);
+                  setTested(false);
+                }}
+              >
                 <SelectTrigger
                   aria-label="Client party"
                   data-testid="select-connection-client"
@@ -437,29 +478,61 @@ function StatementConnectionsBody({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="connection-config">Config (optional JSON)</Label>
-              <Textarea
-                id="connection-config"
-                value={configText}
-                onChange={(e) => setConfigText(e.target.value)}
-                placeholder='{"apiKey": "…"}'
-                rows={3}
-                className="font-mono text-xs"
-                data-testid="input-connection-config"
-              />
-              {!configParse.ok && (
-                <p
-                  className="text-sm text-destructive"
-                  role="alert"
-                  data-testid="text-config-error"
-                >
-                  {configParse.error}
-                </p>
-              )}
-            </div>
+            {selectedConnector?.configurationFields.map((field) => (
+              <div className="space-y-1" key={field.key}>
+                <Label htmlFor={`bank-connector-${field.key}`}>
+                  {field.label}
+                  {field.required ? " *" : ""}
+                </Label>
+                <Input
+                  id={`bank-connector-${field.key}`}
+                  type={field.secret ? "password" : "text"}
+                  autoComplete="off"
+                  value={config[field.key] ?? ""}
+                  onChange={(event) => {
+                    setConfig((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }));
+                    setTested(false);
+                  }}
+                  placeholder={field.placeholder}
+                  required={field.required}
+                  maxLength={2048}
+                />
+                <p className="text-xs text-muted-foreground">{field.help}</p>
+              </div>
+            ))}
+            {tested ? (
+              <p
+                className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                role="status"
+              >
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+                Test passed. The connection is ready to save.
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() =>
+                selectedConnector &&
+                testConnection.mutate({
+                  data: {
+                    connectorKey: selectedConnector.key,
+                    config,
+                  },
+                })
+              }
+              disabled={
+                !clientPartyId || !requiredComplete || testConnection.isPending
+              }
+              data-testid="button-test-connection"
+            >
+              <TestTube2 className="size-4" aria-hidden="true" />
+              {testConnection.isPending ? "Testing…" : "Test connection"}
+            </Button>
             <Button
               variant="secondary"
               onClick={() => setCreateOpen(false)}
@@ -473,9 +546,7 @@ function StatementConnectionsBody({
                   data: {
                     connectorKey,
                     clientPartyId,
-                    ...(configParse.ok && configParse.config !== undefined
-                      ? { config: configParse.config }
-                      : {}),
+                    config,
                   },
                 })
               }

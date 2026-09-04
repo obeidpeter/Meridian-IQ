@@ -13,6 +13,7 @@ import { Suppliers } from "@/pages/suppliers";
 import { SupplierDetail } from "@/pages/supplier-detail";
 import { Scoreboard } from "@/pages/scoreboard";
 import { Notifications } from "@/pages/notifications";
+import { Today } from "@/pages/today";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
@@ -32,7 +33,8 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Confirmations} />
+        <Route path="/" component={Today} />
+        <Route path="/confirmations" component={Confirmations} />
         <Route path="/invoices/:id" component={InvoiceRespond} />
         <Route path="/suppliers" component={Suppliers} />
         <Route path="/suppliers/:id" component={SupplierDetail} />

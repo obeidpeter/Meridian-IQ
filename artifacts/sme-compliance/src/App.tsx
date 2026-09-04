@@ -32,6 +32,7 @@ import { Analytics } from "@/pages/analytics";
 import { Notifications } from "@/pages/notifications";
 import { Help } from "@/pages/help";
 import { ActivityPage } from "@/pages/activity";
+import { Today, WorkPage } from "@/pages/today";
 
 // A 401 must not retry-spin — the session guard redirects to the portal instead.
 const queryClient = new QueryClient({
@@ -50,7 +51,9 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={Today} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/work" component={WorkPage} />
         <Route path="/month-end" component={MonthEnd} />
         <Route path="/collections" component={Collections} />
         <Route path="/analytics" component={Analytics} />

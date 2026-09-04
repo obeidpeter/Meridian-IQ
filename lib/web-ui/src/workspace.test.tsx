@@ -1,10 +1,19 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { CommandMenu, SegmentedControl, type CommandItem } from "./workspace";
 
 // RTL's auto-cleanup needs framework globals, which stay off here.
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const items: CommandItem[] = [
   { id: "cmd-one", label: "One", onSelect: () => {} },
@@ -52,4 +61,45 @@ test("SegmentedControl is a toggle-button group, not fake tabs", () => {
   const [alpha, beta] = Array.from(group.querySelectorAll("button"));
   expect(alpha.getAttribute("aria-pressed")).toBe("true");
   expect(beta.getAttribute("aria-pressed")).toBe("false");
+});
+
+test("remote command search aborts a stale request before showing new results", async () => {
+  vi.useFakeTimers();
+  const pending = new Map<
+    string,
+    { signal: AbortSignal; resolve: (items: CommandItem[]) => void }
+  >();
+  const remoteSearch = vi.fn(
+    (query: string, signal: AbortSignal) =>
+      new Promise<CommandItem[]>((resolve) => {
+        pending.set(query, { signal, resolve });
+      }),
+  );
+  render(
+    <CommandMenu
+      items={items}
+      open
+      onOpenChange={() => {}}
+      remoteSearch={remoteSearch}
+    />,
+  );
+  const input = screen.getByRole("searchbox");
+  fireEvent.change(input, { target: { value: "first" } });
+  await act(async () => vi.advanceTimersByTime(220));
+  expect(remoteSearch).toHaveBeenCalledTimes(1);
+
+  fireEvent.change(input, { target: { value: "second" } });
+  expect(pending.get("first")?.signal.aborted).toBe(true);
+  await act(async () => vi.advanceTimersByTime(220));
+  pending.get("first")?.resolve([
+    { id: "stale", label: "Stale result", onSelect: () => {} },
+  ]);
+  pending.get("second")?.resolve([
+    { id: "fresh", label: "Fresh result", onSelect: () => {} },
+  ]);
+  await act(async () => Promise.resolve());
+
+  expect(screen.getByRole("option", { name: /Fresh result/ })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: /Stale result/ })).toBeNull();
+  vi.useRealTimers();
 });
