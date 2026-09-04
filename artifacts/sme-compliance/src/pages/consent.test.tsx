@@ -63,6 +63,7 @@ function grantRecord(over: Partial<ConsentRecord> = {}): ConsentRecord {
     scope: "anonymized_benchmark",
     basis: "consent",
     channel: "app",
+    commandId: null,
     createdAt: "2026-08-01T09:00:00.000Z",
     ...over,
   };
@@ -145,9 +146,9 @@ describe("plain-language copy", () => {
     expect(card.textContent).toContain("Anonymized benchmarking");
     expect(card.textContent).toContain("Layer 2");
     // The title precedes the layer suffix.
-    expect(
-      card.textContent!.indexOf("Anonymized benchmarking"),
-    ).toBeLessThan(card.textContent!.indexOf("Layer 2"));
+    expect(card.textContent!.indexOf("Anonymized benchmarking")).toBeLessThan(
+      card.textContent!.indexOf("Layer 2"),
+    );
   });
 
   test("the success toast names the scope, not a bare layer number", () => {

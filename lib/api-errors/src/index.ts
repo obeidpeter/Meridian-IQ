@@ -56,3 +56,9 @@ export function serverError(err: unknown): string | undefined {
   const data = (err as { data?: { error?: unknown } } | null)?.data;
   return typeof data?.error === "string" ? data.error : undefined;
 }
+
+/** Opaque support reference returned in the API response header. */
+export function requestReference(err: unknown): string | undefined {
+  const value = (err as { requestId?: unknown } | null)?.requestId;
+  return typeof value === "string" && value.trim() ? value : undefined;
+}

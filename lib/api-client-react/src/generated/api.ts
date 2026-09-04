@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 import {
   useMutation,
@@ -120,6 +120,8 @@ import type {
   ConfirmationInput,
   ConflictResponse,
   ConnectorInfo,
+  ConsentCaptureInput,
+  ConsentCaptureResult,
   ConsentDecision,
   ConsentInput,
   ConsentRecord,
@@ -273,6 +275,7 @@ import type {
   ListClerkEvalRunsParams,
   ListClientStatementsParams,
   ListCollectionAccountsParams,
+  ListDeadLettersParams,
   ListEngagementsParams,
   ListErpConnectionsParams,
   ListFilingsParams,
@@ -323,10 +326,11 @@ import type {
   OnboardingRun,
   OnboardingRunList,
   OpeningPosition,
+  OperationalReadiness,
   OperatorBrief,
   OperatorCaseView,
   OperatorQueueStats,
-  OutboxEvent,
+  OutboxEventPage,
   Party,
   PartyInput,
   PartyMergeInput,
@@ -3193,6 +3197,78 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRecordConsentMutationOptions(options));
+    }
+
+export const getCaptureConsentUrl = (id: string,) => {
+
+
+
+
+  return `/api/parties/${id}/consent/capture`
+}
+
+/**
+ * An idempotent command: retrying the same commandId returns the original records, while reusing it with different decisions is a conflict. Both layer 1 and layer 2 records commit together or neither does.
+ * @summary Atomically record the two explicit first-landing consent decisions
+ */
+export const captureConsent = async (id: string,
+    consentCaptureInput: ConsentCaptureInput, options?: RequestInit): Promise<ConsentCaptureResult> => {
+
+  return customFetch<ConsentCaptureResult>(getCaptureConsentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(consentCaptureInput)
+  }
+);}
+
+
+
+
+export const getCaptureConsentMutationOptions = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof captureConsent>>, TError,{id: string;data: BodyType<ConsentCaptureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof captureConsent>>, TError,{id: string;data: BodyType<ConsentCaptureInput>}, TContext> => {
+
+const mutationKey = ['captureConsent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof captureConsent>>, {id: string;data: BodyType<ConsentCaptureInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  captureConsent(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CaptureConsentMutationResult = NonNullable<Awaited<ReturnType<typeof captureConsent>>>
+    export type CaptureConsentMutationBody = BodyType<ConsentCaptureInput>
+    export type CaptureConsentMutationError = ErrorType<ConflictResponse>
+
+    /**
+ * @summary Atomically record the two explicit first-landing consent decisions
+ */
+export const useCaptureConsent = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof captureConsent>>, TError,{id: string;data: BodyType<ConsentCaptureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof captureConsent>>,
+        TError,
+        {id: string;data: BodyType<ConsentCaptureInput>},
+        TContext
+      > => {
+      return useMutation(getCaptureConsentMutationOptions(options));
     }
 
 export const getCheckConsentUrl = (id: string,
@@ -8689,17 +8765,20 @@ export function useGetClerkAssurance<TData = Awaited<ReturnType<typeof getClerkA
 
 
 
-export const getListDeadLettersUrl = () => {
+export const getGetReleaseReadinessUrl = () => {
 
 
 
 
-  return `/api/operator/dead-letters`
+  return `/api/operator/release-readiness`
 }
 
-export const listDeadLetters = async ( options?: RequestInit): Promise<OutboxEvent[]> => {
+/**
+ * @summary Deployment, data, scheduler, backup, rail and security release posture
+ */
+export const getReleaseReadiness = async ( options?: RequestInit): Promise<OperationalReadiness> => {
 
-  return customFetch<OutboxEvent[]>(getListDeadLettersUrl(),
+  return customFetch<OperationalReadiness>(getGetReleaseReadinessUrl(),
   {
     ...options,
     method: 'GET'
@@ -8712,23 +8791,107 @@ export const listDeadLetters = async ( options?: RequestInit): Promise<OutboxEve
 
 
 
-export const getListDeadLettersQueryKey = () => {
+export const getGetReleaseReadinessQueryKey = () => {
     return [
-    `/api/operator/dead-letters`
+    `/api/operator/release-readiness`
     ] as const;
     }
 
 
-export const getListDeadLettersQueryOptions = <TData = Awaited<ReturnType<typeof listDeadLetters>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDeadLetters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetReleaseReadinessQueryOptions = <TData = Awaited<ReturnType<typeof getReleaseReadiness>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReleaseReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListDeadLettersQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetReleaseReadinessQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDeadLetters>>> = ({ signal }) => listDeadLetters({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReleaseReadiness>>> = ({ signal }) => getReleaseReadiness({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReleaseReadiness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReleaseReadinessQueryResult = NonNullable<Awaited<ReturnType<typeof getReleaseReadiness>>>
+export type GetReleaseReadinessQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Deployment, data, scheduler, backup, rail and security release posture
+ */
+
+export function useGetReleaseReadiness<TData = Awaited<ReturnType<typeof getReleaseReadiness>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReleaseReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReleaseReadinessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDeadLettersUrl = (params?: ListDeadLettersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/operator/dead-letters?${stringifiedParams}` : `/api/operator/dead-letters`
+}
+
+/**
+ * Dead events ordered oldest first using an opaque stable cursor.
+ */
+export const listDeadLetters = async (params?: ListDeadLettersParams, options?: RequestInit): Promise<OutboxEventPage> => {
+
+  return customFetch<OutboxEventPage>(getListDeadLettersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDeadLettersQueryKey = (params?: ListDeadLettersParams,) => {
+    return [
+    `/api/operator/dead-letters`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDeadLettersQueryOptions = <TData = Awaited<ReturnType<typeof listDeadLetters>>, TError = ErrorType<unknown>>(params?: ListDeadLettersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDeadLetters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDeadLettersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDeadLetters>>> = ({ signal }) => listDeadLetters(params, { signal, ...requestOptions });
 
 
 
@@ -8743,11 +8906,11 @@ export type ListDeadLettersQueryError = ErrorType<unknown>
 
 
 export function useListDeadLetters<TData = Awaited<ReturnType<typeof listDeadLetters>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDeadLetters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListDeadLettersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDeadLetters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListDeadLettersQueryOptions(options)
+  const queryOptions = getListDeadLettersQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -8778,9 +8941,9 @@ export const getListRetryingEventsUrl = (params?: ListRetryingEventsParams,) => 
 /**
  * Pending outbox events that have failed at least once or are parked behind a rail breaker, soonest retry first (R102).
  */
-export const listRetryingEvents = async (params?: ListRetryingEventsParams, options?: RequestInit): Promise<OutboxEvent[]> => {
+export const listRetryingEvents = async (params?: ListRetryingEventsParams, options?: RequestInit): Promise<OutboxEventPage> => {
 
-  return customFetch<OutboxEvent[]>(getListRetryingEventsUrl(params),
+  return customFetch<OutboxEventPage>(getListRetryingEventsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -13492,7 +13655,7 @@ export const replaceClientAssignments = async (id: string,
 
 
 
-export const getReplaceClientAssignmentsMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+export const getReplaceClientAssignmentsMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceClientAssignments>>, TError,{id: string;data: BodyType<ClientAssignmentsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof replaceClientAssignments>>, TError,{id: string;data: BodyType<ClientAssignmentsInput>}, TContext> => {
 
@@ -13521,12 +13684,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ReplaceClientAssignmentsMutationResult = NonNullable<Awaited<ReturnType<typeof replaceClientAssignments>>>
     export type ReplaceClientAssignmentsMutationBody = BodyType<ClientAssignmentsInput>
-    export type ReplaceClientAssignmentsMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+    export type ReplaceClientAssignmentsMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
 
     /**
  * @summary Replace the client's assignee set (firm admin) — every add and removal is an audit event
  */
-export const useReplaceClientAssignments = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+export const useReplaceClientAssignments = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceClientAssignments>>, TError,{id: string;data: BodyType<ClientAssignmentsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof replaceClientAssignments>>,

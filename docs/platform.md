@@ -754,8 +754,7 @@ member (`modules/collections/{service,provider}.ts`,
   console's client drill-down carries the Collection accounts card.
 - **The inbound webhook** (`POST /api/collections/inbound`) is a machine
   rail deliberately OFF the OpenAPI contract — no generated SDK grows a way
-  to mark invoices settled. **FAIL-CLOSED** (the inbound-rail stance, the
-  opposite of `METRICS_TOKEN`'s open-when-unset default): this endpoint
+  to mark invoices settled. **FAIL-CLOSED** (the inbound-rail stance): this endpoint
   settles money state on the word of an unauthenticated caller, so with
   the rail's key ring empty (`COLLECTION_WEBHOOK_KEYS` and the legacy
   `COLLECTION_WEBHOOK_TOKEN` both unset) the rail does not exist — every
@@ -1324,16 +1323,17 @@ collection webhooks, `/api/internal/sweep`, `/api/metrics` — is governed by a
 per-rail **key ring** in `lib/op-token.ts`: `X_KEYS` = `id:secret,…` (ids
 `[A-Za-z0-9_-]{1,32}`, secrets 32+ characters, unique ids — the
 `SESSION_SIGNING_KEYS` shape), plus the pre-key-ring single `X_TOKEN` as the
-key id `legacy`; both may be set during a migration, and an empty ring is
-the fail-closed "rail dark" state (404 for a required rail, open for the
-optional metrics scrape). `railKeyRing(tokenEnv)` is named by the legacy
+  key id `legacy`; both may be set during a migration, and an empty ring is
+  the fail-closed "rail dark" state (404 for a required rail and for metrics in
+  production; metrics remains open only outside production). `railKeyRing(tokenEnv)` is named by the legacy
 env var every route and document already uses. A caller proves a key on the
 **signed path** — `x-op-key-id`, `x-op-timestamp` (unix seconds inside
 `OP_SIGNATURE_WINDOW_SECONDS`, default 300) and `x-op-signature: v1=` + hex
 HMAC-SHA256 over `${ts}.${METHOD}.${path}.${sha256hex(rawBody)}`, so a
 captured signature is bound to its rail, its exact body bytes and a short
-window — or on the **legacy path**, the secret verbatim in `x-op-token`
-(constant-time against every ring key) until `OP_LEGACY_TOKENS=off`. The
+  window — or on the **legacy path**, the secret verbatim in `x-op-token`
+  (constant-time against every ring key). Production defaults the legacy path
+  off; `OP_LEGACY_TOKENS=on` temporarily enables it during migration. The
 raw bytes come from `lib/body.ts`, the one JSON parser (app and route
 harness) that keeps `req.rawBody`; re-serialising `req.body` would not
 byte-match a provider's signature. `authenticateOpRequest` never throws and
@@ -1373,10 +1373,10 @@ legacy header still admitted).
   and `configured` (R95); `GET /operator/rail-config` lists `rail_primary`
   / `rail_secondary` beside the other env-lit rails, presence only.
 - `/api/internal/sweep` is fail-closed unless its ring (`SWEEP_KEYS` or the
-  legacy `SWEEP_TOKEN`) is configured and the caller signs or presents a key
-  in the `x-op-token` header; it also has an endpoint rate limit.
-  `/api/metrics` is open when `METRICS_TOKEN` is unset and header-protected
-  when configured. Operation tokens are never accepted in URLs.
+  single `SWEEP_TOKEN` signed as key id `legacy`) is configured; it also has
+  an endpoint rate limit. `/api/metrics` is fail-closed without a key ring in
+  production and stays open when unset only outside production. Production
+  callers sign requests; operation tokens are never accepted in URLs.
 
 ## Backups, restore drills & releases
 

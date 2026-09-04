@@ -75,35 +75,45 @@ router.get(
   },
 );
 
-router.get("/collection-accounts", requireFlag("collection_accounts"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "statement.write");
-  requireFirmScope(req.principal);
-  const query = parseOrThrow(ListCollectionAccountsQueryParams, req.query);
-  // The queried client must be one this firm engages (cross-tenant probe of
-  // another firm's party id is a 403, not an empty list).
-  await assertPartyAccess(req.principal, query.clientPartyId);
-  const rows = await listCollectionAccounts(query.clientPartyId);
-  res.json(ListCollectionAccountsResponse.parse(rows.map(accountView)));
-});
+router.get(
+  "/collection-accounts",
+  requireFlag("collection_accounts"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.write");
+    requireFirmScope(req.principal);
+    const query = parseOrThrow(ListCollectionAccountsQueryParams, req.query);
+    // The queried client must be one this firm engages (cross-tenant probe of
+    // another firm's party id is a 403, not an empty list).
+    await assertPartyAccess(req.principal, query.clientPartyId);
+    const rows = await listCollectionAccounts(query.clientPartyId);
+    res.json(ListCollectionAccountsResponse.parse(rows.map(accountView)));
+  },
+);
 
-router.post("/collection-accounts", requireFlag("collection_accounts"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "statement.write");
-  requireFirmScope(req.principal);
-  const body = parseOrThrow(CreateCollectionAccountBody, req.body);
-  // Party access + durable reservation + provider provisioning + activation
-  // + pointer-only audit live in the service. A broken relay leaves only the
-  // hidden reservation needed for an idempotent retry; it never exposes an
-  // active account that the provider did not create.
-  const row = await createCollectionAccount(
-    req.principal,
-    {
-      clientPartyId: body.clientPartyId,
-      label: body.label ?? null,
-    },
-    req.abortSignal,
-  );
-  res.status(201).json(CreateCollectionAccountResponse.parse(accountView(row)));
-});
+router.post(
+  "/collection-accounts",
+  requireFlag("collection_accounts"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.write");
+    requireFirmScope(req.principal);
+    const body = parseOrThrow(CreateCollectionAccountBody, req.body);
+    // Party access + durable reservation + provider provisioning + activation
+    // + pointer-only audit live in the service. A broken relay leaves only the
+    // hidden reservation needed for an idempotent retry; it never exposes an
+    // active account that the provider did not create.
+    const row = await createCollectionAccount(
+      req.principal,
+      {
+        clientPartyId: body.clientPartyId,
+        label: body.label ?? null,
+      },
+      req.abortSignal,
+    );
+    res
+      .status(201)
+      .json(CreateCollectionAccountResponse.parse(accountView(row)));
+  },
+);
 
 router.post(
   "/collection-accounts/:id/deactivate",
@@ -132,8 +142,8 @@ router.post(
 // Deliberately NOT in the OpenAPI contract: no human client ever calls this,
 // and the generated SDKs must not grow a way to mark invoices settled.
 //
-// Gate posture — FAIL-CLOSED, the inbound-rail stance (routes/inbound.ts),
-// the opposite of METRICS_TOKEN's open-when-unset default: this endpoint
+// Gate posture — FAIL-CLOSED, the inbound-rail stance (routes/inbound.ts).
+// Unlike the non-production convenience on the metrics endpoint, this route
 // SETTLES money state on the word of an unauthenticated caller, so with no
 // COLLECTION_WEBHOOK_TOKEN configured the rail must not exist at all — every
 // request 404s exactly like an unknown route. Setting the env var lights the

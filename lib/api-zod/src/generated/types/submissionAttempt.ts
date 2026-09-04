@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 import type { SubmissionAttemptRail } from './submissionAttemptRail';
 import type { SubmissionAttemptStatus } from './submissionAttemptStatus';
@@ -14,6 +14,11 @@ export interface SubmissionAttempt {
   rail: SubmissionAttemptRail;
   attemptNo: number;
   idempotencyKey: string;
+  /**
+     * Request reference that originated the durable submission.
+     * @nullable
+     */
+  correlationId: string | null;
   status: SubmissionAttemptStatus;
   /** @nullable */
   errorCode?: string | null;

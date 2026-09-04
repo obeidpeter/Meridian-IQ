@@ -28,6 +28,21 @@ interface DbContext {
 }
 
 const storage = new AsyncLocalStorage<DbContext>();
+const correlationStorage = new AsyncLocalStorage<string | null>();
+
+// Bind an inbound request reference independently of the database transaction.
+// Routes that deliberately own short transactions can then preserve the same
+// support reference without keeping a pooled connection open around network IO.
+export function runCorrelationContext<T>(
+  correlationId: string | null,
+  fn: () => T,
+): T {
+  return correlationStorage.run(correlationId, fn);
+}
+
+export function currentCorrelationId(): string | null {
+  return correlationStorage.getStore() ?? null;
+}
 
 // The ambient tenant-scoped transaction, or the raw pool when none is active.
 export function getDb(): Database {
@@ -41,7 +56,11 @@ export function getDb(): Database {
 
 async function setGucs(
   tx: Database,
-  opts: { bypass: boolean; firmId: string | null },
+  opts: {
+    bypass: boolean;
+    firmId: string | null;
+    correlationId?: string | null;
+  },
 ): Promise<void> {
   // Drop superuser privileges for the rest of the transaction so RLS applies.
   await tx.execute(sql`SET LOCAL ROLE meridian_app`);
@@ -53,18 +72,31 @@ async function setGucs(
       sql`SELECT set_config('app.firm_id', ${opts.firmId}, true)`,
     );
   }
+  if (opts.correlationId) {
+    await tx.execute(
+      sql`SELECT set_config('app.correlation_id', ${opts.correlationId}, true)`,
+    );
+  }
 }
 
 // Core entry: open a transaction, bind the RLS GUCs, and run `fn` with the
 // scoped transaction as the ambient getDb(). The request middleware calls this
 // directly with the principal-derived options.
 export async function runRequestContext<T>(
-  opts: { bypass: boolean; firmId: string | null },
+  opts: {
+    bypass: boolean;
+    firmId: string | null;
+    correlationId?: string | null;
+  },
   fn: () => Promise<T>,
 ): Promise<T> {
   return db.transaction(async (tx) => {
     const scoped = tx as unknown as Database;
-    await setGucs(scoped, opts);
+    const correlationId =
+      opts.correlationId === undefined
+        ? currentCorrelationId()
+        : opts.correlationId;
+    await setGucs(scoped, { ...opts, correlationId });
     const context: DbContext = { db: scoped, active: true };
     try {
       return await storage.run(context, fn);
@@ -79,6 +111,12 @@ export async function runRequestContext<T>(
 
 // Run `fn` inside a transaction that bypasses tenant RLS (cross-tenant staff and
 // trusted internal work: seeding, the async submission worker, reconciliation).
-export async function runInBypassContext<T>(fn: () => Promise<T>): Promise<T> {
-  return runRequestContext({ bypass: true, firmId: null }, fn);
+export async function runInBypassContext<T>(
+  fn: () => Promise<T>,
+  opts: { correlationId?: string | null } = {},
+): Promise<T> {
+  return runRequestContext(
+    { bypass: true, firmId: null, correlationId: opts.correlationId },
+    fn,
+  );
 }

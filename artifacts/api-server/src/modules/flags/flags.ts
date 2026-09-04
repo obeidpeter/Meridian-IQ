@@ -8,6 +8,7 @@ import {
   type FeatureFlag,
 } from "@workspace/db";
 import { DomainError } from "../errors";
+import { RELEASE_FLAGS } from "./releases";
 
 export const CLERK_ENTITLEMENT_FLAG_KEY = "clerk_ai";
 export const CLERK_RUNTIME_FLAG_KEY = "clerk_ai_runtime";
@@ -15,7 +16,15 @@ export const CLERK_RUNTIME_FLAG_KEY = "clerk_ai_runtime";
 // Feature-flag service (PL-02). A dark feature is unreachable: routes call
 // isFeatureEnabled and 404 when off. Per-firm overrides let layer-three surfaces
 // activate per client on recorded consent.
-export async function isFeatureEnabled(
+const RELEASE_FLAG_BY_KEY = new Map(
+  RELEASE_FLAGS.map((flag) => [flag.key, flag]),
+);
+
+export function featureRequirements(key: string): readonly string[] {
+  return RELEASE_FLAG_BY_KEY.get(key)?.requires ?? [];
+}
+
+async function rawFeatureEnabled(
   key: string,
   firmId?: string | null,
 ): Promise<boolean> {
@@ -38,6 +47,26 @@ export async function isFeatureEnabled(
     .where(eq(featureFlagsTable.key, key))
     .limit(1);
   return flag?.enabled ?? false;
+}
+
+export async function unmetFeatureRequirements(
+  key: string,
+  firmId?: string | null,
+): Promise<string[]> {
+  const unmet: string[] = [];
+  for (const required of featureRequirements(key)) {
+    const scope = required === CLERK_RUNTIME_FLAG_KEY ? null : firmId;
+    if (!(await isFeatureEnabled(required, scope))) unmet.push(required);
+  }
+  return unmet;
+}
+
+export async function isFeatureEnabled(
+  key: string,
+  firmId?: string | null,
+): Promise<boolean> {
+  if (!(await rawFeatureEnabled(key, firmId))) return false;
+  return (await unmetFeatureRequirements(key, firmId)).length === 0;
 }
 
 // Effective availability composes ordinary rollout state with global safety
@@ -78,13 +107,17 @@ export function requireFlag(
   };
 }
 
-export type FlagWithCohort = FeatureFlag & { overrideCount: number };
+export type FlagWithCohort = FeatureFlag & {
+  overrideCount: number;
+  requires: string[];
+  unmetPrerequisites: string[];
+};
 
 // Every platform flag with the size of its pilot cohort (R99). Under a firm
 // principal's RLS the count covers that firm's own overrides only; the
 // operator (bypass) sees the whole cohort.
 export async function listFlags(): Promise<FlagWithCohort[]> {
-  return getDb()
+  const rows = await getDb()
     .select({
       key: featureFlagsTable.key,
       enabled: featureFlagsTable.enabled,
@@ -98,6 +131,13 @@ export async function listFlags(): Promise<FlagWithCohort[]> {
     })
     .from(featureFlagsTable)
     .orderBy(featureFlagsTable.key);
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      requires: [...featureRequirements(row.key)],
+      unmetPrerequisites: await unmetFeatureRequirements(row.key, null),
+    })),
+  );
 }
 
 export async function getFlag(key: string): Promise<FeatureFlag> {
@@ -107,7 +147,11 @@ export async function getFlag(key: string): Promise<FeatureFlag> {
     .where(eq(featureFlagsTable.key, key))
     .limit(1);
   if (!flag) {
-    throw new DomainError("FLAG_NOT_FOUND", `Unknown feature flag: ${key}`, 404);
+    throw new DomainError(
+      "FLAG_NOT_FOUND",
+      `Unknown feature flag: ${key}`,
+      404,
+    );
   }
   return flag;
 }
@@ -126,6 +170,16 @@ export async function setFlag(
     .where(eq(featureFlagsTable.key, key))
     .limit(1);
   if (!before) return null;
+  if (enabled) {
+    const unmet = await unmetFeatureRequirements(key, null);
+    if (unmet.length > 0) {
+      throw new DomainError(
+        "FLAG_PREREQUISITE",
+        `Enable ${unmet.join(", ")} before enabling ${key}`,
+        409,
+      );
+    }
+  }
   const [after] = await getDb()
     .update(featureFlagsTable)
     .set({ enabled, updatedAt: new Date() })
@@ -206,6 +260,16 @@ export async function setFirmOverride(
     );
   }
   await getFlag(key);
+  if (enabled) {
+    const unmet = await unmetFeatureRequirements(key, firmId);
+    if (unmet.length > 0) {
+      throw new DomainError(
+        "FLAG_PREREQUISITE",
+        `Enable ${unmet.join(", ")} for this firm before enabling ${key}`,
+        409,
+      );
+    }
+  }
   const [firm] = await getDb()
     .select({ id: firmsTable.id })
     .from(firmsTable)
@@ -238,7 +302,11 @@ export async function setFirmOverride(
     });
   const after = await readOverride(key, firmId);
   if (!after) {
-    throw new DomainError("OVERRIDE_NOT_FOUND", "Override did not persist", 500);
+    throw new DomainError(
+      "OVERRIDE_NOT_FOUND",
+      "Override did not persist",
+      500,
+    );
   }
   return { before, after };
 }
@@ -294,8 +362,16 @@ export async function litFeatureKeys(firmId: string | null): Promise<string[]> {
   // receive only the composite clerk_ai truth and cannot mistake the safety
   // switch for a separately usable product feature.
   lit.delete(CLERK_RUNTIME_FLAG_KEY);
+  const effective = (key: string, stack = new Set<string>()): boolean => {
+    if (!(lit.get(key) ?? false) || stack.has(key)) return false;
+    const next = new Set(stack).add(key);
+    return featureRequirements(key).every((required) => {
+      if (required === CLERK_RUNTIME_FLAG_KEY) return runtimeEnabled;
+      return effective(required, next);
+    });
+  };
   return [...lit.entries()]
-    .filter(([, enabled]) => enabled)
+    .filter(([key]) => effective(key))
     .map(([key]) => key)
     .sort();
 }

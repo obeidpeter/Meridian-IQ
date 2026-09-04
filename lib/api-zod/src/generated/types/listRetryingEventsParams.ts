@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 
 export type ListRetryingEventsParams = {
@@ -13,7 +13,7 @@ export type ListRetryingEventsParams = {
  */
 limit?: number;
 /**
- * @minimum 0
+ * @maxLength 512
  */
-offset?: number;
+cursor?: string;
 };

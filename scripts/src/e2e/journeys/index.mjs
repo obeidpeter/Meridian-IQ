@@ -55,6 +55,7 @@ import {
   journeyPasswordReset,
 } from "./lifecycle.mjs";
 import { journeyIntegrationLayer } from "./integration.mjs";
+import { journeyAccessibilityMatrix } from "./accessibility.mjs";
 
 export async function runJourneys(
   page,
@@ -113,4 +114,7 @@ export async function runJourneys(
     fakeRailUrl,
     fakeRailToken,
   );
+  // End with a read-only WCAG smoke across every static route and role. It
+  // runs after stateful journeys so it cannot perturb their load-bearing order.
+  await journeyAccessibilityMatrix(page, BASE, check);
 }

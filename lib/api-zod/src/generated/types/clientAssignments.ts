@@ -3,11 +3,16 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 import type { ClientAssignee } from './clientAssignee';
 
 export interface ClientAssignments {
   clientPartyId: string;
+  /**
+     * Hash of the current assignment set for optimistic concurrency.
+     * @pattern ^[0-9a-f]{64}$
+     */
+  version: string;
   assignees: ClientAssignee[];
 }

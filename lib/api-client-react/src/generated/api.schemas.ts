@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 export interface HealthStatus {
   status: string;
@@ -481,6 +481,8 @@ export interface ConsentRecord {
   scope: string;
   basis: string;
   channel: string;
+  /** @nullable */
+  commandId: string | null;
   createdAt: string;
 }
 
@@ -498,6 +500,45 @@ export interface ConsentInput {
   scope: string;
   basis: string;
   channel: string;
+}
+
+export type ConsentCaptureDecisionLayer = typeof ConsentCaptureDecisionLayer[keyof typeof ConsentCaptureDecisionLayer];
+
+
+export const ConsentCaptureDecisionLayer = {
+  NUMBER_1: 1,
+  NUMBER_2: 2,
+} as const;
+
+export type ConsentCaptureDecisionAction = typeof ConsentCaptureDecisionAction[keyof typeof ConsentCaptureDecisionAction];
+
+
+export const ConsentCaptureDecisionAction = {
+  grant: 'grant',
+  revoke: 'revoke',
+} as const;
+
+export interface ConsentCaptureDecision {
+  layer: ConsentCaptureDecisionLayer;
+  action: ConsentCaptureDecisionAction;
+}
+
+export interface ConsentCaptureInput {
+  commandId: string;
+  /**
+     * @minItems 2
+     * @maxItems 2
+     */
+  decisions: ConsentCaptureDecision[];
+}
+
+export interface ConsentCaptureResult {
+  commandId: string;
+  /**
+     * @minItems 2
+     * @maxItems 2
+     */
+  records: ConsentRecord[];
 }
 
 export interface ConsentDecision {
@@ -850,6 +891,11 @@ export interface SubmissionAttempt {
   rail: SubmissionAttemptRail;
   attemptNo: number;
   idempotencyKey: string;
+  /**
+     * Request reference that originated the durable submission.
+     * @nullable
+     */
+  correlationId: string | null;
   status: SubmissionAttemptStatus;
   /** @nullable */
   errorCode?: string | null;
@@ -1667,6 +1713,10 @@ export interface FeatureFlag {
   updatedAt: string;
   /** Size of the flag's pilot cohort (firm overrides the caller can see). */
   overrideCount: number;
+  /** Flags that must be effectively lit before this feature can run. */
+  requires: string[];
+  /** Required flags currently dark at the platform level. */
+  unmetPrerequisites: string[];
 }
 
 export interface FeatureFlagUpdate {
@@ -1906,6 +1956,11 @@ export interface OutboxEvent {
   aggregateType: string;
   aggregateId: string;
   type: string;
+  /**
+     * Opaque request correlation reference for operator support.
+     * @nullable
+     */
+  correlationId?: string | null;
   status: OutboxEventStatus;
   attempts: number;
   maxAttempts: number;
@@ -1928,6 +1983,54 @@ export interface OutboxEvent {
      */
   firstAttemptAt?: string | null;
   createdAt: string;
+}
+
+export interface OutboxEventPage {
+  items: OutboxEvent[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type OperationalReadinessCheckStatus = typeof OperationalReadinessCheckStatus[keyof typeof OperationalReadinessCheckStatus];
+
+
+export const OperationalReadinessCheckStatus = {
+  pass: 'pass',
+  warning: 'warning',
+  blocked: 'blocked',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OperationalReadinessCheckDetail = { [key: string]: unknown } | null;
+
+export interface OperationalReadinessCheck {
+  key: string;
+  label: string;
+  status: OperationalReadinessCheckStatus;
+  summary: string;
+  /** @nullable */
+  detail?: OperationalReadinessCheckDetail;
+}
+
+export type OperationalReadinessStatus = typeof OperationalReadinessStatus[keyof typeof OperationalReadinessStatus];
+
+
+export const OperationalReadinessStatus = {
+  ready: 'ready',
+  warning: 'warning',
+  blocked: 'blocked',
+} as const;
+
+export interface OperationalReadiness {
+  status: OperationalReadinessStatus;
+  generatedAt: string;
+  buildRevision: string;
+  /** @nullable */
+  expectedBuildRevision: string | null;
+  contractVersion: string;
+  checks: OperationalReadinessCheck[];
 }
 
 export interface ReconcileResult {
@@ -2692,12 +2795,22 @@ export interface ClientAssignee {
 
 export interface ClientAssignments {
   clientPartyId: string;
+  /**
+     * Hash of the current assignment set for optimistic concurrency.
+     * @pattern ^[0-9a-f]{64}$
+     */
+  version: string;
   assignees: ClientAssignee[];
 }
 
 export interface ClientAssignmentsInput {
   /** @maxItems 50 */
   userIds: string[];
+  /**
+     * Version returned by the latest assignments read.
+     * @pattern ^[0-9a-f]{64}$
+     */
+  expectedVersion: string;
 }
 
 export interface FirmMember {
@@ -7409,6 +7522,18 @@ export type GetMonthEndCloseParams = {
 clientPartyId?: string;
 };
 
+export type ListDeadLettersParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @maxLength 512
+ */
+cursor?: string;
+};
+
 export type ListRetryingEventsParams = {
 /**
  * @minimum 1
@@ -7416,9 +7541,9 @@ export type ListRetryingEventsParams = {
  */
 limit?: number;
 /**
- * @minimum 0
+ * @maxLength 512
  */
-offset?: number;
+cursor?: string;
 };
 
 export type VerifyAuditParams = {

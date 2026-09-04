@@ -15,9 +15,8 @@ import {
 // these, and the generated SDKs must not grow a way to impersonate an email
 // address or a phone number.
 //
-// Gate posture — FAIL-CLOSED, the opposite of METRICS_TOKEN's open-when-unset
-// default. /api/metrics is idempotent and tenant-free, so leaving it open
-// until an operator opts into a secret is safe; this endpoint CREATES
+// Gate posture — FAIL-CLOSED. /api/metrics is idempotent and tenant-free, so
+// it may stay open for local scraping outside production; this endpoint CREATES
 // tenant-scoped work and spends real model tokens on the word of an
 // unauthenticated caller, so with no INBOUND_EMAIL_TOKEN configured the rail
 // must not exist at all: every request 404s exactly like an unknown route

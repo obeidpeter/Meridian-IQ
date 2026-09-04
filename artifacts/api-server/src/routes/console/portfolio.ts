@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getDb,
@@ -195,7 +196,10 @@ async function loadFirmClients(
       legalName: partiesTable.legalName,
     })
     .from(engagementsTable)
-    .innerJoin(partiesTable, eq(engagementsTable.clientPartyId, partiesTable.id))
+    .innerJoin(
+      partiesTable,
+      eq(engagementsTable.clientPartyId, partiesTable.id),
+    )
     .where(eq(engagementsTable.firmId, firmId));
   return rows;
 }
@@ -267,6 +271,11 @@ async function clientAssignees(firmId: string, clientPartyId: string) {
     .orderBy(clientAssignmentsTable.createdAt);
   return {
     clientPartyId,
+    version: assignmentSetVersion(
+      firmId,
+      clientPartyId,
+      rows.map((row) => row.userId),
+    ),
     assignees: rows.map((r) => ({
       userId: r.userId,
       fullName: r.fullName,
@@ -275,6 +284,16 @@ async function clientAssignees(firmId: string, clientPartyId: string) {
       assignedAt: r.assignedAt,
     })),
   };
+}
+
+export function assignmentSetVersion(
+  firmId: string,
+  clientPartyId: string,
+  userIds: string[],
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([firmId, clientPartyId, [...userIds].sort()]))
+    .digest("hex");
 }
 
 router.get(
@@ -303,6 +322,12 @@ router.put(
     const body = parseOrThrow(ReplaceClientAssignmentsBody, req.body);
     const firmId = firmScope(req.principal);
     await assertFirmEngagesClient(firmId, params.id);
+    // Serialize the read/replace window for this one client's assignment set.
+    // A waiting request then observes the winner's committed version and gets
+    // a 409 instead of silently erasing it.
+    await getDb().execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${firmId}:${params.id}`}, 0))`,
+    );
     const wanted = [...new Set(body.userIds)];
     if (wanted.length > 0) {
       const members = await getDb()
@@ -326,16 +351,28 @@ router.put(
       }
     }
     const current = new Set(
-      (await getDb()
-        .select({ userId: clientAssignmentsTable.userId })
-        .from(clientAssignmentsTable)
-        .where(
-          and(
-            eq(clientAssignmentsTable.firmId, firmId),
-            eq(clientAssignmentsTable.clientPartyId, params.id),
-          ),
-        )).map((r) => r.userId),
+      (
+        await getDb()
+          .select({ userId: clientAssignmentsTable.userId })
+          .from(clientAssignmentsTable)
+          .where(
+            and(
+              eq(clientAssignmentsTable.firmId, firmId),
+              eq(clientAssignmentsTable.clientPartyId, params.id),
+            ),
+          )
+      ).map((r) => r.userId),
     );
+    const currentVersion = assignmentSetVersion(firmId, params.id, [
+      ...current,
+    ]);
+    if (body.expectedVersion !== currentVersion) {
+      throw new DomainError(
+        "ASSIGNMENTS_CHANGED",
+        "The team changed since you opened it. The latest assignments have been loaded; review and try again.",
+        409,
+      );
+    }
     const toAdd = wanted.filter((id) => !current.has(id));
     const toRemove = [...current].filter((id) => !wanted.includes(id));
     if (toAdd.length > 0) {
@@ -529,7 +566,11 @@ function riskFromAggregate(
     pendingCount: agg.pendingCount,
     stampedCount: agg.stampedCount,
     overdueCount: agg.overdueCount,
-    penaltyRisk: computePenaltyRisk(agg.overdueCount, agg.failedCount, agg.dueSoon),
+    penaltyRisk: computePenaltyRisk(
+      agg.overdueCount,
+      agg.failedCount,
+      agg.dueSoon,
+    ),
     nextDeadline,
     failingInvoiceIds: agg.failingInvoiceIds,
   };
@@ -542,13 +583,19 @@ router.get("/console/portfolio", async (req, res): Promise<void> => {
   const aggregates = await loadClientRiskAggregates(firmId);
   const assignments = await loadFirmAssignments(firmId);
   const risks: ClientRisk[] = clients.map((client) => ({
-    ...riskFromAggregate(client.id, client.legalName, aggregates.get(client.id)),
+    ...riskFromAggregate(
+      client.id,
+      client.legalName,
+      aggregates.get(client.id),
+    ),
     // D12: who looks after this client; empty = unassigned (visible to all).
     assignedUserIds: assignments.get(client.id) ?? [],
   }));
 
   // Riskiest clients first so the partner triages top-down.
-  risks.sort((a, b) => PRIORITY_RANK[a.penaltyRisk] - PRIORITY_RANK[b.penaltyRisk]);
+  risks.sort(
+    (a, b) => PRIORITY_RANK[a.penaltyRisk] - PRIORITY_RANK[b.penaltyRisk],
+  );
 
   const summary = {
     firmId,
@@ -572,7 +619,10 @@ router.get("/console/clients/:id", async (req, res): Promise<void> => {
   const [client] = await getDb()
     .select({ id: partiesTable.id, legalName: partiesTable.legalName })
     .from(engagementsTable)
-    .innerJoin(partiesTable, eq(engagementsTable.clientPartyId, partiesTable.id))
+    .innerJoin(
+      partiesTable,
+      eq(engagementsTable.clientPartyId, partiesTable.id),
+    )
     .where(
       and(
         eq(engagementsTable.firmId, firmId),

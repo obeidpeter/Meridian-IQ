@@ -12,9 +12,16 @@ import {
   RAIL_CIRCUIT_OPEN_ACTION,
   WEBHOOK_DELIVERY_DEAD_ACTION,
 } from "../modules/desk/health-watch.ts";
-import { appFor, listen, closeAllServers } from "../test-helpers/route-harness.ts";
+import {
+  appFor,
+  listen,
+  closeAllServers,
+} from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
-import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // GET /operator/health-alerts, GET /operator/rail-config and GET
 // /operator/rails. Pinned:
@@ -96,7 +103,10 @@ test("GET /operator/health-alerts serves the watches' durable alerts, newest fir
   assert.ok(rail, "the rail alert surfaces");
   assert.equal(rail.action, RAIL_CIRCUIT_OPEN_ACTION);
   assert.equal(rail.entityType, "rail");
-  assert.ok(!Number.isNaN(Date.parse(rail.createdAt)), "createdAt serialized for the wire");
+  assert.ok(
+    !Number.isNaN(Date.parse(rail.createdAt)),
+    "createdAt serialized for the wire",
+  );
   assert.deepEqual(rail.detail, {
     rail: `test_rail_${SALT}`,
     failureCount: 3,
@@ -140,7 +150,10 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
     const res = await fetch(`${base}/operator/rail-config`);
     assert.equal(res.status, 200);
     const text = await res.text();
-    assert.ok(!text.includes(secret), "a configured value NEVER appears in the body");
+    assert.ok(
+      !text.includes(secret),
+      "a configured value NEVER appears in the body",
+    );
     const body = JSON.parse(text) as {
       key: string;
       label: string;
@@ -224,7 +237,9 @@ test("GET /operator/rails lists both rails in order with the transport, synthesi
   // what the route reports, and it serves rail_primary only.
   process.env.RAIL_PRIMARY_URL = `https://rail.example/${secret}`;
   process.env.RAIL_PRIMARY_TOKEN = secret;
-  setRailTransport(scriptedRail({ name: "t", environment: "live", rails: ["rail_primary"] }));
+  setRailTransport(
+    scriptedRail({ name: "t", environment: "live", rails: ["rail_primary"] }),
+  );
   try {
     // rail_primary has a (closed) breaker row; rail_secondary has none at all.
     await getDb()
@@ -235,7 +250,9 @@ test("GET /operator/rails lists both rails in order with the transport, synthesi
       .update(railStatesTable)
       .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null })
       .where(eq(railStatesTable.rail, "rail_primary"));
-    await getDb().delete(railStatesTable).where(eq(railStatesTable.rail, "rail_secondary"));
+    await getDb()
+      .delete(railStatesTable)
+      .where(eq(railStatesTable.rail, "rail_secondary"));
 
     const base = await listen(appFor(operator, operatorRouter));
     const res = await fetch(`${base}/operator/rails`);
@@ -256,13 +273,25 @@ test("GET /operator/rails lists both rails in order with the transport, synthesi
     assert.equal(primary.state, "closed");
     assert.equal(secondary.transport, "t");
     assert.equal(secondary.environment, "live");
-    assert.equal(secondary.configured, false, "a rail the transport does not serve");
-    assert.equal(secondary.state, "closed", "synthesised closed: no rail_states row exists");
+    assert.equal(
+      secondary.configured,
+      false,
+      "a rail the transport does not serve",
+    );
+    assert.equal(
+      secondary.state,
+      "closed",
+      "synthesised closed: no rail_states row exists",
+    );
     assert.equal(secondary.failureCount, 0);
     assert.equal(secondary.openedAt, null);
     assert.equal(secondary.retryAt, null);
     assert.ok(
-      body.every((r) => Object.values(r).every((v) => typeof v !== "string" || !v.includes(secret))),
+      body.every((r) =>
+        Object.values(r).every(
+          (v) => typeof v !== "string" || !v.includes(secret),
+        ),
+      ),
       "no field carries the secret",
     );
   } finally {
@@ -295,7 +324,13 @@ test("GET /operator/rails serialises an OPEN breaker (timestamps as strings) and
     .onConflictDoNothing({ target: railStatesTable.rail });
   await getDb()
     .update(railStatesTable)
-    .set({ state: "open", failureCount: 3, openedAt, retryAt, lastErrorCode: "RAIL_UNAUTHORIZED" })
+    .set({
+      state: "open",
+      failureCount: 3,
+      openedAt,
+      retryAt,
+      lastErrorCode: "RAIL_UNAUTHORIZED",
+    })
     .where(eq(railStatesTable.rail, "rail_primary"));
   try {
     const base = await listen(appFor(operator, operatorRouter));
@@ -318,7 +353,14 @@ test("GET /operator/rails serialises an OPEN breaker (timestamps as strings) and
   } finally {
     await getDb()
       .update(railStatesTable)
-      .set({ state: "closed", failureCount: 0, openedAt: null, retryAt: null, probeStartedAt: null, lastErrorCode: null })
+      .set({
+        state: "closed",
+        failureCount: 0,
+        openedAt: null,
+        retryAt: null,
+        probeStartedAt: null,
+        lastErrorCode: null,
+      })
       .where(eq(railStatesTable.rail, "rail_primary"));
   }
 });
@@ -326,42 +368,164 @@ test("GET /operator/rails serialises an OPEN breaker (timestamps as strings) and
 test("GET /operator/retrying lists pending events that failed or are parked, soonest first, bounded (R102)", async () => {
   const soon = new Date(Date.now() + 10_000);
   const later = new Date(Date.now() + 20_000);
-  const ids = { failed: randomUUID(), parked: randomUUID(), fresh: randomUUID(), dead: randomUUID() };
+  const ids = {
+    failed: randomUUID(),
+    parked: randomUUID(),
+    fresh: randomUUID(),
+    dead: randomUUID(),
+  };
   const aggregate = (tag: string) => `retrying-${tag}-${SALT}`;
-  await getDb().insert(outboxTable).values([
-    { id: ids.failed, aggregateType: "invoice", aggregateId: aggregate("failed"), type: "invoice.submit", payload: {}, status: "pending", attempts: 2, nextAttemptAt: soon, lastError: "RAIL_TIMEOUT" },
-    { id: ids.parked, aggregateType: "invoice", aggregateId: aggregate("parked"), type: "invoice.submit", payload: {}, status: "pending", attempts: 0, nextAttemptAt: later, parkedUntil: later, parkCount: 1, lastError: "RAIL_UNAVAILABLE: parked until later" },
-    { id: ids.fresh, aggregateType: "invoice", aggregateId: aggregate("fresh"), type: "invoice.submit", payload: {}, status: "pending", attempts: 0, nextAttemptAt: new Date(Date.now() + 3_600_000) },
-    { id: ids.dead, aggregateType: "invoice", aggregateId: aggregate("dead"), type: "invoice.submit", payload: {}, status: "dead", attempts: 6, nextAttemptAt: soon, lastError: "MBS_INVALID_TIN" },
-  ]);
+  await getDb()
+    .insert(outboxTable)
+    .values([
+      {
+        id: ids.failed,
+        aggregateType: "invoice",
+        aggregateId: aggregate("failed"),
+        type: "invoice.submit",
+        payload: {},
+        status: "pending",
+        attempts: 2,
+        nextAttemptAt: soon,
+        lastError: "RAIL_TIMEOUT",
+      },
+      {
+        id: ids.parked,
+        aggregateType: "invoice",
+        aggregateId: aggregate("parked"),
+        type: "invoice.submit",
+        payload: {},
+        status: "pending",
+        attempts: 0,
+        nextAttemptAt: later,
+        parkedUntil: later,
+        parkCount: 1,
+        lastError: "RAIL_UNAVAILABLE: parked until later",
+      },
+      {
+        id: ids.fresh,
+        aggregateType: "invoice",
+        aggregateId: aggregate("fresh"),
+        type: "invoice.submit",
+        payload: {},
+        status: "pending",
+        attempts: 0,
+        nextAttemptAt: new Date(Date.now() + 3_600_000),
+      },
+      {
+        id: ids.dead,
+        aggregateType: "invoice",
+        aggregateId: aggregate("dead"),
+        type: "invoice.submit",
+        payload: {},
+        status: "dead",
+        attempts: 6,
+        nextAttemptAt: soon,
+        lastError: "MBS_INVALID_TIN",
+      },
+    ]);
   try {
     const base = await listen(appFor(operator, operatorRouter));
     const res = await fetch(`${base}/operator/retrying?limit=200`);
     assert.equal(res.status, 200);
-    const body = (await res.json()) as Array<{
-      id: string;
-      nextAttemptAt: string | null;
-      parkedUntil: string | null;
-      parkCount: number;
-      lastError: string | null;
-    }>;
+    const body = (await res.json()) as {
+      items: Array<{
+        id: string;
+        nextAttemptAt: string | null;
+        parkedUntil: string | null;
+        parkCount: number;
+        lastError: string | null;
+      }>;
+      nextCursor: string | null;
+    };
     const known = Object.values(ids) as string[];
-    const listed = body.filter((e) => known.includes(e.id)).map((e) => e.id);
-    assert.deepEqual(listed, [ids.failed, ids.parked], "failed-once then parked, soonest first; fresh and dead rows absent");
-    const failed = body.find((e) => e.id === ids.failed);
+    const listed = body.items
+      .filter((e) => known.includes(e.id))
+      .map((e) => e.id);
+    assert.deepEqual(
+      listed,
+      [ids.failed, ids.parked],
+      "failed-once then parked, soonest first; fresh and dead rows absent",
+    );
+    const failed = body.items.find((e) => e.id === ids.failed);
     assert.equal(failed?.nextAttemptAt, soon.toISOString());
     assert.equal(failed?.lastError, "RAIL_TIMEOUT");
-    const parked = body.find((e) => e.id === ids.parked);
+    const parked = body.items.find((e) => e.id === ids.parked);
     assert.equal(parked?.parkedUntil, later.toISOString());
     assert.equal(parked?.parkCount, 1);
 
     const one = await fetch(`${base}/operator/retrying?limit=1`);
-    assert.equal(((await one.json()) as unknown[]).length, 1, "bounded");
+    const firstPage = (await one.json()) as {
+      items: Array<{ id: string }>;
+      nextCursor: string | null;
+    };
+    assert.equal(firstPage.items.length, 1, "bounded");
+    assert.ok(firstPage.nextCursor, "another row produces an opaque cursor");
+    const second = await fetch(
+      `${base}/operator/retrying?limit=1&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+    );
+    assert.equal(second.status, 200);
+    const secondPage = (await second.json()) as {
+      items: Array<{ id: string }>;
+    };
+    assert.equal(secondPage.items.length, 1);
+    assert.notEqual(secondPage.items[0]?.id, firstPage.items[0]?.id);
+    const invalidCursor = await fetch(
+      `${base}/operator/retrying?cursor=not-a-cursor`,
+    );
+    assert.equal(invalidCursor.status, 400);
     const bad = await fetch(`${base}/operator/retrying?limit=0`);
-    assert.equal(bad.status, 400, "bad paging input is a 400, never the whole book");
+    assert.equal(
+      bad.status,
+      400,
+      "bad paging input is a 400, never the whole book",
+    );
   } finally {
-    for (const id of Object.values(ids) as Array<ReturnType<typeof randomUUID>>) {
+    for (const id of Object.values(ids) as Array<
+      ReturnType<typeof randomUUID>
+    >) {
       await getDb().delete(outboxTable).where(eq(outboxTable.id, id));
     }
+  }
+});
+
+test("GET /operator/dead-letters returns a page, redacts inbound payloads and rejects bad cursors", async () => {
+  const id = randomUUID();
+  const correlationId = `request-${SALT}`;
+  await getDb()
+    .insert(outboxTable)
+    .values({
+      id,
+      aggregateType: "inbound",
+      aggregateId: `email-${SALT}`,
+      type: "inbound.email",
+      payload: { sender: "private@example.test", body: "private contents" },
+      status: "dead",
+      attempts: 6,
+      lastError: "intake failed",
+      correlationId,
+    });
+  try {
+    const base = await listen(appFor(operator, operatorRouter));
+    const response = await fetch(`${base}/operator/dead-letters?limit=200`);
+    assert.equal(response.status, 200);
+    const page = (await response.json()) as {
+      items: Array<{
+        id: string;
+        payload: unknown;
+        correlationId: string | null;
+      }>;
+      nextCursor: string | null;
+    };
+    assert.ok("nextCursor" in page);
+    const event = page.items.find((item) => item.id === id);
+    assert.deepEqual(event?.payload, { redacted: true });
+    assert.equal(event?.correlationId, correlationId);
+    assert.equal(
+      (await fetch(`${base}/operator/dead-letters?cursor=bad`)).status,
+      400,
+    );
+  } finally {
+    await getDb().delete(outboxTable).where(eq(outboxTable.id, id));
   }
 });

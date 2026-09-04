@@ -6,6 +6,11 @@ import {
   type Response,
 } from "express";
 import { runScheduledWorkOnce } from "../modules/pipeline/pipeline";
+import {
+  markOperationFailed,
+  markOperationStarted,
+  markOperationSucceeded,
+} from "../lib/operations";
 import { requireOpToken } from "../lib/op-token";
 import { bumpFixedWindow } from "../lib/fixed-window";
 
@@ -67,12 +72,32 @@ router.get(
   limitSweep,
   async (req, res): Promise<void> => {
     const startedAt = Date.now();
-    const result = await runScheduledWorkOnce();
-    req.log.info(
-      { ...result, tookMs: Date.now() - startedAt },
-      "external sweep trigger completed",
-    );
-    res.json({ status: "ok", ran: result.ran });
+    await markOperationStarted("scheduled_work", {
+      requestId: String(req.id),
+    });
+    try {
+      const result = await runScheduledWorkOnce();
+      const tookMs = Date.now() - startedAt;
+      await markOperationSucceeded("scheduled_work", {
+        requestId: String(req.id),
+        tookMs,
+        drained: result.drained,
+        ran: result.ran,
+      });
+      req.log.info({ ...result, tookMs }, "external sweep trigger completed");
+      res.json({ status: "ok", ran: result.ran });
+    } catch (error) {
+      await markOperationFailed("scheduled_work", error, {
+        requestId: String(req.id),
+        tookMs: Date.now() - startedAt,
+      }).catch((heartbeatError) => {
+        req.log.error(
+          { err: heartbeatError },
+          "could not persist failed sweep heartbeat",
+        );
+      });
+      throw error;
+    }
   },
 );
 

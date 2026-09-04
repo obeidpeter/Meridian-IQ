@@ -19,43 +19,74 @@
 // Exit:  0 on success (dump written, verified, checksummed, retention applied);
 //        non-zero on any failure. A dump that fails `pg_restore --list`
 //        verification is deleted — an unlistable archive is not a backup.
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
-import { fail, run, sha256File, utcStamp } from "./common.mjs";
+import { fail, psql, run, sha256File, utcStamp } from "./common.mjs";
 
 const P = "backup";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
-  fail(P, "DATABASE_URL is not set — refusing to guess which database to dump. Set it to the Postgres connection string and re-run.", 2);
+  fail(
+    P,
+    "DATABASE_URL is not set — refusing to guess which database to dump. Set it to the Postgres connection string and re-run.",
+    2,
+  );
 }
 
 const dir = path.resolve(process.env.BACKUP_DIR || "./backups");
 const keep = Number(process.env.BACKUP_KEEP ?? 14);
 if (!Number.isInteger(keep) || keep < 1) {
-  fail(P, `BACKUP_KEEP must be a positive integer (got ${JSON.stringify(process.env.BACKUP_KEEP)})`, 2);
+  fail(
+    P,
+    `BACKUP_KEEP must be a positive integer (got ${JSON.stringify(process.env.BACKUP_KEEP)})`,
+    2,
+  );
 }
 
 mkdirSync(dir, { recursive: true });
 const out = path.join(dir, `meridian-${utcStamp()}.dump`);
 
 // 1. Dump (custom format: compressed, integrity-checked TOC, selective restore).
-const dump = run("pg_dump", ["--format=custom", "--file", out, "--dbname", url]);
+const dump = run("pg_dump", [
+  "--format=custom",
+  "--file",
+  out,
+  "--dbname",
+  url,
+]);
 if (dump.status !== 0) {
   rmSync(out, { force: true });
-  fail(P, `pg_dump failed (exit ${dump.status}): ${(dump.stderr || "").trim()}`);
+  fail(
+    P,
+    `pg_dump failed (exit ${dump.status}): ${(dump.stderr || "").trim()}`,
+  );
 }
 
 // 2. Verify: an archive pg_restore cannot read the TOC of is not a backup.
 const list = run("pg_restore", ["--list", out]);
 if (list.status !== 0) {
   rmSync(out, { force: true });
-  fail(P, `dump failed verification — pg_restore --list exited ${list.status}: ${(list.stderr || "").trim()} (dump deleted)`);
+  fail(
+    P,
+    `dump failed verification — pg_restore --list exited ${list.status}: ${(list.stderr || "").trim()} (dump deleted)`,
+  );
 }
-const tocEntries = list.stdout.split("\n").filter((l) => /^\d+;/.test(l)).length;
+const tocEntries = list.stdout
+  .split("\n")
+  .filter((l) => /^\d+;/.test(l)).length;
 if (tocEntries === 0) {
   rmSync(out, { force: true });
-  fail(P, "dump failed verification — pg_restore --list returned an empty TOC (dump deleted)");
+  fail(
+    P,
+    "dump failed verification — pg_restore --list returned an empty TOC (dump deleted)",
+  );
 }
 
 // 3. Checksum, in `sha256sum -c`-compatible format, so off-box copies can be
@@ -82,3 +113,38 @@ console.log(
   `${P}: kept ${Math.min(dumps.length, keep)} dump(s), pruned ${pruned.length}` +
     (pruned.length ? ` (${pruned.join(", ")})` : ""),
 );
+
+// Persist the success outside the app process so the operator can distinguish
+// "backup configured" from a backup that has actually completed recently.
+// Values interpolated below are generated locally (hex digest, integer size,
+// timestamp-shaped filename), never user input.
+const metadata = JSON.stringify({
+  file: path.basename(out),
+  bytes: size,
+  sha256: digest,
+  tocEntries,
+});
+const metadataBase64 = Buffer.from(metadata, "utf8").toString("base64");
+psql(
+  url,
+  `BEGIN;
+   SET LOCAL ROLE meridian_app;
+   SELECT set_config('app.bypass', 'on', true);
+   INSERT INTO operational_heartbeats
+      (key, last_started_at, last_succeeded_at, last_error, metadata, updated_at)
+    VALUES (
+      'backup',
+      now(),
+      now(),
+      NULL,
+      convert_from(decode('${metadataBase64}', 'base64'), 'utf8')::jsonb,
+      now()
+    )
+    ON CONFLICT (key) DO UPDATE SET
+      last_succeeded_at = excluded.last_succeeded_at,
+      last_error = NULL,
+      metadata = excluded.metadata,
+      updated_at = now();
+   COMMIT;`,
+);
+console.log(`${P}: recorded durable backup heartbeat`);

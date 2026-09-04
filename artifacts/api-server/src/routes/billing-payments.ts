@@ -54,8 +54,8 @@ router.get("/billing/payments", async (req, res): Promise<void> => {
 // contract: no human client ever calls this, and the generated SDKs must not
 // grow a way to mark bills paid.
 //
-// Gate posture — FAIL-CLOSED, the inbound-rail stance (routes/inbound.ts),
-// the opposite of METRICS_TOKEN's open-when-unset default: this endpoint
+// Gate posture — FAIL-CLOSED, the inbound-rail stance (routes/inbound.ts).
+// Unlike the non-production convenience on the metrics endpoint, this route
 // SETTLES money state on the word of an unauthenticated caller, so with no
 // PAYMENT_WEBHOOK_TOKEN configured the rail must not exist at all — every
 // request 404s exactly like an unknown route. Setting the env var lights the

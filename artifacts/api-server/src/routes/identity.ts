@@ -32,12 +32,11 @@ import {
 import { DomainError } from "../modules/errors";
 import { litFeatureKeys } from "../modules/flags/flags";
 import { activationReleaseTag } from "../modules/flags/releases";
-import { hasConsentDecision } from "../modules/consent/consent";
+import { hasConsentDecisions } from "../modules/consent/consent";
 import { createPasswordReset } from "../modules/auth/password-reset";
 import { normalizeEmail } from "../modules/auth/session";
 
 const router: IRouter = Router();
-
 
 // What the shell calls the workspace: the business (client party) for client
 // users, the buyer organisation for buyer users, the firm for firm roles.
@@ -84,7 +83,7 @@ export async function consentCapturedFor(p: {
 }): Promise<boolean | null> {
   if (p.role !== "client_user" || !p.clientPartyId) return null;
   if (!isUuid(p.clientPartyId)) return false;
-  return hasConsentDecision(p.clientPartyId, 1);
+  return hasConsentDecisions(p.clientPartyId, [1, 2]);
 }
 
 router.get("/me", async (req, res): Promise<void> => {
@@ -130,7 +129,10 @@ router.get("/firms", async (req, res): Promise<void> => {
   const rows =
     tenant === null
       ? await getDb().select().from(firmsTable).orderBy(firmsTable.createdAt)
-      : await getDb().select().from(firmsTable).where(eq(firmsTable.id, tenant));
+      : await getDb()
+          .select()
+          .from(firmsTable)
+          .where(eq(firmsTable.id, tenant));
   res.json(ListFirmsResponse.parse(rows));
 });
 

@@ -16,8 +16,8 @@ import { rawBodyOf } from "./body";
 //    payload, and the timestamp must sit inside a short replay window.
 //  - the LEGACY path: `x-op-token` carries a secret verbatim (constant-time
 //    compare against every key in the ring). Kept so a provider migrates on
-//    its own schedule; OP_LEGACY_TOKENS=off refuses it once every caller
-//    signs.
+//    its own schedule. Production defaults this path off; explicitly setting
+//    OP_LEGACY_TOKENS=on is required during a time-bounded migration.
 //
 // The ring for rail X is `X_KEYS` = `id:secret,id:secret,…` (ids
 // [A-Za-z0-9_-]{1,32}, secrets 32+ chars, ids unique — the same shape as
@@ -25,8 +25,9 @@ import { rawBodyOf } from "./body";
 // before key rings existed still works and is the key id `legacy`; both
 // may be set during a migration. Ring empty (neither set) means the rail is
 // dark — a required rail 404s exactly like an unknown route, an optional
-// one (metrics) is open. Secrets are never accepted in URLs, where browser
-// history, proxy logs and referrers can retain them, and never echoed:
+// one (metrics) is open only outside production. Secrets are never accepted
+// in URLs, where browser history, proxy logs and referrers can retain them,
+// and never echoed:
 // rail-config reports key IDS only.
 
 export const OP_TOKEN_HEADER = "x-op-token";
@@ -53,7 +54,10 @@ export function keyRingEnvName(tokenEnv: string): string {
 }
 
 /** Parse an `id:secret,…` ring; throws on a malformed entry. */
-export function parseKeyRing(ringEnv: string, raw: string | undefined): OpKey[] {
+export function parseKeyRing(
+  ringEnv: string,
+  raw: string | undefined,
+): OpKey[] {
   const text = raw?.trim();
   if (!text) return [];
   const keys = text.split(",").map((entry) => {
@@ -105,7 +109,11 @@ export function describeKeyRing(tokenEnv: string): {
 }
 
 export function legacyTokenPathEnabled(): boolean {
-  return (process.env.OP_LEGACY_TOKENS ?? "on").trim().toLowerCase() !== "off";
+  const defaultValue = process.env.NODE_ENV === "production" ? "off" : "on";
+  return (
+    (process.env.OP_LEGACY_TOKENS ?? defaultValue).trim().toLowerCase() !==
+    "off"
+  );
 }
 
 export function signatureWindowSeconds(): number {
@@ -198,7 +206,11 @@ export function authenticateOpRequest(
   const keyId = req.get(OP_KEY_ID_HEADER);
   const timestamp = req.get(OP_TIMESTAMP_HEADER);
   const signature = req.get(OP_SIGNATURE_HEADER);
-  if (keyId !== undefined || timestamp !== undefined || signature !== undefined) {
+  if (
+    keyId !== undefined ||
+    timestamp !== undefined ||
+    signature !== undefined
+  ) {
     if (!keyId || !timestamp || !signature) {
       return { ok: false, reason: "signature_incomplete" };
     }
@@ -211,7 +223,8 @@ export function authenticateOpRequest(
     if (Math.abs(now - Number(timestamp)) > signatureWindowSeconds()) {
       return { ok: false, reason: "stale_timestamp" };
     }
-    if (!signature.startsWith("v1=")) return { ok: false, reason: "bad_signature" };
+    if (!signature.startsWith("v1="))
+      return { ok: false, reason: "bad_signature" };
     const expected = createHmac("sha256", key.secret)
       .update(
         opSigningString({

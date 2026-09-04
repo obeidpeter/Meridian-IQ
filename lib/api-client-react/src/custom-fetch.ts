@@ -207,6 +207,7 @@ export class ApiError<T = unknown> extends Error {
   readonly response: Response;
   readonly method: string;
   readonly url: string;
+  readonly requestId: string | null;
 
   constructor(
     response: Response,
@@ -223,6 +224,7 @@ export class ApiError<T = unknown> extends Error {
     this.response = response;
     this.method = requestInfo.method;
     this.url = response.url || requestInfo.url;
+    this.requestId = response.headers.get("x-request-id");
   }
 }
 
@@ -236,6 +238,7 @@ export class ResponseParseError extends Error {
   readonly url: string;
   readonly rawBody: string;
   readonly cause: unknown;
+  readonly requestId: string | null;
 
   constructor(
     response: Response,
@@ -255,6 +258,7 @@ export class ResponseParseError extends Error {
     this.response = response;
     this.method = requestInfo.method;
     this.url = response.url || requestInfo.url;
+    this.requestId = response.headers.get("x-request-id");
     // Keep malformed server payloads from being retained wholesale in error
     // telemetry or component state. The prefix is sufficient for diagnosis.
     this.rawBody = rawBody.slice(0, 4_096);

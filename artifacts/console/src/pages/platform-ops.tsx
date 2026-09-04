@@ -8,6 +8,8 @@ import {
   useListMessages,
   useListHealthAlerts,
   useGetRailConfig,
+  useGetReleaseReadiness,
+  getGetReleaseReadinessQueryKey,
   getListDeadLettersQueryKey,
   getListRailStatesQueryKey,
   getListMessagesQueryKey,
@@ -35,6 +37,9 @@ import {
   RotateCcw,
   Inbox,
   MessageSquare,
+  ChevronLeft,
+  ChevronRight,
+  Rocket,
 } from "lucide-react";
 import {
   formatDateTime,
@@ -95,7 +100,9 @@ export function railKeyIdsLine(entry: {
 }): string | null {
   const ids = entry.keyIds ?? [];
   if (ids.length === 0) return null;
-  const ring = ids.map((id) => (id === "legacy" ? "legacy (single token)" : id));
+  const ring = ids.map((id) =>
+    id === "legacy" ? "legacy (single token)" : id,
+  );
   const plain = entry.legacyTokenAccepted
     ? "plain x-op-token accepted"
     : "signed requests only";
@@ -140,11 +147,16 @@ export function isParked(
   event: Pick<OutboxEvent, "parkedUntil">,
   now: Date = new Date(),
 ): boolean {
-  return Boolean(event.parkedUntil && new Date(event.parkedUntil).getTime() > now.getTime());
+  return Boolean(
+    event.parkedUntil && new Date(event.parkedUntil).getTime() > now.getTime(),
+  );
 }
 
 export function retryingLine(
-  event: Pick<OutboxEvent, "attempts" | "maxAttempts" | "nextAttemptAt" | "parkedUntil" | "parkCount">,
+  event: Pick<
+    OutboxEvent,
+    "attempts" | "maxAttempts" | "nextAttemptAt" | "parkedUntil" | "parkCount"
+  >,
   now: Date = new Date(),
 ): string {
   const tries = `${event.attempts}/${event.maxAttempts} attempts`;
@@ -157,10 +169,155 @@ export function retryingLine(
     : tries;
 }
 
-export const RETRYING_EMPTY = "Nothing retrying — every queued event delivered or is waiting for its first try.";
+export const RETRYING_EMPTY =
+  "Nothing retrying — every queued event delivered or is waiting for its first try.";
+
+export function readinessBadge(status: "ready" | "warning" | "blocked") {
+  return {
+    label:
+      status === "ready"
+        ? "Ready"
+        : status === "warning"
+          ? "Review"
+          : "Blocked",
+    classes: pillClasses(
+      status === "ready" ? "emerald" : status === "warning" ? "amber" : "red",
+    ),
+  };
+}
+
+function QueuePagination({
+  canPrevious,
+  canNext,
+  busy,
+  onPrevious,
+  onNext,
+}: {
+  canPrevious: boolean;
+  canNext: boolean;
+  busy: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  if (!canPrevious && !canNext) return null;
+  return (
+    <nav
+      className="mt-3 flex items-center justify-end gap-2 border-t pt-3"
+      aria-label="Queue pages"
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={!canPrevious || busy}
+        onClick={onPrevious}
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        Previous
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={!canNext || busy}
+        onClick={onNext}
+      >
+        Next
+        <ChevronRight className="size-4" aria-hidden="true" />
+      </Button>
+    </nav>
+  );
+}
+
+function ReleaseReadinessSection() {
+  const { data, isLoading, error, refetch, isFetching } =
+    useGetReleaseReadiness({
+      query: {
+        queryKey: getGetReleaseReadinessQueryKey(),
+        refetchInterval: 30_000,
+      },
+    });
+  const overall = readinessBadge(data?.status ?? "warning");
+  return (
+    <Card data-testid="card-release-readiness">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2">
+            <Rocket className="size-5 text-primary" aria-hidden="true" />
+            Release readiness
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {data && (
+              <span className={overall.classes} data-testid="release-status">
+                {overall.label}
+              </span>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={`size-4 ${isFetching ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              Refresh
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-32" />
+        ) : error ? (
+          <QueryError thing="release readiness" onRetry={() => refetch()} />
+        ) : data ? (
+          <>
+            <p className="mb-4 break-all font-mono text-xs text-muted-foreground">
+              Build {data.buildRevision} · contract {data.contractVersion}
+            </p>
+            <div className="divide-y" aria-label="Release readiness checks">
+              {data.checks.map((check) => {
+                const badge = readinessBadge(
+                  check.status === "pass" ? "ready" : check.status,
+                );
+                return (
+                  <div
+                    key={check.key}
+                    className="flex flex-wrap items-start justify-between gap-3 py-3"
+                    data-testid={`release-check-${check.key}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{check.label}</p>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                        {check.summary}
+                      </p>
+                    </div>
+                    <span className={`${badge.classes} shrink-0`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 function RetryingSection() {
-  const { data, isLoading, error, refetch } = useListRetryingEvents({ limit: 50 });
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [history, setHistory] = useState<Array<string | undefined>>([]);
+  const { data, isLoading, isFetching, error, refetch } =
+    useListRetryingEvents({
+      limit: 50,
+      cursor,
+    });
+  const items = data?.items ?? [];
   return (
     <Card data-testid="card-retrying">
       <CardHeader>
@@ -174,7 +331,7 @@ function RetryingSection() {
           <Skeleton className="h-24" />
         ) : error ? (
           <QueryError thing="retrying events" onRetry={() => refetch()} />
-        ) : (data ?? []).length === 0 ? (
+        ) : items.length === 0 ? (
           <p
             className="text-sm text-muted-foreground flex items-center gap-2"
             data-testid="text-retrying-empty"
@@ -187,7 +344,7 @@ function RetryingSection() {
           </p>
         ) : (
           <div className="space-y-3">
-            {(data ?? []).map((event) => (
+            {items.map((event) => (
               <div
                 key={event.id}
                 className="border rounded-md p-3"
@@ -205,6 +362,11 @@ function RetryingSection() {
                     >
                       {retryingLine(event)}
                     </p>
+                    {event.correlationId && (
+                      <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                        Request {event.correlationId}
+                      </p>
+                    )}
                     {event.lastError && (
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 flex items-start gap-1">
                         <AlertTriangle
@@ -223,13 +385,29 @@ function RetryingSection() {
                       Parked
                     </span>
                   ) : (
-                    <span className={`${pillClasses("slate")} shrink-0`}>Retrying</span>
+                    <span className={`${pillClasses("slate")} shrink-0`}>
+                      Retrying
+                    </span>
                   )}
                 </div>
               </div>
             ))}
           </div>
         )}
+        <QueuePagination
+          canPrevious={history.length > 0}
+          canNext={!error && Boolean(data?.nextCursor)}
+          busy={isFetching}
+          onPrevious={() => {
+            const previous = history.at(-1);
+            setHistory((value) => value.slice(0, -1));
+            setCursor(previous);
+          }}
+          onNext={() => {
+            setHistory((value) => [...value, cursor]);
+            setCursor(data?.nextCursor ?? undefined);
+          }}
+        />
       </CardContent>
     </Card>
   );
@@ -252,7 +430,10 @@ function RailsSection() {
         ) : error ? (
           <QueryError thing="rail states" onRetry={() => refetch()} />
         ) : (data ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-rails-empty">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-rails-empty"
+          >
             No rail activity yet — states appear after the first submission.
           </p>
         ) : (
@@ -388,7 +569,9 @@ function RailConfigSection() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-xs text-muted-foreground mb-3">{RAIL_CONFIG_INTRO}</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          {RAIL_CONFIG_INTRO}
+        </p>
         {isLoading ? (
           <Skeleton className="h-16" />
         ) : error ? (
@@ -435,7 +618,13 @@ function RailConfigSection() {
 }
 
 function DeadLettersSection() {
-  const { data, isLoading, error, refetch } = useListDeadLetters();
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [history, setHistory] = useState<Array<string | undefined>>([]);
+  const { data, isLoading, isFetching, error, refetch } = useListDeadLetters({
+    limit: 50,
+    cursor,
+  });
+  const items = data?.items ?? [];
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const replay = useReplayDeadLetter();
@@ -474,7 +663,7 @@ function DeadLettersSection() {
         ) : error ? (
           // A failed fetch must never read as "all delivered".
           <QueryError thing="dead-lettered events" onRetry={() => refetch()} />
-        ) : (data ?? []).length === 0 ? (
+        ) : items.length === 0 ? (
           <p
             className="text-sm text-muted-foreground flex items-center gap-2"
             data-testid="text-dead-letters-empty"
@@ -487,7 +676,7 @@ function DeadLettersSection() {
           </p>
         ) : (
           <div className="space-y-3">
-            {(data ?? []).map((event) => (
+            {items.map((event) => (
               <div
                 key={event.id}
                 className="border rounded-md p-3"
@@ -503,6 +692,11 @@ function DeadLettersSection() {
                       {event.attempts}/{event.maxAttempts} attempts ·{" "}
                       {formatDateTime(event.createdAt)}
                     </p>
+                    {event.correlationId && (
+                      <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                        Request {event.correlationId}
+                      </p>
+                    )}
                     {event.lastError && (
                       <p className="text-xs text-red-700 dark:text-red-400 mt-1 flex items-start gap-1">
                         <AlertTriangle
@@ -531,6 +725,20 @@ function DeadLettersSection() {
             ))}
           </div>
         )}
+        <QueuePagination
+          canPrevious={history.length > 0}
+          canNext={!error && Boolean(data?.nextCursor)}
+          busy={isFetching}
+          onPrevious={() => {
+            const previous = history.at(-1);
+            setHistory((value) => value.slice(0, -1));
+            setCursor(previous);
+          }}
+          onNext={() => {
+            setHistory((value) => [...value, cursor]);
+            setCursor(data?.nextCursor ?? undefined);
+          }}
+        />
       </CardContent>
     </Card>
   );
@@ -553,7 +761,10 @@ function MessagesSection() {
       </CardHeader>
       <CardContent>
         {isFeatureDisabled(error) ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-messages-dark">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-messages-dark"
+          >
             Notifications ship dark (`messaging_notifications`). Flip the flag
             on the Feature flags page to start sending — deliveries appear here.
           </p>
@@ -562,7 +773,10 @@ function MessagesSection() {
         ) : error ? (
           <QueryError thing="message deliveries" onRetry={() => refetch()} />
         ) : (data ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="text-messages-empty">
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-messages-empty"
+          >
             No messages sent yet.
           </p>
         ) : (
@@ -579,7 +793,9 @@ function MessagesSection() {
                     <span className="text-muted-foreground font-normal">
                       {" "}
                       · {m.channel}
-                      {m.failoverFrom ? ` (failover from ${m.failoverFrom})` : ""}
+                      {m.failoverFrom
+                        ? ` (failover from ${m.failoverFrom})`
+                        : ""}
                     </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -652,6 +868,7 @@ export function PlatformOps() {
         </Button>
       </div>
 
+      <ReleaseReadinessSection />
       <HealthAlertsSection />
       <RailsSection />
       <RetryingSection />

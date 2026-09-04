@@ -60,40 +60,48 @@ const heldStamp = (tag: string): Partial<StampResult> => ({
   raw: { lookedUp: true },
 });
 
-async function seedInvoice(n: number, status: "submitted" | "draft" = "submitted") {
+async function seedInvoice(
+  n: number,
+  status: "submitted" | "draft" = "submitted",
+) {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId: firm,
-    supplierPartyId: supplier,
-    buyerPartyId: buyer,
-    invoiceNumber: invoiceNumber(n),
-    issueDate: "2026-08-01",
-    dueDate: "2026-08-31",
-    status: status as never,
-    subtotal: "100000.00",
-    vatTotal: "7500.00",
-    grandTotal: "107500.00",
-  });
-  await getDb().insert(invoiceLinesTable).values({
-    invoiceId: id,
-    lineNo: 1,
-    description: `Consulting ${SALT}`,
-    quantity: "1.0000",
-    unitPrice: "100000.00",
-    vatRate: "0.0750",
-    lineExtension: "100000.00",
-    vatAmount: "7500.00",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId: firm,
+      supplierPartyId: supplier,
+      buyerPartyId: buyer,
+      invoiceNumber: invoiceNumber(n),
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      status: status as never,
+      subtotal: "100000.00",
+      vatTotal: "7500.00",
+      grandTotal: "107500.00",
+    });
+  await getDb()
+    .insert(invoiceLinesTable)
+    .values({
+      invoiceId: id,
+      lineNo: 1,
+      description: `Consulting ${SALT}`,
+      quantity: "1.0000",
+      unitPrice: "100000.00",
+      vatRate: "0.0750",
+      lineExtension: "100000.00",
+      vatAmount: "7500.00",
+    });
   return id;
 }
 
-async function enqueueSubmit(invoiceId: string) {
+async function enqueueSubmit(invoiceId: string, correlationId?: string) {
   await getDb().insert(outboxTable).values({
     aggregateType: "invoice",
     aggregateId: invoiceId,
     type: "invoice.submit",
     payload: { invoiceId },
+    correlationId,
   });
 }
 
@@ -115,10 +123,20 @@ async function drainUntilSettled(invoiceId: string) {
 }
 
 const invoiceStatus = async (id: string) =>
-  (await getDb().select({ status: invoicesTable.status }).from(invoicesTable).where(eq(invoicesTable.id, id)))[0]?.status;
+  (
+    await getDb()
+      .select({ status: invoicesTable.status })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, id))
+  )[0]?.status;
 
 const auditActions = async (id: string) =>
-  (await getDb().select({ action: auditEventsTable.action }).from(auditEventsTable).where(eq(auditEventsTable.entityId, id))).map((r) => r.action);
+  (
+    await getDb()
+      .select({ action: auditEventsTable.action })
+      .from(auditEventsTable)
+      .where(eq(auditEventsTable.entityId, id))
+  ).map((r) => r.action);
 
 async function closeBreakers(): Promise<void> {
   for (const rail of ["rail_primary", "rail_secondary"] as Rail[]) {
@@ -136,27 +154,31 @@ let restoreRailEnv: () => void = () => {};
 before(async () => {
   restoreRailEnv = clearRailEnv();
   await closeBreakers();
-  await getDb().insert(firmsTable).values({ id: firm, name: `Pipeline Firm ${SALT}` });
-  await getDb().insert(partiesTable).values([
-    {
-      id: supplier,
-      type: "client_business",
-      legalName: `Pipeline Supplier ${SALT}`,
-      tin: `1111-${SALT}`,
-      street: "1 Broad Street",
-      city: "Lagos",
-      countryCode: "NG",
-    },
-    {
-      id: buyer,
-      type: "buyer",
-      legalName: `Pipeline Buyer ${SALT}`,
-      tin: `2222-${SALT}`,
-      street: "2 Marina",
-      city: "Lagos",
-      countryCode: "NG",
-    },
-  ]);
+  await getDb()
+    .insert(firmsTable)
+    .values({ id: firm, name: `Pipeline Firm ${SALT}` });
+  await getDb()
+    .insert(partiesTable)
+    .values([
+      {
+        id: supplier,
+        type: "client_business",
+        legalName: `Pipeline Supplier ${SALT}`,
+        tin: `1111-${SALT}`,
+        street: "1 Broad Street",
+        city: "Lagos",
+        countryCode: "NG",
+      },
+      {
+        id: buyer,
+        type: "buyer",
+        legalName: `Pipeline Buyer ${SALT}`,
+        tin: `2222-${SALT}`,
+        street: "2 Marina",
+        city: "Lagos",
+        countryCode: "NG",
+      },
+    ]);
 });
 
 after(async () => {
@@ -180,7 +202,10 @@ test("MBS_DUPLICATE is recovered: the held stamp is persisted, provenance and au
     setRailTransport(null);
   }
   assert.equal(await invoiceStatus(id), "stamped");
-  const [stamp] = await getDb().select().from(stampRecordsTable).where(eq(stampRecordsTable.invoiceId, id));
+  const [stamp] = await getDb()
+    .select()
+    .from(stampRecordsTable)
+    .where(eq(stampRecordsTable.invoiceId, id));
   assert.equal(stamp?.irn, "IRN-recovered");
   assert.equal(stamp?.provider, "fake-rail");
   assert.equal(stamp?.environment, "live");
@@ -188,17 +213,35 @@ test("MBS_DUPLICATE is recovered: the held stamp is persisted, provenance and au
     .select()
     .from(submissionAttemptsTable)
     .where(eq(submissionAttemptsTable.invoiceId, id))
-    .orderBy(asc(submissionAttemptsTable.createdAt), asc(submissionAttemptsTable.status));
-  assert.equal(attempts.length, 2, "the rejection and the lookup are both retained");
+    .orderBy(
+      asc(submissionAttemptsTable.createdAt),
+      asc(submissionAttemptsTable.status),
+    );
+  assert.equal(
+    attempts.length,
+    2,
+    "the rejection and the lookup are both retained",
+  );
   const rejected = attempts.find((a) => a.status === "rejected");
   const recovered = attempts.find((a) => a.status === "accepted");
   assert.equal(rejected?.errorCode, "MBS_DUPLICATE");
-  assert.equal((rejected?.requestPayload as { canonical?: unknown })?.canonical !== undefined, true, "the full request is retained");
-  assert.equal((recovered?.responsePayload as { recovered?: boolean })?.recovered, true);
+  assert.equal(
+    (rejected?.requestPayload as { canonical?: unknown })?.canonical !==
+      undefined,
+    true,
+    "the full request is retained",
+  );
+  assert.equal(
+    (recovered?.responsePayload as { recovered?: boolean })?.recovered,
+    true,
+  );
   const actions = await auditActions(id);
   assert.ok(actions.includes("invoice.stamp_recovered"), actions.join(","));
   assert.ok(!actions.includes("invoice.rejected"));
-  const [event] = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, id));
+  const [event] = await getDb()
+    .select()
+    .from(outboxTable)
+    .where(eq(outboxTable.aggregateId, id));
   assert.equal(event?.status, "done");
 });
 
@@ -215,12 +258,21 @@ test("a duplicate no rail can produce keeps the terminal failure and says so", a
     setRailTransport(null);
   }
   assert.equal(await invoiceStatus(id), "failed");
-  const stamps = await getDb().select().from(stampRecordsTable).where(eq(stampRecordsTable.invoiceId, id));
+  const stamps = await getDb()
+    .select()
+    .from(stampRecordsTable)
+    .where(eq(stampRecordsTable.invoiceId, id));
   assert.equal(stamps.length, 0);
   const actions = await auditActions(id);
-  assert.ok(actions.includes("invoice.stamp_recovery_failed"), actions.join(","));
+  assert.ok(
+    actions.includes("invoice.stamp_recovery_failed"),
+    actions.join(","),
+  );
   assert.ok(actions.includes("invoice.rejected"));
-  const [event] = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, id));
+  const [event] = await getDb()
+    .select()
+    .from(outboxTable)
+    .where(eq(outboxTable.aggregateId, id));
   assert.equal(event?.status, "dead");
 });
 
@@ -237,12 +289,17 @@ test("reconcile() persists a stamp the rail already holds instead of re-queuing"
     setRailTransport(null);
   }
   assert.equal(await invoiceStatus(id), "stamped");
-  const [stamp] = await getDb().select().from(stampRecordsTable).where(eq(stampRecordsTable.invoiceId, id));
+  const [stamp] = await getDb()
+    .select()
+    .from(stampRecordsTable)
+    .where(eq(stampRecordsTable.invoiceId, id));
   assert.equal(stamp?.irn, "IRN-reconciled");
   const live = await getDb()
     .select()
     .from(outboxTable)
-    .where(and(eq(outboxTable.aggregateId, id), eq(outboxTable.status, "pending")));
+    .where(
+      and(eq(outboxTable.aggregateId, id), eq(outboxTable.status, "pending")),
+    );
   assert.equal(live.length, 0, "no resubmission was queued");
   const actions = await auditActions(id);
   assert.ok(actions.includes("invoice.stamp_recovered"), actions.join(","));
@@ -256,22 +313,36 @@ test("reconcile() re-queues a stuck invoice the simulator does not remember", as
   setRailTransport(null);
   await reconcile();
   assert.equal(await invoiceStatus(id), "submitted");
-  const rows = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, id));
+  const rows = await getDb()
+    .select()
+    .from(outboxTable)
+    .where(eq(outboxTable.aggregateId, id));
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.type, "invoice.submit");
 });
 
 test("an accepted submission retains the canonical request and names its provenance", async () => {
   const id = await seedInvoice(5);
-  await enqueueSubmit(id);
+  const correlationId = `request-${SALT}`;
+  await enqueueSubmit(id, correlationId);
   setRailTransport(null);
   await drainUntilSettled(id);
   assert.equal(await invoiceStatus(id), "stamped");
-  const [attempt] = await getDb().select().from(submissionAttemptsTable).where(eq(submissionAttemptsTable.invoiceId, id));
-  const request = attempt?.requestPayload as { canonical?: { invoiceNumber?: string }; idempotencyKey?: string };
+  const [attempt] = await getDb()
+    .select()
+    .from(submissionAttemptsTable)
+    .where(eq(submissionAttemptsTable.invoiceId, id));
+  const request = attempt?.requestPayload as {
+    canonical?: { invoiceNumber?: string };
+    idempotencyKey?: string;
+  };
   assert.equal(request?.canonical?.invoiceNumber, `INV-PIPE-5-${SALT}`);
   assert.equal(request?.idempotencyKey, `${id}:INV-PIPE-5-${SALT}`);
-  const [stamp] = await getDb().select().from(stampRecordsTable).where(eq(stampRecordsTable.invoiceId, id));
+  assert.equal(attempt?.correlationId, correlationId);
+  const [stamp] = await getDb()
+    .select()
+    .from(stampRecordsTable)
+    .where(eq(stampRecordsTable.invoiceId, id));
   assert.equal(stamp?.provider, "simulator");
   assert.equal(stamp?.environment, "sandbox");
 });

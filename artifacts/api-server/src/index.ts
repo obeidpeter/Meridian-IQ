@@ -7,7 +7,11 @@ import {
   ensureAppRoleAssumable,
 } from "@workspace/db";
 import { logger } from "./lib/logger";
-import { awaitWorkerIdle, startWorker, stopWorker } from "./modules/pipeline/pipeline";
+import {
+  awaitWorkerIdle,
+  startWorker,
+  stopWorker,
+} from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
 import { disableProductionDemoIdentities } from "./bootstrap/security";
 import { assertSessionSigningConfigured } from "./modules/auth/session";
@@ -125,7 +129,9 @@ async function verifyProductionGuardrails(): Promise<void> {
            ('clerk_cases_live_dedupe_uq'),
            ('collection_accounts_one_active_per_client'),
             ('payment_intents_provider_ref_uq'),
-            ('password_resets_one_pending_per_user_uq')
+            ('password_resets_one_pending_per_user_uq'),
+            ('consent_records_party_command_layer_uq'),
+            ('outbox_events_processing_lease_idx')
          ) AS required(index_name)
         WHERE to_regclass('public.' || required.index_name) IS NULL
         ORDER BY required.index_name`,
@@ -167,7 +173,7 @@ async function verifyProductionGuardrails(): Promise<void> {
       );
     } else {
       logger.info(
-        { policies, triggers, requiredIndexes: 5 },
+        { policies, triggers, requiredIndexes: 8 },
         "Production guardrails verified",
       );
     }

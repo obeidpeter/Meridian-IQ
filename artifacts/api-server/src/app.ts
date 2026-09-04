@@ -9,7 +9,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
-import { runRequestContext } from "@workspace/db";
+import { runCorrelationContext, runRequestContext } from "@workspace/db";
 import router from "./routes";
 import inboundRouter from "./routes/inbound";
 import { logger } from "./lib/logger";
@@ -18,6 +18,7 @@ import { rateLimit } from "./middleware/rate-limit";
 import { errorHandler } from "./middleware/error";
 import { metricsMiddleware } from "./lib/metrics";
 import { getReadiness } from "./lib/readiness";
+import { resolveRequestId } from "./lib/request-id";
 
 // Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
 // (buyer_user — scoped to a buyer Party at the route level, not to a firm) and
@@ -255,7 +256,7 @@ function tenantContext(req: Request, res: Response, next: NextFunction): void {
     }
   };
 
-  runRequestContext({ bypass, firmId }, () => {
+  runRequestContext({ bypass, firmId, correlationId: String(req.id) }, () => {
     return new Promise<void>((resolve, reject) => {
       const settle = () => {
         if (terminated) return;
@@ -394,6 +395,11 @@ app.use(metricsMiddleware);
 app.use(
   pinoHttp({
     logger,
+    genReqId(req, res) {
+      const requestId = resolveRequestId(req.headers["x-request-id"]);
+      res.setHeader("X-Request-Id", requestId);
+      return requestId;
+    },
     serializers: {
       req(req) {
         return {
@@ -410,6 +416,12 @@ app.use(
     },
   }),
 );
+
+// Keep the request reference available to routes that intentionally manage
+// their own short transactions outside tenantContext.
+app.use((req, _res, next) => {
+  runCorrelationContext(String(req.id), next);
+});
 
 app.use((req, res, next) => {
   const controller = new AbortController();

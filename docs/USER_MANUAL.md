@@ -2053,7 +2053,13 @@ unreachable (404), not broken:
 | `CLERK_COST_PER_1M_INPUT_USD` / `CLERK_COST_PER_1M_OUTPUT_USD` | Price the economics meter uses for its USD estimate; both unset shows tokens only. |
 | `PUBLIC_APP_URL` | Origin of the links the server writes into password-reset messages (https required in production; the deployed app URL when unset). |
 | `LOG_LEVEL` / `PGPOOL_MAX` | Server log level (default `info`) and the database pool size per instance (default 20). |
-| `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Optional metrics secret and required sweep secret (`METRICS_KEYS` / `SWEEP_KEYS` rings, or the single tokens). Signed requests or the `x-op-token` header only — never a URL; the sweep endpoint is unavailable while its ring is empty. |
+| `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Metrics and sweep secrets (`METRICS_KEYS` / `SWEEP_KEYS` rings, or the single tokens). Both endpoints fail closed in production when their ring is empty. Use signed requests; operation credentials are never accepted in a URL. |
+| `EXPECTED_BUILD_REVISION`                                       | Git SHA that should be running. The release-readiness check compares it with `REPLIT_GIT_SHA` (or another detected build revision) and blocks a production release on mismatch. |
+| `SCHEDULED_WORK_MAX_AGE_MS` / `BACKUP_MAX_AGE_MS` / `RESTORE_DRILL_MAX_AGE_MS` | Maximum age of the durable sweep, backup, and restore-drill heartbeats. Defaults are 10 minutes, 26 hours, and 31 days. |
+| `ADVISORY_INBOX_VERIFIED_AT` / `ADVISORY_INBOX_MAX_AGE_MS`       | ISO date-time of the latest successful end-to-end advisory inbox test and its maximum age (default 90 days). The underlying test evidence must be retained separately. |
+| `USABILITY_VALIDATED_AT` / `USABILITY_EVIDENCE_REF` / `USABILITY_MAX_AGE_MS` | ISO date-time, report or ticket reference, and maximum age for the latest moderated cross-role usability validation (default 180 days). |
+| `REQUIRE_LIVE_RAILS` / `RAIL_ACCREDITATION_CONFIRMED`           | Set both to `true` only when a release must use accredited production authority rails and the accreditation evidence has been retained. |
+| `OUTBOX_LEASE_MS` / `OUTBOX_RELEASE_MAX_AGE_SECONDS`             | Outbox worker lease duration and the oldest-pending threshold that blocks release readiness. Defaults are 120 seconds and 900 seconds. |
 | `CLERK_SECRET_KEY` (+ `CLERK_AUTHORIZED_PARTIES`)               | The hosted identity provider (unrelated to the AI assistant). In production the key without authorized parties (or `REPLIT_DOMAINS`) disables it.          |
 | `FRAME_ANCESTORS`                                               | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                       |
 | `ENABLE_DEV_AUTH`                                               | The `x-mock-*` dev identity shim — a full auth bypass, honoured only outside production.                                                                   |
@@ -2063,13 +2069,14 @@ rails, the payment and collection webhooks, `/api/internal/sweep` and
 `/api/metrics` — is governed by a per-rail key ring: `X_KEYS` is
 `id:secret,id:secret,…` (ids `A-Za-z0-9_-`, secrets 32+ characters, ids
 unique), and the pre-key-ring single `X_TOKEN` still works as the key id
-`legacy`, so a provider migrates on its own schedule. A provider proves a key
+`legacy`, including on the signed path. A provider proves a key
 one of two ways: the **signed path** — `x-op-key-id`, `x-op-timestamp`
 (unix seconds, within `OP_SIGNATURE_WINDOW_SECONDS`, default 300) and
 `x-op-signature: v1=<hex HMAC-SHA256(secret, "ts.METHOD.path.sha256(body)")>`
 — which binds the request to its rail and its exact bytes and cannot be
 replayed outside the window; or the **legacy path**, the secret verbatim in
-`x-op-token`, accepted until `OP_LEGACY_TOKENS=off`. The Compliance Desk's
+`x-op-token`. The plain-token path defaults off in production and requires
+`OP_LEGACY_TOKENS=on` during a time-bounded provider migration. The Compliance Desk's
 rail-configuration card shows each rail's key **ids** (never a secret) and
 whether the plain token path is still open. To rotate a key: add the new
 `id:secret` to the ring, move the provider to it, then drop the old entry.

@@ -3,10 +3,15 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 
 export interface ClientAssignmentsInput {
   /** @maxItems 50 */
   userIds: string[];
+  /**
+     * Version returned by the latest assignments read.
+     * @pattern ^[0-9a-f]{64}$
+     */
+  expectedVersion: string;
 }

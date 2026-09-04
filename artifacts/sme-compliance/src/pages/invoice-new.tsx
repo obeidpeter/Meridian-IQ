@@ -51,84 +51,33 @@ import {
   emptyLine,
   draftHasWork,
   lineTotals,
-  todayIsoDate,
   toInvoiceLineInputs,
   updateLineAt,
 } from "@/lib/invoice-lines";
 import {
-  Plus,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+  DRAFT_KEY,
+  draftStorageKey,
+  emptyInvoiceDraft,
+  loadInvoiceDraft,
+  removeInvoiceDraft,
+  saveInvoiceDraft,
+  type DraftState,
+} from "@/lib/invoice-draft";
+import { Plus, ShieldCheck, Sparkles } from "lucide-react";
 
-// Exported for invoice-detail's "New from this invoice", which seeds this
-// page's offline draft before navigating here.
-export const DRAFT_KEY = "meridianiq:invoice-draft";
-
-export function draftStorageKey(
-  userId: string,
-  firmId?: string | null,
-): string {
-  return `${DRAFT_KEY}:${firmId ?? "no-firm"}:${userId}`;
-}
-
-export interface DraftState {
-  invoiceNumber: string;
-  buyerPartyId: string;
-  issueDate: string;
-  dueDate: string;
-  /** ISO currency code; NGN unless the client picked otherwise. */
-  currency: string;
-  /** ₦ per unit of the foreign currency; blank = not provided. */
-  fxRateToNgn: string;
-  /**
-   * WHT Desk: the withholding catalogue key a human picked, "" = No WHT
-   * (the default — a category is never pre-selected, and "" is omitted
-   * from the create payload entirely).
-   */
-  whtCategory: string;
-  lines: LineDraft[];
-}
+export { DRAFT_KEY, draftStorageKey };
+export type { DraftState };
 
 // The lawful set the rails accept for e-invoicing; NGN leads and is the
 // default — a foreign currency additionally wants an exchange rate so the
 // naira-equivalent VAT can be computed server-side.
 export const CURRENCIES = ["NGN", "USD", "EUR", "GBP"] as const;
 
-const emptyDraft = (): DraftState => ({
-  invoiceNumber: "",
-  buyerPartyId: "",
-  issueDate: todayIsoDate(),
-  dueDate: "",
-  currency: "NGN",
-  fxRateToNgn: "",
-  whtCategory: "",
-  lines: [emptyLine()],
-});
+const emptyDraft = emptyInvoiceDraft;
 
 // The Radix select can't carry an empty-string item value, so the "No WHT"
 // option rides a sentinel that maps back to "" in the draft.
 const NO_WHT = "none";
-
-function loadDraft(key: string): { draft: DraftState; restored: boolean } {
-  try {
-    // Durable copy first; fall back to a pre-move sessionStorage draft so
-    // an in-flight draft survives the storage migration.
-    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
-    // Merge over the empty draft so an offline draft saved before the
-    // currency fields existed still loads with NGN defaults.
-    if (raw) {
-      const draft = {
-        ...emptyDraft(),
-        ...(JSON.parse(raw) as Partial<DraftState>),
-      };
-      return { draft, restored: draftHasWork(draft) };
-    }
-  } catch {
-    /* ignore corrupt draft */
-  }
-  return { draft: emptyDraft(), restored: false };
-}
 
 export function InvoiceNew() {
   usePageTitle("New invoice");
@@ -159,11 +108,15 @@ export function InvoiceNew() {
 
   useEffect(() => {
     if (!draftKey || draftOwner === draftKey) return;
-    const { draft: stored, restored } = loadDraft(draftKey);
+    const {
+      draft: stored,
+      restored,
+      savedAt: restoredAt,
+    } = loadInvoiceDraft(draftKey);
     setDraft(stored);
     setDraftOwner(draftKey);
-    setSavedAt(restored ? new Date() : null);
-    localStorage.removeItem(DRAFT_KEY);
+    setSavedAt(restored ? restoredAt : null);
+    removeInvoiceDraft(DRAFT_KEY);
   }, [draftKey, draftOwner]);
 
   // Frequent items (line-item memory): mined server-side from this client's
@@ -257,15 +210,11 @@ export function InvoiceNew() {
     if (!draftKey || draftOwner !== draftKey) return;
     const t = setTimeout(() => {
       if (draftHasWork(draft)) {
-        localStorage.setItem(draftKey, JSON.stringify(draft));
-        // The pre-move copy must not shadow the durable one on reload.
-        sessionStorage.removeItem(draftKey);
-        setSavedAt(new Date());
+        setSavedAt(saveInvoiceDraft(draftKey, draft));
       } else {
         // An untouched or emptied form leaves no durable residue — the
         // indicator only ever claims a draft that actually exists.
-        localStorage.removeItem(draftKey);
-        sessionStorage.removeItem(draftKey);
+        removeInvoiceDraft(draftKey);
         setSavedAt(null);
       }
     }, 400);
@@ -277,10 +226,8 @@ export function InvoiceNew() {
   // back exactly as it was. Only offered when the draft carried real work.
   const discardDraft = () => {
     const stashedDraft = draft;
-    const stashedSavedAt = savedAt;
     if (draftKey) {
-      localStorage.removeItem(draftKey);
-      sessionStorage.removeItem(draftKey);
+      removeInvoiceDraft(draftKey);
     }
     setDraft(emptyDraft());
     setSavedAt(null);
@@ -295,13 +242,17 @@ export function InvoiceNew() {
           data-testid="button-undo-discard"
           onClick={() => {
             setDraft(stashedDraft);
-            setSavedAt(stashedSavedAt ?? new Date());
-            if (draftKey) {
-              try {
-                localStorage.setItem(draftKey, JSON.stringify(stashedDraft));
-              } catch {
-                /* storage full/blocked — the in-memory restore still holds */
-              }
+            const persistedAt = draftKey
+              ? saveInvoiceDraft(draftKey, stashedDraft)
+              : null;
+            setSavedAt(persistedAt);
+            if (draftKey && !persistedAt) {
+              toast({
+                title: "Draft restored only in this tab",
+                description:
+                  "Your browser blocked device storage. Keep this tab open or allow site storage.",
+                variant: "destructive",
+              });
             }
           }}
         >
@@ -387,8 +338,7 @@ export function InvoiceNew() {
         },
       });
       if (draftKey) {
-        localStorage.removeItem(draftKey);
-        sessionStorage.removeItem(draftKey);
+        removeInvoiceDraft(draftKey);
       }
       // Not awaited: a background refetch rejection must not surface as a false
       // "could not create invoice" error after the save already succeeded.
@@ -465,7 +415,7 @@ export function InvoiceNew() {
       >
         <span className="text-xs text-muted-foreground flex items-center gap-2 shrink-0">
           <span role="status" data-testid="text-draft-saved">
-            {savedAt ? "Draft saved on this device" : ""}
+            {savedAt ? "Draft saved on this device for 7 days" : ""}
           </span>
           {savedAt && (
             <Button
@@ -648,8 +598,8 @@ export function InvoiceNew() {
                       id="buyer-tin-note"
                       className="text-sm mt-1 text-amber-700 dark:text-amber-400"
                     >
-                      {tinGuidance} You can still save this invoice as a draft
-                      — it cannot be submitted for stamping until the TIN is
+                      {tinGuidance} You can still save this invoice as a draft —
+                      it cannot be submitted for stamping until the TIN is
                       added.
                     </p>
                   )}

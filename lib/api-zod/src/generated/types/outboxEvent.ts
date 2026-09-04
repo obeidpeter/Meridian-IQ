@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.94.0
+ * OpenAPI spec version: 0.95.0
  */
 import type { OutboxEventStatus } from './outboxEventStatus';
 
@@ -12,6 +12,11 @@ export interface OutboxEvent {
   aggregateType: string;
   aggregateId: string;
   type: string;
+  /**
+     * Opaque request correlation reference for operator support.
+     * @nullable
+     */
+  correlationId?: string | null;
   status: OutboxEventStatus;
   attempts: number;
   maxAttempts: number;

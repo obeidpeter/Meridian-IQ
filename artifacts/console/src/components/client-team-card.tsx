@@ -63,8 +63,15 @@ export function ClientTeamCard({
   };
 
   const save = () => {
+    if (!assignments.data) return;
     replace.mutate(
-      { id: clientPartyId, data: { userIds: [...draft] } },
+      {
+        id: clientPartyId,
+        data: {
+          userIds: [...draft],
+          expectedVersion: assignments.data.version,
+        },
+      },
       {
         onSuccess: () => {
           toast({ title: "Assignments saved" });
@@ -75,12 +82,15 @@ export function ClientTeamCard({
             queryKey: getGetPortfolioQueryKey(),
           });
         },
-        onError: (e) =>
+        onError: (e) => {
+          void assignments.refetch();
+          setSelected(null);
           toast({
             title: "Could not save assignments",
             description: serverErrorMessage(e),
             variant: "destructive",
-          }),
+          });
+        },
       },
     );
   };

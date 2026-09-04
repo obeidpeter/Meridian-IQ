@@ -412,8 +412,9 @@ presence boolean.
 Decision: every rail reads a per-rail key ring (`X_KEYS` = `id:secret,…`,
 the session-signing shape) with the old single token as the `legacy` key;
 callers sign requests (key id, timestamp inside a replay window, HMAC over
-method, path and the exact body bytes) or, until `OP_LEGACY_TOKENS=off`,
-present a secret verbatim; the rail-config surface shows key ids only; the
+method, path and the exact body bytes). The plain-token compatibility path is
+off by default in production and requires `OP_LEGACY_TOKENS=on` during a
+time-bounded migration; the rail-config surface shows key ids only; the
 e2e collections journey rides the signed path.
 Consequences: keys rotate by adding then removing ring entries; a captured
 credential is bound to one rail, one payload and a few minutes; providers

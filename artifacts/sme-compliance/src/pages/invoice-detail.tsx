@@ -85,11 +85,15 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { RejectionRiskCard } from "@/components/rejection-risk-card";
 import { QueryError } from "@/components/query-error";
-import { draftStorageKey, type DraftState } from "@/pages/invoice-new";
+import {
+  draftStorageKey,
+  saveInvoiceDraft,
+  storedInvoiceDraftHasWork,
+  type DraftState,
+} from "@/lib/invoice-draft";
 import { LineItemRow } from "@/components/line-item-row";
 import { FieldError } from "@/components/field-error";
 import {
-  draftHasWork,
   emptyLine,
   lineTotals,
   todayIsoDate,
@@ -506,6 +510,11 @@ function SubmissionTimeline({ attempts }: { attempts: SubmissionAttempt[] }) {
                     {a.errorCode}
                   </p>
                 )}
+                {a.correlationId && (
+                  <p className="break-all font-mono text-[11px] text-muted-foreground">
+                    Support reference {a.correlationId}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {formatDate(a.createdAt)}
                 </p>
@@ -792,8 +801,8 @@ export function ValidationErrorsCard({
         {partyFieldFlagged && (
           <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
             Issues with customer or business details live on the customer or
-            business record, not on this invoice — ask your firm to correct the record,
-            then submit again.
+            business record, not on this invoice — ask your firm to correct the
+            record, then submit again.
           </p>
         )}
         {showFixButton && (
@@ -1018,10 +1027,9 @@ export function InvoiceDetail() {
     .filter(
       (a) => (a.status === "rejected" || a.status === "error") && a.errorCode,
     )
-    .reduce<(typeof attempts extends (infer T)[] | undefined ? T : never) | undefined>(
-      (best, a) => (!best || a.attemptNo >= best.attemptNo ? a : best),
-      undefined,
-    );
+    .reduce<
+      (typeof attempts extends (infer T)[] | undefined ? T : never) | undefined
+    >((best, a) => (!best || a.attemptNo >= best.attemptNo ? a : best), undefined);
   const errorCode = latestFailed?.errorCode || undefined;
   const { data: catalogue } = useGetErrorCatalogueEntry(errorCode || "", {
     query: {
@@ -1380,29 +1388,27 @@ export function InvoiceDetail() {
   // A stored draft with real work must be asked about before replacing.
   // The form's draft lives in localStorage (with a pre-move sessionStorage
   // fallback) — check BOTH homes, or a durable draft gets silently shadowed.
-  // draftHasWork is the form's own bar, so the guard and the form agree on
-  // what counts as work; a corrupt draft reads as empty (the form ignores
-  // it too).
+  // The shared parser applies the form's own work threshold and removes
+  // expired or corrupt records before this replacement decision is made.
   const storedDraftHasWork = (): boolean => {
-    try {
-      if (!me) return false;
-      const key = draftStorageKey(me.userId, me.firmId);
-      const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
-      if (!raw) return false;
-      return draftHasWork(JSON.parse(raw) as Partial<DraftState>);
-    } catch {
-      return false;
-    }
+    if (!me) return false;
+    return storedInvoiceDraftHasWork(draftStorageKey(me.userId, me.firmId));
   };
 
   const startNewFromInvoice = () => {
     const draft = buildDraftFromInvoice();
     if (!draft || !invoice || !me) return;
     const key = draftStorageKey(me.userId, me.firmId);
-    // The form reads localStorage first — seed there, and drop any stale
-    // sessionStorage copy so nothing shadows the new draft.
-    localStorage.setItem(key, JSON.stringify(draft));
-    sessionStorage.removeItem(key);
+    // Seed through the same expiring envelope that the form autosaves.
+    if (!saveInvoiceDraft(key, draft)) {
+      toast({
+        title: "Could not create a local draft",
+        description:
+          "Your browser blocked device storage. Allow site storage, then try again.",
+        variant: "destructive",
+      });
+      return;
+    }
     toast({
       title: "New invoice drafted",
       description: `Copied from ${invoice.invoiceNumber} — give it a new invoice number.`,

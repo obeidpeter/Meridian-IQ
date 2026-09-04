@@ -23,6 +23,7 @@ import {
   reconcile,
   replayDead,
   retryDisposition,
+  registerHandler,
   sweepOutboxGauges,
 } from "./pipeline.ts";
 import { registry } from "../../lib/metrics.ts";
@@ -47,29 +48,33 @@ failingRail.script("*", { outcome: "timeout" });
 
 async function seedInvoice(n: number) {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId: firm,
-    supplierPartyId: supplier,
-    buyerPartyId: buyer,
-    invoiceNumber: `INV-OUT-${n}-${SALT}`,
-    issueDate: "2026-08-01",
-    dueDate: "2026-08-31",
-    status: "submitted",
-    subtotal: "100000.00",
-    vatTotal: "7500.00",
-    grandTotal: "107500.00",
-  });
-  await getDb().insert(invoiceLinesTable).values({
-    invoiceId: id,
-    lineNo: 1,
-    description: `Outage ${SALT}`,
-    quantity: "1.0000",
-    unitPrice: "100000.00",
-    vatRate: "0.0750",
-    lineExtension: "100000.00",
-    vatAmount: "7500.00",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId: firm,
+      supplierPartyId: supplier,
+      buyerPartyId: buyer,
+      invoiceNumber: `INV-OUT-${n}-${SALT}`,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      status: "submitted",
+      subtotal: "100000.00",
+      vatTotal: "7500.00",
+      grandTotal: "107500.00",
+    });
+  await getDb()
+    .insert(invoiceLinesTable)
+    .values({
+      invoiceId: id,
+      lineNo: 1,
+      description: `Outage ${SALT}`,
+      quantity: "1.0000",
+      unitPrice: "100000.00",
+      vatRate: "0.0750",
+      lineExtension: "100000.00",
+      vatAmount: "7500.00",
+    });
   return id;
 }
 
@@ -113,7 +118,8 @@ async function setBreakers(state: "closed" | "open", retryAt: Date | null) {
 async function drainUntilScheduled(id: string) {
   for (let pass = 0; pass < 20; pass++) {
     const row = await outboxRow(id);
-    const ready = row.status === "pending" && row.nextAttemptAt.getTime() <= Date.now();
+    const ready =
+      row.status === "pending" && row.nextAttemptAt.getTime() <= Date.now();
     if (!ready && row.status !== "processing") return;
     if ((await drain(50)) === 0) return;
   }
@@ -125,11 +131,31 @@ let restoreRailEnv: () => void = () => {};
 
 before(async () => {
   restoreRailEnv = clearRailEnv();
-  await getDb().insert(firmsTable).values({ id: firm, name: `Outage Firm ${SALT}` });
-  await getDb().insert(partiesTable).values([
-    { id: supplier, type: "client_business", legalName: `Outage Supplier ${SALT}`, tin: "12345678-0001", street: "1 Marina", city: "Lagos", countryCode: "NG" },
-    { id: buyer, type: "buyer", legalName: `Outage Buyer ${SALT}`, tin: "12345678-0002", street: "2 Marina", city: "Lagos", countryCode: "NG" },
-  ]);
+  await getDb()
+    .insert(firmsTable)
+    .values({ id: firm, name: `Outage Firm ${SALT}` });
+  await getDb()
+    .insert(partiesTable)
+    .values([
+      {
+        id: supplier,
+        type: "client_business",
+        legalName: `Outage Supplier ${SALT}`,
+        tin: "12345678-0001",
+        street: "1 Marina",
+        city: "Lagos",
+        countryCode: "NG",
+      },
+      {
+        id: buyer,
+        type: "buyer",
+        legalName: `Outage Buyer ${SALT}`,
+        tin: "12345678-0002",
+        street: "2 Marina",
+        city: "Lagos",
+        countryCode: "NG",
+      },
+    ]);
   await setBreakers("closed", null);
 });
 
@@ -143,15 +169,32 @@ after(async () => {
 test("backoff is capped and jittered; the disposition needs both the minimum tries and the horizon", () => {
   for (let i = 0; i < 20; i++) {
     const first = backoffMs(0);
-    assert.ok(first >= 1_000 && first <= 2_000, `first backoff in [1s,2s]: ${first}`);
+    assert.ok(
+      first >= 1_000 && first <= 2_000,
+      `first backoff in [1s,2s]: ${first}`,
+    );
     const deep = backoffMs(30);
-    assert.ok(deep >= 450_000 && deep <= 900_000, `deep backoff capped at 15 min: ${deep}`);
+    assert.ok(
+      deep >= 450_000 && deep <= 900_000,
+      `deep backoff capped at 15 min: ${deep}`,
+    );
   }
   const now = new Date();
   const dayAgo = new Date(now.getTime() - 25 * 60 * 60 * 1000);
-  assert.equal(retryDisposition({ maxAttempts: 6, firstAttemptAt: dayAgo }, 6, now).dead, true);
-  assert.equal(retryDisposition({ maxAttempts: 6, firstAttemptAt: dayAgo }, 5, now).dead, false, "minimum tries not yet spent");
-  const fresh = retryDisposition({ maxAttempts: 6, firstAttemptAt: null }, 6, now);
+  assert.equal(
+    retryDisposition({ maxAttempts: 6, firstAttemptAt: dayAgo }, 6, now).dead,
+    true,
+  );
+  assert.equal(
+    retryDisposition({ maxAttempts: 6, firstAttemptAt: dayAgo }, 5, now).dead,
+    false,
+    "minimum tries not yet spent",
+  );
+  const fresh = retryDisposition(
+    { maxAttempts: 6, firstAttemptAt: null },
+    6,
+    now,
+  );
   assert.equal(fresh.dead, false, "the horizon starts at the first attempt");
   assert.equal(fresh.firstAttemptAt, now);
   assert.ok(fresh.nextAttemptAt.getTime() > now.getTime());
@@ -176,13 +219,22 @@ test("every breaker open: the submission parks — nothing sent, no attempt burn
   assert.equal(row.parkCount, 1);
   assert.equal(row.firstAttemptAt, null, "the horizon clock has not started");
   assert.ok(row.parkedUntil && row.parkedUntil.getTime() >= retryAt.getTime());
-  assert.ok(row.parkedUntil && row.parkedUntil.getTime() <= retryAt.getTime() + 2_500, "jitter is bounded");
+  assert.ok(
+    row.parkedUntil && row.parkedUntil.getTime() <= retryAt.getTime() + 2_500,
+    "jitter is bounded",
+  );
   assert.equal(row.nextAttemptAt.getTime(), row.parkedUntil!.getTime());
   assert.match(row.lastError ?? "", /^RAIL_UNAVAILABLE: parked until /);
   assert.deepEqual(mustNotBeCalled.calls, [], "the rail was never called");
-  const attempts = await getDb().select().from(submissionAttemptsTable).where(eq(submissionAttemptsTable.invoiceId, invoiceId));
+  const attempts = await getDb()
+    .select()
+    .from(submissionAttemptsTable)
+    .where(eq(submissionAttemptsTable.invoiceId, invoiceId));
   assert.equal(attempts.length, 0, "a park is not a submission attempt");
-  const [inv] = await getDb().select({ status: invoicesTable.status }).from(invoicesTable).where(eq(invoicesTable.id, invoiceId));
+  const [inv] = await getDb()
+    .select({ status: invoicesTable.status })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, invoiceId));
   assert.equal(inv?.status, "submitted");
   await setBreakers("closed", null);
 });
@@ -196,11 +248,20 @@ test("a retriable rail error backs off under the horizon; horizon + minimum trie
     const before = Date.now();
     await drainUntilScheduled(a);
     const rowA = await outboxRow(a);
-    assert.equal(rowA.status, "pending", "one try with a day of horizon left stays pending");
+    assert.equal(
+      rowA.status,
+      "pending",
+      "one try with a day of horizon left stays pending",
+    );
     assert.equal(rowA.attempts, 1);
-    assert.ok(rowA.firstAttemptAt && rowA.firstAttemptAt.getTime() >= before - 1_000);
+    assert.ok(
+      rowA.firstAttemptAt && rowA.firstAttemptAt.getTime() >= before - 1_000,
+    );
     const delay = rowA.nextAttemptAt.getTime() - Date.now();
-    assert.ok(delay >= 1_000 && delay <= 4_500, `jittered backoff for attempt 1: ${delay}ms`);
+    assert.ok(
+      delay >= 1_000 && delay <= 4_500,
+      `jittered backoff for attempt 1: ${delay}ms`,
+    );
     assert.equal(rowA.lastError, "RAIL_TIMEOUT");
     await setBreakers("closed", null);
 
@@ -237,7 +298,10 @@ test("reconcile never resurrects a dead-lettered submission; a replay restarts i
     .returning({ id: outboxTable.id });
   setRailTransport(null);
   await reconcile();
-  const rows = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, invoiceId));
+  const rows = await getDb()
+    .select()
+    .from(outboxTable)
+    .where(eq(outboxTable.aggregateId, invoiceId));
   assert.equal(rows.length, 1, "no fresh row was queued beside the dead one");
   assert.equal(rows[0]!.status, "dead");
 
@@ -245,7 +309,11 @@ test("reconcile never resurrects a dead-lettered submission; a replay restarts i
   const replayed = await outboxRow(dead!.id);
   assert.equal(replayed.status, "pending");
   assert.equal(replayed.attempts, 0);
-  assert.equal(replayed.firstAttemptAt, null, "a replay starts a fresh horizon");
+  assert.equal(
+    replayed.firstAttemptAt,
+    null,
+    "a replay starts a fresh horizon",
+  );
   assert.equal(replayed.parkCount, 0);
   assert.equal(replayed.lastError, null);
   // Settle it so the shared outbox does not carry a live row for this run.
@@ -256,7 +324,64 @@ test("the gauges sweep exposes outbox depth by state and the oldest pending age"
   await sweepOutboxGauges();
   const text = await registry.metrics();
   for (const state of ["pending", "parked", "processing", "dead"]) {
-    assert.match(text, new RegExp(`meridian_outbox_events\\{state="${state}"\\} \\d+`));
+    assert.match(
+      text,
+      new RegExp(`meridian_outbox_events\\{state="${state}"\\} \\d+`),
+    );
   }
   assert.match(text, /meridian_outbox_oldest_pending_age_seconds \d/);
+});
+
+test("an expired processing lease is reclaimed once while an active lease stays owned", async () => {
+  const eventType = `test.lease.${SALT}`;
+  let handled = 0;
+  registerHandler(eventType, async () => {
+    handled += 1;
+    return { kind: "done" };
+  });
+  const staleId = randomUUID();
+  const activeId = randomUUID();
+  await getDb()
+    .insert(outboxTable)
+    .values([
+      {
+        id: staleId,
+        aggregateType: "test",
+        aggregateId: `stale-${SALT}`,
+        type: eventType,
+        payload: {},
+        status: "processing",
+        lockedAt: new Date(Date.now() - 120_000),
+        lockToken: randomUUID(),
+        lockExpiresAt: new Date(Date.now() - 60_000),
+      },
+      {
+        id: activeId,
+        aggregateType: "test",
+        aggregateId: `active-${SALT}`,
+        type: eventType,
+        payload: {},
+        status: "processing",
+        lockedAt: new Date(),
+        lockToken: randomUUID(),
+        lockExpiresAt: new Date(Date.now() + 10 * 60_000),
+      },
+    ]);
+  try {
+    for (let pass = 0; pass < 20; pass += 1) {
+      if ((await outboxRow(staleId)).status === "done") break;
+      await drain(50);
+    }
+    const reclaimed = await outboxRow(staleId);
+    const active = await outboxRow(activeId);
+    assert.equal(reclaimed.status, "done");
+    assert.equal(reclaimed.lockToken, null);
+    assert.equal(reclaimed.lockExpiresAt, null);
+    assert.equal(handled, 1, "the reclaimed event finalized exactly once");
+    assert.equal(active.status, "processing");
+    assert.ok(active.lockExpiresAt && active.lockExpiresAt > new Date());
+  } finally {
+    await getDb().delete(outboxTable).where(eq(outboxTable.id, staleId));
+    await getDb().delete(outboxTable).where(eq(outboxTable.id, activeId));
+  }
 });

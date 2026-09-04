@@ -1,4 +1,16 @@
-import { and, asc, eq, gt, isNotNull, lt, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  isNotNull,
+  lt,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   getDb,
   pool,
@@ -18,12 +30,13 @@ import {
   railOpenCooldownMs,
   recoverExistingStamp,
   submitWithFailover,
+  type FailoverResult,
   type StampResult,
 } from "../rails/adapter";
 import { RailLookupError } from "../rails/faults";
 import { railTimeoutMs } from "../rails/transports/http";
 import { openInvoiceCase } from "../desk/cases";
-import { isRetriable } from "../errors";
+import { DomainError, isRetriable } from "../errors";
 import { logger } from "../../lib/logger";
 import {
   sweepRunsTotal,
@@ -70,7 +83,10 @@ export function outboxRetryHorizonMs(): number {
 
 /** Capped exponential backoff with half-range jitter: [cap/2, cap] of 2s·2^n. */
 export function backoffMs(attempts: number): number {
-  const raw = Math.min(outboxMaxBackoffMs(), BASE_BACKOFF_MS * Math.pow(2, attempts));
+  const raw = Math.min(
+    outboxMaxBackoffMs(),
+    BASE_BACKOFF_MS * Math.pow(2, attempts),
+  );
   return Math.floor(raw / 2 + Math.random() * (raw / 2));
 }
 
@@ -92,7 +108,9 @@ export function retryDisposition(
   const backoffAt = new Date(now.getTime() + backoffMs(attempts));
   // A rail's Retry-After (R95) is a FLOOR under the backoff, never a ceiling.
   const retryAt =
-    notBefore && notBefore.getTime() > backoffAt.getTime() ? notBefore : backoffAt;
+    notBefore && notBefore.getTime() > backoffAt.getTime()
+      ? notBefore
+      : backoffAt;
   return {
     dead,
     firstAttemptAt,
@@ -215,9 +233,22 @@ async function persistStamp(
   }
 }
 
-async function handleInvoiceSubmit(
+interface PreparedInvoiceSubmit {
+  invoice: InvoiceRow;
+  canonical: Awaited<ReturnType<typeof buildCanonical>>;
+  idempotencyKey: string;
+  attemptNo: number;
+}
+
+interface InvoiceRailEffect {
+  failover: FailoverResult;
+  recovered: StampResult | null;
+  recoveryError: string | null;
+}
+
+async function prepareInvoiceSubmit(
   event: OutboxEvent,
-): Promise<HandlerOutcome> {
+): Promise<PreparedInvoiceSubmit | null> {
   const invoiceId = String(
     (event.payload as { invoiceId?: string }).invoiceId ?? "",
   );
@@ -226,15 +257,61 @@ async function handleInvoiceSubmit(
     .from(invoicesTable)
     .where(eq(invoicesTable.id, invoiceId))
     .limit(1);
-  if (!invoice) return { kind: "dead", error: `Invoice ${invoiceId} missing` };
+  if (!invoice) return null;
 
   const canonical = await buildCanonical(invoiceId);
-  const idempotencyKey = `${invoiceId}:${invoice.invoiceNumber}`;
-  const attemptNo = event.attempts + 1;
-  const { result, sent, circuitOpen, retryAfter } = await submitWithFailover(
+  return {
+    invoice,
     canonical,
-    idempotencyKey,
+    idempotencyKey: `${invoiceId}:${invoice.invoiceNumber}`,
+    attemptNo: event.attempts + 1,
+  };
+}
+
+// The authority I/O stage deliberately owns no database context. A process
+// crash after the rail accepts is recovered by the rail idempotency key and
+// duplicate lookup; the durable outbox lease is reclaimed independently.
+async function performInvoiceRailCall(
+  prepared: PreparedInvoiceSubmit,
+): Promise<InvoiceRailEffect> {
+  const failover = await submitWithFailover(
+    prepared.canonical,
+    prepared.idempotencyKey,
   );
+  let recovered: StampResult | null = null;
+  let recoveryError: string | null = null;
+  if (
+    failover.result.status === "rejected" &&
+    failover.result.errorCode === "MBS_DUPLICATE"
+  ) {
+    try {
+      recovered = await recoverExistingStamp(
+        prepared.canonical,
+        prepared.idempotencyKey,
+        failover.result.rail,
+      );
+    } catch (err) {
+      if (!(err instanceof RailLookupError)) throw err;
+      recoveryError = `${err.code}: stamp lookup failed`;
+    }
+  }
+  return { failover, recovered, recoveryError };
+}
+
+async function finalizeInvoiceSubmit(
+  event: OutboxEvent,
+  prepared: PreparedInvoiceSubmit | null,
+  effect: InvoiceRailEffect | null,
+): Promise<HandlerOutcome> {
+  if (!prepared || !effect) {
+    const invoiceId = String(
+      (event.payload as { invoiceId?: string }).invoiceId ?? "",
+    );
+    return { kind: "dead", error: `Invoice ${invoiceId} missing` };
+  }
+  const { invoice, canonical, idempotencyKey, attemptNo } = prepared;
+  const invoiceId = invoice.id;
+  const { result, sent, circuitOpen, retryAfter } = effect.failover;
 
   // Every breaker is open: nothing was sent, so there is no attempt to record
   // and none to burn — park until the earliest rail will take a probe (R96).
@@ -259,6 +336,7 @@ async function handleInvoiceSubmit(
         rail: r.rail,
         attemptNo,
         idempotencyKey,
+        correlationId: event.correlationId,
         status:
           r.status === "accepted"
             ? "accepted"
@@ -281,33 +359,24 @@ async function handleInvoiceSubmit(
   }
 
   if (result.status === "rejected" && result.errorCode === "MBS_DUPLICATE") {
-    // The rail already holds a stamp for this submission — an earlier try
-    // was accepted but its result never reached us. Recover it instead of
-    // failing an invoice the authority has stamped (R97).
-    let recovered: StampResult | null;
-    try {
-      recovered = await recoverExistingStamp(canonical, idempotencyKey, result.rail);
-    } catch (err) {
-      if (!(err instanceof RailLookupError)) throw err;
-      // The rail could not be ASKED (timeout, 5xx, refused credentials): the
-      // stamp may well exist, so this is a retry, never a terminal failure.
-      // The 409 attempt row above stays on the record.
-      return { kind: "retry", error: `${err.code}: stamp lookup failed` };
+    if (effect.recoveryError) {
+      return { kind: "retry", error: effect.recoveryError };
     }
-    if (recovered) {
+    if (effect.recovered) {
       await getDb()
         .insert(submissionAttemptsTable)
         .values({
           invoiceId,
-          rail: recovered.rail,
+          rail: effect.recovered.rail,
           attemptNo,
           idempotencyKey,
+          correlationId: event.correlationId,
           status: "accepted",
           requestPayload: { lookup: true, idempotencyKey },
-          responsePayload: { ...recovered.raw, recovered: true },
+          responsePayload: { ...effect.recovered.raw, recovered: true },
           errorCode: null,
         });
-      await persistStamp(invoice, recovered, true);
+      await persistStamp(invoice, effect.recovered, true);
       return { kind: "done" };
     }
     // No rail knows the submission: keep the terminal rejection, but say so.
@@ -461,7 +530,6 @@ async function handleLifecycleChanged(
 }
 
 const HANDLERS: Record<string, (e: OutboxEvent) => Promise<HandlerOutcome>> = {
-  "invoice.submit": handleInvoiceSubmit,
   "invoice.lifecycle_changed": handleLifecycleChanged,
 };
 
@@ -484,15 +552,26 @@ export type { HandlerOutcome };
 // (and now `firstAttemptAt`/`parkCount`) undefined on the claimed event and
 // silently disabled attempt-count dead-lettering (R96).
 async function claimnext(): Promise<OutboxEvent | null> {
+  const lockToken = randomUUID();
+  const lockExpiresAt = new Date(Date.now() + outboxLeaseMs());
   const [event] = await getDb()
     .update(outboxTable)
-    .set({ status: "processing", lockedAt: sql`now()` })
+    .set({
+      status: "processing",
+      lockedAt: sql`now()`,
+      lockToken,
+      lockExpiresAt,
+    })
     .where(
       eq(
         outboxTable.id,
         sql`(
           SELECT id FROM outbox_events
-          WHERE status = 'pending' AND next_attempt_at <= now()
+          WHERE (status = 'pending' AND next_attempt_at <= now())
+             OR (status = 'processing' AND (
+                  lock_expires_at <= now()
+                  OR (lock_expires_at IS NULL AND locked_at < now() - interval '5 minutes')
+                ))
           ORDER BY created_at ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -503,99 +582,150 @@ async function claimnext(): Promise<OutboxEvent | null> {
   return event ?? null;
 }
 
+class OutboxLeaseLost extends Error {}
+
+async function lockActiveLease(event: OutboxEvent): Promise<void> {
+  if (!event.lockToken) throw new OutboxLeaseLost("Claim has no lease token");
+  const result = await getDb().execute<{ id: string }>(sql`
+    SELECT id FROM outbox_events
+    WHERE id = ${event.id}
+      AND status = 'processing'
+      AND lock_token = ${event.lockToken}
+    FOR UPDATE
+  `);
+  const rows =
+    (result as unknown as { rows?: { id: string }[] }).rows ??
+    (result as unknown as { id: string }[]);
+  if (rows.length !== 1) {
+    throw new OutboxLeaseLost(`Lease lost for outbox event ${event.id}`);
+  }
+}
+
+async function applyHandlerOutcome(
+  event: OutboxEvent,
+  outcome: HandlerOutcome,
+): Promise<void> {
+  const now = new Date();
+  const attempts = event.attempts + 1;
+  const firstAttemptAt = event.firstAttemptAt ?? now;
+  const released = { lockedAt: null, lockToken: null, lockExpiresAt: null };
+  if (outcome.kind === "park") {
+    const until = new Date(
+      outcome.until.getTime() + Math.random() * PARK_JITTER_MS,
+    );
+    await getDb()
+      .update(outboxTable)
+      .set({
+        ...released,
+        status: "pending",
+        nextAttemptAt: until,
+        parkedUntil: until,
+        parkCount: event.parkCount + 1,
+        lastError: `${outcome.error}: parked until ${until.toISOString()}`,
+      })
+      .where(eq(outboxTable.id, event.id));
+    return;
+  }
+  if (outcome.kind === "done") {
+    const containsInboundPayload = event.type.startsWith("inbound.");
+    await getDb()
+      .update(outboxTable)
+      .set({
+        ...released,
+        status: "done",
+        attempts,
+        firstAttemptAt,
+        parkedUntil: null,
+        ...(containsInboundPayload ? { payload: { redacted: true } } : {}),
+      })
+      .where(eq(outboxTable.id, event.id));
+    return;
+  }
+  if (outcome.kind === "dead") {
+    await getDb()
+      .update(outboxTable)
+      .set({
+        ...released,
+        status: "dead",
+        attempts,
+        firstAttemptAt,
+        parkedUntil: null,
+        lastError: outcome.error,
+        nextAttemptAt: now,
+      })
+      .where(eq(outboxTable.id, event.id));
+    await openCaseForDeadEvent(event, outcome.error);
+    return;
+  }
+  const next = retryDisposition(event, attempts, now, outcome.notBefore);
+  await getDb()
+    .update(outboxTable)
+    .set({
+      ...released,
+      status: next.dead ? "dead" : "pending",
+      attempts,
+      firstAttemptAt: next.firstAttemptAt,
+      parkedUntil: null,
+      lastError: outcome.error,
+      nextAttemptAt: next.nextAttemptAt,
+    })
+    .where(eq(outboxTable.id, event.id));
+  if (next.dead) await openCaseForDeadEvent(event, outcome.error);
+}
+
 async function processOne(): Promise<boolean> {
-  // The whole claim -> handle -> outbox-status-update runs in one bypass
-  // transaction (CON-01/SEC-02): the worker has no request principal, so it must
-  // bypass tenant RLS, and a single transaction makes each event's domain writes
-  // and its outbox bookkeeping atomic. A thrown error rolls the claim back so the
-  // event returns to `pending` and is retried, never left stuck in `processing`.
-  // An UNEXPECTED handler throw must not commit the handler's partial domain
-  // writes (CON-03). The old code caught the throw and re-queued in the SAME
-  // transaction, so a deadlock after a stamp/status write already succeeded
-  // committed those writes and the retry appended duplicate immutable lifecycle
-  // and audit rows. Handlers signal expected failures by RETURNING a retry/dead
-  // outcome (those commit their bookkeeping normally); anything that THROWS
-  // propagates out of the transaction so it rolls back — discarding both the
-  // partial writes and the `processing` claim (the event returns to `pending`).
-  // The failed attempt is then recorded in a SEPARATE transaction so the retry
-  // stays bounded and backed-off without re-running the handler.
-  let claimedEvent: OutboxEvent | null = null;
-  let handlerError: string | null = null;
+  // The claim commits before any handler runs. This frees the pool while an
+  // authority request is in flight; lockToken/lockExpiresAt make a crash
+  // reclaimable and make a late worker's finalization fail closed.
+  const event = await runInBypassContext(claimnextSafe);
+  if (!event) return false;
+
   try {
-    return await runInBypassContext(async () => {
-      // The rail call runs inside this transaction (R95): bound the hold so a
-      // deployment default shorter than the transport budget cannot kill the
-      // session mid-call, and a hung call cannot pin the connection forever.
-      // An event makes at most four rail calls (two submits, two lookups).
-      await getDb().execute(
-        sql.raw(
-          `SET LOCAL idle_in_transaction_session_timeout = '${transactionHoldBudgetMs()}ms'`,
-        ),
+    if (event.type === "invoice.submit") {
+      const prepared = await runInBypassContext(() =>
+        prepareInvoiceSubmit(event),
       );
-      const event = await claimnextSafe();
-      if (!event) return false;
-      claimedEvent = event;
-      const handler = HANDLERS[event.type];
-      let outcome: HandlerOutcome;
-      try {
-        outcome = handler
-          ? await handler(event)
-          : { kind: "dead", error: `No handler for ${event.type}` };
-      } catch (err) {
-        handlerError = err instanceof Error ? err.message : String(err);
-        throw err; // roll back partial domain writes + the claim
-      }
-      const now = new Date();
-      const attempts = event.attempts + 1;
-      const firstAttemptAt = event.firstAttemptAt ?? now;
-      if (outcome.kind === "park") {
-        // Parked (R96): status stays pending so the drain index still holds
-        // the row, the attempt counter and the horizon clock do not move,
-        // and the wake-up is jittered so a parked backlog does not probe
-        // the rail in one wave.
-        const until = new Date(
-          outcome.until.getTime() + Math.random() * PARK_JITTER_MS,
-        );
-        await getDb()
-          .update(outboxTable)
-          .set({
-            status: "pending",
-            lockedAt: null,
-            nextAttemptAt: until,
-            parkedUntil: until,
-            parkCount: event.parkCount + 1,
-            lastError: `${outcome.error}: parked until ${until.toISOString()}`,
-          })
-          .where(eq(outboxTable.id, event.id));
-      } else if (outcome.kind === "done") {
-        const containsInboundPayload = event.type.startsWith("inbound.");
-        await getDb()
-          .update(outboxTable)
-          .set({
-            status: "done",
-            attempts,
-            firstAttemptAt,
-            parkedUntil: null,
-            lockedAt: null,
-            ...(containsInboundPayload ? { payload: { redacted: true } } : {}),
-          })
-          .where(eq(outboxTable.id, event.id));
-      } else if (outcome.kind === "dead") {
-        await getDb()
-          .update(outboxTable)
-          .set({
-            status: "dead",
-            attempts,
-            firstAttemptAt,
-            parkedUntil: null,
-            lockedAt: null,
-            lastError: outcome.error,
-            nextAttemptAt: now,
-          })
-          .where(eq(outboxTable.id, event.id));
-        await openCaseForDeadEvent(event, outcome.error);
-      } else {
-        const next = retryDisposition(event, attempts, now, outcome.notBefore);
+      const effect = prepared ? await performInvoiceRailCall(prepared) : null;
+      await runInBypassContext(
+        async () => {
+          await lockActiveLease(event);
+          const outcome = await finalizeInvoiceSubmit(event, prepared, effect);
+          await applyHandlerOutcome(event, outcome);
+        },
+        { correlationId: event.correlationId },
+      );
+    } else {
+      await runInBypassContext(
+        async () => {
+          await lockActiveLease(event);
+          const handler = HANDLERS[event.type];
+          const outcome = handler
+            ? await handler(event)
+            : { kind: "dead" as const, error: `No handler for ${event.type}` };
+          await applyHandlerOutcome(event, outcome);
+        },
+        { correlationId: event.correlationId },
+      );
+    }
+  } catch (error) {
+    if (error instanceof OutboxLeaseLost) {
+      logger.warn(
+        { eventId: event.id, correlationId: event.correlationId },
+        "outbox lease expired before finalization; a new worker owns the event",
+      );
+      return true;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    await runInBypassContext(
+      async () => {
+        try {
+          await lockActiveLease(event);
+        } catch (leaseError) {
+          if (leaseError instanceof OutboxLeaseLost) return;
+          throw leaseError;
+        }
+        const attempts = event.attempts + 1;
+        const next = retryDisposition(event, attempts);
         await getDb()
           .update(outboxTable)
           .set({
@@ -604,42 +734,18 @@ async function processOne(): Promise<boolean> {
             firstAttemptAt: next.firstAttemptAt,
             parkedUntil: null,
             lockedAt: null,
-            lastError: outcome.error,
+            lockToken: null,
+            lockExpiresAt: null,
+            lastError: message,
             nextAttemptAt: next.nextAttemptAt,
           })
           .where(eq(outboxTable.id, event.id));
-        if (next.dead) await openCaseForDeadEvent(event, outcome.error);
-      }
-      return true;
-    });
-  } catch (err) {
-    // Distinguish a handler throw (which we rolled back on purpose) from an
-    // infrastructure/claim error unrelated to a handler.
-    if (claimedEvent === null || handlerError === null) throw err;
-    const event: OutboxEvent = claimedEvent;
-    const message: string = handlerError;
-    // Fresh transaction: the domain writes and the claim were rolled back, so
-    // record only the failed attempt + backoff (or dead-letter). No handler
-    // runs here, so no partial ledger rows can be written.
-    await runInBypassContext(async () => {
-      const attempts = event.attempts + 1;
-      const next = retryDisposition(event, attempts);
-      await getDb()
-        .update(outboxTable)
-        .set({
-          status: next.dead ? "dead" : "pending",
-          attempts,
-          firstAttemptAt: next.firstAttemptAt,
-          parkedUntil: null,
-          lockedAt: null,
-          lastError: message,
-          nextAttemptAt: next.nextAttemptAt,
-        })
-        .where(eq(outboxTable.id, event.id));
-      if (next.dead) await openCaseForDeadEvent(event, message);
-    });
-    return true;
+        if (next.dead) await openCaseForDeadEvent(event, message);
+      },
+      { correlationId: event.correlationId },
+    );
   }
+  return true;
 }
 
 // SME-06/CON-04: a dead-lettered invoice event is by definition an unresolved
@@ -679,9 +785,18 @@ async function claimnextSafe(): Promise<OutboxEvent | null> {
   }
 }
 
-// The worst an event can hold its transaction: four rail calls plus slack.
+// Compatibility export for the former in-transaction rail budget. It now
+// defines the minimum durable lease around the transaction-free I/O stage.
 export function transactionHoldBudgetMs(): number {
   return 4 * railTimeoutMs() + 30_000;
+}
+
+export function outboxLeaseMs(): number {
+  const configured = Number(process.env.OUTBOX_LEASE_MS);
+  const minimum = transactionHoldBudgetMs();
+  return Number.isFinite(configured) && configured >= minimum
+    ? Math.floor(configured)
+    : minimum;
 }
 
 // Set by stopWorker (R95): a drain pass finishes the event in flight and
@@ -709,75 +824,108 @@ export async function drain(max = 50): Promise<number> {
 // recovered stamp is persisted in place; only an unknown submission is
 // re-queued. Returns the number of invoices re-queued (the operator counter);
 // recoveries are logged.
-// Each stuck invoice is reconciled in its OWN short transaction (R95): the
-// rail lookups it may make are bounded per call, but a pass over K invoices
-// against a hung rail must not hold one connection and the reconcile lock for
-// K × that budget. A pass takes at most RECONCILE_BATCH invoices, oldest
-// first; the next pass continues where it left off.
+// Each stuck invoice is prepared and finalized in short transactions, with the
+// rail lookup between them while no pooled connection is held. A pass takes at
+// most RECONCILE_BATCH invoices, oldest first; the next pass continues where
+// it left off.
 const RECONCILE_BATCH = 50;
 
 type ReconcileOutcome = "skipped" | "dead" | "recovered" | "requeued";
 
 async function reconcileOne(invoice: InvoiceRow): Promise<ReconcileOutcome> {
-  const [stamp] = await getDb()
-    .select({ id: stampRecordsTable.id })
-    .from(stampRecordsTable)
-    .where(eq(stampRecordsTable.invoiceId, invoice.id))
-    .limit(1);
-  if (stamp) return "skipped";
-  // A live row (pending — parked or not — or processing) is already on
-  // its way. A DEAD row is terminal until an operator replays it (R96):
-  // resurrecting it here would re-queue a fresh row every pass, burn a
-  // new retry budget, and mint a new alert and Desk case each time.
-  const open = await getDb()
-    .select({ status: outboxTable.status })
-    .from(outboxTable)
-    .where(
-      and(
-        eq(outboxTable.aggregateId, invoice.id),
-        ne(outboxTable.status, "done"),
-      ),
-    );
-  if (open.some((row) => row.status === "dead")) return "dead";
-  if (open.length > 0) return "skipped";
   const idempotencyKey = `${invoice.id}:${invoice.invoiceNumber}`;
-  // Fail soft: an invoice whose canonical form no longer builds (or a rail
-  // lookup that could not be answered) is re-queued so the submit handler
-  // records the failure with its reason, rather than aborting the pass.
-  const existing = await buildCanonical(invoice.id)
-    .then((canonical) => recoverExistingStamp(canonical, idempotencyKey))
-    .catch((err: unknown) => {
+  const prepared = await runInBypassContext(async () => {
+    const [stamp] = await getDb()
+      .select({ id: stampRecordsTable.id })
+      .from(stampRecordsTable)
+      .where(eq(stampRecordsTable.invoiceId, invoice.id))
+      .limit(1);
+    if (stamp) return { outcome: "skipped" as const, canonical: null };
+    const open = await getDb()
+      .select({ status: outboxTable.status })
+      .from(outboxTable)
+      .where(
+        and(
+          eq(outboxTable.aggregateId, invoice.id),
+          ne(outboxTable.status, "done"),
+        ),
+      );
+    if (open.some((row) => row.status === "dead")) {
+      return { outcome: "dead" as const, canonical: null };
+    }
+    if (open.length > 0) {
+      return { outcome: "skipped" as const, canonical: null };
+    }
+    const canonical = await buildCanonical(invoice.id).catch((err: unknown) => {
       logger.warn(
         { invoiceId: invoice.id, err },
-        "reconcile could not ask the rail for an existing stamp; re-queuing",
+        "reconcile could not build the canonical invoice; re-queuing",
       );
       return null;
     });
-  if (existing) {
+    return { outcome: null, canonical };
+  });
+  if (prepared.outcome) return prepared.outcome;
+
+  // No database transaction is open across the authority lookup.
+  const existing = prepared.canonical
+    ? await recoverExistingStamp(prepared.canonical, idempotencyKey).catch(
+        (err: unknown) => {
+          logger.warn(
+            { invoiceId: invoice.id, err },
+            "reconcile could not ask the rail for an existing stamp; re-queuing",
+          );
+          return null;
+        },
+      )
+    : null;
+
+  return runInBypassContext(async () => {
+    // Re-check after I/O: another worker may have stamped or queued the invoice
+    // while this lookup was in flight.
+    const [stamp] = await getDb()
+      .select({ id: stampRecordsTable.id })
+      .from(stampRecordsTable)
+      .where(eq(stampRecordsTable.invoiceId, invoice.id))
+      .limit(1);
+    if (stamp) return "skipped";
+    const open = await getDb()
+      .select({ status: outboxTable.status })
+      .from(outboxTable)
+      .where(
+        and(
+          eq(outboxTable.aggregateId, invoice.id),
+          ne(outboxTable.status, "done"),
+        ),
+      );
+    if (open.some((row) => row.status === "dead")) return "dead";
+    if (open.length > 0) return "skipped";
+    if (existing) {
+      await getDb()
+        .insert(submissionAttemptsTable)
+        .values({
+          invoiceId: invoice.id,
+          rail: existing.rail,
+          attemptNo: 0,
+          idempotencyKey,
+          status: "accepted",
+          requestPayload: { lookup: true, idempotencyKey, source: "reconcile" },
+          responsePayload: { ...existing.raw, recovered: true },
+          errorCode: null,
+        });
+      await persistStamp(invoice, existing, true);
+      return "recovered";
+    }
     await getDb()
-      .insert(submissionAttemptsTable)
+      .insert(outboxTable)
       .values({
-        invoiceId: invoice.id,
-        rail: existing.rail,
-        attemptNo: 0,
-        idempotencyKey,
-        status: "accepted",
-        requestPayload: { lookup: true, idempotencyKey, source: "reconcile" },
-        responsePayload: { ...existing.raw, recovered: true },
-        errorCode: null,
+        aggregateType: "invoice",
+        aggregateId: invoice.id,
+        type: "invoice.submit",
+        payload: { invoiceId: invoice.id },
       });
-    await persistStamp(invoice, existing, true);
-    return "recovered";
-  }
-  await getDb()
-    .insert(outboxTable)
-    .values({
-      aggregateType: "invoice",
-      aggregateId: invoice.id,
-      type: "invoice.submit",
-      payload: { invoiceId: invoice.id },
-    });
-  return "requeued";
+    return "requeued";
+  });
 }
 
 export async function reconcile(): Promise<number> {
@@ -819,7 +967,7 @@ export async function reconcile(): Promise<number> {
   let recovered = 0;
   let deadLettered = 0;
   for (const invoice of stuck) {
-    const outcome = await runInBypassContext(() => reconcileOne(invoice));
+    const outcome = await reconcileOne(invoice);
     if (outcome === "dead") deadLettered++;
     else if (outcome === "recovered") recovered++;
     else if (outcome === "requeued") requeued++;
@@ -892,6 +1040,9 @@ export async function replayDead(outboxId: string): Promise<void> {
         firstAttemptAt: null,
         parkedUntil: null,
         parkCount: 0,
+        lockedAt: null,
+        lockToken: null,
+        lockExpiresAt: null,
       })
       .where(and(eq(outboxTable.id, outboxId), eq(outboxTable.status, "dead")));
   });
@@ -900,43 +1051,159 @@ export async function replayDead(outboxId: string): Promise<void> {
 // The events still on their way (R102): pending rows that have already
 // failed at least once, or are parked behind a breaker — the Desk's view of
 // "what is retrying and why", bounded like every list.
+export interface QueuePage {
+  items: OutboxEvent[];
+  nextCursor: string | null;
+}
+
+type QueueCursor = {
+  kind: "dead" | "retrying";
+  primary: string;
+  createdAt: string;
+  id: string;
+};
+
+const UUID_CURSOR_VALUE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function encodeQueueCursor(cursor: QueueCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeQueueCursor(
+  raw: string | undefined,
+  kind: QueueCursor["kind"],
+): QueueCursor | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(raw, "base64url").toString("utf8"),
+    ) as Partial<QueueCursor>;
+    if (
+      parsed.kind !== kind ||
+      typeof parsed.primary !== "string" ||
+      Number.isNaN(Date.parse(parsed.primary)) ||
+      typeof parsed.createdAt !== "string" ||
+      Number.isNaN(Date.parse(parsed.createdAt)) ||
+      typeof parsed.id !== "string" ||
+      !UUID_CURSOR_VALUE.test(parsed.id)
+    ) {
+      throw new Error("shape");
+    }
+    return parsed as QueueCursor;
+  } catch {
+    throw new DomainError(
+      "INVALID_CURSOR",
+      "The queue cursor is invalid or belongs to a different list",
+      400,
+    );
+  }
+}
+
+function queuePage(
+  rows: OutboxEvent[],
+  limit: number,
+  kind: QueueCursor["kind"],
+  primary: (row: OutboxEvent) => Date,
+): QueuePage {
+  const items = rows.slice(0, limit);
+  const last = items.at(-1);
+  return {
+    items,
+    nextCursor:
+      rows.length > limit && last
+        ? encodeQueueCursor({
+            kind,
+            primary: primary(last).toISOString(),
+            createdAt: last.createdAt.toISOString(),
+            id: last.id,
+          })
+        : null,
+  };
+}
+
 export async function listRetrying(bounds: {
   limit: number;
-  offset: number;
-}): Promise<OutboxEvent[]> {
+  cursor?: string | undefined;
+}): Promise<QueuePage> {
   return runInBypassContext(async () => {
+    const cursor = decodeQueueCursor(bounds.cursor, "retrying");
+    // node-postgres materializes timestamps as millisecond-precision Dates.
+    // Normalize PostgreSQL's microseconds in both ORDER BY and comparisons so
+    // the boundary row cannot repeat on the next cursor page.
+    const retryAt = sql<Date>`date_trunc('milliseconds', ${outboxTable.nextAttemptAt})`;
+    const createdAt = sql<Date>`date_trunc('milliseconds', ${outboxTable.createdAt})`;
+    const retrying = and(
+      eq(outboxTable.status, "pending"),
+      or(gt(outboxTable.attempts, 0), isNotNull(outboxTable.parkedUntil)),
+    );
+    const after = cursor
+      ? or(
+          gt(retryAt, new Date(cursor.primary)),
+          and(
+            eq(retryAt, new Date(cursor.primary)),
+            or(
+              gt(createdAt, new Date(cursor.createdAt)),
+              and(
+                eq(createdAt, new Date(cursor.createdAt)),
+                gt(outboxTable.id, cursor.id),
+              ),
+            ),
+          ),
+        )
+      : undefined;
     const rows = await getDb()
       .select()
       .from(outboxTable)
-      .where(
-        and(
-          eq(outboxTable.status, "pending"),
-          or(gt(outboxTable.attempts, 0), isNotNull(outboxTable.parkedUntil)),
-        ),
-      )
-      .orderBy(asc(outboxTable.nextAttemptAt), asc(outboxTable.createdAt))
-      .limit(bounds.limit)
-      .offset(bounds.offset);
-    return rows.map((row) =>
+      .where(after ? and(retrying, after) : retrying)
+      .orderBy(asc(retryAt), asc(createdAt), asc(outboxTable.id))
+      .limit(bounds.limit + 1);
+    const redacted = rows.map((row) =>
       row.type === "inbound.email" || row.type === "inbound.whatsapp"
         ? { ...row, payload: { redacted: true } }
         : row,
+    );
+    return queuePage(
+      redacted,
+      bounds.limit,
+      "retrying",
+      (row) => row.nextAttemptAt,
     );
   });
 }
 
-export async function listDeadLetters(): Promise<OutboxEvent[]> {
+export async function listDeadLetters(bounds: {
+  limit: number;
+  cursor?: string | undefined;
+}): Promise<QueuePage> {
   return runInBypassContext(async () => {
+    const cursor = decodeQueueCursor(bounds.cursor, "dead");
+    const createdAt = sql<Date>`date_trunc('milliseconds', ${outboxTable.createdAt})`;
+    const after = cursor
+      ? or(
+          gt(createdAt, new Date(cursor.createdAt)),
+          and(
+            eq(createdAt, new Date(cursor.createdAt)),
+            gt(outboxTable.id, cursor.id),
+          ),
+        )
+      : undefined;
     const rows = await getDb()
       .select()
       .from(outboxTable)
-      .where(eq(outboxTable.status, "dead"))
-      .orderBy(asc(outboxTable.createdAt));
-    return rows.map((row) =>
+      .where(
+        after
+          ? and(eq(outboxTable.status, "dead"), after)
+          : eq(outboxTable.status, "dead"),
+      )
+      .orderBy(asc(createdAt), asc(outboxTable.id))
+      .limit(bounds.limit + 1);
+    const redacted = rows.map((row) =>
       row.type === "inbound.email" || row.type === "inbound.whatsapp"
         ? { ...row, payload: { redacted: true } }
         : row,
     );
+    return queuePage(redacted, bounds.limit, "dead", (row) => row.createdAt);
   });
 }
 
@@ -1093,7 +1360,9 @@ export async function sweepOutboxGauges(): Promise<void> {
   outboxEvents.set({ state: "parked" }, row?.parked ?? 0);
   outboxEvents.set({ state: "processing" }, row?.processing ?? 0);
   outboxEvents.set({ state: "dead" }, row?.dead ?? 0);
-  outboxOldestPendingAgeSeconds.set(Number(row?.oldest_pending_age_seconds ?? 0));
+  outboxOldestPendingAgeSeconds.set(
+    Number(row?.oldest_pending_age_seconds ?? 0),
+  );
 }
 
 registerSweep("pipeline.gauges", sweepOutboxGauges);
@@ -1286,7 +1555,9 @@ export async function runScheduledWorkOnce(): Promise<{
 // its NAME and logged, not silently dropped, and does not abort its siblings.
 // Exported over an explicit list so a test can drive it without touching the
 // registry.
-export async function runSweepsOnce(sweeps: RegisteredSweep[]): Promise<number> {
+export async function runSweepsOnce(
+  sweeps: RegisteredSweep[],
+): Promise<number> {
   let failures = 0;
   for (const sweep of sweeps) {
     const timeoutMs = sweep.timeoutMs || defaultSweepTimeoutMs();

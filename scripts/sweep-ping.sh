@@ -11,22 +11,8 @@
 # external cron). The pre-breach alert margin is 4 hours, so a 5-minute cadence
 # leaves ample headroom. The endpoint is idempotent and safe to over-call.
 #
-# Usage:
-#   SWEEP_TOKEN=... ./scripts/sweep-ping.sh
-#   SWEEP_URL=https://example.com/api/internal/sweep SWEEP_TOKEN=... ./scripts/sweep-ping.sh
-#
-# SWEEP_TOKEN may be the legacy single token or any secret from the SWEEP_KEYS
-# ring (R100): this pinger uses the plain x-op-token path, which stays open
-# until the deployment sets OP_LEGACY_TOKENS=off — at which point the
-# scheduler must sign its requests (see docs/platform.md, "Machine-rail
-# credentials").
+# Usage: SWEEP_TOKEN=... ./scripts/sweep-ping.sh
+# The Node pinger signs every call, including a legacy single-token deployment
+# (key id `legacy`), so production can keep OP_LEGACY_TOKENS off.
 set -eu
-
-SWEEP_URL="${SWEEP_URL:-https://meridian-iq.replit.app/api/internal/sweep}"
-: "${SWEEP_TOKEN:?SWEEP_TOKEN must be set}"
-
-# --max-time bounds a hung request; --retry covers cold-start flakiness
-# (connection resets while the instance is waking).
-curl -fsS --max-time 120 --retry 3 --retry-delay 5 --retry-all-errors \
-  -H "x-op-token: $SWEEP_TOKEN" "$SWEEP_URL"
-echo
+exec node "$(dirname "$0")/src/ops/sweep-ping.mjs"
