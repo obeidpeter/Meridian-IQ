@@ -61,9 +61,40 @@ jobs:
       # Run through pnpm 11 via dlx: npm retired the audit endpoint pnpm 10
       # calls (410 on every run since 2026-07); pnpm 11 uses the bulk advisory
       # endpoint and reads the same v9 lockfile. Install/build/test stay on
-      # the workspace's pnpm 10 toolchain.
+      # the workspace's pnpm 10 toolchain. npm's advisory transport is capped
+      # so an outage cannot consume the whole job; only a confirmed transport
+      # failure falls through to the independent, stricter OSV lockfile scan.
       - name: Dependency audit (prod, high+)
-        run: pnpm dlx pnpm@11 audit --prod --audit-level=high
+        id: npm-audit
+        shell: bash
+        run: |
+          set +e
+          timeout 90s pnpm dlx pnpm@11 audit --prod --audit-level=high \
+            2>&1 | tee "$RUNNER_TEMP/pnpm-audit.log"
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if [[ "$status" -eq 0 ]]; then
+            echo "transport_failure=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$status" -eq 124 ]] || grep -Eqi \
+            'TimeoutError|operation was aborted due to timeout|advisories/bulk error \(23\)' \
+            "$RUNNER_TEMP/pnpm-audit.log"; then
+            echo "transport_failure=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::npm advisory service unavailable; using the OSV fallback."
+            exit 0
+          fi
+
+          exit "$status"
+
+      - name: Dependency audit fallback (OSV full lockfile)
+        if: steps.npm-audit.outputs.transport_failure == 'true'
+        uses: google/osv-scanner-action/osv-scanner-action@0c58c542420dfd23fcac08dd9c8ca3cca9c36f1a # v2.5.0
+        with:
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
 
       # Codegen drift: the OpenAPI spec is the contract; committed generated
       # clients must match it exactly or route validation silently diverges.
