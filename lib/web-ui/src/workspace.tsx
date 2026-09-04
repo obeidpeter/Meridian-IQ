@@ -258,6 +258,11 @@ export interface CommandItem {
   onSelect: () => void;
 }
 
+export type CommandSearchProvider = (
+  query: string,
+  signal: AbortSignal,
+) => Promise<CommandItem[]>;
+
 export function CommandMenu({
   items,
   trigger,
@@ -266,6 +271,8 @@ export function CommandMenu({
   title = "Search MeridianIQ",
   placeholder = "Search pages and actions",
   emptyText = "No matching pages or actions.",
+  remoteSearch,
+  minimumSearchLength = 2,
 }: {
   items: CommandItem[];
   trigger?: (open: () => void) => ReactNode;
@@ -274,10 +281,16 @@ export function CommandMenu({
   title?: string;
   placeholder?: string;
   emptyText?: string;
+  remoteSearch?: CommandSearchProvider;
+  minimumSearchLength?: number;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [remoteItems, setRemoteItems] = useState<CommandItem[]>([]);
+  const [remoteState, setRemoteState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const inputRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -294,12 +307,14 @@ export function CommandMenu({
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return items;
-    return items.filter((item) =>
+    const local = items.filter((item) =>
       [item.label, item.description, item.group, ...(item.keywords ?? [])]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(needle)),
     );
-  }, [items, query]);
+    const seen = new Set(local.map((item) => item.id));
+    return [...local, ...remoteItems.filter((item) => !seen.has(item.id))];
+  }, [items, query, remoteItems]);
 
   const show = useCallback(() => {
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
@@ -338,6 +353,38 @@ export function CommandMenu({
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
+
+  useEffect(() => {
+    const needle = query.trim();
+    if (!open || !remoteSearch || needle.length < minimumSearchLength) {
+      setRemoteItems([]);
+      setRemoteState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setRemoteState("loading");
+      void remoteSearch(needle, controller.signal)
+        .then((results) => {
+          if (controller.signal.aborted) return;
+          setRemoteItems(results);
+          setRemoteState("ready");
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setRemoteItems([]);
+          setRemoteState("error");
+        });
+    }, 220);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [minimumSearchLength, open, query, remoteSearch]);
+
+  useEffect(() => {
+    setActiveIndex((index) => Math.max(0, Math.min(index, filtered.length - 1)));
+  }, [filtered.length]);
 
   const choose = (item: CommandItem) => {
     hide();
@@ -439,8 +486,13 @@ export function CommandMenu({
               className="mi-command__results"
               id="mi-command-results"
               role="listbox"
+              aria-busy={remoteState === "loading"}
             >
-              {filtered.length === 0 ? (
+              {remoteState === "loading" && filtered.length === 0 ? (
+                <p className="mi-command__empty" role="status">
+                  Searching workspace records…
+                </p>
+              ) : filtered.length === 0 ? (
                 <p className="mi-command__empty">{emptyText}</p>
               ) : (
                 filtered.map((item, index) => (
@@ -471,6 +523,13 @@ export function CommandMenu({
                 ))
               )}
             </div>
+            <p className="mi-sr-only" role="status" aria-live="polite">
+              {remoteState === "ready"
+                ? `${remoteItems.length} workspace record${remoteItems.length === 1 ? "" : "s"} found.`
+                : remoteState === "error"
+                  ? "Workspace search is temporarily unavailable. Page and action results are still shown."
+                  : ""}
+            </p>
             <footer className="mi-command__footer">
               <span>
                 <kbd>Enter</kbd> open

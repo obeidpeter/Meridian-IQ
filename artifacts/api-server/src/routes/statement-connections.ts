@@ -11,6 +11,8 @@ import {
 } from "@workspace/db";
 import {
   ListStatementConnectorsResponse,
+  TestStatementConnectionBody,
+  TestStatementConnectionResponse,
   ListStatementConnectionsResponse,
   CreateStatementConnectionBody,
   CreateStatementConnectionResponse,
@@ -46,6 +48,52 @@ import "../modules/statements/feed-engine";
 // modules/statements/feed-engine.ts).
 
 const router: IRouter = Router();
+
+function normalizeFeedConfig(
+  connector: (typeof STATEMENT_FEED_CONNECTORS)[string],
+  config: Record<string, unknown>,
+): Record<string, string> {
+  const fields = new Map(
+    connector.configurationFields.map((field) => [field.key, field]),
+  );
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(config)) {
+    const field = fields.get(key);
+    if (!field) {
+      throw new DomainError(
+        "CONNECTOR_CONFIG_UNKNOWN_FIELD",
+        `Configuration field "${key}" is not supported by this connector`,
+        422,
+      );
+    }
+    if (typeof value !== "string") {
+      throw new DomainError(
+        "CONNECTOR_CONFIG_INVALID",
+        `${field.label} must be text`,
+        422,
+      );
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > 2_048 || /[\u0000-\u001f\u007f]/.test(trimmed)) {
+      throw new DomainError(
+        "CONNECTOR_CONFIG_INVALID",
+        `${field.label} contains an unsupported value`,
+        422,
+      );
+    }
+    if (trimmed) normalized[key] = trimmed;
+  }
+  for (const field of connector.configurationFields) {
+    if (field.required && !normalized[field.key]) {
+      throw new DomainError(
+        "CONNECTOR_CONFIG_REQUIRED",
+        `${field.label} is required`,
+        422,
+      );
+    }
+  }
+  return normalized;
+}
 
 // The contract carries plain-string timestamps for these resources, so the
 // views serialize dates explicitly instead of parsing raw rows.
@@ -88,8 +136,43 @@ router.get(
           key: c.key,
           name: c.name,
           description: c.description,
+          mode: c.mode,
+          configured: c.isConfigured(),
+          configurationFields: c.configurationFields,
         })),
       ),
+    );
+  },
+);
+
+router.post(
+  "/statement-connections/test",
+  requireFlag("bank_feeds"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.write");
+    const body = parseOrThrow(TestStatementConnectionBody.strict(), req.body);
+    const connector = findFeedConnector(body.connectorKey);
+    if (!connector || !connector.isConfigured()) {
+      throw new DomainError(
+        "CONNECTOR_UNAVAILABLE",
+        "This bank connector is not configured on the server",
+        422,
+      );
+    }
+    const config = normalizeFeedConfig(connector, body.config ?? {});
+    const result = await connector.authenticate(config);
+    if (!result.ok) {
+      throw new DomainError(
+        "CONNECTOR_AUTH_FAILED",
+        result.error ?? "Connector rejected the configuration",
+        422,
+      );
+    }
+    res.json(
+      TestStatementConnectionResponse.parse({
+        ok: true,
+        message: "Connection test passed",
+      }),
     );
   },
 );
@@ -128,7 +211,7 @@ router.post(
     const firmId = requireFirmScope(req.principal);
     const parsed = parseOrThrow(CreateStatementConnectionBody, req.body);
     const connector = findFeedConnector(parsed.connectorKey);
-    if (!connector) {
+    if (!connector || !connector.isConfigured()) {
       throw new DomainError(
         "UNKNOWN_CONNECTOR",
         `No feed connector registered for "${parsed.connectorKey}"`,
@@ -138,15 +221,19 @@ router.post(
     // The named client must be one this firm engages (and a client_user could
     // never reach here — statement.write excludes the role entirely).
     await assertPartyAccess(req.principal, parsed.clientPartyId);
-    // Reject a config the connector itself cannot authenticate: a connection
-    // that could only ever produce failed runs should not be storable.
-    const auth = await connector.authenticate(parsed.config ?? {});
-    if (!auth.ok) {
-      throw new DomainError(
-        "CONNECTOR_AUTH",
-        auth.error ?? "authentication failed",
-        422,
-      );
+    // Sandbox credentials can be verified synchronously. Live relay
+    // credentials are re-authenticated by the worker outside this request's
+    // database transaction, after the UI's explicit test step.
+    const config = normalizeFeedConfig(connector, parsed.config ?? {});
+    if (connector.mode === "sandbox") {
+      const auth = await connector.authenticate(config);
+      if (!auth.ok) {
+        throw new DomainError(
+          "CONNECTOR_AUTH",
+          auth.error ?? "authentication failed",
+          422,
+        );
+      }
     }
     const [row] = await getDb()
       .insert(statementConnectionsTable)
@@ -154,7 +241,7 @@ router.post(
         firmId,
         clientPartyId: parsed.clientPartyId,
         connectorKey: parsed.connectorKey,
-        config: parsed.config ?? null,
+        config: Object.keys(config).length ? config : null,
       })
       .returning();
     const [party] = await getDb()

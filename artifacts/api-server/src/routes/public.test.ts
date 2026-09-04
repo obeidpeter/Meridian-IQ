@@ -102,3 +102,76 @@ test("usability telemetry accepts only the closed aggregate schema", async () =>
   });
   assert.equal(withFreeText.status, 400);
 });
+
+test("platform access requests require consent and use the trusted relay", async () => {
+  const seen: Array<{ body: unknown; token?: string }> = [];
+  const relay = express();
+  relay.use(express.json());
+  relay.post("/access-hook", (req, res) => {
+    seen.push({ body: req.body, token: req.get("x-op-token") });
+    res.sendStatus(204);
+  });
+  const relayBase = await listen(relay);
+  process.env.MESSAGING_WEBHOOK_URL = `${relayBase}/access-hook`;
+  process.env.MESSAGING_WEBHOOK_TOKEN = "access-route-test";
+  const base = await listen(appFor(principal, publicRouter));
+  const request = (consent: boolean) =>
+    fetch(`${base}/public/access-requests`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        name: " Ada Owner ",
+        email: "ADA@EXAMPLE.TEST",
+        businessName: " Example Business ",
+        interest: "accounting_firm",
+        teamSize: "two_to_ten",
+        message: " Pilot access ",
+        consent,
+      }),
+    });
+
+  assert.equal((await request(false)).status, 400);
+  assert.equal((await request(true)).status, 202);
+  assert.deepEqual(seen, [
+    {
+      token: "access-route-test",
+      body: {
+        kind: "platform_access_request",
+        name: "Ada Owner",
+        email: "ada@example.test",
+        businessName: "Example Business",
+        interest: "accounting_firm",
+        teamSize: "two_to_ten",
+        message: "Pilot access",
+      },
+    },
+  ]);
+});
+
+test("access-request honeypot absorbs automated submissions", async () => {
+  const seen: unknown[] = [];
+  const relay = express();
+  relay.use(express.json());
+  relay.post("/honeypot", (req, res) => {
+    seen.push(req.body);
+    res.sendStatus(204);
+  });
+  const relayBase = await listen(relay);
+  process.env.MESSAGING_WEBHOOK_URL = `${relayBase}/honeypot`;
+  const base = await listen(appFor(principal, publicRouter));
+  const response = await fetch(`${base}/public/access-requests`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      name: "Bot",
+      email: "bot@example.test",
+      businessName: "Bot Co",
+      interest: "business",
+      teamSize: "one",
+      website: "https://spam.example",
+      consent: true,
+    }),
+  });
+  assert.equal(response.status, 202);
+  assert.deepEqual(seen, []);
+});

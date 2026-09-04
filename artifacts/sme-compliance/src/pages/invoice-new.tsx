@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   useGetMe,
@@ -104,6 +104,7 @@ export function InvoiceNew() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const creationSucceeded = useRef(false);
   const draftKey = me ? draftStorageKey(me.userId, me.firmId) : null;
 
   useEffect(() => {
@@ -209,6 +210,7 @@ export function InvoiceNew() {
   useEffect(() => {
     if (!draftKey || draftOwner !== draftKey) return;
     const t = setTimeout(() => {
+      if (creationSucceeded.current) return;
       if (draftHasWork(draft)) {
         setSavedAt(saveInvoiceDraft(draftKey, draft));
       } else {
@@ -337,6 +339,7 @@ export function InvoiceNew() {
           lines,
         },
       });
+      creationSucceeded.current = true;
       if (draftKey) {
         removeInvoiceDraft(draftKey);
       }

@@ -64,6 +64,11 @@ const NO_CONTEXT_ROUTES = new Set([
   "POST /api/auth/request-password-reset",
   "POST /api/public/advisory-requests",
   "POST /api/public/usability-events",
+  "POST /api/public/access-requests",
+  // Provider connectivity test performs no database work and must not hold a
+  // tenant transaction open while the external relay responds.
+  "POST /api/connections/test",
+  "POST /api/statement-connections/test",
   "POST /api/clerk/cases",
   "POST /api/clerk/cases/batch",
   "POST /api/clerk/ask",

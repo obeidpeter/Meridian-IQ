@@ -117,6 +117,8 @@ const PINNED: Record<string, PinnedPolicy> = {
   "statement_connections/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "statement_sync_runs/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "submission_attempts/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "06c8692ee8d2489d", withCheck: "06c8692ee8d2489d" },
+  "work_item_comments/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
+  "work_items/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "wht_credits/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "wht_reminder_sends/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },};
 

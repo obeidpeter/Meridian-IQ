@@ -15,6 +15,7 @@ import {
   useGetMe,
   useLogin,
   useLogout,
+  useRevokeSessions,
   useChangePassword,
   useTotpChallenge,
   useGetTotpStatus,
@@ -619,7 +620,7 @@ function SignInPanel() {
             </Label>
             <a
               href="/reset-password"
-              className="text-xs font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              className="inline-flex min-h-6 items-center text-xs font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               data-testid="link-forgot-password"
             >
               Forgot your password?
@@ -687,6 +688,21 @@ function SignInPanel() {
       <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
         <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
         Your connection is secure. You only see what your account allows.
+      </div>
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4 text-xs">
+        <a
+          href="/#request-access"
+          className="inline-flex min-h-6 items-center font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+          data-testid="link-request-access"
+        >
+          Need an invitation?
+        </a>
+        <a
+          href="/#trust"
+          className="inline-flex min-h-6 items-center font-bold text-slate-600 hover:text-slate-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+        >
+          Security and service status
+        </a>
       </div>
     </div>
   );
@@ -1417,7 +1433,10 @@ function TotpSecurityCard() {
 function SignedInPanel({ me }: { me: Me }) {
   const qc = useQueryClient();
   const logout = useLogout();
+  const revokeSessions = useRevokeSessions();
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const target = defaultWorkspaceFor(me);
 
   const signOut = async () => {
@@ -1432,7 +1451,8 @@ function SignedInPanel({ me }: { me: Me }) {
         const key = storage.key(index);
         if (
           key?.startsWith("meridianiq:invoice-draft") ||
-          key?.startsWith("meridianiq:recent-")
+          key?.startsWith("meridianiq:recent-") ||
+          key?.startsWith("meridianiq:work-draft:")
         ) {
           storage.removeItem(key);
         }
@@ -1443,6 +1463,26 @@ function SignedInPanel({ me }: { me: Me }) {
     // flipping the panel back to the sign-in form.
     await qc.resetQueries();
     setSigningOut(false);
+  };
+
+  const signOutEverywhere = async () => {
+    setRevokeError(null);
+    try {
+      await revokeSessions.mutateAsync();
+      trackUsabilityEvent("sessions_revoked", "account_security");
+      for (const storage of [window.localStorage, window.sessionStorage]) {
+        for (let index = storage.length - 1; index >= 0; index--) {
+          const key = storage.key(index);
+          if (key?.startsWith("meridianiq:")) storage.removeItem(key);
+        }
+      }
+      await qc.resetQueries();
+    } catch (error) {
+      setRevokeError(
+        serverErrorFrom(error) ??
+          "Could not sign out every device. Your current session is still active.",
+      );
+    }
   };
 
   return (
@@ -1495,6 +1535,59 @@ function SignedInPanel({ me }: { me: Me }) {
           )}
           Sign out
         </Button>
+        {!confirmRevoke ? (
+          <Button
+            variant="ghost"
+            className="w-full text-slate-600"
+            onClick={() => {
+              setRevokeError(null);
+              setConfirmRevoke(true);
+            }}
+            data-testid="button-revoke-sessions"
+          >
+            <ShieldOff className="h-4 w-4" aria-hidden="true" />
+            Sign out every device
+          </Button>
+        ) : (
+          <div
+            className="rounded-md border border-red-200 bg-red-50 p-3"
+            role="group"
+            aria-label="Confirm session revocation"
+          >
+            <p className="text-xs font-semibold text-red-900">
+              This immediately ends every browser and mobile session, including
+              this one.
+            </p>
+            {revokeError && (
+              <p className="mt-2 text-xs text-red-800" role="alert">
+                {revokeError}
+              </p>
+            )}
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => void signOutEverywhere()}
+                disabled={revokeSessions.isPending}
+              >
+                {revokeSessions.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : null}
+                Sign out all
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setConfirmRevoke(false);
+                  setRevokeError(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -1732,7 +1825,7 @@ function AccessPortal({
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-500 sm:px-10 xl:px-16">
           <span>Sign-in protected. Access by role.</span>
           <a
-            className="font-bold hover:text-slate-900"
+            className="inline-flex min-h-6 items-center font-bold hover:text-slate-900"
             href="/penalty-calculator/"
           >
             Penalty calculator

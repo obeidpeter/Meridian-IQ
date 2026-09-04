@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type FormEvent,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -38,7 +39,12 @@ import {
   CSID_EXPANSION,
   IRN_EXPANSION,
 } from "@workspace/format";
+import {
+  requestPlatformAccess,
+  type PlatformAccessRequestInput,
+} from "@workspace/api-client-react";
 import { trackUsabilityEvent } from "@workspace/web-ui";
+import { serverErrorFrom } from "@/lib/errors";
 
 // The one human-contact channel for prospects: the platform is invite-only,
 // so every public surface needs a path that is not the sign-in wall. Same
@@ -292,7 +298,7 @@ function BrandLockup({ inverted = false }: { inverted?: boolean }) {
     >
       <span
         className={
-          "grid size-10 place-items-center rounded-md " +
+          "grid size-11 place-items-center rounded-md " +
           (inverted ? "bg-lime-300 text-[#071a1c]" : "bg-teal-700 text-white")
         }
       >
@@ -328,8 +334,8 @@ function LandingNav() {
     ["What it does", "#platform"],
     ["Product tour", "#product-tour"],
     ["How it works", "#workflow"],
-    ["What's coming", "#roadmap"],
-    ["Workspaces", "#workspaces"],
+    ["Trust", "#trust"],
+    ["Request access", "#request-access"],
     ["Penalty calculator", "/penalty-calculator/"],
   ];
 
@@ -381,7 +387,7 @@ function LandingNav() {
         <button
           ref={menuButtonRef}
           type="button"
-          className="grid size-10 place-items-center rounded-md border border-white/20 text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 lg:hidden"
+          className="grid size-11 place-items-center rounded-md border border-white/20 text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 lg:hidden"
           aria-label={open ? "Close navigation" : "Open navigation"}
           aria-expanded={open}
           aria-controls="mobile-navigation"
@@ -994,6 +1000,441 @@ function ProductTour() {
   );
 }
 
+function HeroWorkspaceEvidence() {
+  const priorities = [
+    {
+      title: "Review VAT return",
+      detail: "Due today · Brightstar Foods",
+      tone: "bg-rose-400",
+    },
+    {
+      title: "Resolve 2 invoice checks",
+      detail: "FIRS validation · Adebayo Trading",
+      tone: "bg-amber-300",
+    },
+    {
+      title: "Confirm payment evidence",
+      detail: "INV-2027-041 · ₦840,000",
+      tone: "bg-sky-300",
+    },
+  ];
+
+  return (
+    <div
+      className="hidden border-t border-white/20 pt-5 lg:grid lg:grid-cols-[12rem_repeat(3,minmax(0,1fr))] lg:gap-0"
+      aria-label="Example MeridianIQ Today workspace"
+    >
+      <div className="pr-8">
+        <p className="text-[10px] font-extrabold uppercase text-lime-200">
+          Example Today view
+        </p>
+        <p className="mt-2 text-3xl font-extrabold text-white">8 open</p>
+        <p className="mt-1 text-xs font-semibold text-white/60">
+          2 urgent · 3 due soon
+        </p>
+      </div>
+      {priorities.map((item) => (
+        <div
+          key={item.title}
+          className="min-w-0 border-l border-white/20 px-6 last:pr-0"
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={"size-2 shrink-0 rounded-full " + item.tone}
+              aria-hidden="true"
+            />
+            <span className="text-[10px] font-extrabold uppercase text-white/50">
+              Priority
+            </span>
+          </div>
+          <p className="mt-3 truncate text-sm font-extrabold text-white">
+            {item.title}
+          </p>
+          <p className="mt-1 truncate text-xs font-semibold text-white/60">
+            {item.detail}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ServiceReadiness() {
+  const [state, setState] = useState<"checking" | "operational" | "degraded">(
+    "checking",
+  );
+  const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 6_000);
+
+    setState("checking");
+    void fetch("/api/readyz", {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    })
+      .then((response) => {
+        if (active) setState(response.ok ? "operational" : "degraded");
+      })
+      .catch(() => {
+        if (active) setState("degraded");
+      })
+      .finally(() => window.clearTimeout(timer));
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [refresh]);
+
+  const operational = state === "operational";
+  return (
+    <div className="mt-8 border-t border-white/15 pt-5" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className={
+              "size-2.5 rounded-full " +
+              (state === "checking"
+                ? "animate-pulse bg-amber-300"
+                : operational
+                  ? "bg-emerald-300"
+                  : "bg-rose-300")
+            }
+            aria-hidden="true"
+          />
+          <div>
+            <p className="text-sm font-extrabold text-white">
+              {state === "checking"
+                ? "Checking platform availability"
+                : operational
+                  ? "Core platform is operational"
+                  : "Platform availability is degraded"}
+            </p>
+            <p className="mt-1 text-xs text-white/55">
+              Live check of the application and database connection
+            </p>
+          </div>
+        </div>
+        {state === "degraded" && (
+          <button
+            type="button"
+            onClick={() => setRefresh((value) => value + 1)}
+            className="min-h-11 rounded-md border border-white/25 px-3 text-xs font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+          >
+            Check again
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const INITIAL_ACCESS_REQUEST: PlatformAccessRequestInput = {
+  name: "",
+  email: "",
+  businessName: "",
+  interest: "business",
+  teamSize: "two_to_ten",
+  message: "",
+  consent: false,
+  website: "",
+};
+
+function AccessRequest() {
+  const [form, setForm] = useState<PlatformAccessRequestInput>(
+    INITIAL_ACCESS_REQUEST,
+  );
+  const [status, setStatus] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
+  const [error, setError] = useState<string | null>(null);
+  const started = useRef(false);
+
+  const markStarted = () => {
+    if (started.current) return;
+    started.current = true;
+    trackUsabilityEvent("access_request_started", "access_request");
+  };
+
+  const update = <Key extends keyof PlatformAccessRequestInput>(
+    key: Key,
+    value: PlatformAccessRequestInput[Key],
+  ) => {
+    markStarted();
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (status === "sending") return;
+    setStatus("sending");
+    setError(null);
+    try {
+      await requestPlatformAccess({
+        ...form,
+        name: form.name.trim(),
+        email: form.email.trim(),
+        businessName: form.businessName.trim(),
+        message: form.message?.trim() || undefined,
+      });
+      setStatus("sent");
+    } catch (requestError) {
+      setStatus("error");
+      setError(
+        serverErrorFrom(requestError) ??
+          "We could not send your request. Try again or use the email option.",
+      );
+    }
+  };
+
+  if (status === "sent") {
+    return (
+      <section
+        id="request-access"
+        className="scroll-mt-20 bg-[#e7eeec] py-14 sm:py-24"
+      >
+        <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+          <div
+            className="max-w-3xl border-l-4 border-emerald-600 pl-5 sm:pl-8"
+            role="status"
+          >
+            <CheckCircle2 className="size-8 text-emerald-700" aria-hidden="true" />
+            <h2 className="landing-display mt-5 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
+              Your request is with us.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+              Thanks, {form.name}. We will review what you need and reply to{" "}
+              <span className="font-bold text-slate-900">{form.email}</span>.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setForm(INITIAL_ACCESS_REQUEST);
+                setStatus("idle");
+                started.current = false;
+              }}
+              className="mt-7 min-h-11 rounded-md border border-slate-400 px-4 text-sm font-extrabold text-slate-900 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+            >
+              Send another request
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      id="request-access"
+      className="scroll-mt-20 bg-[#e7eeec] py-14 sm:py-24"
+    >
+      <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-8 lg:grid-cols-[0.75fr_1.25fr] lg:gap-20 lg:px-10">
+        <div>
+          <p className="text-sm font-extrabold uppercase text-teal-700">
+            Request access
+          </p>
+          <h2 className="landing-display mt-4 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
+            Tell us what your team needs.
+          </h2>
+          <p className="mt-5 max-w-lg text-base leading-7 text-slate-600">
+            MeridianIQ is currently invite-led. Share a few details and the
+            right person will follow up about a workspace, pilot or partnership.
+          </p>
+          <div className="mt-8 border-t border-slate-300 pt-5">
+            <p className="text-sm font-bold text-slate-900">
+              Prefer email?
+            </p>
+            <a
+              href={CONTACT_MAILTO}
+              className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-extrabold text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+            >
+              <Mail className="size-4" aria-hidden="true" />
+              {ADVISORY_EMAIL}
+            </a>
+          </div>
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="grid gap-5 rounded-md border border-slate-300 bg-white p-5 shadow-sm sm:grid-cols-2 sm:p-7"
+          aria-describedby={error ? "access-request-error" : undefined}
+        >
+          <div>
+            <label htmlFor="access-name" className="text-sm font-bold text-slate-800">
+              Your name
+            </label>
+            <input
+              id="access-name"
+              autoComplete="name"
+              required
+              minLength={2}
+              maxLength={100}
+              value={form.name}
+              onChange={(event) => update("name", event.target.value)}
+              className="mt-2 h-12 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
+            />
+          </div>
+          <div>
+            <label htmlFor="access-email" className="text-sm font-bold text-slate-800">
+              Work email
+            </label>
+            <input
+              id="access-email"
+              type="email"
+              autoComplete="email"
+              required
+              maxLength={254}
+              value={form.email}
+              onChange={(event) => update("email", event.target.value)}
+              className="mt-2 h-12 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label
+              htmlFor="access-business"
+              className="text-sm font-bold text-slate-800"
+            >
+              Business or firm name
+            </label>
+            <input
+              id="access-business"
+              autoComplete="organization"
+              required
+              minLength={2}
+              maxLength={140}
+              value={form.businessName}
+              onChange={(event) => update("businessName", event.target.value)}
+              className="mt-2 h-12 w-full rounded-md border border-slate-300 px-3 text-base outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="access-interest"
+              className="text-sm font-bold text-slate-800"
+            >
+              I am interested as
+            </label>
+            <select
+              id="access-interest"
+              value={form.interest}
+              onChange={(event) =>
+                update(
+                  "interest",
+                  event.target.value as PlatformAccessRequestInput["interest"],
+                )
+              }
+              className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
+            >
+              <option value="business">A business</option>
+              <option value="accounting_firm">An accounting firm</option>
+              <option value="buyer">A buyer or enterprise team</option>
+              <option value="partnership">A partner</option>
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="access-team-size"
+              className="text-sm font-bold text-slate-800"
+            >
+              Team size
+            </label>
+            <select
+              id="access-team-size"
+              value={form.teamSize}
+              onChange={(event) =>
+                update(
+                  "teamSize",
+                  event.target.value as PlatformAccessRequestInput["teamSize"],
+                )
+              }
+              className="mt-2 h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
+            >
+              <option value="one">Just me</option>
+              <option value="two_to_ten">2–10 people</option>
+              <option value="eleven_to_fifty">11–50 people</option>
+              <option value="over_fifty">More than 50</option>
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label
+              htmlFor="access-message"
+              className="text-sm font-bold text-slate-800"
+            >
+              What would you like to solve? <span className="font-normal text-slate-500">(optional)</span>
+            </label>
+            <textarea
+              id="access-message"
+              rows={4}
+              maxLength={1200}
+              value={form.message}
+              onChange={(event) => update("message", event.target.value)}
+              className="mt-2 w-full resize-y rounded-md border border-slate-300 px-3 py-3 text-base outline-none focus:border-teal-700 focus:ring-2 focus:ring-teal-700/20"
+            />
+          </div>
+          <div
+            className="absolute left-[-10000px] top-auto size-px overflow-hidden"
+            aria-hidden="true"
+          >
+            <label htmlFor="access-website">Website (leave blank)</label>
+            <input
+              id="access-website"
+              tabIndex={-1}
+              autoComplete="off"
+              value={form.website}
+              onChange={(event) => update("website", event.target.value)}
+            />
+          </div>
+          <label className="flex items-start gap-3 text-sm leading-6 text-slate-600 sm:col-span-2">
+            <input
+              type="checkbox"
+              required
+              checked={form.consent}
+              onChange={(event) => update("consent", event.target.checked)}
+              className="mt-1 size-4 shrink-0 accent-teal-700"
+            />
+            <span>
+              MeridianIQ may use these details to contact me about this request.
+            </span>
+          </label>
+
+          {error && (
+            <div
+              id="access-request-error"
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:col-span-2"
+            >
+              <p className="font-bold">Your request was not sent.</p>
+              <p className="mt-1">{error}</p>
+              <a
+                href={CONTACT_MAILTO}
+                className="mt-2 inline-flex font-extrabold underline underline-offset-4"
+              >
+                Send it by email instead
+              </a>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={status === "sending" || !form.consent}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#0f5c52] px-5 text-sm font-extrabold text-white transition-colors hover:bg-[#0e4c45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-55 sm:col-span-2 sm:justify-self-start"
+          >
+            {status === "sending" ? "Sending request…" : "Request access"}
+            {status !== "sending" && (
+              <ArrowRight className="size-4" aria-hidden="true" />
+            )}
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#f8faf9] text-slate-950">
@@ -1006,7 +1447,7 @@ export default function LandingPage() {
 
       <section className="landing-hero text-white">
         <LandingNav />
-        <div className="relative z-10 mx-auto flex min-h-[calc(100svh-10rem)] max-w-7xl items-end px-5 pb-12 pt-14 sm:px-8 sm:pb-16 sm:pt-20 lg:px-10 lg:pb-20">
+        <div className="relative z-10 mx-auto flex min-h-[calc(100svh-10rem)] max-w-7xl flex-col justify-end gap-12 px-5 pb-12 pt-14 sm:px-8 sm:pb-16 sm:pt-20 lg:px-10 lg:pb-20">
           <div className="max-w-4xl">
             <div className="mb-6 inline-flex items-center gap-2 border-l-2 border-lime-300 pl-3 text-sm font-semibold text-lime-200">
               <ShieldCheck className="size-4" aria-hidden="true" />
@@ -1041,12 +1482,12 @@ export default function LandingPage() {
                 See the product
               </a>
               <a
-                href={CONTACT_MAILTO}
+                href="#request-access"
                 onClick={trackLandingCta}
                 data-testid="link-hero-contact"
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
               >
-                Talk to us
+                Request access
                 <Mail className="size-4" aria-hidden="true" />
               </a>
             </div>
@@ -1064,6 +1505,7 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
+          <HeroWorkspaceEvidence />
         </div>
       </section>
 
@@ -1190,7 +1632,7 @@ export default function LandingPage() {
         </section>
 
         <section
-          id="evidence"
+          id="trust"
           className="scroll-mt-20 bg-[#071a1c] py-14 text-white sm:py-24"
         >
           <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10">
@@ -1240,6 +1682,7 @@ export default function LandingPage() {
                   </div>
                 ))}
               </div>
+              <ServiceReadiness />
             </div>
 
             <div className="rounded-md border border-white/15 bg-white/[0.04] p-5 sm:p-7">
@@ -1470,6 +1913,8 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <AccessRequest />
+
         <section className="bg-lime-300 py-12 sm:py-20">
           <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 px-5 sm:px-8 lg:flex-row lg:items-center lg:px-10">
             <div className="max-w-3xl">
@@ -1491,12 +1936,12 @@ export default function LandingPage() {
                 <ArrowRight className="size-4" aria-hidden="true" />
               </a>
               <a
-                href={CONTACT_MAILTO}
+                href="#request-access"
                 onClick={trackLandingCta}
                 data-testid="link-cta-contact"
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-[#071a1c]/30 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-[#071a1c]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#071a1c]"
               >
-                Talk to us
+                Request access
                 <Mail className="size-4" aria-hidden="true" />
               </a>
               <a
@@ -1531,7 +1976,7 @@ export default function LandingPage() {
             <a className="hover:text-white" href="#product-tour">
               Product tour
             </a>
-            <a className="hover:text-white" href="#evidence">
+            <a className="hover:text-white" href="#trust">
               Trust &amp; proof
             </a>
             <a className="hover:text-white" href="#roadmap">
@@ -1542,11 +1987,11 @@ export default function LandingPage() {
             </a>
             <a
               className="hover:text-white"
-              href={CONTACT_MAILTO}
+              href="#request-access"
               onClick={trackLandingCta}
               data-testid="link-footer-contact"
             >
-              Talk to us
+              Request access
             </a>
             <a
               className="font-bold text-lime-300 hover:text-lime-200"

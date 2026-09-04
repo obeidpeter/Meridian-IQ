@@ -15,6 +15,7 @@ Roadmap R0–R2 built; R3+ dormant behind gates).
 - `pnpm --filter @workspace/db run test` — migration rollback test (needs DATABASE_URL)
 - `pnpm --filter @workspace/api-server run benchmark [N]` — NFR-03 pipeline throughput evidence (needs DATABASE_URL)
 - Required env: `DATABASE_URL` — Postgres connection string
+- Live provider env and wire contracts: `docs/workspace-and-provider-readiness.md`
 
 ## Stack
 
@@ -46,7 +47,8 @@ Roadmap R0–R2 built; R3+ dormant behind gates).
 
 ## Product
 
-- Landing + portal: `/` is the public MeridianIQ site and links to the central portal at `/login`. Email+password sign-in sets an origin-wide session cookie; after sign-in the account is redirected to its role's default workspace (operator → console operator queue, firm roles → console/app, buyer → Buyer Rails) and the role-aware tiles cover the rest. Demo accounts sign in with one click; login errors surface the server message. Every app's sidebar shows the signed-in identity (from `/me`, which returns email/fullName) with "All apps" + "Sign out".
+- Landing + portal: `/` is the public MeridianIQ site with live service status and a consented, rate-limited access-request form; `/login` is the central portal. Email+password sign-in sets an origin-wide session cookie and redirects to a role-aware Today workspace (operators and auditors retain their controlled destinations). The account panel can revoke every browser/mobile session. Every app's sidebar shows the signed-in identity with "All apps" + "Sign out".
+- Workspaces: Meridian Today composes live priorities and evidence-backed setup steps for firm, SME and buyer roles; Ctrl/Command+K searches only tenant- and role-accessible records. Firm/SME Team work adds client-scoped tasks, owner/due/status and append-only discussion with idempotent poor-network retries and optimistic concurrency.
 - SME app: guided invoicing, bulk import (5,000-row bulk path), submission + vault, deadline/penalty alerts, reconciliation upload with match proposals, B2C 24-hour report clocks, confirmation timeline.
 - Accountant console: role-aware nav filtered by the principal's capabilities. Firm roles get portfolio risk, onboarding pipeline, unearned income, billing/revenue share, the Advisory toolkit (readiness assessments + VAT-risk checks, ADV-01/02) and ERP Integrations (behind the `erp_connectors` flag); R2 adds white-label branding + subdomain, bulk client import, CPD certification portal. The operator gets the queue (server stats incl. clients served, client-escalation context on cards), the Error catalogue editor with unmapped-code surfacing (ADV-03/INT-02), Platform ops (rail health, dead-letter replay, pipeline reconcile), Gate metrics (live R1/R2 gate measurements from the spine) and Feature flags; console `/` redirects operators to the queue. The auditor role gets read-only console access (Audit & evidence: chain verify + verifiable bundle export). Direct URL hits on pages a role lacks show a capability card, not raw 403s.
 - Compliance Desk intake (SME-06/CON-04): client escalations and pipeline dead letters auto-open operator cases via `modules/desk/cases.ts` — one live case per invoice, repeat signals raise priority. CORE-09 is complete: `POST /invoices/{id}/credit-note` drafts+validates+submits a `credit_note` invoice; the pipeline credits the original when the note stamps, and verify-stamp reports it `eligible: false`.

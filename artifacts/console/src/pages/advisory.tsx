@@ -221,7 +221,7 @@ function AssessmentTab() {
               description="Assessments are recorded against a client's engagement. Add your first client from the portfolio, then come back here."
             >
               <Button asChild variant="outline" data-testid="link-advisory-add-client">
-                <Link href="/">Go to your portfolio</Link>
+                <Link href="/portfolio">Go to your portfolio</Link>
               </Button>
             </EmptyState>
           ) : (

@@ -488,3 +488,36 @@ rollback (the correct memory for a breaker); an operator distinguishes a
 refused credential from an outage on the alert; multi-instance workers
 share one probe per cooldown; and the soak is the regression net for every
 later change to the pipeline's concurrency.
+
+### D22 — Today is a read model; collaboration is a guarded ledger
+
+Context: each role had capable domain pages but no single answer to "what needs
+attention now", global search stopped at page names, and coordination escaped
+into messages with no tenant-scoped owner, deadline or decision history.
+Decision: compose Meridian Today at request time from the authoritative invoice,
+filing, obligation and work ledgers; keep universal search role- and tenant-
+scoped in SQL; persist human coordination in `work_items` and append-only
+`work_item_comments` with idempotent creates and optimistic versions. Client
+scope remains a server predicate, never a UI filter. The browser may persist an
+unsent draft and retry id, but never a second authoritative copy of work state.
+Consequences: the home screen cannot drift from domain records; a lost response
+does not duplicate work; concurrent edits conflict visibly; collaboration can
+be audited without moving compliance evidence out of its owning tables.
+
+### D23 — Live data providers terminate at deployment-owned relays
+
+Context: sandbox ERP and bank connectors proved mapping and cursor behavior but
+did not establish a production credential boundary, and raw JSON configuration
+made setup inconsistent and error-prone.
+Decision: live ERP and bank adapters call only deployment-owned, HTTPS relay
+URLs with server-side tokens. Tenant input is limited to connector-declared,
+bounded string fields; live rows store a non-secret account reference. The UI
+renders those declared fields, requires a connectivity test before save, and
+labels sandbox versus live readiness explicitly. Provider round trips used only
+for testing execute outside tenant transactions; workers authenticate again
+before every pull.
+Consequences: connection forms cannot turn the API into an SSRF proxy or expose
+vendor secrets; OAuth and token rotation stay at the relay; source code can ship
+the integration boundary but cannot truthfully claim a provider is live until
+deployment secrets, accreditation and an observed sync exist. The wire contract
+and rollout checklist live in `docs/workspace-and-provider-readiness.md`.

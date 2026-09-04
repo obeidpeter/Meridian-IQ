@@ -90,10 +90,13 @@ async function journeyPortalAuth(page, BASE, check) {
   );
 
   const heroContact = page.getByTestId("link-hero-contact");
+  const emailContact = page.locator('a[href^="mailto:"]').first();
   check(
-    "landing page offers a mailto contact path for prospects",
+    "landing page offers access-request and email contact paths for prospects",
     (await heroContact.isVisible()) &&
-      ((await heroContact.getAttribute("href")) ?? "").startsWith("mailto:"),
+      (await heroContact.getAttribute("href")) === "#request-access" &&
+      (await emailContact.count()) > 0 &&
+      ((await emailContact.getAttribute("href")) ?? "").startsWith("mailto:"),
   );
 
   const calculatorLink = page.locator('a[href="/penalty-calculator/"]').first();
@@ -241,11 +244,11 @@ async function journeyOperatorDesk(page, BASE, check) {
 async function journeyFirmAdminAdvisory(page, BASE, check) {
   await signIn(page, BASE, "button-demo-demo.admin", "**/console/");
   await page.waitForSelector('[data-testid="text-page-title"]');
-  await checkPageAccessibility(page, check, "firm portfolio");
+  await checkPageAccessibility(page, check, "firm today");
   check(
-    "admin lands on portfolio",
+    "admin lands on Today",
     (await page.getByTestId("text-page-title").innerText()).includes(
-      "Client portfolio",
+      "What needs attention",
     ),
   );
   // The console registers the same "?" cheat sheet as the SME app.
@@ -412,6 +415,10 @@ async function journeyFirstLandingConsent(page, BASE, check) {
   );
   // The vault as a shelf of the invoice list (D16): Today's stamped tile
   // deep-links to the Stamped view, and the filter rides the URL.
+  await page.goto(BASE + "/app/dashboard", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="link-open-vault"]', {
+    timeout: 15000,
+  });
   await page.getByTestId("link-open-vault").click();
   await page.waitForSelector('[data-testid="filter-invoices-stamped"]', {
     timeout: 10000,
@@ -466,7 +473,9 @@ async function journeyClientAssignment(page, BASE, check) {
   await apiLogout(page, BASE);
 
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
-  await page.goto(BASE + "/console", { waitUntil: "networkidle" });
+  await page.goto(BASE + "/console/portfolio?view=clients", {
+    waitUntil: "networkidle",
+  });
   await page.waitForSelector('[data-testid="button-client-scope-mine"]', {
     timeout: 15000,
   });
@@ -474,8 +483,6 @@ async function journeyClientAssignment(page, BASE, check) {
     "assigned staff land on My clients by default",
     (await page.getByTestId("button-client-scope-mine").first().getAttribute("aria-pressed")) === "true",
   );
-  await page.getByTestId("nav-portfolio").first().click();
-  await page.goto(BASE + "/console?view=clients", { waitUntil: "networkidle" });
   await page.waitForSelector(`[data-testid="row-client-${KANO}"]`, { timeout: 15000 });
   check(
     "My clients hides a client assigned only to someone else",

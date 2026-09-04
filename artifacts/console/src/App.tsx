@@ -40,6 +40,7 @@ import { FilingDesk } from "@/pages/filing-desk";
 import { CollectionsDesk } from "@/pages/collections-desk";
 import { PracticeAnalytics } from "@/pages/analytics";
 import { ActivityPage } from "@/pages/activity";
+import { Today, WorkPage } from "@/pages/today";
 import { ClerkShell } from "@/components/clerk-shell";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
@@ -56,13 +57,13 @@ const queryClient = new QueryClient({
   },
 });
 
-// The console front door is role-aware: firm principals land on the client
-// portfolio, operators on the live exception queue, and auditors on the
-// evidence surface they signed in to inspect.
+// The console front door is role-aware: firm principals land on Meridian
+// Today, operators on activation evidence, and auditors on the evidence
+// surface they signed in to inspect.
 function Home() {
   const { data: me } = useGetMe();
-  // While /me resolves, mirror the most likely destination (the portfolio)
-  // instead of a blank pane.
+  // While /me resolves, reuse the established portfolio skeleton instead of
+  // flashing a blank pane before the role redirect resolves.
   if (!me) return <PortfolioSkeleton />;
   if (me.role === "operator") {
     return <Redirect to="/control-centre/activation" replace />;
@@ -70,11 +71,7 @@ function Home() {
   if (me.role === "auditor") {
     return <Redirect to="/audit" replace />;
   }
-  return (
-    <CapabilityGate capability="console.portfolio.read">
-      <Portfolio />
-    </CapabilityGate>
-  );
+  return <Redirect to="/today" replace />;
 }
 
 function Router() {
@@ -125,6 +122,21 @@ function ConsoleRoutes() {
     <Layout>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/today">
+          <CapabilityGate capability="console.portfolio.read">
+            <Today />
+          </CapabilityGate>
+        </Route>
+        <Route path="/portfolio">
+          <CapabilityGate capability="console.portfolio.read">
+            <Portfolio />
+          </CapabilityGate>
+        </Route>
+        <Route path="/work">
+          <CapabilityGate capability="work.read">
+            <WorkPage />
+          </CapabilityGate>
+        </Route>
         <Route path="/notifications" component={Notifications} />
         <Route path="/activity" component={ActivityPage} />
         <Route path="/help" component={Help} />

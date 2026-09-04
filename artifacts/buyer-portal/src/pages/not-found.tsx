@@ -25,7 +25,7 @@ export default function NotFound() {
             </div>
           </div>
           <Button asChild data-testid="link-home">
-            <Link href="/">Back to confirmations</Link>
+            <Link href="/confirmations">Back to confirmations</Link>
           </Button>
         </CardContent>
       </Card>

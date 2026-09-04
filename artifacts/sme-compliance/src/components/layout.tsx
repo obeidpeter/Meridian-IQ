@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Activity,
@@ -14,6 +14,7 @@ import {
   FilePlus,
   FileText,
   Grid2x2,
+  Gauge,
   HandCoins,
   Inbox,
   Keyboard,
@@ -31,9 +32,14 @@ import {
   Store,
   Upload,
   Pin,
+  ListChecks,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
-import { useGetMe, useLogout } from "@workspace/api-client-react";
+import {
+  searchWorkspace,
+  useGetMe,
+  useLogout,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -51,6 +57,7 @@ import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
+  NetworkStatus,
   readRecentItems,
   ReleaseBadge,
   ShortcutsDialog,
@@ -59,6 +66,7 @@ import {
   useGlobalShortcuts,
   WorkspaceChip,
   type CommandItem,
+  trackUsabilityEvent,
 } from "@workspace/web-ui";
 import { HELP_TOPICS } from "@/pages/help";
 
@@ -85,6 +93,13 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Work",
     links: [
       { href: "/", label: "Today", icon: LayoutDashboard },
+      { href: "/dashboard", label: "Overview", icon: Gauge },
+      {
+        href: "/work",
+        label: "Team work",
+        icon: ListChecks,
+        capability: "work.read",
+      },
       { href: "/month-end", label: "Month-end", icon: CalendarCheck2 },
       { href: "/invoices", label: "Invoices", icon: FileText },
       {
@@ -515,7 +530,8 @@ export function Layout({ children }: { children: ReactNode }) {
           key?.startsWith("meridianiq:recent-") ||
           key?.startsWith("meridianiq:pinned-") ||
           key?.startsWith("meridianiq:saved-view-") ||
-          key?.startsWith("meridianiq:operations:")
+          key?.startsWith("meridianiq:operations:") ||
+          key?.startsWith("meridianiq:work-draft:")
         ) {
           storage.removeItem(key);
         }
@@ -671,6 +687,27 @@ export function Layout({ children }: { children: ReactNode }) {
       onSelect: () => setShortcutsOpen(true),
     },
   ];
+  const remoteSearch = useCallback(
+    async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
+      trackUsabilityEvent("global_search_started", "global_search");
+      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      if (results.length === 0) {
+        trackUsabilityEvent("zero_result_search", "global_search");
+      }
+      return results.map((result) => ({
+        id: `sme-search-${result.id}`,
+        label: result.label,
+        description: result.description,
+        group: result.group,
+        icon: <Search className="size-4" aria-hidden="true" />,
+        onSelect: () => {
+          trackUsabilityEvent("global_search_result_opened", "global_search");
+          navigate(result.href);
+        },
+      }));
+    },
+    [navigate],
+  );
   const navProps = {
     groups,
     location,
@@ -688,6 +725,7 @@ export function Layout({ children }: { children: ReactNode }) {
         onOpenChange={setCommandOpen}
         title="Find work"
         placeholder="Search invoices, compliance and Clerk tools"
+        remoteSearch={remoteSearch}
       />
       <ShortcutsDialog
         open={shortcutsOpen}
@@ -792,6 +830,7 @@ export function Layout({ children }: { children: ReactNode }) {
           className="mx-auto w-full max-w-[90rem] px-4 py-5 focus:outline-none sm:px-6 md:px-8 md:py-8 lg:px-10"
         >
           <StaleBuildBanner />
+          <NetworkStatus />
           {children}
         </main>
       </div>

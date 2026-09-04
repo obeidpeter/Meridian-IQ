@@ -701,7 +701,7 @@ export function ClientDetail() {
           void queryClient.invalidateQueries({
             queryKey: getGetPortfolioQueryKey(),
           });
-          navigate("/");
+          navigate("/portfolio");
         },
         onError: (err) => setOffboardNote(offboardErrorNote(err)),
       },
@@ -746,7 +746,7 @@ export function ClientDetail() {
     return (
       <div className="space-y-6">
         <Link
-          href="/?view=clients"
+          href="/portfolio?view=clients"
           className="inline-flex items-center gap-2 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
           data-testid="link-back"
         >
@@ -820,12 +820,12 @@ export function ClientDetail() {
 
   return (
     <div className="space-y-6">
-      {/* "/?view=clients" deep-links the portfolio's clients tab (useUrlTab
+      {/* "/portfolio?view=clients" deep-links the portfolio's clients tab (useUrlTab
           reads the param on mount) so client-hopping doesn't restart triage
           from the Today view. Search/filter/sort are component state and
           reset — the tab restore alone removes most of the cost. */}
       <Link
-        href="/?view=clients"
+        href="/portfolio?view=clients"
         className="inline-flex items-center gap-2 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
         data-testid="link-back"
       >

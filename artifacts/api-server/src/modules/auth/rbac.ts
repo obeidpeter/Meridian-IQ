@@ -113,12 +113,18 @@ const ALL = [
   // their own rows (SEC-03 scoped); preparing and filing is firm work.
   "filing.read",
   "filing.write",
+  // Human coordination attached to client work. Kept out of the machine-key
+  // allowlist and the auditor's broad read-only set: task notes can contain
+  // internal working context that is not audit evidence.
+  "work.read",
+  "work.write",
 ] as const;
 
 export type Capability = (typeof ALL)[number];
 
 const READ_ONLY: Capability[] = ALL.filter(
-  (c) => c.endsWith(".read") || c === "audit.export",
+  (c) =>
+    (c.endsWith(".read") && c !== "work.read") || c === "audit.export",
 );
 
 // Role-permission matrix (Appendix C).
@@ -170,6 +176,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "obligation.write",
     "filing.read",
     "filing.write",
+    "work.read",
+    "work.write",
   ],
   firm_staff: [
     "invoice.read",
@@ -203,6 +211,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "obligation.write",
     "filing.read",
     "filing.write",
+    "work.read",
+    "work.write",
   ],
   client_user: [
     "invoice.read",
@@ -232,6 +242,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     // and updating obligations stays with the firm.
     "obligation.read",
     "filing.read",
+    "work.read",
+    "work.write",
   ],
   operator: [
     "invoice.read",

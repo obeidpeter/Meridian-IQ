@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Connector, ConnectorPullResult } from "./contract.ts";
+import { logger } from "../../lib/logger";
+import { readBoundedJsonObject } from "./relay-response.ts";
 
 // The first two connectors (PL-03: "chosen from R0 engagement evidence").
 // Both are SIMULATED backends — no real ERP is reachable from this environment
@@ -46,6 +48,26 @@ export const sageproConnector: Connector = {
   name: "SagePro Accounting",
   description:
     "AR document ledger pull from SagePro (simulated sandbox backend).",
+  mode: "sandbox",
+  isConfigured: () => true,
+  configurationFields: [
+    {
+      key: "apiKey",
+      label: "Sandbox API key",
+      required: true,
+      secret: true,
+      placeholder: "sp_demo_…",
+      help: "Use an sp_ prefixed key for the deterministic SagePro sandbox.",
+    },
+    {
+      key: "company",
+      label: "Sandbox company",
+      required: false,
+      secret: false,
+      placeholder: "demo-company",
+      help: "Separates one deterministic sandbox book from another.",
+    },
+  ],
   defaultFieldMap: {
     invoiceNumber: "DocNo",
     buyerName: "CustomerName",
@@ -91,6 +113,26 @@ export const quickliteConnector: Connector = {
   name: "QuickLite Books",
   description:
     "Invoice feed pull from QuickLite Books (simulated sandbox backend).",
+  mode: "sandbox",
+  isConfigured: () => true,
+  configurationFields: [
+    {
+      key: "token",
+      label: "Sandbox token",
+      required: true,
+      secret: true,
+      placeholder: "Enter any non-empty sandbox token",
+      help: "Used only by the deterministic QuickLite sandbox adapter.",
+    },
+    {
+      key: "realm",
+      label: "Sandbox realm",
+      required: false,
+      secret: false,
+      placeholder: "demo-realm",
+      help: "Separates one deterministic sandbox book from another.",
+    },
+  ],
   defaultFieldMap: {
     invoiceNumber: "ref",
     buyerName: "customer",
@@ -129,9 +171,161 @@ export const quickliteConnector: Connector = {
   },
 };
 
+// Production adapter protocol. MeridianIQ talks only to a deployment-owned
+// relay URL, never a URL supplied by a tenant, which keeps this connector from
+// becoming an SSRF primitive. The relay owns vendor OAuth/token rotation and
+// responds in the canonical field names below; ERP_CONNECTOR_TOKEN authenticates
+// MeridianIQ to that boundary and is never persisted in a connection row.
+const RELAY_TIMEOUT_MS = 8_000;
+const MAX_RELAY_BODY_BYTES = 2 * 1024 * 1024;
+
+function liveRelayConfigured(): boolean {
+  return Boolean(liveRelayUrl() && process.env.ERP_CONNECTOR_TOKEN?.trim());
+}
+
+function liveRelayUrl(): URL | null {
+  const raw = process.env.ERP_CONNECTOR_URL?.trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (
+      url.username ||
+      url.password ||
+      (url.protocol !== "https:" &&
+        !(process.env.NODE_ENV !== "production" && url.protocol === "http:"))
+    ) {
+      return null;
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function relayRequest(
+  kind: "erp_authenticate" | "erp_pull_invoices",
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const url = liveRelayUrl();
+  const token = process.env.ERP_CONNECTOR_TOKEN?.trim();
+  if (!url || !token) throw new Error("Live ERP relay is not configured");
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-op-token": token,
+      },
+      body: JSON.stringify({ kind, ...payload }),
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+      redirect: "error",
+    });
+  } catch (error) {
+    logger.error(
+      { kind, reason: error instanceof Error ? error.name : "unknown" },
+      "ERP connector relay request failed",
+    );
+    throw new Error("Live ERP relay is unreachable");
+  }
+  if (!response.ok) {
+    logger.warn(
+      { kind, status: response.status },
+      "ERP connector relay rejected request",
+    );
+    throw new Error("Live ERP relay rejected the request");
+  }
+  return readBoundedJsonObject(response, MAX_RELAY_BODY_BYTES, "Live ERP relay");
+}
+
+export const liveErpRelayConnector: Connector = {
+  key: "meridian-relay",
+  name: "Production ERP relay",
+  description:
+    "Live accounting feed through the deployment-owned MeridianIQ adapter protocol.",
+  mode: "live",
+  isConfigured: liveRelayConfigured,
+  configurationFields: [
+    {
+      key: "accountRef",
+      label: "Provider account reference",
+      required: true,
+      secret: false,
+      placeholder: "customer-or-tenant-reference",
+      help: "The non-secret account reference configured in your provider relay.",
+    },
+  ],
+  defaultFieldMap: {
+    invoiceNumber: "invoiceNumber",
+    buyerName: "buyerName",
+    buyerTin: "buyerTin",
+    issueDate: "issueDate",
+    description: "description",
+    quantity: "quantity",
+    unitPrice: "unitPrice",
+    vatRate: "vatRate",
+  },
+  async authenticate(config) {
+    if (!liveRelayConfigured()) {
+      return { ok: false, error: "Live ERP relay is not configured" };
+    }
+    if (!String(config.accountRef ?? "").trim()) {
+      return { ok: false, error: "Provider account reference is required" };
+    }
+    try {
+      const response = await relayRequest("erp_authenticate", { config });
+      return response.ok === true
+        ? { ok: true }
+        : {
+            ok: false,
+            error: "Provider rejected the account reference",
+          };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Provider test failed",
+      };
+    }
+  },
+  async pullInvoices(config, cursor, limit): Promise<ConnectorPullResult> {
+    const response = await relayRequest("erp_pull_invoices", {
+      config,
+      cursor,
+      limit,
+    });
+    if (!Array.isArray(response.rows) || response.rows.length > limit) {
+      throw new Error("Live ERP relay returned an invalid invoice batch");
+    }
+    const rows = response.rows.map((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("Live ERP relay returned an invalid invoice row");
+      }
+      const row: Record<string, string> = {};
+      for (const [key, field] of Object.entries(value)) {
+        if (typeof field !== "string") {
+          throw new Error("Live ERP relay invoice fields must be strings");
+        }
+        row[key] = field;
+      }
+      return row;
+    });
+    const nextCursor = response.nextCursor;
+    const hasMore = response.hasMore;
+    if (
+      typeof nextCursor !== "string" ||
+      nextCursor.length > 512 ||
+      typeof hasMore !== "boolean"
+    ) {
+      throw new Error("Live ERP relay returned an invalid cursor");
+    }
+    return { rows, nextCursor, hasMore };
+  },
+};
+
 export const CONNECTORS: Record<string, Connector> = {
   [sageproConnector.key]: sageproConnector,
   [quickliteConnector.key]: quickliteConnector,
+  [liveErpRelayConnector.key]: liveErpRelayConnector,
 };
 
 export function findConnector(key: string): Connector | null {

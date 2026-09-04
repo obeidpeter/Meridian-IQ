@@ -26,3 +26,11 @@ test("email verification issuance compare-and-sets the saved address", () => {
     "a code sent to the old inbox must not attach to a concurrently saved address",
   );
 });
+
+test("all-device session revocation excludes machine API keys", () => {
+  const block = routeBlock(src("routes/auth.ts"), "/auth/revoke-sessions");
+  assert.ok(
+    block.includes("req.principal.capabilities !== undefined"),
+    "session controls must reject synthetic machine principals before a UUID query",
+  );
+});

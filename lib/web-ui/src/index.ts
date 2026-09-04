@@ -40,11 +40,29 @@ export {
   WorkQueue,
   WorkspaceHeader,
   type CommandItem,
+  type CommandSearchProvider,
   type MetricTone,
   type SegmentedItem,
   type WorkItemTone,
   type WorkQueueItem,
 } from "./workspace";
+export { NetworkStatus } from "./network-status";
+export {
+  TodayWorkspace,
+  type TodayItemView,
+  type TodaySetupStepView,
+  type TodaySummaryView,
+} from "./today";
+export {
+  WorkManagement,
+  type CollaborativeAssigneeOption,
+  type CollaborativeClientOption,
+  type CollaborativeWorkComment,
+  type CollaborativeWorkItem,
+  type CollaborativeWorkPriority,
+  type CollaborativeWorkStatus,
+  type CreateCollaborativeWorkInput,
+} from "./work-management";
 export {
   useActionPolicyControls,
   type ActionPolicyControls,

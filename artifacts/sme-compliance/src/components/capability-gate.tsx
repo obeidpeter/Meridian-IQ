@@ -41,7 +41,7 @@ export function CapabilityGate({
                   </p>
                 </div>
                 <Button size="sm" asChild data-testid="button-back-home">
-                  <Link href="/">Back to dashboard</Link>
+                  <Link href="/">Back to Today</Link>
                 </Button>
               </div>
             </div>

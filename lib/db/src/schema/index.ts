@@ -27,3 +27,4 @@ export * from "./wht.ts";
 export * from "./onboarding.ts";
 export * from "./memory.ts";
 export * from "./assignments.ts";
+export * from "./work.ts";

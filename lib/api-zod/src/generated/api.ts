@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.95.0
+ * OpenAPI spec version: 0.96.0
  */
 import * as zod from 'zod';
 
@@ -38,6 +38,294 @@ export const GetMeResponse = zod.object({
   "token": zod.string().nullish(),
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()
+})
+
+
+/**
+ * @summary Role-aware priority work, setup progress and collaboration for today
+ */
+export const getWorkspaceTodayQueryLimitDefault = 24;
+export const getWorkspaceTodayQueryLimitMax = 50;
+
+
+
+export const GetWorkspaceTodayQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(getWorkspaceTodayQueryLimitMax).default(getWorkspaceTodayQueryLimitDefault)
+})
+
+export const getWorkspaceTodayResponseSummaryTotalMin = 0;
+
+export const getWorkspaceTodayResponseSummaryUrgentMin = 0;
+
+export const getWorkspaceTodayResponseSummaryDueSoonMin = 0;
+
+export const getWorkspaceTodayResponseSummaryBlockedMin = 0;
+
+export const getWorkspaceTodayResponseSummaryCompletedSetupStepsMin = 0;
+
+export const getWorkspaceTodayResponseSummaryTotalSetupStepsMin = 0;
+
+
+
+export const GetWorkspaceTodayResponse = zod.object({
+  "role": zod.string(),
+  "generatedAt": zod.coerce.date(),
+  "summary": zod.object({
+  "total": zod.number().min(getWorkspaceTodayResponseSummaryTotalMin),
+  "urgent": zod.number().min(getWorkspaceTodayResponseSummaryUrgentMin),
+  "dueSoon": zod.number().min(getWorkspaceTodayResponseSummaryDueSoonMin),
+  "blocked": zod.number().min(getWorkspaceTodayResponseSummaryBlockedMin),
+  "completedSetupSteps": zod.number().min(getWorkspaceTodayResponseSummaryCompletedSetupStepsMin),
+  "totalSetupSteps": zod.number().min(getWorkspaceTodayResponseSummaryTotalSetupStepsMin)
+}),
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "source": zod.enum(['work_item', 'invoice', 'filing', 'obligation']),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "status": zod.string(),
+  "dueAt": zod.coerce.date().nullable(),
+  "href": zod.string(),
+  "clientPartyId": zod.string().nullable(),
+  "clientName": zod.string().nullable(),
+  "entityType": zod.string().nullable(),
+  "entityId": zod.string().nullable()
+})),
+  "setup": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "complete": zod.boolean(),
+  "href": zod.string()
+}))
+})
+
+
+/**
+ * @summary Search tenant-scoped records the current role is allowed to open
+ */
+export const searchWorkspaceQueryQMin = 2;
+export const searchWorkspaceQueryQMax = 120;
+
+export const searchWorkspaceQueryLimitDefault = 12;
+export const searchWorkspaceQueryLimitMax = 30;
+
+
+
+export const SearchWorkspaceQueryParams = zod.object({
+  "q": zod.coerce.string().min(searchWorkspaceQueryQMin).max(searchWorkspaceQueryQMax),
+  "limit": zod.coerce.number().min(1).max(searchWorkspaceQueryLimitMax).default(searchWorkspaceQueryLimitDefault)
+})
+
+export const SearchWorkspaceResponseItem = zod.object({
+  "id": zod.string(),
+  "kind": zod.enum(['client', 'supplier', 'invoice', 'filing', 'obligation', 'work_item', 'firm']),
+  "label": zod.string(),
+  "description": zod.string(),
+  "group": zod.string(),
+  "href": zod.string()
+})
+export const SearchWorkspaceResponse = zod.array(SearchWorkspaceResponseItem)
+
+
+/**
+ * @summary List collaborative work items in the caller's firm and client scope
+ */
+export const listWorkItemsQueryLimitDefault = 50;
+export const listWorkItemsQueryLimitMax = 100;
+
+
+
+export const ListWorkItemsQueryParams = zod.object({
+  "status": zod.enum(['open', 'in_progress', 'blocked', 'done']).optional(),
+  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "limit": zod.coerce.number().min(1).max(listWorkItemsQueryLimitMax).default(listWorkItemsQueryLimitDefault)
+})
+
+
+
+
+export const ListWorkItemsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid().nullable(),
+  "clientName": zod.string().nullable(),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "dueAt": zod.coerce.date().nullable(),
+  "assignedTo": zod.string().uuid().nullable(),
+  "assignedToName": zod.string().nullable(),
+  "createdBy": zod.string().uuid(),
+  "createdByName": zod.string().nullable(),
+  "entityType": zod.string().nullable(),
+  "entityId": zod.string().uuid().nullable(),
+  "href": zod.string().nullable(),
+  "version": zod.number().min(1),
+  "completedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListWorkItemsResponse = zod.array(ListWorkItemsResponseItem)
+
+
+/**
+ * @summary Create a collaborative work item idempotently
+ */
+export const createWorkItemBodyTitleMin = 2;
+export const createWorkItemBodyTitleMax = 160;
+
+export const createWorkItemBodyDescriptionMax = 2000;
+
+export const createWorkItemBodyEntityTypeMax = 60;
+
+export const createWorkItemBodyHrefMax = 300;
+
+
+export const createWorkItemBodyHrefRegExp = new RegExp('^');
+
+
+export const CreateWorkItemBody = zod.object({
+  "clientRequestId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid().optional(),
+  "title": zod.string().min(createWorkItemBodyTitleMin).max(createWorkItemBodyTitleMax),
+  "description": zod.string().max(createWorkItemBodyDescriptionMax).optional(),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']).optional(),
+  "dueAt": zod.coerce.date().optional(),
+  "assignedTo": zod.string().uuid().optional(),
+  "entityType": zod.string().min(1).max(createWorkItemBodyEntityTypeMax).optional(),
+  "entityId": zod.string().uuid().optional(),
+  "href": zod.string().max(createWorkItemBodyHrefMax).regex(createWorkItemBodyHrefRegExp).optional()
+})
+
+
+
+
+export const CreateWorkItemResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid().nullable(),
+  "clientName": zod.string().nullable(),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "dueAt": zod.coerce.date().nullable(),
+  "assignedTo": zod.string().uuid().nullable(),
+  "assignedToName": zod.string().nullable(),
+  "createdBy": zod.string().uuid(),
+  "createdByName": zod.string().nullable(),
+  "entityType": zod.string().nullable(),
+  "entityId": zod.string().uuid().nullable(),
+  "href": zod.string().nullable(),
+  "version": zod.number().min(1),
+  "completedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a work item using an optimistic version guard
+ */
+export const UpdateWorkItemParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+export const updateWorkItemBodyTitleMin = 2;
+export const updateWorkItemBodyTitleMax = 160;
+
+export const updateWorkItemBodyDescriptionMax = 2000;
+
+
+
+export const UpdateWorkItemBody = zod.object({
+  "version": zod.number().min(1),
+  "title": zod.string().min(updateWorkItemBodyTitleMin).max(updateWorkItemBodyTitleMax).optional(),
+  "description": zod.string().max(updateWorkItemBodyDescriptionMax).nullish(),
+  "status": zod.enum(['open', 'in_progress', 'blocked', 'done']).optional(),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']).optional(),
+  "dueAt": zod.coerce.date().nullish(),
+  "assignedTo": zod.string().uuid().nullish()
+})
+
+
+
+
+export const UpdateWorkItemResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid().nullable(),
+  "clientName": zod.string().nullable(),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "dueAt": zod.coerce.date().nullable(),
+  "assignedTo": zod.string().uuid().nullable(),
+  "assignedToName": zod.string().nullable(),
+  "createdBy": zod.string().uuid(),
+  "createdByName": zod.string().nullable(),
+  "entityType": zod.string().nullable(),
+  "entityId": zod.string().uuid().nullable(),
+  "href": zod.string().nullable(),
+  "version": zod.number().min(1),
+  "completedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List append-only comments for one accessible work item
+ */
+export const ListWorkItemCommentsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListWorkItemCommentsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "workItemId": zod.string().uuid(),
+  "authorId": zod.string().uuid(),
+  "authorName": zod.string().nullable(),
+  "body": zod.string(),
+  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "createdAt": zod.coerce.date()
+})
+export const ListWorkItemCommentsResponse = zod.array(ListWorkItemCommentsResponseItem)
+
+
+/**
+ * @summary Add a comment idempotently and validate mentioned users
+ */
+export const CreateWorkItemCommentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const createWorkItemCommentBodyBodyMax = 2000;
+
+export const createWorkItemCommentBodyMentionedUserIdsMax = 20;
+
+
+
+export const CreateWorkItemCommentBody = zod.object({
+  "clientRequestId": zod.string().uuid(),
+  "body": zod.string().min(1).max(createWorkItemCommentBodyBodyMax),
+  "mentionedUserIds": zod.array(zod.string().uuid()).max(createWorkItemCommentBodyMentionedUserIdsMax).optional()
+})
+
+export const CreateWorkItemCommentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "workItemId": zod.string().uuid(),
+  "authorId": zod.string().uuid(),
+  "authorName": zod.string().nullable(),
+  "body": zod.string(),
+  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "createdAt": zod.coerce.date()
 })
 
 
@@ -78,6 +366,12 @@ export const LoginResponse = zod.object({
  * @summary Clear the session cookie
  */
 export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Revoke every session for the signed-in account and clear this cookie
+ */
+export const RevokeSessionsResponse = zod.void()
 
 
 /**
@@ -341,11 +635,42 @@ export const RequestAdvisoryReviewResponse = zod.void()
  * @summary Record one privacy-safe aggregate product-usability event
  */
 export const RecordUsabilityEventBody = zod.object({
-  "event": zod.enum(['landing_cta', 'login_attempt', 'login_success', 'login_failure', 'password_reset_request', 'calculator_started', 'calculator_completed', 'advisory_request', 'zero_result_search', 'workflow_started', 'workflow_completed', 'workflow_abandoned', 'help_opened', 'help_search_no_result', 'help_helpful', 'help_unhelpful']),
-  "surface": zod.enum(['landing', 'login', 'password_reset', 'calculator', 'portfolio', 'client_import', 'invoice_import', 'console_help', 'sme_help'])
+  "event": zod.enum(['landing_cta', 'login_attempt', 'login_success', 'login_failure', 'password_reset_request', 'calculator_started', 'calculator_completed', 'advisory_request', 'zero_result_search', 'workflow_started', 'workflow_completed', 'workflow_abandoned', 'help_opened', 'help_search_no_result', 'help_helpful', 'help_unhelpful', 'access_request_started', 'access_request_submitted', 'access_request_failed', 'today_item_opened', 'work_item_created', 'work_item_completed', 'collaboration_comment_added', 'global_search_started', 'global_search_result_opened', 'integration_tested', 'offline_detected', 'online_restored', 'sessions_revoked']),
+  "surface": zod.enum(['landing', 'login', 'password_reset', 'calculator', 'portfolio', 'client_import', 'invoice_import', 'console_help', 'sme_help', 'access_request', 'today', 'global_search', 'collaboration', 'integrations', 'account_security', 'app_shell'])
 })
 
 export const RecordUsabilityEventResponse = zod.void()
+
+
+/**
+ * @summary Send a consented pilot or account-access request to the configured relay
+ */
+export const requestPlatformAccessBodyNameMin = 2;
+export const requestPlatformAccessBodyNameMax = 100;
+
+export const requestPlatformAccessBodyEmailMax = 254;
+
+export const requestPlatformAccessBodyBusinessNameMin = 2;
+export const requestPlatformAccessBodyBusinessNameMax = 140;
+
+export const requestPlatformAccessBodyMessageMax = 1200;
+
+export const requestPlatformAccessBodyWebsiteMax = 200;
+
+
+
+export const RequestPlatformAccessBody = zod.object({
+  "name": zod.string().min(requestPlatformAccessBodyNameMin).max(requestPlatformAccessBodyNameMax),
+  "email": zod.string().email().max(requestPlatformAccessBodyEmailMax),
+  "businessName": zod.string().min(requestPlatformAccessBodyBusinessNameMin).max(requestPlatformAccessBodyBusinessNameMax),
+  "interest": zod.enum(['business', 'accounting_firm', 'buyer', 'partnership']),
+  "teamSize": zod.enum(['one', 'two_to_ten', 'eleven_to_fifty', 'over_fifty']).optional(),
+  "message": zod.string().max(requestPlatformAccessBodyMessageMax).optional(),
+  "consent": zod.boolean(),
+  "website": zod.string().max(requestPlatformAccessBodyWebsiteMax).optional()
+})
+
+export const RequestPlatformAccessResponse = zod.void()
 
 
 /**
@@ -5676,14 +6001,62 @@ export const ListCpdEnrollmentsResponse = zod.array(ListCpdEnrollmentsResponseIt
 
 
 /**
+ * @summary Presence-only readiness of this deployment's external service rails
+ */
+export const getIntegrationReadinessResponseLiveCountMin = 0;
+
+export const getIntegrationReadinessResponseTotalCountMin = 0;
+
+
+
+export const GetIntegrationReadinessResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "liveCount": zod.number().min(getIntegrationReadinessResponseLiveCountMin),
+  "totalCount": zod.number().min(getIntegrationReadinessResponseTotalCountMin),
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "category": zod.enum(['tax', 'payments', 'banking', 'messaging', 'accounting']),
+  "status": zod.enum(['live', 'sandbox', 'setup_required']),
+  "note": zod.string(),
+  "setupHref": zod.string()
+}))
+})
+
+
+/**
  * @summary Registered connector implementations
  */
 export const ListConnectorsResponseItem = zod.object({
   "key": zod.string(),
   "name": zod.string(),
-  "description": zod.string()
+  "description": zod.string(),
+  "mode": zod.enum(['sandbox', 'live']),
+  "configured": zod.boolean(),
+  "configurationFields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "required": zod.boolean(),
+  "secret": zod.boolean(),
+  "placeholder": zod.string(),
+  "help": zod.string()
+}))
 })
 export const ListConnectorsResponse = zod.array(ListConnectorsResponseItem)
+
+
+/**
+ * @summary Validate connector configuration without persisting it
+ */
+export const TestErpConnectionBody = zod.object({
+  "connectorKey": zod.string(),
+  "authConfig": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const TestErpConnectionResponse = zod.object({
+  "ok": zod.boolean(),
+  "message": zod.string()
+})
 
 
 export const ListErpConnectionsQueryParams = zod.object({
@@ -8528,9 +8901,33 @@ export const ConfirmStaffEmailResponse = zod.object({
 export const ListStatementConnectorsResponseItem = zod.object({
   "key": zod.string(),
   "name": zod.string(),
-  "description": zod.string()
+  "description": zod.string(),
+  "mode": zod.enum(['sandbox', 'live']),
+  "configured": zod.boolean(),
+  "configurationFields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "required": zod.boolean(),
+  "secret": zod.boolean(),
+  "placeholder": zod.string(),
+  "help": zod.string()
+}))
 })
 export const ListStatementConnectorsResponse = zod.array(ListStatementConnectorsResponseItem)
+
+
+/**
+ * @summary Test a bank-feed configuration without saving it
+ */
+export const TestStatementConnectionBody = zod.object({
+  "connectorKey": zod.string(),
+  "config": zod.record(zod.string(), zod.unknown())
+})
+
+export const TestStatementConnectionResponse = zod.object({
+  "ok": zod.boolean(),
+  "message": zod.string()
+})
 
 
 /**
