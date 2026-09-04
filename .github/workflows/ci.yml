@@ -94,6 +94,7 @@ jobs:
         uses: google/osv-scanner-action/osv-scanner-action@0c58c542420dfd23fcac08dd9c8ca3cca9c36f1a # v2.5.0
         with:
           scan-args: |-
+            --config=osv-scanner.toml
             --lockfile=pnpm-lock.yaml
 
       # Codegen drift: the OpenAPI spec is the contract; committed generated
