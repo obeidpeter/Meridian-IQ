@@ -7,6 +7,8 @@
 //   pnpm --filter @workspace/scripts run e2e
 //
 // Prerequisites (CI builds these in earlier steps):
+//   node scripts/src/ops/mobile-artifact.mjs build
+//   node scripts/src/ops/mobile-artifact.mjs check
 //   pnpm --filter @workspace/api-server run build
 //   BASE_PATH=/ PORT=1 pnpm --filter @workspace/landing run build
 //   BASE_PATH=/console/ PORT=1 pnpm --filter @workspace/console run build
@@ -14,13 +16,15 @@
 //   BASE_PATH=/buyer/ PORT=1 pnpm --filter @workspace/buyer-portal run build
 //   BASE_PATH=/penalty-calculator/ PORT=1 pnpm --filter @workspace/penalty-calculator run build
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { startStaticServer, startWebhookReceiver } from "./serve.mjs";
 import { runJourneys } from "./journeys/index.mjs";
 import { DEMO_PASSWORD } from "./journeys/shared.mjs";
+import { stampManifest } from "../ops/build-manifest.mjs";
+import { verifyDeployment } from "../ops/postdeploy.mjs";
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -36,6 +40,12 @@ const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 8093);
 const RAIL_PORT = Number(process.env.E2E_RAIL_PORT ?? 5199);
 const RAIL_URL = `http://127.0.0.1:${RAIL_PORT}`;
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
+
+if (process.env.E2E_DATABASE_DISPOSABLE !== "1" || !process.env.DATABASE_URL) {
+  throw new Error(
+    "E2E requires a migrated scratch DATABASE_URL and E2E_DATABASE_DISPOSABLE=1; never point it at serving data",
+  );
+}
 
 // Machine-rail credentials, defined once: set on the api-server env below
 // AND threaded into runJourneys, so the server and the journeys cannot
@@ -328,6 +338,9 @@ try {
   });
 
   const failed = results.filter((r) => !r.ok);
+  if (process.env.GITHUB_ACTIONS === "true" && failed.length === 0) {
+    await verifyDeployment(BASE, stampManifest());
+  }
   console.log(
     `\n${results.length - failed.length}/${results.length} checks passed`,
   );
@@ -342,6 +355,12 @@ try {
   );
   exitCode = 2;
 } finally {
+  if (exitCode !== 0) {
+    const output = path.join(ROOT, "test-results");
+    mkdirSync(output, { recursive: true });
+    writeFileSync(path.join(output, "api-server.log"), apiLog);
+    writeFileSync(path.join(output, "fake-rail.log"), railLog);
+  }
   await browser?.close().catch(() => {});
   hookReceiver?.close();
   staticServer?.close();
@@ -355,5 +374,8 @@ try {
 // fake rail wrote to stderr. The crash tails above stay as they are; this is
 // the signal a passing run would otherwise bury.
 printCapped("api-server warn/error lines", warnOrErrorLines(apiLog));
-printCapped("fake rail stderr", railErr.split("\n").filter((l) => l !== ""));
+printCapped(
+  "fake rail stderr",
+  railErr.split("\n").filter((l) => l !== ""),
+);
 process.exit(exitCode);

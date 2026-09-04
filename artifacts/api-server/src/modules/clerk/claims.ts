@@ -1,6 +1,8 @@
 import { and, desc, eq, isNull, lte, or, gte, sql } from "drizzle-orm";
 import {
   getDb,
+  hasDatabaseContext,
+  runInBypassContext,
   claimRecordsTable,
   type ClaimRecord,
   type ProtectedFact,
@@ -35,10 +37,7 @@ export async function listClaims(claimKey?: string): Promise<ClaimRecord[]> {
     .select()
     .from(claimRecordsTable)
     .where(where)
-    .orderBy(
-      claimRecordsTable.claimKey,
-      desc(claimRecordsTable.version),
-    );
+    .orderBy(claimRecordsTable.claimKey, desc(claimRecordsTable.version));
 }
 
 export async function getClaim(id: string): Promise<ClaimRecord> {
@@ -81,6 +80,7 @@ export async function getActiveClaims(): Promise<ClaimRecord[]> {
 // expired (audited), so the register reflects reality without waiting for a
 // human to notice. Runs from the shared sweep registry.
 export async function sweepExpiredClaims(): Promise<number> {
+  if (!hasDatabaseContext()) return runInBypassContext(sweepExpiredClaims);
   const today = new Date().toISOString().slice(0, 10);
   const rows = await getDb()
     .update(claimRecordsTable)
@@ -91,7 +91,10 @@ export async function sweepExpiredClaims(): Promise<number> {
         sql`${claimRecordsTable.effectiveTo} IS NOT NULL AND ${claimRecordsTable.effectiveTo} < ${today}`,
       ),
     )
-    .returning({ id: claimRecordsTable.id, claimKey: claimRecordsTable.claimKey });
+    .returning({
+      id: claimRecordsTable.id,
+      claimKey: claimRecordsTable.claimKey,
+    });
   for (const row of rows) {
     await appendAudit({
       actorId: "clerk-sweep",

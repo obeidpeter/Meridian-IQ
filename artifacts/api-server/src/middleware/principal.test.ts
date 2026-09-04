@@ -2,7 +2,7 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import cookieParser from "cookie-parser";
-import { requireCsrfHeader } from "./principal.ts";
+import { requireCsrfHeader, devAuthEnabled } from "./principal.ts";
 import { SESSION_COOKIE } from "../modules/auth/session.ts";
 import { listen, closeAllServers } from "../test-helpers/route-harness.ts";
 
@@ -28,6 +28,16 @@ after(async () => {
 });
 
 const COOKIE = { cookie: `${SESSION_COOKIE}=some-session-token` };
+
+test("mock identity requires exact explicit opt-in in development/test and is always forbidden in production", () => {
+  for (const nodeEnv of [undefined, "", "production", "staging", "preview", "developmnt", "development", "test"]) {
+    for (const flag of [undefined, "", "false", "1", "TRUE", "true"]) {
+      assert.equal(devAuthEnabled({ NODE_ENV: nodeEnv, ENABLE_DEV_AUTH: flag }),
+        (nodeEnv === "development" || nodeEnv === "test") && flag === "true",
+        `NODE_ENV=${nodeEnv}, ENABLE_DEV_AUTH=${flag}`);
+    }
+  }
+});
 
 test("cookie-authenticated mutation without the header is refused", async () => {
   const base = await listen(guardedApp());

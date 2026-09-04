@@ -18,7 +18,7 @@ localPort = 24917
 run = "pnpm --filter @workspace/buyer-portal run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/buyer-portal", "run", "build" ]
+build = [ "node", "scripts/src/ops/replit-promote.mjs", "build", "buyer-portal" ]
 publicDir = "artifacts/buyer-portal/dist/public"
 serve = "static"
 

@@ -1,6 +1,9 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { clearLegacySessionCaches } from "@workspace/web-ui";
+
+void clearLegacySessionCaches();
 
 // Authentication is the shared first-party session (see the landing portal at
 // "/"): the HttpOnly, origin-wide session cookie is sent automatically with
@@ -16,7 +19,18 @@ if ("serviceWorker" in navigator) {
     if (import.meta.env.DEV) {
       navigator.serviceWorker
         .getRegistrations()
-        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        .then((regs) =>
+          Promise.all(
+            regs
+              .filter(
+                (r) =>
+                  r.scope ===
+                  new URL(import.meta.env.BASE_URL, window.location.origin)
+                    .href,
+              )
+              .map((r) => r.unregister()),
+          ),
+        )
         .catch(() => {});
       if ("caches" in window) {
         caches
@@ -24,7 +38,11 @@ if ("serviceWorker" in navigator) {
           .then((keys) =>
             Promise.all(
               keys
-                .filter((k) => k.startsWith("meridianiq-"))
+                .filter(
+                  (k) =>
+                    k.startsWith("meridianiq-sme-static-") ||
+                    /^meridianiq-v\d+$/.test(k),
+                )
                 .map((k) => caches.delete(k)),
             ),
           )
@@ -34,7 +52,10 @@ if ("serviceWorker" in navigator) {
     }
     const swUrl = `${import.meta.env.BASE_URL}sw.js`;
     navigator.serviceWorker
-      .register(swUrl, { scope: import.meta.env.BASE_URL })
+      .register(swUrl, {
+        scope: import.meta.env.BASE_URL,
+        updateViaCache: "none",
+      })
       .catch(() => {
         /* offline support is best-effort */
       });

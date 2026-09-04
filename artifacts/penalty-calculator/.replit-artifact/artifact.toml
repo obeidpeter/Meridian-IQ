@@ -18,7 +18,7 @@ localPort = 21831
 run = "pnpm --filter @workspace/penalty-calculator run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/penalty-calculator", "run", "build" ]
+build = [ "node", "scripts/src/ops/replit-promote.mjs", "build", "penalty-calculator" ]
 publicDir = "artifacts/penalty-calculator/dist/public"
 serve = "static"
 

@@ -29,8 +29,13 @@ interface DraftEnvelope {
 export function draftStorageKey(
   userId: string,
   firmId?: string | null,
+  clientPartyId?: string,
+  draftId?: string,
 ): string {
-  return `${DRAFT_KEY}:${firmId ?? "no-firm"}:${userId}`;
+  const owner = `${DRAFT_KEY}:${firmId ?? "no-firm"}:${userId}`;
+  return clientPartyId
+    ? `${owner}:${clientPartyId}${draftId ? `:${draftId}` : ""}`
+    : owner;
 }
 
 export function emptyInvoiceDraft(): DraftState {
@@ -180,5 +185,107 @@ export function saveInvoiceDraft(
 }
 
 export function storedInvoiceDraftHasWork(key: string): boolean {
-  return loadInvoiceDraft(key).restored;
+  return loadInvoiceDraft(key).restored || listDraftRecoveries(key).length > 0;
+}
+
+export interface DraftRecovery {
+  version: 2;
+  id: string;
+  writerId: string;
+  revision: number;
+  draft: DraftState;
+  savedAt: string;
+  expiresAt: string;
+  pending?: { writeId: string; expectedRevision: number; draft: DraftState };
+}
+
+export function saveDraftRecovery(
+  scopeKey: string,
+  recovery: DraftRecovery,
+): boolean {
+  try {
+    window.localStorage.setItem(
+      `${scopeKey}:${recovery.id}:recovery:${recovery.writerId}`,
+      JSON.stringify(recovery),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function removeDraftRecovery(
+  scopeKey: string,
+  recovery: Pick<DraftRecovery, "id" | "writerId">,
+): void {
+  removeInvoiceDraft(
+    `${scopeKey}:${recovery.id}:recovery:${recovery.writerId}`,
+  );
+}
+
+export function listDraftRecoveries(
+  scopeKey: string,
+  now = new Date(),
+): DraftRecovery[] {
+  const rows: DraftRecovery[] = [];
+  try {
+    for (const key of Object.keys(window.localStorage)) {
+      if (!key.startsWith(`${scopeKey}:`) || !key.includes(":recovery:"))
+        continue;
+      try {
+        const value = JSON.parse(window.localStorage.getItem(key) ?? "null");
+        if (
+          !isObject(value) ||
+          value.version !== 2 ||
+          typeof value.id !== "string" ||
+          typeof value.writerId !== "string" ||
+          !Number.isSafeInteger(value.revision) ||
+          Number(value.revision) < 0 ||
+          typeof value.savedAt !== "string" ||
+          typeof value.expiresAt !== "string"
+        )
+          continue;
+        if (
+          !Number.isFinite(Date.parse(value.expiresAt)) ||
+          Date.parse(value.expiresAt) <= now.getTime()
+        ) {
+          removeInvoiceDraft(key);
+          continue;
+        }
+        const draft = normalizeDraft(value.draft);
+        if (!draft || !draftHasWork(draft)) continue;
+        let pending: DraftRecovery["pending"];
+        if (isObject(value.pending)) {
+          const content = normalizeDraft(value.pending.draft);
+          if (
+            content &&
+            typeof value.pending.writeId === "string" &&
+            Number.isSafeInteger(value.pending.expectedRevision) &&
+            Number(value.pending.expectedRevision) >= 0
+          ) {
+            pending = {
+              writeId: value.pending.writeId,
+              expectedRevision: Number(value.pending.expectedRevision),
+              draft: content,
+            };
+          }
+        }
+        rows.push({
+          version: 2,
+          id: value.id,
+          writerId: value.writerId,
+          revision: Number(value.revision),
+          draft,
+          savedAt: value.savedAt,
+          expiresAt: value.expiresAt,
+          pending,
+        });
+      } catch {
+        /* A corrupt recovery slot does not hide other drafts. */
+      }
+    }
+  } catch {
+    return [];
+  }
+  return rows.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }

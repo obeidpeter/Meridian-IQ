@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
 import {
   getDb,
+  withDatabaseContext,
   runInBypassContext,
   membershipsTable,
   messagesTable,
@@ -186,10 +187,7 @@ const expoReceiptTransport: PushReceiptTransport = async (ticketIds) => {
   });
   if (!resp.ok) return {};
   const payload = (await resp.json().catch(() => null)) as {
-    data?: Record<
-      string,
-      { status?: string; details?: { error?: string } }
-    >;
+    data?: Record<string, { status?: string; details?: { error?: string } }>;
   } | null;
   const receipts: Record<string, { status: string; error?: string }> = {};
   for (const [id, r] of Object.entries(payload?.data ?? {})) {
@@ -216,7 +214,6 @@ export function setPushReceiptTransport(t: PushReceiptTransport): void {
 export function resetPushReceiptTransport(): void {
   receiptTransport = expoReceiptTransport;
 }
-
 
 // Devices that should receive alerts for a client Party: devices registered by
 // a principal scoped to that client, plus devices of firm staff (no client
@@ -268,7 +265,10 @@ export async function sendPushAlert(opts: {
   entityId?: string;
 }): Promise<PushSendOutcome> {
   return dispatchPush(
-    await devicesForClientParty(opts.clientPartyId, opts.firmId),
+    await withDatabaseContext(
+      { bypass: !opts.firmId, firmId: opts.firmId },
+      () => devicesForClientParty(opts.clientPartyId, opts.firmId),
+    ),
     recipientRefFor(opts.clientPartyId),
     // The ledger row's REAL recipient identity: the client party. The lossy
     // ref above stays for display/correlation only (SEC-12 shape unchanged).
@@ -287,7 +287,9 @@ export async function sendPushToUser(opts: {
   entityId?: string;
 }): Promise<PushSendOutcome> {
   return dispatchPush(
-    await devicesForUser(opts.userId),
+    await withDatabaseContext({ bypass: true, firmId: null }, () =>
+      devicesForUser(opts.userId),
+    ),
     pointerEntityRef("usr", opts.userId),
     // The ledger row's REAL recipient identity: the user themselves.
     { recipientUserId: opts.userId },
@@ -303,7 +305,11 @@ async function dispatchPush(
   devices: { expoPushToken: string }[],
   recipientRef: string,
   identity: { recipientUserId?: string; recipientPartyId?: string },
-  opts: { templateKey: PushTemplateKey; entityType?: string; entityId?: string },
+  opts: {
+    templateKey: PushTemplateKey;
+    entityType?: string;
+    entityId?: string;
+  },
 ): Promise<PushSendOutcome> {
   if (devices.length === 0) {
     return {
@@ -359,15 +365,17 @@ async function dispatchPush(
       // Persist pending tickets FIRST so a receipt-transport failure below
       // cannot lose them; the sweep deletes whatever the immediate check
       // resolves here (or resolves them itself later).
-      await getDb()
-        .insert(pushTicketsTable)
-        .values(
-          [...ticketIdToToken].map(([ticketId, expoPushToken]) => ({
-            ticketId,
-            expoPushToken,
-          })),
-        )
-        .onConflictDoNothing({ target: pushTicketsTable.ticketId });
+      await withDatabaseContext({ bypass: true, firmId: null }, () =>
+        getDb()
+          .insert(pushTicketsTable)
+          .values(
+            [...ticketIdToToken].map(([ticketId, expoPushToken]) => ({
+              ticketId,
+              expoPushToken,
+            })),
+          )
+          .onConflictDoNothing({ target: pushTicketsTable.ticketId }),
+      );
     }
     // Ticket-level deaths ride along as extraDead so they are pruned in the
     // same single devices delete — even when no ticket id materialised and
@@ -378,20 +386,22 @@ async function dispatchPush(
   }
 
   const providerMessageId = ok ? `expo_push_${Date.now()}` : undefined;
-  await getDb()
-    .insert(messagesTable)
-    .values({
-      channel: "push",
-      recipientRef,
-      recipientUserId: identity.recipientUserId ?? null,
-      recipientPartyId: identity.recipientPartyId ?? null,
-      templateKey: opts.templateKey,
-      entityType: opts.entityType ?? null,
-      entityId: opts.entityId ?? null,
-      status: ok ? "sent" : "failed",
-      providerMessageId,
-      error: ok ? null : (detail ?? "push delivery failed"),
-    });
+  await withDatabaseContext({ bypass: true, firmId: null }, () =>
+    getDb()
+      .insert(messagesTable)
+      .values({
+        channel: "push",
+        recipientRef,
+        recipientUserId: identity.recipientUserId ?? null,
+        recipientPartyId: identity.recipientPartyId ?? null,
+        templateKey: opts.templateKey,
+        entityType: opts.entityType ?? null,
+        entityId: opts.entityId ?? null,
+        status: ok ? "sent" : "failed",
+        providerMessageId,
+        error: ok ? null : (detail ?? "push delivery failed"),
+      }),
+  );
 
   return {
     status: ok ? "sent" : "failed",
@@ -430,20 +440,22 @@ async function resolveReceiptBatch(
       if (token) deadTokens.add(token);
     }
   }
-  let pruned = 0;
-  if (deadTokens.size > 0) {
-    const deleted = await getDb()
-      .delete(pushDevicesTable)
-      .where(inArray(pushDevicesTable.expoPushToken, [...deadTokens]))
-      .returning({ id: pushDevicesTable.id });
-    pruned = deleted.length;
-  }
-  if (resolvedIds.length > 0) {
-    await getDb()
-      .delete(pushTicketsTable)
-      .where(inArray(pushTicketsTable.ticketId, resolvedIds));
-  }
-  return pruned;
+  return withDatabaseContext({ bypass: true, firmId: null }, async () => {
+    let pruned = 0;
+    if (deadTokens.size > 0) {
+      const deleted = await getDb()
+        .delete(pushDevicesTable)
+        .where(inArray(pushDevicesTable.expoPushToken, [...deadTokens]))
+        .returning({ id: pushDevicesTable.id });
+      pruned = deleted.length;
+    }
+    if (resolvedIds.length > 0) {
+      await getDb()
+        .delete(pushTicketsTable)
+        .where(inArray(pushTicketsTable.ticketId, resolvedIds));
+    }
+    return pruned;
+  });
 }
 
 // Expo receipts typically materialise ~15 minutes after the send; only tickets

@@ -77,9 +77,18 @@ async function journeyGovernance(page, BASE, check) {
 
     // A DIFFERENT human approves — evidence row, 201.
     await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+    const reviewResponse = await page.request.get(
+      BASE + `/api/invoices/${invoiceId}`,
+    );
+    if (reviewResponse.status() !== 200)
+      throw new Error("Cannot load invoice content for approval fixture");
+    const reviewed = await reviewResponse.json();
     const approveRes = await page.request.post(
       BASE + `/api/invoices/${invoiceId}/approve`,
-      { headers: CSRF },
+      {
+        headers: CSRF,
+        data: { expectedRevision: reviewed.invoice.contentRevision },
+      },
     );
     check(
       "a colleague records a submission approval (201)",
@@ -173,7 +182,10 @@ async function journeyCollections(page, BASE, check, hookKey) {
   // 401, proving the rail is LIT but guarded (an unset env would 404).
   const badToken = await fetch(BASE + "/api/collections/inbound", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-op-token": "wrong-token" },
+    headers: {
+      "content-type": "application/json",
+      "x-op-token": "wrong-token",
+    },
     body: JSON.stringify({
       accountReference: account?.accountReference ?? "CA-MISSING",
       amount: "1.00",
@@ -257,7 +269,10 @@ async function journeyCollections(page, BASE, check, hookKey) {
   // schedule. 202 either way by design (the settled invoice no longer binds).
   const legacyPath = await fetch(BASE + "/api/collections/inbound", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-op-token": hookKey.secret },
+    headers: {
+      "content-type": "application/json",
+      "x-op-token": hookKey.secret,
+    },
     body: settlementBody,
   });
   check(
@@ -350,7 +365,8 @@ async function journeyAutomation(page, BASE, check) {
     });
     const invoiceId = created.invoiceId;
     const propRes = await page.request.get(
-      BASE + `/api/clerk/action-proposals?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+      BASE +
+        `/api/clerk/action-proposals?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     const proposals = propRes.status() === 200 ? await propRes.json() : null;
     const overdue = (proposals?.actions ?? []).find(
@@ -549,7 +565,8 @@ async function journeyObligations(page, BASE, check) {
     );
 
     const list = await page.request.get(
-      BASE + `/api/obligations?clientPartyId=${DEMO_CLIENT_PARTY_ID}&status=open`,
+      BASE +
+        `/api/obligations?clientPartyId=${DEMO_CLIENT_PARTY_ID}&status=open`,
     );
     const listBody = list.ok() ? await list.json() : { obligations: [] };
     check(
@@ -675,9 +692,7 @@ async function journeyFilings(page, BASE, check) {
       BASE + `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     const rows = list.ok() ? (await list.json()).filings : [];
-    const vatRow = rows.find(
-      (f) => f.taxType === "vat" && f.period === period,
-    );
+    const vatRow = rows.find((f) => f.taxType === "vat" && f.period === period);
     const payeRow = rows.find(
       (f) => f.taxType === "paye" && f.period === period,
     );
@@ -691,8 +706,7 @@ async function journeyFilings(page, BASE, check) {
     // rows are unfiled, so open_filings flags them for attention. Against a
     // kept database an earlier run may already have filed both demo rows —
     // the item then honestly reads clear (the skip-or-pass posture).
-    const bothFiled =
-      vatRow?.status === "filed" && payeRow?.status === "filed";
+    const bothFiled = vatRow?.status === "filed" && payeRow?.status === "filed";
     const close = await page.request.get(
       BASE + `/api/month-end-close?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
@@ -751,7 +765,10 @@ async function journeyFilings(page, BASE, check) {
         BASE + `/api/filings/${target.id}/status`,
         { data: { status: "prepared" }, headers: CSRF },
       );
-      prepared = { status: res.status(), body: res.ok() ? await res.json() : {} };
+      prepared = {
+        status: res.status(),
+        body: res.ok() ? await res.json() : {},
+      };
     }
     check(
       "the return marks prepared",
@@ -884,9 +901,7 @@ async function journeyWht(page, BASE, check) {
     const whtRow = whtRows.find((f) => f.period === period);
     check(
       "filings sync mints the WHT remittance row",
-      sync.status() === 200 &&
-        whtList.status() === 200 &&
-        whtRow !== undefined,
+      sync.status() === 200 && whtList.status() === 200 && whtRow !== undefined,
       `sync ${sync.status()}, list ${whtList.status()}, ${whtRows.length} wht rows, period ${period}`,
     );
 

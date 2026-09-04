@@ -9,7 +9,12 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
-import { runCorrelationContext, runRequestContext } from "@workspace/db";
+import {
+  runCorrelationContext,
+  runRequestContext,
+  runHttpDatabaseBoundary,
+  finishHttpAuthentication,
+} from "@workspace/db";
 import router from "./routes";
 import inboundRouter from "./routes/inbound";
 import { logger } from "./lib/logger";
@@ -256,7 +261,7 @@ app.use(
 // Keep the request reference available to routes that intentionally manage
 // their own short transactions outside tenantContext.
 app.use((req, _res, next) => {
-  runCorrelationContext(String(req.id), next);
+  runHttpDatabaseBoundary(() => runCorrelationContext(String(req.id), next));
 });
 
 app.use((req, res, next) => {
@@ -325,6 +330,7 @@ app.use(
       callback(null, allowed);
     },
     credentials: true,
+    exposedHeaders: ["X-Operation-Id", "Idempotency-Replayed", "X-Request-Id"],
   }),
 );
 // JSON only, 8mb, raw bytes retained for signed machine rails — see
@@ -359,7 +365,12 @@ if (process.env.CLERK_SECRET_KEY) {
     app.use(clerkMiddleware({ authorizedParties }));
   }
 }
-app.use(resolvePrincipal);
+app.use((req, res, next) => {
+  resolvePrincipal(req, res, (err) => {
+    finishHttpAuthentication();
+    next(err);
+  });
+});
 // Per-principal rate limiting: AFTER resolvePrincipal (keys on the resolved
 // userId) and BEFORE tenantContext (the counter bump must ride the raw pool
 // outside the request transaction — a 429's own rollback would otherwise

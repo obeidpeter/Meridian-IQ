@@ -62,6 +62,23 @@ test("every tenant-keyed table has an RLS policy or a documented exemption", asy
     );
 
     assert.ok(rows.length > 0, "enumeration found tenant-keyed tables");
+    for (const table of [
+      "operations",
+      "invoice_drafts",
+      "clerk_reservations",
+      "import_runs",
+      "import_run_chunks",
+    ]) {
+      const row = rows.find((entry) => entry.table_name === table);
+      assert.ok(
+        row?.rls_enabled && row.rls_forced && row.policies === 1,
+        `${table}: additive recovery table must have exactly its reviewed enforced policy`,
+      );
+      assert.ok(
+        !(table in ALLOWLIST),
+        `${table}: recovery data cannot be exempted from RLS`,
+      );
+    }
 
     const uncovered = rows.filter(
       (r) =>

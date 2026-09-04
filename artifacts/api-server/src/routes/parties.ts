@@ -32,7 +32,6 @@ import {
 import { DomainError } from "../modules/errors";
 import {
   createParty,
-  getParty,
   mergeParties,
   partySphereCondition,
   splitParty,
@@ -157,10 +156,16 @@ router.patch("/parties/:id", async (req, res): Promise<void> => {
 router.get("/parties/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
   const params = parseOrThrow(GetPartyParams, req.params);
-  // Same access model as PATCH: engagement OR the party appears on one of the
-  // firm's invoices — firm staff must be able to view a buyer they may edit.
-  await assertPartyAccessOrInvoiceRef(req.principal, params.id);
-  const party = await getParty(params.id);
+  // Hydrating a selection has the same read scope as the directory, not PATCH.
+  const [party] = await getDb()
+    .select()
+    .from(partiesTable)
+    .where(
+      and(
+        eq(partiesTable.id, params.id),
+        partySphereCondition(req.principal) ?? undefined,
+      ),
+    );
   if (!party) {
     throw new DomainError("NOT_FOUND", "Party not found", 404);
   }

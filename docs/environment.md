@@ -164,6 +164,55 @@ remains outside the active scope.
 These are test-process controls. CI owns stable values; local overrides should
 use isolated ports and databases.
 
+## Release and Test Controls
+
+Release verification uses `RELEASE_MANIFEST` (local CI manifest path),
+`RELEASE_MANIFEST_SHA256` (checksum obtained from the trusted CI artifact record),
+`RELEASE_ROLLBACK_REVISION` (full SHA of a reviewed compatible rollback build),
+and `RELEASE_BASE_URL` (deployment origin for read-only postdeploy checks).
+`RELEASE_TRAFFIC_DRAINED=1` is an operator assertion, not a traffic-control
+mechanism: it is required only with the explicit `--offline-bootstrap` flag.
+All web instances, workers, scheduled tasks and external writers must already
+be stopped. `RELEASE_PUSH_FORCE` is retired and refused. `RELEASE_BACKUP` no
+longer bypasses backup requirements; durable backup/restore evidence is mandatory.
+
+Native Replit production descriptors read `release/build-manifest.json` from the
+checkout and require `RELEASE_MANIFEST_SHA256` during every build verification
+and API startup. Provide the checksum independently through trusted Publish
+configuration; it is not a download credential and must not be client-bundled.
+The API build additionally requires the existing production `DATABASE_URL` and
+`RELEASE_ROLLBACK_REVISION` for the mandatory read-only release preflight. The
+startup adapter sets `BUILD_REVISION` and `EXPECTED_BUILD_REVISION` from the
+checksum-verified manifest before loading the API, overriding a stale value or
+Replit deployment UUID. No new secret or download mechanism is introduced.
+The mobile release package reads the public production `EXPO_PUBLIC_DOMAIN`
+and `EXPO_PUBLIC_REPL_ID` from `artifacts/mobile/eas.json`; it does not inherit
+development host/Repl overrides. Its manifest also binds `/mobile/`, and mobile
+startup rejects a different `BASE_PATH`. These public values are build inputs,
+not secrets. Verify the actual expo-domain host/path in Replit before publishing.
+`CI` set to `1` selects noninteractive native release export and refuses reuse of a
+running Metro instance whose build configuration cannot be established. It is
+not an authentication control or a substitute for trusted GitHub provenance.
+
+`E2E_DATABASE_DISPOSABLE` must be `1` to acknowledge that `DATABASE_URL` is a
+migrated scratch database. It is required for the main-app integration tests
+and browser suite, including SQL failure injection. `E2E_RELIABILITY_ONLY`
+selects one exported reliability journey by name for independent reproduction;
+leave it unset in CI. `E2E_RELIABILITY_REVERSE` set to `1` reverses only the new isolated
+journeys, not the legacy suite's documented shared-seed order.
+`ENABLE_DEV_AUTH=true` is explicitly set by the main-app integration fixture
+before importing the app. Browser journeys use real seeded login sessions.
+
+`GITHUB_ACTIONS`, `GITHUB_SHA`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT` and
+`GITHUB_REPOSITORY` are CI-provided provenance, not secrets. Manifest stamping
+refuses non-CI execution. CI sets `BUILD_REVISION` to the full source SHA.
+Do not manufacture CI variables to bless an untested local artifact.
+
+`CATALOGUE_OUT_DIR` optionally selects the local state-catalogue build/report
+directory (default `tmp/state-catalogue-r198`). It is not a secret or a production
+setting. The harness rebuilds its `site` subdirectory; choose a dedicated scratch
+path, never a directory holding source or customer data.
+
 ## Adding a Variable
 
 1. Give it one owner and a safe unset/default behavior.

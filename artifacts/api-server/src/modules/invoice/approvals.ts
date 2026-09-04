@@ -7,6 +7,7 @@ import {
   type InvoiceApprovalRow,
 } from "@workspace/db";
 import { DomainError } from "../errors";
+import { withInvoiceLock } from "./revision";
 import { appendAudit } from "../audit/audit";
 import { isUuid } from "../../lib/uuid";
 import { assertReceivableOriented } from "./orientation";
@@ -102,6 +103,27 @@ export async function recordApproval(
     supplierPartyId: string;
     buyerPartyId: string;
     status: string;
+    contentRevision?: number;
+  },
+  actorUserId: string,
+  note?: string,
+  expectedRevision?: number,
+): Promise<InvoiceApprovalRow> {
+  return withInvoiceLock(
+    invoice.id,
+    (locked) => recordApprovalLocked(locked, actorUserId, note),
+    expectedRevision ?? invoice.contentRevision,
+  );
+}
+
+async function recordApprovalLocked(
+  invoice: {
+    id: string;
+    firmId: string;
+    supplierPartyId: string;
+    buyerPartyId: string;
+    status: string;
+    contentRevision: number;
   },
   actorUserId: string,
   note?: string,
@@ -114,12 +136,26 @@ export async function recordApproval(
       409,
     );
   }
+  const [existing] = await getDb()
+    .select()
+    .from(invoiceApprovalsTable)
+    .where(
+      and(
+        eq(invoiceApprovalsTable.invoiceId, invoice.id),
+        eq(invoiceApprovalsTable.approvedByUserId, actorUserId),
+        eq(invoiceApprovalsTable.contentRevision, invoice.contentRevision),
+        isNull(invoiceApprovalsTable.revokedAt),
+      ),
+    )
+    .limit(1);
+  if (existing) return existing;
   const [row] = await getDb()
     .insert(invoiceApprovalsTable)
     .values({
       firmId: invoice.firmId,
       invoiceId: invoice.id,
       approvedByUserId: actorUserId,
+      contentRevision: invoice.contentRevision,
       note: note ?? null,
     })
     .returning();
@@ -131,7 +167,11 @@ export async function recordApproval(
     entityId: invoice.id,
     // Pointer-only: the approval id and the state it covered — the note is
     // free text and stays on the approval row.
-    after: { approvalId: row.id, status: invoice.status },
+    after: {
+      approvalId: row.id,
+      status: invoice.status,
+      contentRevision: invoice.contentRevision,
+    },
   });
   return row;
 }
@@ -140,6 +180,7 @@ export async function recordApproval(
 export interface ApprovalView {
   id: string;
   invoiceId: string;
+  contentRevision: number | null;
   approvedByUserId: string;
   approvedByName: string | null;
   note: string | null;
@@ -171,6 +212,7 @@ export async function approvalViews(
   return rows.map((r) => ({
     id: r.id,
     invoiceId: r.invoiceId,
+    contentRevision: r.contentRevision,
     approvedByUserId: r.approvedByUserId,
     approvedByName: names.get(r.approvedByUserId) ?? null,
     note: r.note,
@@ -181,7 +223,9 @@ export async function approvalViews(
 
 // Approvals on an invoice, newest first, REVOKED ONES INCLUDED — the list is
 // the evidence trail, not just the live state.
-export async function listApprovals(invoiceId: string): Promise<ApprovalView[]> {
+export async function listApprovals(
+  invoiceId: string,
+): Promise<ApprovalView[]> {
   const rows = await getDb()
     .select()
     .from(invoiceApprovalsTable)
@@ -243,6 +287,7 @@ export async function pendingApprovals(
     AND NOT EXISTS (
       SELECT 1 FROM invoice_approvals a
       WHERE a.invoice_id = i.id AND a.revoked_at IS NULL
+        AND a.content_revision = i.content_revision
     )`;
   const [agg] = (
     await getDb().execute<{ count: number; oldest_days: number | null }>(sql`
@@ -308,6 +353,7 @@ export async function awaitingApproval(invoice: {
     .where(
       and(
         eq(invoiceApprovalsTable.invoiceId, invoice.id),
+        sql`${invoiceApprovalsTable.contentRevision} = (SELECT content_revision FROM invoices WHERE id = ${invoice.id})`,
         isNull(invoiceApprovalsTable.revokedAt),
       ),
     )
@@ -328,6 +374,7 @@ export async function assertSubmitApproved(
   if (!(await firmSubmitApprovalRequired(invoice.firmId))) return;
   const conditions: SQL[] = [
     eq(invoiceApprovalsTable.invoiceId, invoice.id),
+    sql`${invoiceApprovalsTable.contentRevision} = (SELECT content_revision FROM invoices WHERE id = ${invoice.id})`,
     isNull(invoiceApprovalsTable.revokedAt),
   ];
   if (actorId !== undefined) {

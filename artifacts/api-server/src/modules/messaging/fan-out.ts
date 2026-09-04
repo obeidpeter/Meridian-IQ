@@ -1,4 +1,4 @@
-import type { AlertPreferences } from "@workspace/db";
+import { withDatabaseContext, type AlertPreferences } from "@workspace/db";
 import { sendMessage } from "./messaging";
 import { recipientRefFor } from "./recipient-ref";
 import { sendPushAlert, type PushTemplateKey } from "../push/push";
@@ -30,7 +30,12 @@ export async function fanOutAlert(input: {
   // the defaults here without a deliberate product decision.
   smsDefaultWhenNoPrefs: boolean;
 }): Promise<void> {
-  if (!(await isPurposePermitted(input.clientPartyId, "deadline_alerts"))) {
+  if (
+    !(await withDatabaseContext(
+      { bypass: !input.firmId, firmId: input.firmId },
+      () => isPurposePermitted(input.clientPartyId, "deadline_alerts"),
+    ))
+  ) {
     return;
   }
   const { prefs } = input;

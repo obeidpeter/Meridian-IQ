@@ -190,11 +190,17 @@ generated packages is forbidden; every contract change bumps the version.
 
 Context: drizzle push is convenient for tables but cannot express RLS
 policies, triggers, or FORCE ROW LEVEL SECURITY.
-Decision: tables come from `drizzle push`; RLS policies/triggers come from
-numbered guardrail migrations in `lib/db/src/migrations` with rollback tests.
+Decision: historical scratch bootstrap uses `drizzle push`; RLS policies/triggers
+come from numbered migrations in `lib/db/src/migrations` with rollback tests.
+New production fields and tables use reviewed additive versioned SQL, including
+their constraints, grants and policies. The historical registry is not a complete
+schema history and must not be treated as a generic schema conversion.
 Consequences: a new tenant table is not done until its policy migration
 exists; scratch databases need push THEN migrate, in that order; production
-table changes are applied by the release procedure, while every production
+table changes require reviewed migration execution before artifact promotion;
+`ops:release` refuses schema drift instead of pushing against serving traffic.
+An explicit offline bootstrap requires drained writers and retains maintenance
+on failure. Every production
 boot applies the hand-written guardrail migrations idempotently under an
 advisory lock and then verifies coverage before readiness. The manual
 `@workspace/db migrate` command remains the pre-deploy/recovery path; boot is

@@ -1,6 +1,7 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { Request, Response, NextFunction } from "express";
 import { isUuid } from "./uuid";
+import { databasePoolMetrics } from "@workspace/db";
 
 // Prometheus metrics (OBS-01), hand-rolled and dependency-free. A metrics
 // library (prom-client) would pull in @opentelemetry/api, which forks
@@ -243,6 +244,39 @@ const METRICS: Metric[] = [
   usabilityEventsTotal,
 ];
 
+export const auditLockWaitSeconds = new Histogram(
+  "meridian_audit_lock_wait_seconds", "Time waiting for the global audit chain lock.",
+  [0.001, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+);
+export const auditLockFailures = new Counter(
+  "meridian_audit_lock_failures_total", "Audit lock acquisition failures; no event was appended.",
+);
+export const webhookFanoutOldestAge = new LabeledGauge(
+  "meridian_webhook_fanout_oldest_age_seconds", "Age of the oldest eligible event in the latest bounded fanout batch.",
+);
+export const clerkAdmissionRejected = new Counter(
+  "meridian_clerk_admission_rejected_total", "Clerk admissions refused before provider execution.",
+);
+METRICS.push(auditLockWaitSeconds, auditLockFailures, webhookFanoutOldestAge, clerkAdmissionRejected);
+
+function poolMetrics(): string {
+  const pools = databasePoolMetrics();
+  const fields = [
+    ["total", "connections", "gauge"], ["idle", "idle_connections", "gauge"],
+    ["active", "active_connections", "gauge"], ["waiting", "waiting_requests", "gauge"],
+    ["max", "max_connections", "gauge"], ["idleErrors", "idle_errors_total", "counter"],
+    ["oldestAcquisitionSeconds", "oldest_acquisition_seconds", "gauge"],
+    ["acquisitionCount", "acquisitions_total", "counter"],
+    ["acquisitionFailures", "acquisition_failures_total", "counter"],
+    ["acquisitionSeconds", "acquisition_seconds_total", "counter"],
+  ] as const;
+  return fields.map(([key, suffix, type]) => {
+    const metric = `meridian_pg_pool_${suffix}`;
+    return [`# HELP ${metric} PostgreSQL pool ${suffix}.`, `# TYPE ${metric} ${type}`,
+      ...pools.map((entry) => `${metric}{pool="${entry.name}"} ${entry[key]}`)].join("\n");
+  }).join("\n");
+}
+
 export function recordUsabilityEvent(event: string, surface: string): void {
   usabilityEventsTotal.inc({ event, surface });
 }
@@ -278,7 +312,7 @@ export const registry = {
   contentType: CONTENT_TYPE,
   async metrics(): Promise<string> {
     return (
-      [processMetrics(), ...METRICS.map((m) => m.expose())].join("\n") + "\n"
+      [processMetrics(), poolMetrics(), ...METRICS.map((m) => m.expose())].join("\n") + "\n"
     );
   },
 };

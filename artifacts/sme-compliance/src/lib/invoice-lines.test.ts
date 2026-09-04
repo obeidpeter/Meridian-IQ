@@ -65,6 +65,58 @@ describe("lineTotal / lineTotals", () => {
     expect(totals.net).toBe(4000);
     expect(totals.vat).toBeCloseTo(225);
   });
+
+  test("rounds extension half-up and computes VAT before extension rounding", () => {
+    expect(
+      lineTotal({
+        description: "fractional",
+        quantity: "0.5",
+        unitPrice: "2.01",
+        vatRate: "0.5",
+      }),
+    ).toEqual({ ext: 1.01, vat: 0.5, total: 1.51 });
+  });
+
+  test("rounds VAT half-up rather than binary floating-point ties", () => {
+    expect(
+      lineTotal({
+        description: "VAT tie",
+        quantity: "1",
+        unitPrice: "0.60",
+        vatRate: "0.075",
+      }),
+    ).toEqual({ ext: 0.6, vat: 0.05, total: 0.65 });
+  });
+
+  test("sums rounded lines in decimal arithmetic", () => {
+    expect(
+      lineTotals(
+        Array.from({ length: 100 }, () => ({
+          description: "small",
+          quantity: "0.5",
+          unitPrice: "0.01",
+          vatRate: "0",
+        })),
+      ),
+    ).toEqual({ net: 1, vat: 0, total: 1 });
+    expect(
+      lineTotals([
+        { description: "a", quantity: "1", unitPrice: "0.10", vatRate: "0" },
+        { description: "b", quantity: "1", unitPrice: "0.20", vatRate: "0" },
+      ]),
+    ).toEqual({ net: 0.3, vat: 0, total: 0.3 });
+  });
+
+  test.each(["-", ".", "NaN", "Infinity", "1e999", "0x10"])(
+    "does not crash while typing invalid value %s",
+    (unitPrice) => {
+      expect(lineTotal({ ...emptyLine(), unitPrice })).toEqual({
+        ext: 0,
+        vat: 0,
+        total: 0,
+      });
+    },
+  );
 });
 
 describe("draftHasWork", () => {
@@ -96,6 +148,44 @@ describe("draftHasWork", () => {
 });
 
 describe("toInvoiceLineInputs", () => {
+  test("preserves cents and fractional quantities beyond Number precision", () => {
+    expect(
+      toInvoiceLineInputs([
+        {
+          description: " exact ",
+          quantity: "99999999999999.9999",
+          unitPrice: "9999999999999999.99",
+          vatRate: "0.0750",
+        },
+      ]),
+    ).toEqual([
+      {
+        description: "exact",
+        quantity: "99999999999999.9999",
+        unitPrice: "9999999999999999.99",
+        vatRate: "0.075",
+      },
+    ]);
+  });
+
+  test.each(["NaN", "Infinity", "0x10", "1e3", "", "-1", "1.001"])(
+    "rejects invalid or overprecision price %s instead of coercing it",
+    (unitPrice) => {
+      expect(() =>
+        toInvoiceLineInputs([{ ...emptyLine(), unitPrice }]),
+      ).toThrow();
+    },
+  );
+
+  test("enforces positive quantity and fractional VAT", () => {
+    expect(() =>
+      toInvoiceLineInputs([{ ...emptyLine(), unitPrice: "1", quantity: "0" }]),
+    ).toThrow(/greater than zero/);
+    expect(() =>
+      toInvoiceLineInputs([{ ...emptyLine(), unitPrice: "1", vatRate: "7.5" }]),
+    ).toThrow(/fraction/);
+  });
+
   test("trims descriptions and normalizes the numeric strings", () => {
     expect(
       toInvoiceLineInputs([

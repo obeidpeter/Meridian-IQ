@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import {
   getDb,
+  hasDatabaseContext,
+  runInBypassContext,
   clerkBatchesTable,
   clerkCasesTable,
   type ClerkBatch,
@@ -151,6 +153,8 @@ export async function createClerkBatch(
 async function claimBatch(
   batchId: string,
 ): Promise<{ batch: ClerkBatch; stamp: Date } | null> {
+  if (!hasDatabaseContext())
+    return runInBypassContext(() => claimBatch(batchId));
   const stamp = new Date();
   const staleBefore = new Date(Date.now() - RECLAIM_AFTER_MS);
   const [claimed] = await getDb()
@@ -180,6 +184,8 @@ async function fencedPatch(
   stamp: Date,
   patch: Partial<typeof clerkBatchesTable.$inferInsert>,
 ): Promise<Date | null> {
+  if (!hasDatabaseContext())
+    return runInBypassContext(() => fencedPatch(batchId, stamp, patch));
   const next = new Date();
   const rows = await getDb()
     .update(clerkBatchesTable)
@@ -209,11 +215,13 @@ export async function processBatch(
   gateway: ClerkGateway,
 ): Promise<SliceOutcome> {
   if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return "noop";
-  const [candidate] = await getDb()
-    .select({ firmId: clerkBatchesTable.firmId })
-    .from(clerkBatchesTable)
-    .where(eq(clerkBatchesTable.id, batchId))
-    .limit(1);
+  const [candidate] = await runInBypassContext(() =>
+    getDb()
+      .select({ firmId: clerkBatchesTable.firmId })
+      .from(clerkBatchesTable)
+      .where(eq(clerkBatchesTable.id, batchId))
+      .limit(1),
+  );
   if (
     !candidate ||
     (candidate.firmId &&
@@ -495,20 +503,22 @@ export async function sweepClerkBatches(): Promise<void> {
   // has minute-sensitive statutory work behind this, so a pass is bounded at
   // roughly a slice's worth of model calls; the queue drains across passes
   // (and the kick path drives the interactive case slice-to-slice anyway).
-  const candidates = await getDb()
-    .select({ id: clerkBatchesTable.id, firmId: clerkBatchesTable.firmId })
-    .from(clerkBatchesTable)
-    .where(
-      or(
-        eq(clerkBatchesTable.status, "queued"),
-        and(
-          eq(clerkBatchesTable.status, "processing"),
-          lt(clerkBatchesTable.claimedAt, staleBefore),
+  const candidates = await runInBypassContext(() =>
+    getDb()
+      .select({ id: clerkBatchesTable.id, firmId: clerkBatchesTable.firmId })
+      .from(clerkBatchesTable)
+      .where(
+        or(
+          eq(clerkBatchesTable.status, "queued"),
+          and(
+            eq(clerkBatchesTable.status, "processing"),
+            lt(clerkBatchesTable.claimedAt, staleBefore),
+          ),
         ),
-      ),
-    )
-    .orderBy(asc(clerkBatchesTable.createdAt))
-    .limit(25);
+      )
+      .orderBy(asc(clerkBatchesTable.createdAt))
+      .limit(25),
+  );
   let candidate: (typeof candidates)[number] | undefined;
   for (const row of candidates) {
     if (

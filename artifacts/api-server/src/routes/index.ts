@@ -59,6 +59,10 @@ import workspaceRouter from "./workspace";
 import workRouter from "./work";
 import invoiceRoomRouter from "./invoice-room";
 import creditRouter from "./credit";
+import operationsRouter from "./operations";
+import invoiceDraftsRouter from "./invoice-drafts";
+import clerkReservationsRouter from "./clerk-reservations";
+import importRunsRouter from "./import-runs";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -78,6 +82,7 @@ import "../modules/clerk/quality-watch";
 import "../modules/clerk/agreement-watch";
 import "../modules/push/register";
 import "../modules/invoice/register";
+import "../modules/invoice-drafts/register";
 // Registers the obligation deadline-reminder sweep with the pipeline worker.
 import "../modules/obligations/register";
 // Registers the filing mint sweep with the pipeline worker.
@@ -143,5 +148,9 @@ router.use(workspaceRouter);
 router.use(workRouter);
 router.use(invoiceRoomRouter);
 router.use(creditRouter);
+router.use(operationsRouter);
+router.use(invoiceDraftsRouter);
+router.use(clerkReservationsRouter);
+router.use(importRunsRouter);
 
 export default router;

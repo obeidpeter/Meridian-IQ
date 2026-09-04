@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   useGetMe,
-  useListParties,
-  useCreateInvoice,
-  useDraftInvoiceWithClerk,
+  createInvoice,
+  getCreateInvoiceMutationOptions,
+  getDraftInvoiceWithClerkMutationOptions,
+  draftInvoiceWithClerk,
   useListErrorCatalogue,
   useListLineItemSuggestions,
   getListInvoicesQueryKey,
@@ -12,7 +13,7 @@ import {
   type InvoiceLineInput,
   type LineItemSuggestion,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -36,10 +37,24 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { PageHeader } from "@/components/page-header";
-import { ReadinessList, type ReadinessStep } from "@workspace/web-ui";
+import {
+  beginOperation,
+  operationSessionKey,
+  updateOperation,
+  ReadinessList,
+  type ReadinessStep,
+} from "@workspace/web-ui";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { AddCustomerDialog } from "@/components/add-customer-dialog";
-import { BuyerSelectOptions } from "@/components/buyer-select-options";
+import {
+  CustomerDirectoryPicker,
+  useDirectoryCustomer,
+} from "@/components/customer-directory-picker";
+import { InvoiceDraftControls } from "@/components/invoice-draft-controls";
+import { useInvoiceDrafts } from "@/lib/use-invoice-drafts";
+import { useSessionWork, type SessionWork } from "@/lib/use-session-work";
+import type { InvoiceDraftSession } from "@/lib/invoice-draft-session";
+import { isDefinitiveFirstRejection } from "@/lib/invoice-submission";
 import { FieldError, invalidClass } from "@/components/field-error";
 import { LineItemRow } from "@/components/line-item-row";
 import { formatAmount, formatNaira } from "@/lib/format";
@@ -57,10 +72,6 @@ import {
 import {
   DRAFT_KEY,
   draftStorageKey,
-  emptyInvoiceDraft,
-  loadInvoiceDraft,
-  removeInvoiceDraft,
-  saveInvoiceDraft,
   type DraftState,
 } from "@/lib/invoice-draft";
 import { Plus, ShieldCheck, Sparkles } from "lucide-react";
@@ -73,8 +84,6 @@ export type { DraftState };
 // naira-equivalent VAT can be computed server-side.
 export const CURRENCIES = ["NGN", "USD", "EUR", "GBP"] as const;
 
-const emptyDraft = emptyInvoiceDraft;
-
 // The Radix select can't carry an empty-string item value, so the "No WHT"
 // option rides a sentinel that maps back to "" in the draft.
 const NO_WHT = "none";
@@ -85,11 +94,77 @@ export function InvoiceNew() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
-  // Bounded reads (R98): the customer picker wants buyers only, at the
-  // reference-list ceiling, so one read covers the whole working set.
-  const { data: parties } = useListParties({ type: "buyer", limit: 500 });
   const { data: catalogue } = useListErrorCatalogue();
-  const create = useCreateInvoice();
+  const drafts = useInvoiceDrafts();
+  const { draft, setDraft } = drafts;
+  const submission = drafts.state.submission;
+  const locked = !!submission;
+  const creating = useRef<SessionWork | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const operationKey = operationSessionKey(me);
+  const captureWork = useSessionWork(
+    operationKey ? `${operationKey}:${drafts.id}` : null,
+  );
+  useEffect(() => {
+    creating.current = null;
+    setSubmitting(false);
+  }, [drafts.session]);
+  const create = useMutation({
+    mutationKey: getCreateInvoiceMutationOptions().mutationKey,
+    mutationFn: async ({
+      data,
+      work,
+      journalKey,
+      session,
+    }: {
+      data: Parameters<typeof createInvoice>[0];
+      work: SessionWork;
+      journalKey: string | null;
+      session: InvoiceDraftSession;
+    }) => {
+      work.check();
+      const prepared = await session.prepareSubmission(data, work.check);
+      work.check();
+      if (prepared.submission.status !== "pending")
+        throw new Error(
+          "This invoice request cannot be submitted again. Reconcile its existing result.",
+        );
+      const intent = prepared.submission;
+      const operation = beginOperation(journalKey, {
+        title: "Create invoice",
+        kind: "invoice",
+        route: `/invoices/new?draft=${work.id}`,
+        command: "invoice.create",
+        idempotencyKey: intent.key,
+      });
+      try {
+        work.check();
+        const result = await createInvoice(structuredClone(intent.body), {
+          headers: { "X-Idempotency-Key": intent.key },
+          signal: work.signal,
+        });
+        work.check();
+        session.confirmSubmission(result.invoice.id);
+        updateOperation(journalKey, operation?.id, {
+          status: "succeeded",
+          savedSummary: "1 invoice draft created.",
+        });
+        return result;
+      } catch (error) {
+        if (!work.current()) throw error;
+        const rejected =
+          prepared.firstDispatch && isDefinitiveFirstRejection(error);
+        if (rejected) session.rejectSubmission();
+        updateOperation(journalKey, operation?.id, {
+          status: rejected ? "failed" : "partial",
+          savedSummary: rejected
+            ? "The server rejected this request before creation. Correct the invoice and retry."
+            : "Outcome unconfirmed. Retry the preserved original request with its original command key.",
+        });
+        throw error;
+      }
+    },
+  });
 
   const tinGuidance = useMemo(() => {
     const entry = (catalogue || []).find((c) => c.code === "MBS_INVALID_TIN");
@@ -99,26 +174,8 @@ export function InvoiceNew() {
     );
   }, [catalogue]);
 
-  const [draft, setDraft] = useState<DraftState>(emptyDraft);
-  const [draftOwner, setDraftOwner] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
-  const creationSucceeded = useRef(false);
-  const draftKey = me ? draftStorageKey(me.userId, me.firmId) : null;
-
-  useEffect(() => {
-    if (!draftKey || draftOwner === draftKey) return;
-    const {
-      draft: stored,
-      restored,
-      savedAt: restoredAt,
-    } = loadInvoiceDraft(draftKey);
-    setDraft(stored);
-    setDraftOwner(draftKey);
-    setSavedAt(restored ? restoredAt : null);
-    removeInvoiceDraft(DRAFT_KEY);
-  }, [draftKey, draftOwner]);
 
   // Frequent items (line-item memory): mined server-side from this client's
   // own invoices. Clicking a chip appends a prefilled line — a suggestion the
@@ -147,31 +204,61 @@ export function InvoiceNew() {
     });
   };
 
-  const buyers = useMemo(
-    () => (parties || []).filter((p) => p.type === "buyer"),
-    [parties],
-  );
-
   // "Draft with Clerk" (idea #7): one sentence prefills the SAME form below —
   // Clerk proposes, the client reviews and saves through the ordinary create
   // path; nothing exists until they click "Create invoice".
   // PL-02 gate, mirroring the dashboard's Clerk surfaces: the card is absent
   // while the clerk_ai feature is dark.
   const clerkLit = !!me?.features.includes("clerk_ai");
-  const clerkDraft = useDraftInvoiceWithClerk();
+  const clerkDraft = useMutation({
+    mutationKey: getDraftInvoiceWithClerkMutationOptions().mutationKey,
+    mutationFn: async ({
+      data,
+      work,
+    }: {
+      data: Parameters<typeof draftInvoiceWithClerk>[0];
+      work: SessionWork;
+    }) => {
+      work.check();
+      const result = await draftInvoiceWithClerk(data, { signal: work.signal });
+      work.check();
+      return result;
+    },
+  });
   const [clerkText, setClerkText] = useState("");
   const [clerkNote, setClerkNote] = useState<string | null>(null);
 
   const draftWithClerk = async () => {
+    const startedSession = drafts.session;
+    if (startedSession.refreshSubmission()) return;
+    const startedDraft = draft;
+    const work = captureWork(drafts.id, startedSession.captureLifecycle());
+    if (!work.current()) {
+      work.close();
+      return;
+    }
     try {
-      const res = await clerkDraft.mutateAsync({ data: { text: clerkText } });
+      work.check();
+      const res = await clerkDraft.mutateAsync({
+        data: { text: clerkText },
+        work,
+      });
+      work.check();
+      if (
+        drafts.latest.current !== startedSession ||
+        startedSession.state.draft !== startedDraft
+      ) {
+        setClerkNote(
+          "Your draft changed while Clerk was working. The suggestion was not applied.",
+        );
+        return;
+      }
       const p = res.proposal;
       // Buyer identity is only ever a suggestion: preselect the top match if
       // it is a customer the picker actually offers; otherwise say what Clerk
       // read so the user can pick or add the customer themselves.
       const top = res.buyerSuggestions[0];
-      const matchedBuyerId =
-        top && buyers.some((b) => b.id === top.partyId) ? top.partyId : "";
+      const matchedBuyerId = top?.partyId ?? "";
       setDraft((d) => ({
         ...d,
         invoiceNumber: p.invoiceNumber ?? d.invoiceNumber,
@@ -196,6 +283,7 @@ export function InvoiceNew() {
           : "Prefilled from your instruction — check every field before saving.",
       );
     } catch (e) {
+      if (!work.current()) return;
       handleClerkGatewayError(e, {
         onDisabled: () =>
           setClerkNote(
@@ -204,58 +292,43 @@ export function InvoiceNew() {
         toast,
         fallbackTitle: "Clerk couldn't draft that",
       });
+    } finally {
+      work.close();
     }
   };
-
-  useEffect(() => {
-    if (!draftKey || draftOwner !== draftKey) return;
-    const t = setTimeout(() => {
-      if (creationSucceeded.current) return;
-      if (draftHasWork(draft)) {
-        setSavedAt(saveInvoiceDraft(draftKey, draft));
-      } else {
-        // An untouched or emptied form leaves no durable residue — the
-        // indicator only ever claims a draft that actually exists.
-        removeInvoiceDraft(draftKey);
-        setSavedAt(null);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [draft, draftKey, draftOwner]);
 
   // Discard with an escape hatch (user control and freedom): the cleared
   // draft is held in the closure and one Undo puts it — and its device copy —
   // back exactly as it was. Only offered when the draft carried real work.
-  const discardDraft = () => {
+  const discardDraft = async () => {
     const stashedDraft = draft;
-    if (draftKey) {
-      removeInvoiceDraft(draftKey);
+    const discardedSession = drafts.session;
+    const current = discardedSession.captureLifecycle();
+    try {
+      if (!(await discardedSession.discard()) || !current()) return;
+    } catch (error) {
+      if (!current()) return;
+      toast({
+        title: "Draft was not discarded",
+        description: serverErrorMessage(error),
+        variant: "destructive",
+      });
+      return;
     }
-    setDraft(emptyDraft());
-    setSavedAt(null);
+    if (drafts.latest.current !== discardedSession) return;
+    drafts.newDraft();
     setShowErrors(false);
     if (!draftHasWork(stashedDraft)) return;
     toast({
       title: "Draft discarded",
-      description: "Your unfinished invoice was cleared from this device.",
+      description:
+        "Your unfinished invoice was discarded from your account and this tab.",
       action: (
         <ToastAction
           altText="Undo discarding the draft"
           data-testid="button-undo-discard"
           onClick={() => {
-            setDraft(stashedDraft);
-            const persistedAt = draftKey
-              ? saveInvoiceDraft(draftKey, stashedDraft)
-              : null;
-            setSavedAt(persistedAt);
-            if (draftKey && !persistedAt) {
-              toast({
-                title: "Draft restored only in this tab",
-                description:
-                  "Your browser blocked device storage. Keep this tab open or allow site storage.",
-                variant: "destructive",
-              });
-            }
+            drafts.newDraft(stashedDraft);
           }}
         >
           Undo
@@ -264,7 +337,7 @@ export function InvoiceNew() {
     });
   };
 
-  const selectedBuyer = buyers.find((b) => b.id === draft.buyerPartyId);
+  const { data: selectedBuyer } = useDirectoryCustomer(draft.buyerPartyId);
 
   const totals = lineTotals(draft.lines);
 
@@ -279,8 +352,13 @@ export function InvoiceNew() {
   draft.lines.forEach((l, i) => {
     if (!l.description.trim())
       errors[`line-${i}-desc`] = "Description required.";
-    if (!(Number(l.quantity) > 0)) errors[`line-${i}-qty`] = "Qty must be > 0.";
-    if (!(Number(l.unitPrice) >= 0) || l.unitPrice === "")
+    if (!Number.isFinite(Number(l.quantity)) || !(Number(l.quantity) > 0))
+      errors[`line-${i}-qty`] = "Qty must be finite and > 0.";
+    if (
+      !Number.isFinite(Number(l.unitPrice)) ||
+      !(Number(l.unitPrice) >= 0) ||
+      l.unitPrice === ""
+    )
       errors[`line-${i}-price`] = "Price required.";
   });
   const isValid = Object.keys(errors).length === 0;
@@ -304,8 +382,15 @@ export function InvoiceNew() {
     setDraft((d) => ({ ...d, lines: updateLineAt(d.lines, i, patch) }));
 
   const submit = async () => {
+    if (
+      creating.current ||
+      (!submission &&
+        (drafts.state.status === "loading" ||
+          drafts.state.status === "conflict"))
+    )
+      return;
     setShowErrors(true);
-    if (!isValid) {
+    if (!submission && !isValid) {
       const first = errorFieldIds()[0];
       if (first) {
         const el = document.getElementById(first);
@@ -315,45 +400,108 @@ export function InvoiceNew() {
       return;
     }
     if (!me?.clientPartyId) return;
+    const submittedSession = drafts.session;
+    const work = captureWork(drafts.id, submittedSession.captureLifecycle());
+    if (!work.current()) {
+      work.close();
+      return;
+    }
+    const original = submittedSession.refreshSubmission();
+    if (original?.status === "succeeded") {
+      work.close();
+      navigate(`/invoices/${original.invoiceId}`);
+      return;
+    }
+    if (original?.status === "blocked") {
+      work.close();
+      return;
+    }
+    creating.current = work;
+    setSubmitting(true);
+    const current = work.current;
+    let commandStarted = false;
     try {
+      const saved =
+        original?.status === "pending" || (await submittedSession.save());
+      if (
+        !current() ||
+        !submittedSession.isActive() ||
+        drafts.latest.current !== submittedSession
+      )
+        return;
+      if (!saved) {
+        toast({
+          title: "Invoice not sent",
+          description:
+            "Save or reconcile this draft before creating its invoice.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (submittedSession.state.status === "conflict") return;
       const lines: InvoiceLineInput[] = toInvoiceLineInputs(draft.lines);
       const fxRate = draft.fxRateToNgn.trim();
+      commandStarted = true;
       const res = await create.mutateAsync({
-        data: {
-          supplierPartyId: me.clientPartyId,
-          buyerPartyId: draft.buyerPartyId,
-          invoiceNumber: draft.invoiceNumber.trim(),
-          currency: draft.currency || "NGN",
-          // The rate only makes sense on a foreign-currency invoice, and an
-          // empty field is omitted, never sent as "".
-          ...(draft.currency !== "NGN" && fxRate
-            ? { fxRateToNgn: fxRate }
-            : {}),
-          issueDate: draft.issueDate,
-          dueDate: draft.dueDate || undefined,
-          // Only a real, human-picked category travels; "" (No WHT) is
-          // omitted, never sent.
-          ...(draft.whtCategory
-            ? { whtCategory: draft.whtCategory as InvoiceInputWhtCategory }
-            : {}),
-          lines,
-        },
+        work,
+        journalKey: operationKey,
+        session: submittedSession,
+        data:
+          original?.status === "pending"
+            ? original.body
+            : {
+                supplierPartyId: me.clientPartyId,
+                buyerPartyId: draft.buyerPartyId,
+                invoiceNumber: draft.invoiceNumber.trim(),
+                currency: draft.currency || "NGN",
+                // The rate only makes sense on a foreign-currency invoice, and an
+                // empty field is omitted, never sent as "".
+                ...(draft.currency !== "NGN" && fxRate
+                  ? { fxRateToNgn: fxRate }
+                  : {}),
+                issueDate: draft.issueDate,
+                dueDate: draft.dueDate || undefined,
+                // Only a real, human-picked category travels; "" (No WHT) is
+                // omitted, never sent.
+                ...(draft.whtCategory
+                  ? {
+                      whtCategory: draft.whtCategory as InvoiceInputWhtCategory,
+                    }
+                  : {}),
+                lines,
+              },
       });
-      creationSucceeded.current = true;
-      if (draftKey) {
-        removeInvoiceDraft(draftKey);
+      if (!current()) return;
+      try {
+        await submittedSession.discard();
+      } catch {
+        submittedSession.complete();
       }
+      if (!current()) return;
       // Not awaited: a background refetch rejection must not surface as a false
       // "could not create invoice" error after the save already succeeded.
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       toast({ title: "Invoice created", description: "Saved to your vault." });
-      navigate(`/invoices/${res.invoice.id}`);
+      if (drafts.latest.current === submittedSession)
+        navigate(`/invoices/${res.invoice.id}`);
     } catch (e) {
+      if (!current()) return;
+      const uncertain = commandStarted && !!submittedSession.state.submission;
       toast({
-        title: "Could not create invoice",
-        description: serverErrorMessage(e),
+        title: uncertain
+          ? "Invoice creation not confirmed"
+          : "Could not create invoice",
+        description: uncertain
+          ? `${serverErrorMessage(e)} Retry the preserved original request to recover its result. Do not create a replacement invoice.`
+          : serverErrorMessage(e),
         variant: "destructive",
       });
+    } finally {
+      if (creating.current === work) {
+        creating.current = null;
+        if (work.current()) setSubmitting(false);
+      }
+      work.close();
     }
   };
 
@@ -415,24 +563,36 @@ export function InvoiceNew() {
       <PageHeader
         title="New invoice"
         description="We check it against FIRS rules as you type."
-      >
-        <span className="text-xs text-muted-foreground flex items-center gap-2 shrink-0">
-          <span role="status" data-testid="text-draft-saved">
-            {savedAt ? "Draft saved on this device for 7 days" : ""}
-          </span>
-          {savedAt && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={discardDraft}
-              data-testid="button-discard-draft"
-            >
-              Discard draft
+      />
+      <InvoiceDraftControls
+        controller={drafts}
+        disabled={submitting || (locked && submission.status !== "succeeded")}
+        onDiscard={() => void discardDraft()}
+      />
+      {submission && (
+        <section
+          role="status"
+          aria-label="Invoice request recovery"
+          className="space-y-2 border-y py-3"
+        >
+          <p className="text-sm">
+            {submission.status === "succeeded"
+              ? "This invoice was already created."
+              : submission.status === "blocked"
+                ? "The original request cannot be read on this device. Check account activity before creating a replacement invoice; it could duplicate a completed invoice."
+                : "Invoice creation is not yet confirmed. The original customer, amounts and request are preserved on this device. Reconcile this request before starting a replacement invoice."}
+          </p>
+          {submission.status !== "blocked" && (
+            <Button onClick={submit} disabled={submitting}>
+              {submitting
+                ? "Reconciling..."
+                : submission.status === "succeeded"
+                  ? "View created invoice"
+                  : "Retry original invoice"}
             </Button>
           )}
-        </span>
-      </PageHeader>
+        </section>
+      )}
 
       <RequireClientScope thing="invoice form">
         <AddCustomerDialog
@@ -442,7 +602,10 @@ export function InvoiceNew() {
             setDraft((d) => ({ ...d, buyerPartyId: party.id }))
           }
         />
-        <div className="grid gap-6 lg:grid-cols-3">
+        <fieldset
+          disabled={submitting || locked || drafts.state.status === "loading"}
+          className="grid min-w-0 gap-6 lg:grid-cols-3"
+        >
           <div className="lg:col-span-2 space-y-6">
             {clerkLit && (
               <Card className="border-violet-200 dark:border-violet-900">
@@ -526,71 +689,36 @@ export function InvoiceNew() {
                 </div>
                 <div>
                   <Label htmlFor="buyer-select">Customer</Label>
-                  {buyers.length === 0 ? (
-                    <div
-                      id="buyer-select"
-                      className="border rounded-md px-3 py-2 mt-1 flex flex-wrap items-center justify-between gap-2"
-                      data-testid="text-no-buyers"
+                  <div className="flex flex-wrap items-start gap-2">
+                    <div className="min-w-0 flex-1 basis-56">
+                      <CustomerDirectoryPicker
+                        id="buyer-select"
+                        value={draft.buyerPartyId}
+                        onChange={(buyerPartyId) =>
+                          setDraft((d) => ({ ...d, buyerPartyId }))
+                        }
+                        excludeId={me?.clientPartyId ?? undefined}
+                        invalid={showErrors && !!errors.buyerPartyId}
+                        describedBy={
+                          showErrors && errors.buyerPartyId
+                            ? "buyer-select-error"
+                            : selectedBuyer && !selectedBuyer.tin
+                              ? "buyer-tin-note"
+                              : undefined
+                        }
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => setAddCustomerOpen(true)}
+                      data-testid="button-add-customer"
                     >
-                      <span className="text-sm text-muted-foreground">
-                        No customers yet — add your first customer.
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAddCustomerOpen(true)}
-                        data-testid="button-add-first-customer"
-                      >
-                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
-                        customer
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-start gap-2">
-                      {/* basis-56 lets the button drop below the picker on a
-                          phone: side by side, the two cannot shrink under
-                          362px and the page scrolled sideways (WCAG 1.4.10). */}
-                      <div className="min-w-0 flex-1 basis-56">
-                        <Select
-                          value={draft.buyerPartyId || undefined}
-                          onValueChange={(v) =>
-                            setDraft((d) => ({ ...d, buyerPartyId: v }))
-                          }
-                        >
-                          <SelectTrigger
-                            id="buyer-select"
-                            aria-invalid={showErrors && !!errors.buyerPartyId}
-                            aria-describedby={
-                              showErrors && errors.buyerPartyId
-                                ? "buyer-select-error"
-                                : selectedBuyer && !selectedBuyer.tin
-                                  ? "buyer-tin-note"
-                                  : undefined
-                            }
-                            className={invalidClass(
-                              showErrors && !!errors.buyerPartyId,
-                            )}
-                          >
-                            <SelectValue placeholder="Select a customer…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <BuyerSelectOptions buyers={buyers} />
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="shrink-0"
-                        onClick={() => setAddCustomerOpen(true)}
-                        data-testid="button-add-customer"
-                      >
-                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add
-                        customer
-                      </Button>
-                    </div>
-                  )}
+                      <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                      Add customer
+                    </Button>
+                  </div>
                   {showErrors && errors.buyerPartyId && (
                     <FieldError id="buyer-select-error">
                       {errors.buyerPartyId}
@@ -830,16 +958,16 @@ export function InvoiceNew() {
                   <div className="flex justify-between font-semibold">
                     <span>Total</span>
                     <span className="tabular-nums">
-                      {formatAmount(totals.net + totals.vat, draft.currency)}
+                      {formatAmount(totals.total, draft.currency)}
                     </span>
                   </div>
                 </div>
                 <Button
                   className="w-full"
                   onClick={submit}
-                  disabled={create.isPending}
+                  disabled={submitting || drafts.state.status === "conflict"}
                 >
-                  {create.isPending ? "Saving…" : "Create invoice"}
+                  {submitting ? "Saving…" : "Create invoice"}
                 </Button>
                 {showErrors && !isValid && (
                   <p
@@ -852,7 +980,7 @@ export function InvoiceNew() {
               </CardContent>
             </Card>
           </div>
-        </div>
+        </fieldset>
       </RequireClientScope>
     </div>
   );

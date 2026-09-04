@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   getDb,
+  withTransaction,
   runInBypassContext,
   invoicesTable,
   partiesTable,
@@ -693,7 +694,7 @@ export async function respondBulk(
   const items: BulkConfirmItem[] = [];
   for (const invoiceId of invoiceIds) {
     try {
-      await getDb().transaction(async () => {
+      await withTransaction(async () => {
         await confirmInvoiceForBuyer(principal, invoiceId, method, noSetOff);
       });
       items.push({ invoiceId, status: "confirmed", reason: null });

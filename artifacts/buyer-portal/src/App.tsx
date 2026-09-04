@@ -1,23 +1,53 @@
+import { webSession, lazyRoute, SessionBoundary } from "@workspace/web-ui";
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
+const NotFound = lazyRoute(() => import("@/pages/not-found"));
 import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
-import { Confirmations } from "@/pages/confirmations";
-import { InvoiceRespond } from "@/pages/invoice-respond";
-import { Suppliers } from "@/pages/suppliers";
-import { SupplierDetail } from "@/pages/supplier-detail";
-import { Scoreboard } from "@/pages/scoreboard";
-import { Notifications } from "@/pages/notifications";
-import { Today } from "@/pages/today";
+const Confirmations = lazyRoute(() =>
+  import("@/pages/confirmations").then((module) => ({
+    default: module.Confirmations,
+  })),
+);
+const InvoiceRespond = lazyRoute(() =>
+  import("@/pages/invoice-respond").then((module) => ({
+    default: module.InvoiceRespond,
+  })),
+);
+const Suppliers = lazyRoute(() =>
+  import("@/pages/suppliers").then((module) => ({ default: module.Suppliers })),
+);
+const SupplierDetail = lazyRoute(() =>
+  import("@/pages/supplier-detail").then((module) => ({
+    default: module.SupplierDetail,
+  })),
+);
+const Scoreboard = lazyRoute(() =>
+  import("@/pages/scoreboard").then((module) => ({
+    default: module.Scoreboard,
+  })),
+);
+const Notifications = lazyRoute(() =>
+  import("@/pages/notifications").then((module) => ({
+    default: module.Notifications,
+  })),
+);
+const Today = lazyRoute(() =>
+  import("@/pages/today").then((module) => ({ default: module.Today })),
+);
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache(webSession.mutationCacheOptions),
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
@@ -49,14 +79,16 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <RequireSession allow={["buyer_user"]}>
-            <Router />
-          </RequireSession>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+      <SessionBoundary client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <RequireSession allow={["buyer_user"]}>
+              <Router />
+            </RequireSession>
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </SessionBoundary>
     </QueryClientProvider>
   );
 }

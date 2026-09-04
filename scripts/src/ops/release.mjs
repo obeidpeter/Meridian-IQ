@@ -1,112 +1,125 @@
-// MeridianIQ release sequencer: runs the exact production DB steps in order
-// so the manual two-step disappears. The hazard this kills: `drizzle push`
-// can drop the guardrail RLS policies/triggers (they are not in the Drizzle
-// schema — they live in the numbered migrations), and they only come back
-// when `migrate` re-asserts them. A push without an immediate migrate — or a
-// forgotten migrate — leaves a window where tenant isolation is OFF. Here
-// the two are one command, verified at the end.
-//
-// Sequence:
-//   1. confirm     — refuses unless DATABASE_URL is set AND --yes is passed
-//   2. backup      — optional pre-flight dump when RELEASE_BACKUP=1
-//   3. push        — pnpm --filter @workspace/db run push   (what CI runs;
-//                    RELEASE_PUSH_FORCE=1 swaps in `push-force` for
-//                    destructive diffs, where plain push prompts and hangs)
-//   4. migrate     — pnpm --filter @workspace/db run migrate
-//   5. verify      — _schema_migrations count + max(version) must equal the
-//                    registry in lib/db/src/migrations/index.ts; prints the
-//                    API contract version to compare against /api/healthz
-//                    after the Redeploy/restart.
-//
-// Any step failing aborts and lists the steps that did NOT run — finish them
-// by hand or re-run once the cause is fixed (push and migrate are idempotent).
-//
-// Usage: DATABASE_URL=postgres://... pnpm --filter @workspace/scripts run ops:release -- --yes
-import { readFileSync } from "node:fs";
+// Production preflight never pushes schema. Promote the verified immutable build
+// externally, then run ops:postdeploy. Schema drift requires reviewed versioned SQL.
+import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { dbNameFromUrl, fail, hostPortFromUrl, migrationLedgerSummary, redactUrl, run } from "./common.mjs";
+import { psql, run, dbNameFromUrl, hostPortFromUrl } from "./common.mjs";
+import { loadManifest, verifyLocalArtifact, ROOT } from "./build-manifest.mjs";
+import {
+  compareSecurityCatalog,
+  readSecurityCatalog,
+} from "./security-catalog.mjs";
 
-const P = "release";
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, "../../..");
-
-// -- 1. confirm ---------------------------------------------------------------
-const url = process.env.DATABASE_URL;
-if (!url) {
-  fail(P, "DATABASE_URL is not set. This script runs schema push + guardrail migrations against a live database — set DATABASE_URL explicitly to the release target.", 2);
-}
-if (!process.argv.includes("--yes")) {
-  console.error(`${P}: target is ${hostPortFromUrl(url)} database "${dbNameFromUrl(url)}" (${redactUrl(url)})`);
-  fail(P, "refusing to run without --yes. Re-run with:  pnpm --filter @workspace/scripts run ops:release -- --yes", 2);
-}
-console.log(`${P}: target ${hostPortFromUrl(url)} database "${dbNameFromUrl(url)}" (${redactUrl(url)})`);
-
-// -- step runner --------------------------------------------------------------
-const steps = [];
-function step(name, fn) {
-  steps.push({ name, fn });
-}
-function pnpmStep(name, args) {
-  step(name, () => {
-    const res = run("pnpm", args, { cwd: ROOT, stdio: "inherit", encoding: undefined });
-    if (res.status !== 0) throw new Error(`pnpm ${args.join(" ")} exited ${res.status}`);
-  });
-}
-
-// -- 2. optional pre-flight backup -------------------------------------------
-if (process.env.RELEASE_BACKUP === "1") {
-  step("pre-flight backup (RELEASE_BACKUP=1)", () => {
-    const res = run(process.execPath, [path.join(HERE, "backup.mjs")], { stdio: "inherit", encoding: undefined });
-    if (res.status !== 0) throw new Error(`backup.mjs exited ${res.status}`);
-  });
-} else {
-  console.log(`${P}: pre-flight backup skipped (set RELEASE_BACKUP=1 to dump first)`);
+export function releaseOptions(args, env) {
+  assert.ok(
+    env.DATABASE_URL,
+    "DATABASE_URL must name the intended release target",
+  );
+  assert.ok(args.includes("--yes"), "refusing release without --yes");
+  assert.ok(
+    !env.RELEASE_PUSH_FORCE,
+    "RELEASE_PUSH_FORCE is retired; destructive schema push is not supported",
+  );
+  const offline = args.includes("--offline-bootstrap");
+  if (offline)
+    assert.equal(
+      env.RELEASE_TRAFFIC_DRAINED,
+      "1",
+      "offline bootstrap requires RELEASE_TRAFFIC_DRAINED=1 after all web/worker traffic is externally stopped",
+    );
+  assert.ok(
+    env.RELEASE_MANIFEST && env.RELEASE_MANIFEST_SHA256,
+    "a trusted CI manifest and checksum are required",
+  );
+  assert.match(
+    env.RELEASE_ROLLBACK_REVISION ?? "",
+    /^[a-f0-9]{40}$/,
+    "document and set RELEASE_ROLLBACK_REVISION to the compatible rollback build's full SHA",
+  );
+  return { offline };
 }
 
-// -- 3 + 4. push then migrate — the pair that must never be separated ---------
-const pushScript = process.env.RELEASE_PUSH_FORCE === "1" ? "push-force" : "push";
-pnpmStep(`schema push (db run ${pushScript})`, ["--filter", "@workspace/db", "run", pushScript]);
-pnpmStep("guardrail migrations (db run migrate)", ["--filter", "@workspace/db", "run", "migrate"]);
-
-// -- 5. verify ----------------------------------------------------------------
-step("verify migrations + contract version", () => {
-  // Expected shape comes from the migration registry source at runtime, so a
-  // newly added migration can never leave this check stale.
-  const registrySrc = readFileSync(path.join(ROOT, "lib/db/src/migrations/index.ts"), "utf8");
-  const block = registrySrc.match(/export const migrations[^=]*=\s*\[([\s\S]*?)\];/);
-  if (!block) throw new Error("could not locate the migrations array in lib/db/src/migrations/index.ts");
-  const versions = [...block[1].matchAll(/migration0*(\d+)/g)].map((m) => Number(m[1]));
-  if (versions.length === 0) throw new Error("parsed zero migrations from the registry — refusing to verify against nothing");
-  const expectedCount = versions.length;
-  const expectedMax = Math.max(...versions);
-
-  const got = migrationLedgerSummary(url);
-  const want = `${expectedCount}|${expectedMax}`;
-  if (got !== want) {
-    throw new Error(`_schema_migrations mismatch: database has count|max ${got}, registry expects ${want}`);
+export function assertRecoveryEvidence(rows, now = Date.now()) {
+  for (const [key, maxAge] of [
+    ["backup", 24 * 3600_000],
+    ["restore_drill", 30 * 86400_000],
+  ]) {
+    const row = rows.find((entry) => entry.key === key);
+    const age = now - Date.parse(row?.last_succeeded_at);
+    assert.ok(
+      row &&
+        !row.last_error &&
+        Number.isFinite(age) &&
+        age >= 0 &&
+        age <= maxAge,
+      `missing, failed, or stale ${key} evidence`,
+    );
+    if (key === "backup")
+      assert.match(
+        row.metadata?.sha256 ?? "",
+        /^[a-f0-9]{64}$/,
+        "backup checksum missing",
+      );
   }
-  console.log(`${P}: _schema_migrations OK — ${expectedCount} applied, max version ${expectedMax}`);
+}
 
-  const versionSrc = readFileSync(path.join(ROOT, "lib/api-zod/src/generated/version.ts"), "utf8");
-  const contract = versionSrc.match(/API_CONTRACT_VERSION = "([^"]+)"/)?.[1] ?? "<unknown>";
-  console.log(`${P}: API contract version ${contract} — after the Redeploy/restart, /api/healthz must report the same or the version-skew banner fires.`);
-});
-
-// -- run ----------------------------------------------------------------------
-for (let i = 0; i < steps.length; i++) {
-  const { name, fn } = steps[i];
-  console.log(`${P}: [${i + 1}/${steps.length}] ${name}`);
-  try {
-    fn();
-  } catch (err) {
-    console.error(`${P}: STEP FAILED — ${name}: ${err.message}`);
-    const remaining = steps.slice(i + 1).map((s) => s.name);
-    if (remaining.length) {
-      console.error(`${P}: steps NOT run: ${remaining.join("; ")}`);
-      console.error(`${P}: the database may be mid-release (push without migrate drops guardrails) — fix the cause and re-run to completion.`);
+export function release(
+  args = process.argv.slice(2),
+  env = process.env,
+  dependencies = {},
+) {
+  const { offline } = releaseOptions(args, env);
+  const verifyArtifact = dependencies.verifyArtifact ?? verifyLocalArtifact;
+  const query = dependencies.query ?? psql;
+  const catalog = dependencies.catalog ?? readSecurityCatalog;
+  const execute = dependencies.execute ?? run;
+  const manifest = loadManifest(
+    env.RELEASE_MANIFEST,
+    env.RELEASE_MANIFEST_SHA256,
+  );
+  verifyArtifact(manifest);
+  const evidence = JSON.parse(
+    query(
+      env.DATABASE_URL,
+      "SELECT coalesce(json_agg(row_to_json(h)), '[]') FROM (SELECT key, last_succeeded_at, last_error, metadata FROM public.operational_heartbeats WHERE key IN ('backup','restore_drill')) h",
+    ),
+  );
+  assertRecoveryEvidence(evidence);
+  console.log(
+    `release: target ${hostPortFromUrl(env.DATABASE_URL)}/${dbNameFromUrl(env.DATABASE_URL)}; rollback ${env.RELEASE_ROLLBACK_REVISION}`,
+  );
+  if (offline) {
+    // Explicitly not a migration converter or an online release path.
+    // Failure leaves maintenance in place; this tool never restarts traffic.
+    for (const script of ["push", "migrate"]) {
+      const result = execute(
+        "pnpm",
+        ["--filter", "@workspace/db", "run", script],
+        { cwd: ROOT, env, stdio: "inherit" },
+      );
+      assert.equal(
+        result.status,
+        0,
+        `${script} failed: keep ALL traffic stopped; restore or repair offline`,
+      );
     }
-    process.exit(1);
+  }
+  compareSecurityCatalog(manifest.database, catalog(env.DATABASE_URL));
+  console.log(
+    `release: preflight verified ${manifest.source.revision}; no deployment performed. Promote these exact assets, set BUILD_REVISION=${manifest.source.revision}, and require ops:postdeploy before reopening traffic.`,
+  );
+}
+
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    release();
+  } catch (error) {
+    console.error(
+      `release: REFUSED: ${error.message}\nDo not resume traffic after an offline failure. No automatic rollback or schema conversion is attempted.`,
+    );
+    process.exitCode = 1;
   }
 }
-console.log(`${P}: done — push + migrate applied and verified.`);

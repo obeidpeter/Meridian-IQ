@@ -1,4 +1,5 @@
 import { DomainError } from "../errors";
+import { hasDatabaseContext, runInBypassContext } from "@workspace/db";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { fenceDocument } from "./cases";
 import {
@@ -113,8 +114,10 @@ export function aggregate(
       fieldsCompared > 0
         ? Number((fieldsCorrect / fieldsCompared).toFixed(4))
         : null,
-    injectionFixtures: results.filter((r) => r.riskLabel === "injection").length,
-    injectionResisted: results.filter((r) => r.injectionResisted === true).length,
+    injectionFixtures: results.filter((r) => r.riskLabel === "injection")
+      .length,
+    injectionResisted: results.filter((r) => r.injectionResisted === true)
+      .length,
     failures: results.filter((r) => r.outcome !== "ok").length,
   };
 }
@@ -249,9 +252,16 @@ export async function runPromptCanary(
     promptVersion: CANARY_PROMPT_VERSION,
     ...aggregate(candidateResults),
   };
-  const { verdict, verdictReason } = canaryVerdict(incumbentSide, candidateSide);
+  const { verdict, verdictReason } = canaryVerdict(
+    incumbentSide,
+    candidateSide,
+  );
 
-  const diffs = computeFixtureDiffs(fixtures, incumbentResults, candidateResults);
+  const diffs = computeFixtureDiffs(
+    fixtures,
+    incumbentResults,
+    candidateResults,
+  );
 
   await appendAudit({
     actorId,
@@ -310,6 +320,7 @@ export async function loadCanaryCorpus(): Promise<{
   fixtures: EvalFixture[];
   truncated: boolean;
 }> {
+  if (!hasDatabaseContext()) return runInBypassContext(loadCanaryCorpus);
   const full = [
     ...EVAL_FIXTURES,
     ...(await loadGrownFixtures()).filter((f) => f.kind !== "notice"),

@@ -1,9 +1,11 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, sql, type SQL } from "drizzle-orm";
 import { getDb, invoicesTable } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
   ListInvoicesResponse,
+  ListInvoicesPagedQueryParams,
+  ListInvoicesPagedResponse,
   CreateInvoiceBody,
   CreateInvoiceResponse,
   ExportInvoicesCsvQueryParams,
@@ -12,15 +14,24 @@ import { parseOrThrow } from "../../lib/parse";
 import { pageBounds } from "../../lib/page";
 import {
   assertCan,
+  assertPartyAccess,
   clientPartyScope,
   requireFirmScope,
   tenantFirmId,
   type Principal,
 } from "../../modules/auth/rbac";
 import { createDraft } from "../../modules/invoice/service";
+import { executeHttpOperation } from "../../modules/operations/http";
+import { invoicePageFilters } from "../../modules/invoice/list-filters";
+import { invoiceNgnEquivalent } from "../../modules/invoice/ngn-equivalent";
 import { partyNamesById } from "../../modules/party/party";
 import { sendCsvAttachment, toCsv } from "../../lib/csv";
 import { likePattern } from "../../lib/sql";
+import {
+  decodeInvoiceCursor,
+  encodeInvoiceCursor,
+  invoiceFilterKey,
+} from "../../modules/invoice/cursor";
 
 // The invoices collection: list, create, and the CSV export of the same
 // scoped list. /invoices/export is a LITERAL path that must stay mounted
@@ -70,8 +81,8 @@ router.get("/invoices", async (req, res): Promise<void> => {
   });
   // Bounded reads (R98, lib/page.ts): every request is newest-first and
   // bounded — a bare request is the default page, not the whole tenant book
-  // the legacy full-list mode used to return. `id` breaks created_at ties so
-  // offset paging never repeats or skips a row.
+  // the legacy full-list mode used to return. New clients use /invoices/page
+  // because deterministic ordering alone cannot prevent offset drift.
   const { limit, offset } = pageBounds(query);
   const rows = await getDb()
     .select()
@@ -83,15 +94,78 @@ router.get("/invoices", async (req, res): Promise<void> => {
   res.json(ListInvoicesResponse.parse(rows));
 });
 
+router.get("/invoices/page", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ListInvoicesPagedQueryParams, req.query);
+  const q = query.q?.trim();
+  const baseConditions = [
+    ...invoiceListConditions(req.principal, { status: query.status, q }),
+    ...invoicePageFilters(query),
+  ];
+  const conditions = [...baseConditions];
+  const filter = invoiceFilterKey({
+    userId: req.principal.userId,
+    firmId: tenantFirmId(req.principal),
+    clientPartyId: clientPartyScope(req.principal),
+    status: query.status ?? "",
+    q: q ?? "",
+    statusGroup: query.statusGroup ?? "all",
+    fromDate: query.fromDate ?? "",
+    toDate: query.toDate ?? "",
+    minAmount: query.minAmount ?? "",
+    maxAmount: query.maxAmount ?? "",
+  });
+  if (query.cursor) {
+    const cursor = decodeInvoiceCursor(query.cursor, filter);
+    conditions.push(
+      sql`(${invoicesTable.createdAt}, ${invoicesTable.id}) < (${cursor.timestamp}::timestamptz, ${cursor.id}::uuid)`,
+    );
+  }
+  const { limit } = pageBounds(query);
+  const rows = await getDb()
+    .select({
+      ...getTableColumns(invoicesTable),
+      cursorTimestamp: sql<string>`to_char(${invoicesTable.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+    })
+    .from(invoicesTable)
+    .where(and(...conditions))
+    .orderBy(desc(invoicesTable.createdAt), desc(invoicesTable.id))
+    .limit(limit + 1);
+  const [count] = await getDb()
+    .select({ total: sql<number>`count(*)::int` })
+    .from(invoicesTable)
+    .where(and(...baseConditions));
+  const items = rows.slice(0, limit);
+  const last = items[items.length - 1];
+  res.json(
+    ListInvoicesPagedResponse.parse({
+      items,
+      total: count?.total ?? 0,
+      nextCursor:
+        rows.length > limit && last
+          ? encodeInvoiceCursor(last.cursorTimestamp, last.id, filter)
+          : null,
+    }),
+  );
+});
+
 router.post("/invoices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
   const firmId = requireFirmScope(req.principal);
   const parsed = parseOrThrow(CreateInvoiceBody, req.body);
-  const bundle = await createDraft(
-    { firmId, ...parsed },
-    req.principal.userId,
-  );
-  res.status(201).json(CreateInvoiceResponse.parse(bundle));
+  await assertPartyAccess(req.principal, parsed.supplierPartyId);
+  await executeHttpOperation(req, res, {
+    command: "invoice.create",
+    clientPartyId: parsed.supplierPartyId,
+    payload: parsed,
+    execute: async () => ({
+      statusCode: 201,
+      body: CreateInvoiceResponse.parse(
+        await createDraft({ firmId, ...parsed }, req.principal.userId),
+      ),
+      summary: "1 invoice draft created.",
+    }),
+  });
 });
 
 // CSV export of the same tenant/SEC-03/status/q-scoped list the invoices page
@@ -119,11 +193,6 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
   // rate means unconvertible — an honest blank, never an assumed 1.0. The FX
   // columns are APPENDED so existing consumers' column positions hold
   // (`currency` already sits mid-row).
-  const ngnEquivalent = (r: (typeof rows)[number]): string => {
-    if (r.currency === "NGN") return r.grandTotal;
-    if (!r.fxRateToNgn) return "";
-    return (Number(r.grandTotal) * Number(r.fxRateToNgn)).toFixed(2);
-  };
   const csv = toCsv(
     [
       "invoiceNumber",
@@ -157,7 +226,7 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
       names.get(r.buyerPartyId) ?? r.buyerPartyId,
       r.createdAt.toISOString(),
       r.fxRateToNgn ?? "",
-      ngnEquivalent(r),
+      invoiceNgnEquivalent(r),
     ]),
   );
   sendCsvAttachment(

@@ -18,7 +18,7 @@ localPort = 26060
 run = "pnpm --filter @workspace/landing run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/landing", "run", "build" ]
+build = [ "node", "scripts/src/ops/replit-promote.mjs", "build", "landing" ]
 publicDir = "artifacts/landing/dist/public"
 serve = "static"
 

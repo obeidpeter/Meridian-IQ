@@ -23,6 +23,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
 import {
   beginOperation,
+  operationSessionKey,
   trackUsabilityEvent,
   updateOperation,
   useFilePicker,
@@ -79,17 +80,28 @@ function parseClientRows(text: string): ClientImportRow[] {
  * it offline instead of transcribing from the on-screen list.
  */
 export function importResultsCsv(
-  results: { rowNumber: number; status: string; errors?: { field?: string; message?: string }[] }[],
+  results: {
+    rowNumber: number;
+    status: string;
+    errors?: { field?: string; message?: string }[];
+  }[],
   source: { legalName?: string }[],
 ): string {
   const cell = (v: string) => `"${v.replace(/"/g, '""')}"`;
   const lines = [["row", "legalName", "status", "errors"].map(cell).join(",")];
   for (const r of results) {
     const errors = (r.errors ?? [])
-      .map((e) => (e.field ? `${e.field}: ${e.message ?? ""}` : (e.message ?? "")))
+      .map((e) =>
+        e.field ? `${e.field}: ${e.message ?? ""}` : (e.message ?? ""),
+      )
       .join("; ");
     lines.push(
-      [String(r.rowNumber), source[r.rowNumber - 1]?.legalName ?? "", r.status, errors]
+      [
+        String(r.rowNumber),
+        source[r.rowNumber - 1]?.legalName ?? "",
+        r.status,
+        errors,
+      ]
         .map(cell)
         .join(","),
     );
@@ -104,7 +116,7 @@ export function ClientImport() {
   const importClients = useImportClients();
   const clerkDraft = useDraftClientImportWithClerk();
   const { data: me } = useGetMe();
-  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const operationKey = operationSessionKey(me);
 
   const [raw, setRaw] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -482,7 +494,10 @@ export function ClientImport() {
           <p className="font-semibold">The import may have completed.</p>
           <p className="mt-1">
             The connection ended before MeridianIQ answered. Check the{" "}
-            <Link href="/portfolio?view=clients" className="font-semibold underline">
+            <Link
+              href="/portfolio?view=clients"
+              className="font-semibold underline"
+            >
               client portfolio
             </Link>{" "}
             before importing again to avoid duplicate client records.

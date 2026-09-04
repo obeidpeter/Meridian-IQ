@@ -2,6 +2,8 @@ import type { RequestHandler } from "express";
 import { and, asc, eq, sql } from "drizzle-orm";
 import {
   getDb,
+  hasDatabaseContext,
+  runInBypassContext,
   featureFlagsTable,
   featureFlagOverridesTable,
   firmsTable,
@@ -65,6 +67,8 @@ export async function isFeatureEnabled(
   key: string,
   firmId?: string | null,
 ): Promise<boolean> {
+  if (!hasDatabaseContext())
+    return runInBypassContext(() => isFeatureEnabled(key, firmId));
   if (!(await rawFeatureEnabled(key, firmId))) return false;
   return (await unmetFeatureRequirements(key, firmId)).length === 0;
 }

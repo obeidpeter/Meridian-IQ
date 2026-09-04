@@ -11,6 +11,7 @@ import { isFeatureEnabled } from "../flags/flags";
 import { fanOutAlert } from "../messaging/fan-out";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import type { PushTemplateKey } from "../push/push";
+import { withClerkDb } from "./scope";
 
 // The shared per-client monthly rail (round 54). The advisory-brief rail was
 // built as "the statement rail verbatim" (round 50), and round 53 then had
@@ -90,12 +91,14 @@ export async function deliverPendingClientAlerts<T extends AnyRailTable>(
   const table = opts.table as typeof clerkClientStatementsTable;
   // Candidate rows, oldest first, so a backlog wider than one pass drains
   // in generation order; claimed rows drop out of the scan.
-  const pending = await getDb()
-    .select()
-    .from(table)
-    .where(isNull(table.deliveredAt))
-    .orderBy(table.createdAt)
-    .limit(opts.limit);
+  const pending = await withClerkDb(null, () =>
+    getDb()
+      .select()
+      .from(table)
+      .where(isNull(table.deliveredAt))
+      .orderBy(table.createdAt)
+      .limit(opts.limit),
+  );
   if (pending.length === 0) return 0;
 
   const messagingOn = await isFeatureEnabled("messaging_notifications", null);
@@ -117,11 +120,13 @@ export async function deliverPendingClientAlerts<T extends AnyRailTable>(
     // Sends happen AFTER the claim committed, outside any open transaction:
     // a crash here loses at most the remaining channels of one row — never
     // a committed claim.
-    const [prefs] = await getDb()
-      .select()
-      .from(alertPreferencesTable)
-      .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
-      .limit(1);
+    const [prefs] = await withClerkDb(row.firmId, () =>
+      getDb()
+        .select()
+        .from(alertPreferencesTable)
+        .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
+        .limit(1),
+    );
     await fanOutAlert({
       prefs,
       clientPartyId: row.clientPartyId,

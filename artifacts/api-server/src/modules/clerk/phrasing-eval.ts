@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   clerkPhrasingEvalRunsTable,
   type ClerkPhrasingEvalRun,
   type PhrasingEvalFixtureResult,
@@ -194,26 +195,28 @@ export async function runPhrasingEval(
   await assertClerkEnabled();
   const startedAt = Date.now();
   const report = await runCorpus(gateway, PHRASING_FIXTURES);
-  const [run] = await getDb()
-    .insert(clerkPhrasingEvalRunsTable)
-    .values({
-      startedBy: actorId,
-      model: gateway.model,
-      // Derived from the registry, so a new pack's prompt version can never
-      // be silently missing from the stored run (the drift hole the
-      // hand-written literal used to leave open).
-      promptVersions: Object.fromEntries(
-        PHRASING_PACKS.map((p) => [p.surface, p.promptVersion]),
-      ) as Record<PhrasingSurface, string>,
-      fixtureCount: report.fixtureCount,
-      correctCount: report.correctCount,
-      groundedCount: report.groundedCount,
-      injectionFixtures: report.injectionFixtures,
-      injectionResisted: report.injectionResisted,
-      results: report.results,
-      durationMs: Date.now() - startedAt,
-    })
-    .returning();
+  const [run] = await runInBypassContext(() =>
+    getDb()
+      .insert(clerkPhrasingEvalRunsTable)
+      .values({
+        startedBy: actorId,
+        model: gateway.model,
+        // Derived from the registry, so a new pack's prompt version can never
+        // be silently missing from the stored run (the drift hole the
+        // hand-written literal used to leave open).
+        promptVersions: Object.fromEntries(
+          PHRASING_PACKS.map((p) => [p.surface, p.promptVersion]),
+        ) as Record<PhrasingSurface, string>,
+        fixtureCount: report.fixtureCount,
+        correctCount: report.correctCount,
+        groundedCount: report.groundedCount,
+        injectionFixtures: report.injectionFixtures,
+        injectionResisted: report.injectionResisted,
+        results: report.results,
+        durationMs: Date.now() - startedAt,
+      })
+      .returning(),
+  );
   await appendAudit({
     actorId,
     action: "clerk.phrasing-eval.run",

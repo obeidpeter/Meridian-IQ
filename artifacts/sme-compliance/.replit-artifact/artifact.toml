@@ -18,7 +18,7 @@ localPort = 25883
 run = "pnpm --filter @workspace/sme-compliance run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/sme-compliance", "run", "build" ]
+build = [ "node", "scripts/src/ops/replit-promote.mjs", "build", "sme-compliance" ]
 publicDir = "artifacts/sme-compliance/dist/public"
 serve = "static"
 

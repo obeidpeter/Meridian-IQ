@@ -54,6 +54,22 @@ contracts used by two implementations live in neutral modules such as
 Changes across these boundaries require negative-path and concurrency tests,
 not only happy-path coverage.
 
+## Reliability Evidence
+
+- `scripts/src/ops/release.mjs`, `build-manifest.mjs`, `security-catalog.mjs`, and
+  `postdeploy.mjs`: read-only online release preflight, trusted CI artifact and
+  semantic schema parity. No serving-time schema push.
+- `scripts/src/e2e/accessibility.mjs` and `journeys/reliability.mjs`: real axe,
+  keyboard interaction, isolated accounts, stale writes and SQL import rollback.
+- `artifacts/api-server/src/release-reliability.integration.test.ts`: actual
+  main-app HTTP middleware and PostgreSQL transaction tests, not router mocks.
+- `lib/db/src/migrations/rollback-reliability.ts`: one ladder step for each of
+  migrations 0050-0054, preserving rows and enforcing additive rollback contracts.
+- `lib/db/src/migrations/reliability-policy-reference.ts`: independent reviewed
+  owner-policy definitions; PostgreSQL canonicalizes them for exact policy pins.
+- [Runtime evidence checklist](runtime-evidence-r198.md): test commands,
+  artifact promotion prerequisites, manual checks and unverified runtime claims.
+
 ## Generated and Runtime Output
 
 Do not review or edit dependencies, `dist`, coverage, Expo static output, or

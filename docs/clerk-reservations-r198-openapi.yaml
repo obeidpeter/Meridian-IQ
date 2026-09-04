@@ -1,0 +1,144 @@
+# Merge paths/components into lib/api-spec/openapi.yaml, then regenerate via
+# the parent-owned codegen flow. Paths are relative to the existing /api server.
+paths:
+  /operator/clerk-reservations:
+    get:
+      operationId: listClerkReservations
+      tags: [operator]
+      description: >-
+        Requires an authenticated operator with operator.queue.read. Lists only
+        expired, unsettled reservations. Ordered by UUID with bounded keyset
+        pagination. Start a fresh listing to discover newly expired rows below
+        an earlier cursor. Does not release or refund uncertain provider spend.
+      parameters:
+        - in: query
+          name: afterId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+      responses:
+        "200":
+          description: Expired reservations awaiting reconciliation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkReservationPage"
+        "400":
+          description: Invalid cursor or limit
+        "401":
+          description: Authentication required
+        "403":
+          description: Operator role and capability required
+  /operator/clerk-reservations/{id}/reconcile:
+    post:
+      operationId: reconcileClerkReservation
+      tags: [operator]
+      description: >-
+        Requires an authenticated operator with operator.queue.act and the normal
+        x-meridian-csrf header. The operator must confirm provider execution has
+        stopped and supply an audit reason. Charges at least the reserved amount,
+        appends audit evidence and settles atomically. Never refunds uncertain
+        spend. Repeated reconciliation returns the existing inferenceCallId with
+        replayed=true; subsequent input cannot change the recorded charge. A
+        later provider result charges only excess usage not already charged in
+        the same UTC budget month.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkReservationReconcileInput"
+      responses:
+        "200":
+          description: Reservation reconciled or a previous settlement replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkReservationReconcileResult"
+        "400":
+          description: Invalid input or proposed charge below reserved tokens
+        "401":
+          description: Authentication required
+        "403":
+          description: Operator role/capability required or CSRF marker missing
+        "404":
+          description: Reservation not found
+        "409":
+          description: Reservation has not expired or local provider work is active
+components:
+  schemas:
+    ClerkReservation:
+      type: object
+      required: [id, firmId, reservedTokens, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        reservedTokens:
+          type: string
+          pattern: "^[1-9][0-9]*$"
+          description: Positive bigint encoded as a decimal string.
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    ClerkReservationPage:
+      type: object
+      required: [reservations, nextAfterId]
+      properties:
+        reservations:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/ClerkReservation"
+        nextAfterId:
+          type: [string, "null"]
+          format: uuid
+          description: Last UUID when the page is full; null otherwise. A following page may be empty.
+    ClerkReservationReconcileInput:
+      type: object
+      additionalProperties: false
+      required: [reason, confirmedStopped]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 1000
+          description: Trimmed operator explanation or provider evidence reference recorded in the audit chain.
+        confirmedStopped:
+          type: boolean
+          enum: [true]
+          description: Operator confirms the failed provider execution has stopped.
+        chargedTokens:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Optional conservative charge, at least reservedTokens. Omission charges reservedTokens.
+    ClerkReservationReconcileResult:
+      type: object
+      required: [inferenceCallId, replayed]
+      properties:
+        inferenceCallId:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean

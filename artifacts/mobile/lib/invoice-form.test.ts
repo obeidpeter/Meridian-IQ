@@ -60,6 +60,7 @@ test("isValidISODate validates real calendar dates, not just the shape", () => {
   assert.equal(isValidISODate("2026-13-01"), false);
   assert.equal(isValidISODate("2026-1-01"), false); // must be zero-padded
   assert.equal(isValidISODate(""), false);
+  assert.equal(isValidISODate("0000-01-01"), false);
 });
 
 test("computeTotals treats vatRate as a percent and sums across lines", () => {
@@ -79,9 +80,28 @@ test("computeTotals reads blank fields as zero", () => {
   );
 });
 
+test("mobile previews use rounded decimal line amounts and payloads preserve cents", () => {
+  assert.deepEqual(
+    computeTotals([line({ quantity: "0.5", unitPrice: "2.01", vatRate: "0" })]),
+    { subtotal: 1.01, vat: 0, grand: 1.01 },
+  );
+  const { payloadLines, lineErrs } = normalizeLines([
+    line({ unitPrice: "90071992547409.93", vatRate: "7.5" }),
+  ]);
+  assert.deepEqual(lineErrs, {});
+  assert.equal(payloadLines[0].unitPrice, "90071992547409.93");
+  assert.ok(normalizeLines([line({ vatRate: "NaN" })]).lineErrs.k1.vatRate);
+  assert.ok(normalizeLines([line({ quantity: "1e3" })]).lineErrs.k1.quantity);
+});
+
 test("normalizeLines converts the percent field to the API's fraction", () => {
   const { payloadLines, lineErrs } = normalizeLines([
-    line({ description: "  Consulting  ", quantity: "2", unitPrice: "1500", vatRate: "7.5" }),
+    line({
+      description: "  Consulting  ",
+      quantity: "2",
+      unitPrice: "1500",
+      vatRate: "7.5",
+    }),
   ]);
   assert.deepEqual(lineErrs, {});
   assert.deepEqual(payloadLines, [
@@ -110,7 +130,10 @@ test("normalizeLines flags non-positive quantity and negative price per line", (
     line({ key: "bad-both", quantity: "abc", unitPrice: "junk" }),
     line({ key: "ok", quantity: "1,5", vatRate: "" }),
   ]);
-  assert.equal(lineErrs["bad-qty"]?.quantity, "Enter a quantity greater than 0.");
+  assert.equal(
+    lineErrs["bad-qty"]?.quantity,
+    "Enter a quantity greater than 0.",
+  );
   assert.equal(lineErrs["bad-qty"]?.unitPrice, undefined);
   assert.equal(lineErrs["bad-price"]?.unitPrice, "Enter a valid unit price.");
   assert.equal(lineErrs["bad-price"]?.quantity, undefined);

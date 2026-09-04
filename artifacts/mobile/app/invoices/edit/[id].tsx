@@ -9,10 +9,7 @@ import {
   useUpdateInvoice,
   useUpdateParty,
 } from "@workspace/api-client-react";
-import type {
-  InvoiceLineInput,
-  Party,
-} from "@workspace/api-client-react";
+import type { InvoiceLineInput, Party } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Stack,
@@ -41,6 +38,7 @@ import {
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, errorStatus } from "@/lib/api-error";
+import { useSession } from "@/lib/session";
 import {
   blankLine,
   computeTotals,
@@ -227,6 +225,7 @@ export default function FixInvoiceScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { me } = useSession();
 
   const detailQuery = useGetInvoice(id, {
     query: { enabled: !!id, queryKey: getGetInvoiceQueryKey(id) },
@@ -259,10 +258,14 @@ export default function FixInvoiceScreen() {
   const [linesDirty, setLinesDirty] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+  const [expectedRevision, setExpectedRevision] = useState<number | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const saveInFlight = useRef(false);
 
   useEffect(() => {
     if (prefilled || !detailQuery.data) return;
     const inv = detailQuery.data.invoice;
+    setExpectedRevision(inv.contentRevision);
     setInvoiceNumber(inv.invoiceNumber);
     setIssueDate(inv.issueDate);
     setDueDate(inv.dueDate ?? "");
@@ -308,7 +311,10 @@ export default function FixInvoiceScreen() {
   const buyerErrorStatus = buyerQuery.isError
     ? errorStatus(buyerQuery.error)
     : undefined;
-  const buyerLocked = buyerErrorStatus === 403;
+  const buyerLocked =
+    buyerErrorStatus === 403 ||
+    !me?.capabilities.includes("party.write") ||
+    me.role === "client_user";
   const buyerLoadFailed = buyerQuery.isError && !buyerLocked;
 
   // The supplier is the user's own party, so a 403 would still mean "managed by
@@ -429,7 +435,14 @@ export default function FixInvoiceScreen() {
   };
 
   const handleSave = async () => {
-    if (!invoice) return;
+    if (
+      !invoice ||
+      expectedRevision === null ||
+      saving ||
+      conflict ||
+      saveInFlight.current
+    )
+      return;
     setBanner(null);
     setLineErrors({});
     setIssueDateError(null);
@@ -476,14 +489,17 @@ export default function FixInvoiceScreen() {
       return;
     }
 
+    saveInFlight.current = true;
+    let partySaved = false;
     try {
       // Party fixes first (a corrected TIN must be in place before any
       // re-validation/retry re-reads the parties). Requests are serialized —
       // the API applies audit + validation per call.
-      if (supplierDraft && supplierQuery.data) {
+      if (!supplierLocked && supplierDraft && supplierQuery.data) {
         const patch = partyPatch(supplierDraft, supplierQuery.data);
         if (Object.keys(patch).length > 0) {
           await updateParty.mutateAsync({ id: supplierId, data: patch });
+          partySaved = true;
           await queryClient.invalidateQueries({
             queryKey: getGetPartyQueryKey(supplierId),
           });
@@ -493,6 +509,7 @@ export default function FixInvoiceScreen() {
         const patch = partyPatch(buyerDraft, buyerQuery.data);
         if (Object.keys(patch).length > 0) {
           await updateParty.mutateAsync({ id: buyerId, data: patch });
+          partySaved = true;
           await queryClient.invalidateQueries({
             queryKey: getGetPartyQueryKey(buyerId),
           });
@@ -522,7 +539,11 @@ export default function FixInvoiceScreen() {
         invPatch.lines = payloadLines;
       }
       if (Object.keys(invPatch).length > 0) {
-        await updateInvoice.mutateAsync({ id, data: invPatch });
+        const saved = await updateInvoice.mutateAsync({
+          id,
+          data: { ...invPatch, expectedRevision },
+        });
+        setExpectedRevision(saved.invoice.contentRevision);
       }
 
       await queryClient.invalidateQueries({
@@ -545,19 +566,30 @@ export default function FixInvoiceScreen() {
       allowLeaveRef.current = true;
       router.back();
     } catch (e) {
+      if (errorStatus(e) === 409) {
+        setConflict(true);
+        await detailQuery.refetch();
+      }
       setBanner(
-        apiErrorMessage(
-          e,
-          "We couldn't save these changes. Please try again.",
-        ),
+        (partySaved
+          ? "Business details were saved. Invoice changes are incomplete. "
+          : "") +
+          apiErrorMessage(
+            e,
+            "We couldn't save these changes. Please try again.",
+          ),
       );
       scrollToTop();
+    } finally {
+      saveInFlight.current = false;
     }
   };
 
   return (
     <>
-      <Stack.Screen options={stackHeaderOptions(colors, "Fix invoice details")} />
+      <Stack.Screen
+        options={stackHeaderOptions(colors, "Fix invoice details")}
+      />
       <ScrollHost
         ref={scrollRef}
         style={{ backgroundColor: colors.background }}
@@ -588,6 +620,43 @@ export default function FixInvoiceScreen() {
         ) : (
           <View style={{ gap: 20 }}>
             {banner ? <Banner tone="error" message={banner} /> : null}
+            {conflict && invoice ? (
+              <View style={{ gap: 12 }}>
+                <AppText variant="heading">Review the saved version</AppText>
+                <AppText>
+                  Saved revision {invoice.contentRevision}:{" "}
+                  {invoice.invoiceNumber}, issued {invoice.issueDate}, due{" "}
+                  {invoice.dueDate ?? "not set"},{" "}
+                  {detailQuery.data?.lines.length ?? 0} lines.
+                </AppText>
+                <AppText>
+                  Your edits: {invoiceNumber}, issued {issueDate}, due{" "}
+                  {dueDate || "not set"}, {lines.length} lines. Your unsaved
+                  entries are still in the form.
+                </AppText>
+                <AppButton
+                  label="Reload saved version"
+                  icon="refresh-cw"
+                  variant="secondary"
+                  onPress={() => {
+                    setPrefilled(false);
+                    setLinesDirty(false);
+                    setConflict(false);
+                    setBanner(null);
+                  }}
+                />
+                <AppButton
+                  label="Keep my edits"
+                  icon="edit-2"
+                  variant="secondary"
+                  onPress={() => {
+                    setExpectedRevision(invoice.contentRevision);
+                    setConflict(false);
+                    setBanner(null);
+                  }}
+                />
+              </View>
+            ) : null}
 
             {focus.length > 0 ? (
               <Card
@@ -640,7 +709,8 @@ export default function FixInvoiceScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
               >
                 <AppText variant="heading">Invoice details</AppText>
-                {focus.includes("invoice") || focus.includes("invoiceNumber") ? (
+                {focus.includes("invoice") ||
+                focus.includes("invoiceNumber") ? (
                   <Feather
                     name="alert-circle"
                     size={16}
@@ -701,7 +771,11 @@ export default function FixInvoiceScreen() {
                   onChangeText={setNotes}
                   placeholder="Payment terms, reference…"
                   multiline
-                  style={{ height: 80, paddingTop: 12, textAlignVertical: "top" }}
+                  style={{
+                    height: 80,
+                    paddingTop: 12,
+                    textAlignVertical: "top",
+                  }}
                 />
               </Card>
             </View>
@@ -749,7 +823,7 @@ export default function FixInvoiceScreen() {
               icon="check"
               onPress={() => void handleSave()}
               loading={saving}
-              disabled={saving}
+              disabled={saving || conflict}
               testID="button-save-fixes"
             />
             <AppButton

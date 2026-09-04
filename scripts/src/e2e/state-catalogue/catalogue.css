@@ -1,0 +1,20 @@
+@import "../../../../artifacts/sme-compliance/src/index.css";
+
+/* Only the specimen container is styled here; production components are intact. */
+.catalogue {
+  max-width: 72rem;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.catalogue > header {
+  margin-bottom: 1.5rem;
+}
+.catalogue > header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.catalogue > header p {
+  color: var(--mi-muted);
+  font-size: 0.875rem;
+}

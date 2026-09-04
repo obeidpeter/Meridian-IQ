@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import { withClerkDb } from "./scope";
 import {
   getDb,
   runInBypassContext,
@@ -42,10 +43,7 @@ import {
   OBLIGATION_DUE_SOON_DAYS,
   countOpenObligations,
 } from "../obligations/obligations";
-import {
-  FILING_DUE_SOON_DAYS,
-  countOpenFilings,
-} from "../filings/filings";
+import { FILING_DUE_SOON_DAYS, countOpenFilings } from "../filings/filings";
 import { statutoryDueDay } from "../filings/statutory-calendar";
 import { countWhtChase } from "../wht/credits";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
@@ -446,7 +444,8 @@ const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
   {
     promptLine: (facts) =>
       `- Invoices waiting for a colleague's approval before submission: ${facts.approvalsPendingCount ?? "approval policy off — do not mention"}${
-        facts.approvalsPendingCount !== null && facts.approvalsPendingOldestDays !== null
+        facts.approvalsPendingCount !== null &&
+        facts.approvalsPendingOldestDays !== null
           ? ` (oldest waiting ${facts.approvalsPendingOldestDays} day(s))`
           : ""
       }`,
@@ -629,19 +628,21 @@ export async function generateFirmDigest(
   now: Date = new Date(),
 ): Promise<ClerkDigestRow> {
   const weekStart = digestWeekStart(now);
-  const [existing] = await getDb()
-    .select()
-    .from(clerkDigestsTable)
-    .where(
-      and(
-        eq(clerkDigestsTable.firmId, firmId),
-        eq(clerkDigestsTable.weekStart, weekStart),
-      ),
-    )
-    .limit(1);
+  const [existing] = await withClerkDb(firmId, () =>
+    getDb()
+      .select()
+      .from(clerkDigestsTable)
+      .where(
+        and(
+          eq(clerkDigestsTable.firmId, firmId),
+          eq(clerkDigestsTable.weekStart, weekStart),
+        ),
+      )
+      .limit(1),
+  );
   if (existing) return existing;
 
-  const facts = await computeDigestFacts(firmId);
+  const facts = await withClerkDb(firmId, () => computeDigestFacts(firmId));
   const template = buildTemplateDigest(facts);
   let headline = template.headline;
   let bullets = template.bullets;
@@ -679,27 +680,36 @@ export async function generateFirmDigest(
 
   // Two instances racing resolve on the (firm_id, week_start) unique key: the
   // loser reads the winner's row.
-  const [inserted] = await getDb()
-    .insert(clerkDigestsTable)
-    // The fact snapshot is stored WITH the digest (round 20): consecutive
-    // weekly snapshots are the impact report's time series. The spread
-    // satisfies the column's generic Record type — DigestFacts is an
-    // interface, and the schema package cannot import it.
-    .values({ firmId, weekStart, headline, bullets, source, facts: { ...facts } })
-    .onConflictDoNothing()
-    .returning();
-  if (inserted) return inserted;
-  const [winner] = await getDb()
-    .select()
-    .from(clerkDigestsTable)
-    .where(
-      and(
-        eq(clerkDigestsTable.firmId, firmId),
-        eq(clerkDigestsTable.weekStart, weekStart),
-      ),
-    )
-    .limit(1);
-  return winner;
+  return withClerkDb(firmId, async () => {
+    const [inserted] = await getDb()
+      .insert(clerkDigestsTable)
+      // The fact snapshot is stored WITH the digest (round 20): consecutive
+      // weekly snapshots are the impact report's time series. The spread
+      // satisfies the column's generic Record type — DigestFacts is an
+      // interface, and the schema package cannot import it.
+      .values({
+        firmId,
+        weekStart,
+        headline,
+        bullets,
+        source,
+        facts: { ...facts },
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (inserted) return inserted;
+    const [winner] = await getDb()
+      .select()
+      .from(clerkDigestsTable)
+      .where(
+        and(
+          eq(clerkDigestsTable.firmId, firmId),
+          eq(clerkDigestsTable.weekStart, weekStart),
+        ),
+      )
+      .limit(1);
+    return winner;
+  });
 }
 
 // Offer generated digests to the firm's OPTED-IN staff, mirroring
@@ -732,15 +742,19 @@ export async function generateFirmDigest(
 // Expo push HTTP — meant a mid-pass failure rolled back every claim and
 // message row while pushes had already left the building, and sibling
 // instances blocked on the row locks for the duration.
-export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number> {
+export async function deliverFirmDigests(
+  limit = DELIVERY_BATCH,
+): Promise<number> {
   // Plain short read (raw pool): candidate rows, oldest first, so a backlog
   // wider than one pass drains in generation order.
-  const pending = await getDb()
-    .select()
-    .from(clerkDigestsTable)
-    .where(isNull(clerkDigestsTable.deliveredAt))
-    .orderBy(clerkDigestsTable.createdAt)
-    .limit(limit);
+  const pending = await withClerkDb(null, () =>
+    getDb()
+      .select()
+      .from(clerkDigestsTable)
+      .where(isNull(clerkDigestsTable.deliveredAt))
+      .orderBy(clerkDigestsTable.createdAt)
+      .limit(limit),
+  );
   if (pending.length === 0) return 0;
 
   const messagingOn = await isFeatureEnabled("messaging_notifications", null);
@@ -780,29 +794,37 @@ export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number
     // digest notification lands. Push is unaffected — it targets the
     // member's own registered devices, not a typed-in address.
     const recipients = (
-      await getDb()
-        .selectDistinct({
-          userId: staffNotificationPreferencesTable.userId,
-          emailEnabled: staffNotificationPreferencesTable.emailEnabled,
-          pushEnabled: staffNotificationPreferencesTable.pushEnabled,
-          email: staffNotificationPreferencesTable.email,
-          emailVerifiedAt: staffNotificationPreferencesTable.emailVerifiedAt,
-        })
-        .from(staffNotificationPreferencesTable)
-        .innerJoin(
-          membershipsTable,
-          and(
-            eq(membershipsTable.userId, staffNotificationPreferencesTable.userId),
-            eq(membershipsTable.firmId, staffNotificationPreferencesTable.firmId),
-            inArray(membershipsTable.role, ["firm_admin", "firm_staff"]),
+      await withClerkDb(row.firmId, () =>
+        getDb()
+          .selectDistinct({
+            userId: staffNotificationPreferencesTable.userId,
+            emailEnabled: staffNotificationPreferencesTable.emailEnabled,
+            pushEnabled: staffNotificationPreferencesTable.pushEnabled,
+            email: staffNotificationPreferencesTable.email,
+            emailVerifiedAt: staffNotificationPreferencesTable.emailVerifiedAt,
+          })
+          .from(staffNotificationPreferencesTable)
+          .innerJoin(
+            membershipsTable,
+            and(
+              eq(
+                membershipsTable.userId,
+                staffNotificationPreferencesTable.userId,
+              ),
+              eq(
+                membershipsTable.firmId,
+                staffNotificationPreferencesTable.firmId,
+              ),
+              inArray(membershipsTable.role, ["firm_admin", "firm_staff"]),
+            ),
+          )
+          .where(
+            and(
+              eq(staffNotificationPreferencesTable.firmId, row.firmId),
+              eq(staffNotificationPreferencesTable.digestEnabled, true),
+            ),
           ),
-        )
-        .where(
-          and(
-            eq(staffNotificationPreferencesTable.firmId, row.firmId),
-            eq(staffNotificationPreferencesTable.digestEnabled, true),
-          ),
-        )
+      )
     ).filter(
       (r) =>
         (r.emailEnabled && r.email !== null && r.emailVerifiedAt !== null) ||
@@ -864,60 +886,66 @@ export async function latestDigestForFirm(
   return row ?? null;
 }
 
-registerSweep("clerk.digests", async function sweepClerkDigests(): Promise<void> {
-  // Opt-in: generating digests for every firm can spend firm tokens, so the
-  // flag must be turned on deliberately (off/missing = no digests at all).
-  if (await isFeatureEnabled(DIGEST_FLAG_KEY)) {
-    // Candidate selection is a SHORT bypass transaction; generation — which
-    // makes one model call per firm — runs OUTSIDE it. Holding one transaction
-    // (and the advisory lock, and a pooled connection) across up to 20 provider
-    // calls made a slow provider stall the entire shared sweep loop, delaying
-    // the minute-sensitive statutory alerts behind it. The lock now only
-    // de-duplicates candidate selection within a pass; cross-instance
-    // idempotency rests where it always did — the (firm_id, week_start) unique
-    // key — so a rare concurrent pass wastes at most one phrasing call per firm
-    // and never stores a duplicate.
-    const firms = await runInBypassContext(async () => {
-      const locked = await tryAdvisoryXactLock(DIGEST_LOCK_ID);
-      if (!locked) return [];
+registerSweep(
+  "clerk.digests",
+  async function sweepClerkDigests(): Promise<void> {
+    // Opt-in: generating digests for every firm can spend firm tokens, so the
+    // flag must be turned on deliberately (off/missing = no digests at all).
+    if (await isFeatureEnabled(DIGEST_FLAG_KEY)) {
+      // Candidate selection is a SHORT bypass transaction; generation — which
+      // makes one model call per firm — runs OUTSIDE it. Holding one transaction
+      // (and the advisory lock, and a pooled connection) across up to 20 provider
+      // calls made a slow provider stall the entire shared sweep loop, delaying
+      // the minute-sensitive statutory alerts behind it. The lock now only
+      // de-duplicates candidate selection within a pass; cross-instance
+      // idempotency rests where it always did — the (firm_id, week_start) unique
+      // key — so a rare concurrent pass wastes at most one phrasing call per firm
+      // and never stores a duplicate.
+      const firms = await runInBypassContext(async () => {
+        const locked = await tryAdvisoryXactLock(DIGEST_LOCK_ID);
+        if (!locked) return [];
 
-      const weekStart = digestWeekStart();
-      return getDb()
-        .select({ id: firmsTable.id })
-        .from(firmsTable)
-        .leftJoin(
-          clerkDigestsTable,
-          and(
-            eq(clerkDigestsTable.firmId, firmsTable.id),
-            eq(clerkDigestsTable.weekStart, weekStart),
-          ),
-        )
-        .where(isNull(clerkDigestsTable.id))
-        .limit(DIGEST_BATCH);
-    });
-    if (firms.length > 0) {
-      // No provider configured (or kill switch off) still produces digests —
-      // just from the template path.
-      const gateway = await gatewayOrNull();
-      let generated = 0;
-      for (const firm of firms) {
-        await generateFirmDigest(firm.id, gateway);
-        generated += 1;
+        const weekStart = digestWeekStart();
+        return getDb()
+          .select({ id: firmsTable.id })
+          .from(firmsTable)
+          .leftJoin(
+            clerkDigestsTable,
+            and(
+              eq(clerkDigestsTable.firmId, firmsTable.id),
+              eq(clerkDigestsTable.weekStart, weekStart),
+            ),
+          )
+          .where(isNull(clerkDigestsTable.id))
+          .limit(DIGEST_BATCH);
+      });
+      if (firms.length > 0) {
+        // No provider configured (or kill switch off) still produces digests —
+        // just from the template path.
+        const gateway = await gatewayOrNull();
+        let generated = 0;
+        for (const firm of firms) {
+          await generateFirmDigest(firm.id, gateway);
+          generated += 1;
+        }
+        logger.info(
+          { generated },
+          "clerk digest sweep: weekly digests generated",
+        );
       }
-      logger.info({ generated }, "clerk digest sweep: weekly digests generated");
     }
-  }
 
-  // Delivery runs every pass — even while the generation flag is dark — so
-  // digests generated before delivery existed (and stragglers from a bounded
-  // pass) are still offered to opted-in staff. The delivered_at
-  // compare-and-set keeps this idempotent across instances without the
-  // generation lock.
-  const delivered = await deliverFirmDigests();
-  if (delivered > 0) {
-    logger.info(
-      { delivered },
-      "clerk digest sweep: digests offered to staff notification channels",
-    );
-  }
-});
+    // Delivery runs every pass — even while the generation flag is dark — so
+    // digests generated before delivery existed (and stragglers from a bounded
+    // pass) are still offered to opted-in staff. The delivered_at
+    // compare-and-set keeps this idempotent across instances without the
+    // generation lock.
+    const delivered = await deliverFirmDigests();
+    if (delivered > 0) {
+      logger.info(
+        { delivered },
+        "clerk digest sweep: digests offered to staff notification channels",
+      );
+    }
+  },
+);

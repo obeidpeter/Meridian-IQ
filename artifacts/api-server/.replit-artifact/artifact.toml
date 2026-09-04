@@ -15,23 +15,20 @@ run = "pnpm --filter @workspace/api-server run dev"
 [services.production]
 
 [services.production.build]
-args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
+args = ["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server"]
 
 [services.production.build.env]
 NODE_ENV = "production"
 
 [services.production.run]
-# we don't run through pnpm to make startup faster in production
-args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+# Verify the packaged CI bytes before loading the unchanged API bundle.
+args = ["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server"]
 
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
-# The boot-time seeder never runs in production (schema and seed data are owned
-# by Replit's Publish flow — see src/index.ts), so the public demo deployment's
-# one-click demo accounts come from the Publish "overwrite data" dev->prod copy,
-# NOT from a startup seed. Per SEC-01, do not set SEED_DEMO here: it is inert in
-# production, and a real deployment must never create known-password accounts.
+# Production uses reviewed versioned migrations, never a dev-data overwrite.
+# Do not set SEED_DEMO: production must never create known-password accounts.
 
 [services.production.health.startup]
 path = "/api/healthz"

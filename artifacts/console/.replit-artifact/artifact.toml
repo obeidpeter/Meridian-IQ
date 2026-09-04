@@ -18,7 +18,7 @@ localPort = 23876
 run = "pnpm --filter @workspace/console run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/console", "run", "build" ]
+build = [ "node", "scripts/src/ops/replit-promote.mjs", "build", "console" ]
 publicDir = "artifacts/console/dist/public"
 serve = "static"
 

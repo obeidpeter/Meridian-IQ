@@ -47,11 +47,12 @@ minimumReleaseAgeExclude:
   - '@replit/*'
   - stripe-replit-sync
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
+# pnpm >=10.26 and 11 share allowBuilds; v11 ignores onlyBuiltDependencies.
+# Preserve the reviewed package allowlist. Unknown lifecycle scripts fail closed.
+strictDepBuilds: true
+verifyDepsBeforeRun: error
+# Pin the documented pnpm 10/11 default so verification sees false, not unset.
+enableGlobalVirtualStore: false
 
 overrides:
   # Security floors, migrated from package.json's "pnpm.overrides" (a field
@@ -155,3 +156,9 @@ overrides:
   rollup>@rollup/rollup-win32-arm64-msvc: '-'
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
+
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  msw: true
+  unrs-resolver: true

@@ -1,0 +1,7 @@
+{
+  "console": { "maxEagerGzipBytes": 166000, "minDynamicEntries": 33 },
+  "sme-compliance": { "maxEagerGzipBytes": 160500, "minDynamicEntries": 26 },
+  "buyer-portal": { "maxEagerGzipBytes": 135000, "minDynamicEntries": 8 },
+  "landing": { "maxEagerGzipBytes": 71500, "minDynamicEntries": 6 },
+  "penalty-calculator": { "maxEagerGzipBytes": 62000, "minDynamicEntries": 1 }
+}

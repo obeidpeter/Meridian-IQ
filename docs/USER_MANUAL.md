@@ -2167,7 +2167,7 @@ unreachable (404), not broken:
 | `OUTBOX_LEASE_MS` / `OUTBOX_RELEASE_MAX_AGE_SECONDS`                                       | Outbox worker lease duration and the oldest-pending threshold that blocks release readiness. Defaults are 120 seconds and 900 seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `CLERK_SECRET_KEY` (+ `CLERK_AUTHORIZED_PARTIES`)                                          | The hosted identity provider (unrelated to the AI assistant). In production the key without authorized parties (or `REPLIT_DOMAINS`) disables it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `FRAME_ANCESTORS`                                                                          | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `ENABLE_DEV_AUTH`                                                                          | The `x-mock-*` dev identity shim — a full auth bypass, honoured only outside production.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `ENABLE_DEV_AUTH` | The `x-mock-*` identity bypass requires exactly `ENABLE_DEV_AUTH=true` AND `NODE_ENV=development` or `test`, in isolated processes only. Always forbidden in production and other modes; no `.replit` or artifact descriptor enables it. |
 
 **Machine-rail credentials (R100).** Every machine rail — the two intake
 rails, the payment, Invoice Room payment, and collection webhooks,
@@ -2297,7 +2297,9 @@ DATABASE_URL=postgres://... pnpm --filter @workspace/scripts run e2e
   capability list (never submission, Clerk, billing or identity), and all
   secrets (API keys, webhook secrets, invite/reset links, 2FA recovery
   codes) are shown once and stored only as hashes.
-- Demo/dev header identities are honoured only outside production.
+- Demo/dev header identities require exactly `ENABLE_DEV_AUTH=true` and
+  `NODE_ENV=development` or `test`, in isolated processes only. Production and
+  other modes always forbid them; no `.replit` or artifact descriptor enables them.
 
 ### Backups, restore drill and release
 
@@ -2307,7 +2309,7 @@ each needs `DATABASE_URL` set explicitly and prints a redacted target first.
 ```bash
 DATABASE_URL=… pnpm --filter @workspace/scripts run ops:backup            # pg_dump (custom format) → BACKUP_DIR, verified, sha256, pruned to BACKUP_KEEP
 DATABASE_URL=<source> DRILL_DATABASE_URL=<scratch> pnpm --filter @workspace/scripts run ops:restore-drill   # dump → restore into the scratch → assert
-DATABASE_URL=… pnpm --filter @workspace/scripts run ops:release -- --yes  # schema push → guardrail migrations → verify the migration ledger
+DATABASE_URL=… pnpm --filter @workspace/scripts run ops:release -- --yes  # read-only preflight; also requires trusted manifest and recovery evidence
 ```
 
 - **Backup** dumps to `BACKUP_DIR` (default `./backups`), verifies the
@@ -2319,11 +2321,13 @@ DATABASE_URL=… pnpm --filter @workspace/scripts run ops:release -- --yes  # sc
   the migration ledger, key row counts, and that row-level security is still
   enabled and forced on `invoices`. CI runs it on every merge; run it
   per release too.
-- **Release** runs the two production database steps as one verified
-  command — `push` (or `push-force` with `RELEASE_PUSH_FORCE=1`) then
-  `migrate` — refuses without `--yes`, optionally takes a pre-flight dump
-  (`RELEASE_BACKUP=1`), and prints the contract version to compare with
-  `/api/healthz` after the Redeploy or workflow restart.
+- **Release** checks the trusted CI artifact and semantic database catalog
+  without changing a serving database. It requires `--yes`, manifest/checksum,
+  rollback identity and fresh backup/restore evidence. Force push is refused.
+  Reviewed additive migrations precede promotion; historical baseline bootstrap
+  requires explicit offline maintenance. Post-merge never falls back to schema
+  push or non-frozen installation. See the [runtime release checklist](runtime-evidence-r198.md)
+  for the complete procedure and postdeploy source/asset/schema parity checks.
 
 ### Resetting demo data
 

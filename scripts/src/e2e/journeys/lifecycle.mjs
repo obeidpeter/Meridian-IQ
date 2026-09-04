@@ -5,7 +5,6 @@ import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
   DEMO_PASSWORD,
-  createDraftInvoice,
   pollUntil,
   signIn,
 } from "./shared.mjs";
@@ -98,12 +97,8 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   );
   check("server-side search narrows the invoice list", narrowed);
 
-  // A draft can be created through the form — when the signed-in client can
-  // see buyer parties. Since the new-customer gap closed (firm staff see
-  // invoice-referenced buyers), the seeded world takes this branch; the
-  // no-customers fallback below stays for seeds without visible buyers —
-  // there, assert the empty state renders and create the draft via the same
-  // session's API instead, then verify it surfaces in the list UI.
+  // This is a UI completion test: missing buyer setup must fail, not fall back
+  // to an API-created invoice that would hide a broken customer picker.
   const draftNumber = `E2E-${Date.now()}`;
   await page.goto(BASE + "/app/invoices/new", { waitUntil: "networkidle" });
   await page.waitForSelector("#buyer-select", { timeout: 15000 });
@@ -124,30 +119,9 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
     });
     check("invoice form creates a draft", true);
   } else {
-    check(
-      "invoice form shows the no-customers state for the seeded client",
-      true,
+    throw new Error(
+      "UI invoice fixture has no visible buyer; creation was not exercised",
     );
-    const parties = await (
-      await page.request.get(BASE + "/api/parties")
-    ).json();
-    const created = await createDraftInvoice(page, BASE, {
-      supplierPartyId: parties[0].id,
-      buyerPartyId: parties[0].id,
-      invoiceNumber: draftNumber,
-      issueDate: new Date().toISOString().slice(0, 10),
-      description: "E2E smoke goods",
-      unitPrice: "1500",
-      quantity: "2",
-    });
-    check("draft created via the session API", created.status === 201);
-    await page.goto(BASE + "/app/invoices", { waitUntil: "networkidle" });
-    await page.locator("#invoice-search").fill(draftNumber);
-    const found = await pollUntil(
-      async () => (await page.locator(`text=${draftNumber}`).count()) > 0,
-      { page },
-    );
-    check("fresh draft surfaces through list search", found);
   }
 
   // CSV exports ride the same session cookie.

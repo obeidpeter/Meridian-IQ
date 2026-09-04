@@ -1410,20 +1410,15 @@ pnpm --filter @workspace/scripts run ops:restore-drill`. Dumps the source,
   this proves it every run). Prints PASS/FAIL per assertion plus dump/restore
   timings. CI runs it on every merge against the CI database; run it
   per-release too — an untested backup is a hope, not a backup.
-- **Release** — `DATABASE_URL=… pnpm --filter @workspace/scripts run
-ops:release -- --yes` (refuses without both; prints the redacted target
-  first). Sequence: optional pre-flight dump (`RELEASE_BACKUP=1`) →
-  `db run push` (`RELEASE_PUSH_FORCE=1` swaps in `push-force` for destructive
-  diffs, where plain push prompts and hangs) → `db run migrate` → verify that
-  `_schema_migrations` count/max equal the registry in
-  `lib/db/src/migrations/index.ts` (parsed at runtime, so it can never go
-  stale) and print the API contract version to compare against
-  `/api/healthz` after the Redeploy. **The hazard this kills:** the guardrail
-  RLS policies/triggers are not in the Drizzle schema, so a `push` can drop
-  them and only `migrate` re-asserts them — run manually as two steps, the
-  window between them (or a forgotten migrate) is a tenant-isolation hole.
-  A failed step aborts and lists what did not run; push and migrate are both
-  idempotent, so fix the cause and re-run to completion.
+- **Release**: `ops:release -- --yes` is a read-only online preflight requiring
+  the trusted CI manifest/checksum, rollback revision, recovery evidence and
+  semantic catalog parity. It does not push schema or deploy. Apply reviewed
+  additive migrations before promotion; retain traffic isolation for explicit
+  offline baseline bootstrap and any failed bootstrap. `RELEASE_PUSH_FORCE` is
+  rejected. Post-merge uses frozen installation and versioned migrations only.
+  `ops:postdeploy` verifies actual source/contract/assets and database parity.
+  Follow [runtime evidence and release safety](runtime-evidence-r198.md) for the
+  complete prerequisites, trust boundary and maintenance procedure.
 
 **Honest DR statement.** RPO = your backup cadence: the tool does not
 schedule itself, so if you dump nightly you can lose a day. RTO = the restore

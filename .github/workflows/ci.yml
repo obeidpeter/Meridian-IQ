@@ -19,7 +19,9 @@ concurrency:
 jobs:
   quality-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Headroom for the expanded DB/rollback/upgrade suites and restore drill.
+    # Full CI duration must still be measured; local non-DB timings are in the evidence log.
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -38,6 +40,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://meridian:meridian@127.0.0.1:5432/meridian_ci
+      E2E_DATABASE_DISPOSABLE: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +59,12 @@ jobs:
 
       - name: Architecture boundaries
         run: pnpm run architecture:check
+
+      - name: Release, worker and load-tool regression tests
+        run: node --test scripts/src/ops/*.test.mjs scripts/src/load-smoke.test.mjs scripts/src/e2e/service-worker.test.mjs
+
+      - name: Client transport and database deadline configuration tests
+        run: node node_modules/tsx/dist/cli.mjs --test lib/api-client-react/test/custom-fetch.test.ts lib/db/src/connection-config.test.ts
 
       - name: Tracked secret scan
         run: pnpm run security:secrets
@@ -174,6 +183,9 @@ jobs:
       - name: Migration rollback test (real Postgres)
         run: pnpm --filter @workspace/db run test
 
+      - name: Migration-only upgrade matches the release catalog
+        run: node node_modules/tsx/dist/cli.mjs --test scripts/src/ops/migration-upgrade.integration.mjs
+
       # Data durability: an untested backup is a hope, not a backup. Dump the
       # fully-migrated CI database, restore it into a scratch DB on the same
       # service (the drill drops/creates it via the service superuser), and
@@ -203,8 +215,11 @@ jobs:
   # the full journey suite; see scripts/src/e2e/journeys/ for the current
   # inventory.
   e2e:
+    needs: quality-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Local catalogue rendering added ~171s (excluding its build), route budgets ~34s.
+    # Include browser installation, both build passes and DB journeys on slower runners.
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -223,6 +238,8 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://meridian:meridian@127.0.0.1:5432/meridian_e2e
+      E2E_DATABASE_DISPOSABLE: '1'
+      BUILD_REVISION: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -245,6 +262,15 @@ jobs:
       - name: Build api-server
         run: pnpm --filter @workspace/api-server run build
 
+      - name: Build immutable mobile native export and serving package
+        run: node scripts/src/ops/mobile-artifact.mjs build
+
+      - name: Verify packaged mobile manifests and native asset bytes
+        run: node scripts/src/ops/mobile-artifact.mjs check
+
+      - name: Axe engine and keyboard assertion regression
+        run: node --test scripts/src/e2e/accessibility.test.mjs
+
       - name: Build frontends
         run: |
           BASE_PATH=/ PORT=3000 pnpm --filter @workspace/landing run build
@@ -256,5 +282,38 @@ jobs:
       - name: Push schema
         run: pnpm --filter @workspace/db run push
 
+      - name: Render recovery states and verify accessibility
+        run: node scripts/src/e2e/state-catalogue/run.mjs
+
+      - name: Enforce lazy route and entry bundle budgets
+        run: node scripts/src/e2e/state-catalogue/route-budget.mjs
+
       - name: Run E2E journeys
         run: pnpm --filter @workspace/scripts run e2e
+
+      - name: Stamp tested immutable build manifest
+        run: node scripts/src/ops/build-manifest.mjs
+
+      - name: Preserve tested release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: meridian-release-${{ github.sha }}
+          if-no-files-found: error
+          # The inventory hashes hidden assets too; do not omit them in transport.
+          include-hidden-files: true
+          path: |
+            release/build-manifest.json*
+            artifacts/*/dist/**
+
+      - name: Preserve failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-evidence
+          path: |
+            scripts/test-results/**
+            test-results/**
+            tmp/state-catalogue-r198/**
+            tmp/route-budget-r198/report.json
+            tmp/route-budget-r198/*.build.log
+            tmp/route-budget-r198/*/.vite/manifest.json

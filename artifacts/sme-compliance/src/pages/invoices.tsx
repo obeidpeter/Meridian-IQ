@@ -1,19 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   useGetMe,
-  useListInvoices,
   useBulkSubmitInvoices,
   getListInvoicesQueryKey,
   getGetDashboardSummaryQueryKey,
   getGetReceivablesSummaryQueryKey,
-  useListParties,
 } from "@workspace/api-client-react";
-import type {
-  BulkSubmitRowResult,
-  Invoice,
-  ListInvoicesParams,
-} from "@workspace/api-client-react";
+import type { BulkSubmitRowResult, Invoice } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,14 +23,15 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { useUrlTab } from "@workspace/web-ui";
+import { useUrlParam, useUrlTab } from "@workspace/web-ui";
 import { PillToggle } from "@/components/pill-toggle";
 import { QueryError } from "@/components/query-error";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import { idMap, scopedToSupplier } from "@/lib/rows";
+import { CustomerName } from "@/components/customer-directory-picker";
+import { useInvoicePages } from "@/lib/invoice-pages";
 import {
   Search,
   FileText,
@@ -81,10 +76,6 @@ export function matchesFilter(inv: Invoice, key: FilterKey): boolean {
   return !!f && (f.tones as readonly string[]).includes(statusTone(inv.status));
 }
 
-// Server page size. Passing limit/offset switches GET /invoices into its
-// newest-first bounded mode, so we never pull the unbounded legacy list.
-const PAGE_SIZE = 50;
-
 // The vault's Min/Max filters are ₦-labeled, so they compare naira VALUE:
 // foreign invoices convert through their captured FX rate; one without a
 // rate cannot be compared, so it only shows while no amount filter is set.
@@ -108,107 +99,6 @@ export function nairaApproxLine(
   if (inv.currency === "NGN") return null;
   const value = nairaEquivalent(inv);
   return value === null ? null : `≈ ${formatNaira(value.toFixed(2))}`;
-}
-
-// Offset-paged accumulation of GET /invoices for the vault list: debounces
-// the search box into the server-side `q`, keeps every fetched page for the
-// current term, and exposes load-more / reset-to-first-page controls plus the
-// derived loading flags. `query` is the debounced term the pages were fetched
-// with (the CSV export URL must be built from it, not the live input).
-function useAccumulatedInvoicePages(search: string) {
-  // Debounced server-side search plus paging cursor, kept in one state object
-  // so a new search term resets to the first page in the same update.
-  const [paging, setPaging] = useState<{ q: string; offset: number }>({
-    q: "",
-    offset: 0,
-  });
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const q = search.trim();
-      setPaging((prev) => (prev.q === q ? prev : { q, offset: 0 }));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  const params: ListInvoicesParams = paging.q
-    ? { limit: PAGE_SIZE, offset: paging.offset, q: paging.q }
-    : { limit: PAGE_SIZE, offset: paging.offset };
-  const {
-    data: page,
-    isLoading,
-    isError,
-    isFetching,
-    refetch,
-  } = useListInvoices(params, {
-    query: { queryKey: getListInvoicesQueryKey(params) },
-  });
-
-  // Earlier pages accumulated per search term, keyed by offset so a
-  // background refetch of a page replaces it instead of appending a
-  // duplicate. The current offset's page always comes live from the query
-  // and is merged in below; the effect just persists it for later offsets.
-  const [pages, setPages] = useState<{
-    q: string;
-    byOffset: Record<number, Invoice[]>;
-  }>({ q: "", byOffset: {} });
-
-  useEffect(() => {
-    if (!page) return;
-    setPages((prev) =>
-      prev.q === paging.q
-        ? { q: prev.q, byOffset: { ...prev.byOffset, [paging.offset]: page } }
-        : { q: paging.q, byOffset: { [paging.offset]: page } },
-    );
-  }, [page, paging]);
-
-  const byOffset = useMemo(() => {
-    const merged: Record<number, Invoice[]> =
-      pages.q === paging.q ? { ...pages.byOffset } : {};
-    if (page) merged[paging.offset] = page;
-    return merged;
-  }, [pages, paging, page]);
-
-  const loaded = useMemo(
-    () =>
-      Object.keys(byOffset)
-        .map(Number)
-        .sort((a, b) => a - b)
-        .flatMap((offset) => byOffset[offset] ?? []),
-    [byOffset],
-  );
-
-  const hasLoaded = Object.keys(byOffset).length > 0;
-  const lastPage = byOffset[paging.offset];
-  const hasMore = !!lastPage && lastPage.length === PAGE_SIZE;
-  const loadingMore = isFetching && hasLoaded && !lastPage;
-  const initialLoading = isLoading && !hasLoaded;
-
-  const loadMore = () =>
-    setPaging((prev) => ({
-      ...prev,
-      offset: prev.offset + PAGE_SIZE,
-    }));
-
-  // Drop the accumulated pages and jump back to the first page so the
-  // refreshed statuses show instead of stale later pages.
-  const resetToFirstPage = () => {
-    setPaging((prev) => (prev.offset === 0 ? prev : { ...prev, offset: 0 }));
-    setPages((prev) => ({ q: prev.q, byOffset: {} }));
-  };
-
-  return {
-    loaded,
-    hasLoaded,
-    hasMore,
-    loadingMore,
-    initialLoading,
-    isError,
-    refetch,
-    loadMore,
-    resetToFirstPage,
-    query: paging.q,
-  };
 }
 
 // The two-step bulk-submit dialog: `report === null` is the confirmation
@@ -448,14 +338,10 @@ function AdvancedFiltersCard({
 export function Invoices() {
   usePageTitle("Invoices");
   const { data: me } = useGetMe();
-  // Bounded reads (R98): the buyer-name map beside the paged vault reads the
-  // reference-list ceiling; a row whose buyer falls outside it shows the
-  // "Unknown customer" fallback rather than a whole-spine read.
-  const { data: parties } = useListParties({ limit: 500 });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const bulkSubmit = useBulkSubmitInvoices();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useUrlParam("q");
   // Bulk submit dialog: `bulkReport === null` is the confirmation step; a
   // report switches it to the results view. Rows accumulate across batches,
   // deduped by invoiceId (an invalid draft stays pending by design, so it
@@ -474,10 +360,10 @@ export function Invoices() {
     FILTER_KEYS,
   );
   const [showFilters, setShowFilters] = useState(false);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
+  const [fromDate, setFromDate] = useUrlParam("fromDate");
+  const [toDate, setToDate] = useUrlParam("toDate");
+  const [minAmount, setMinAmount] = useUrlParam("minAmount");
+  const [maxAmount, setMaxAmount] = useUrlParam("maxAmount");
 
   const {
     loaded,
@@ -490,16 +376,12 @@ export function Invoices() {
     loadMore,
     resetToFirstPage,
     query,
-  } = useAccumulatedInvoicePages(search);
-
-  const partyName = useMemo(
-    () =>
-      idMap(
-        parties,
-        (p) => p.id,
-        (p) => p.legalName,
-      ),
-    [parties],
+    counts,
+    total,
+  } = useInvoicePages(
+    search,
+    { statusGroup: filter, fromDate, toDate, minAmount, maxAmount },
+    me ? `${me.firmId}:${me.userId}:${me.clientPartyId}` : "",
   );
 
   const hasAdvanced = !!fromDate || !!toDate || !!minAmount || !!maxAmount;
@@ -574,35 +456,7 @@ export function Invoices() {
     }
   };
 
-  // The client's own invoice book — the base every filter applies to. The
-  // search is server-side (q matches the invoice number or either party's
-  // legal name); the tab and advanced filters apply to the loaded rows. The
-  // status tabs group raw statuses by tone (e.g. draft + validated), so they
-  // can't map onto the server's exact-match `status` param.
-  const scoped = useMemo(
-    () => scopedToSupplier(loaded, me?.clientPartyId),
-    [loaded, me?.clientPartyId],
-  );
-
-  const countFor = (key: FilterKey) =>
-    scoped.filter((inv) => matchesFilter(inv, key)).length;
-
-  const rows = useMemo(() => {
-    const minParsed = Number(minAmount);
-    const maxParsed = Number(maxAmount);
-    const min = minAmount && Number.isFinite(minParsed) ? minParsed : null;
-    const max = maxAmount && Number.isFinite(maxParsed) ? maxParsed : null;
-    return scoped
-      .filter((inv) => matchesFilter(inv, filter))
-      .filter((inv) => (fromDate ? inv.issueDate >= fromDate : true))
-      .filter((inv) => (toDate ? inv.issueDate <= toDate : true))
-      .filter((inv) => {
-        if (min === null && max === null) return true;
-        const ngn = nairaEquivalent(inv);
-        if (ngn === null) return false;
-        return (min === null || ngn >= min) && (max === null || ngn <= max);
-      });
-  }, [scoped, filter, fromDate, toDate, minAmount, maxAmount]);
+  const rows = loaded;
 
   return (
     <div className="space-y-6">
@@ -683,9 +537,7 @@ export function Invoices() {
             data-testid={`filter-invoices-${f.key}`}
           >
             {f.label}
-            {/* While older pages exist the count is a lower bound over what's loaded,
-                so it must say so — "Failed · 0" with a failure on page 2 is a lie. */}
-            {hasLoaded ? ` · ${countFor(f.key)}${hasMore ? "+" : ""}` : ""}
+            {counts[f.key] !== undefined ? ` · ${counts[f.key]}` : ""}
           </PillToggle>
         ))}
         <Button
@@ -727,7 +579,7 @@ export function Invoices() {
       ) : isError && !hasLoaded ? (
         <QueryError thing="your invoices" onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
-        scoped.length === 0 && !hasAnyFilter ? (
+        !hasAnyFilter ? (
           <Card>
             <EmptyState
               icon={FileText}
@@ -753,11 +605,7 @@ export function Invoices() {
             <EmptyState
               icon={FileText}
               title="No matches"
-              description={
-                hasMore
-                  ? "Nothing loaded so far matches the current search and filters — older invoices haven't been loaded yet."
-                  : "No invoices match the current search and filters."
-              }
+              description="No invoices match the current search and filters."
             >
               <div className="mt-2 flex flex-wrap justify-center gap-2">
                 {hasMore && (
@@ -796,8 +644,10 @@ export function Invoices() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1 truncate">
-                      {partyName.get(inv.buyerPartyId) || "Unknown customer"} ·
-                      Issued {formatDate(inv.issueDate)}
+                      {inv.buyerLegalName || (
+                        <CustomerName id={inv.buyerPartyId} />
+                      )}{" "}
+                      · Issued {formatDate(inv.issueDate)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
@@ -829,7 +679,8 @@ export function Invoices() {
       {hasLoaded && loaded.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
           <span data-testid="text-showing-count">
-            Showing {rows.length} invoice{rows.length === 1 ? "" : "s"}
+            Showing {rows.length} of {total ?? "..."} invoice
+            {total === 1 ? "" : "s"}
           </span>
           {isError ? (
             <>

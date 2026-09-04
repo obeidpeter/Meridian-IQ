@@ -1,3 +1,9 @@
+import { customFetch } from "@workspace/api-client-react";
+import {
+  signOutAndRedirect,
+  SessionOperationRecovery,
+  useOperationNavigation,
+} from "@workspace/web-ui";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -15,11 +21,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
-import {
-  searchWorkspace,
-  useGetMe,
-  useLogout,
-} from "@workspace/api-client-react";
+import { searchWorkspace, useGetMe, logout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -188,10 +190,11 @@ function NavLinks({
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
+  const openOperation = useOperationNavigation("buyer", navigate);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const { data: me } = useGetMe();
-  const logout = useLogout();
+  const [signingOut, setSigningOut] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const isFirstRender = useRef(true);
 
@@ -205,12 +208,8 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [location]);
 
   const signOut = async () => {
-    try {
-      await logout.mutateAsync();
-    } catch {
-      // Cookie clearing is best effort; leave the workspace regardless.
-    }
-    window.location.href = "/login";
+    setSigningOut(true);
+    await signOutAndRedirect((signal) => logout({ signal }));
   };
 
   const activeLink = [...LINKS]
@@ -232,7 +231,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const remoteSearch = useCallback(
     async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
       trackUsabilityEvent("global_search_started", "global_search");
-      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      const results = await searchWorkspace(
+        { q: query, limit: 14 },
+        { signal },
+      );
       if (results.length === 0) {
         trackUsabilityEvent("zero_result_search", "global_search");
       }
@@ -254,7 +256,7 @@ export function Layout({ children }: { children: ReactNode }) {
     location,
     me,
     onSignOut: signOut,
-    signingOut: logout.isPending,
+    signingOut: signingOut,
   };
 
   return (
@@ -349,6 +351,11 @@ export function Layout({ children }: { children: ReactNode }) {
                 Ctrl K
               </kbd>
             </Button>
+            <SessionOperationRecovery
+              me={me}
+              request={customFetch}
+              onOpen={openOperation}
+            />
             <NotificationBell />
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
               <LockKeyhole

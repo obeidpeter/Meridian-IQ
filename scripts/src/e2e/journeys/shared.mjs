@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
+import { CSRF, commandHeaders } from "../../test-client.mjs";
 // Shared spine of the e2e journeys: the demo credentials, the CSRF marker,
 // the seeded demo-client ids, and the sign-in/api-session/poll helpers every
 // journey group composes. Journey code lives in the sibling group files;
@@ -18,7 +19,6 @@ const DEMO_EMAIL_BY_TEST_ID = {
 };
 
 // Every state-changing page.request call presents the CSRF marker header.
-const CSRF = { "x-meridian-csrf": "1" };
 
 // The seeded demo client party. Journeys key list filters and API calls off
 // the full id, and pattern-match "a demo-client invoice" off its first block.
@@ -47,15 +47,21 @@ export async function signOutFromApp(page, BASE) {
 // context's cookie jar, so a later page.goto rides the same session. Drops any
 // current session first (logout is a public, idempotent endpoint).
 export async function apiLogin(page, BASE, email) {
-  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
-  await page.request.post(BASE + "/api/auth/login", {
+  await apiLogout(page, BASE);
+  const response = await page.request.post(BASE + "/api/auth/login", {
     data: { email, password: DEMO_PASSWORD },
     headers: CSRF,
   });
+  if (response.status() !== 200)
+    throw new Error(`Fixture login refused: ${response.status()} (${email})`);
 }
 
 export async function apiLogout(page, BASE) {
-  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  const response = await page.request.post(BASE + "/api/auth/logout", {
+    headers: CSRF,
+  });
+  if (!response.ok())
+    throw new Error(`Fixture logout refused: ${response.status()}`);
 }
 
 // The one-line draft-invoice scaffold every journey probe shares: POST
@@ -78,6 +84,7 @@ export async function createDraftInvoice(
     quantity = "1",
     vatRate = "0.075",
     whtCategory,
+    idempotencyKey,
   },
 ) {
   const res = await page.request.post(BASE + "/api/invoices", {
@@ -89,7 +96,7 @@ export async function createDraftInvoice(
       ...(whtCategory ? { whtCategory } : {}),
       lines: [{ description, quantity, unitPrice, vatRate }],
     },
-    headers: CSRF,
+    headers: commandHeaders(idempotencyKey),
   });
   return {
     status: res.status(),

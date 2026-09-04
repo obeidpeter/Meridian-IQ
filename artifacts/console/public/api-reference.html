@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.98.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.99.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.98.0</title>
+<title>MeridianIQ API reference — v0.99.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.98.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.99.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -157,7 +157,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">14</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">4</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">8</span></a><a href="#tag-operator">operator<span class="count">26</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">15</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">7</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-workspace">workspace<span class="count">2</span></a><a href="#tag-work">work<span class="count">5</span></a><a href="#tag-invoice-room">invoice-room<span class="count">14</span></a><a href="#tag-credit">credit<span class="count">8</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">14</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">35</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">4</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">8</span></a><a href="#tag-operator">operator<span class="count">26</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">15</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">7</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-workspace">workspace<span class="count">2</span></a><a href="#tag-work">work<span class="count">5</span></a><a href="#tag-invoice-room">invoice-room<span class="count">14</span></a><a href="#tag-credit">credit<span class="count">8</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a><a href="#tag-untagged">untagged<span class="count">13</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -322,6 +322,10 @@ request's writes were rolled back.</li>
 <details class="op" id="createInvoice">
 <summary><span class="method m-post">POST</span><code class="path">/api/invoices</code><span class="sum">createInvoice</span></summary>
 <div class="opbody"><div class="req">Request body: <code>InvoiceInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>InvoiceDetail</code> <span class="dim">Created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listInvoicesPaged">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/page</code><span class="sum">Stable cursor-paginated invoice list</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Invoice[]</code> <span class="dim">Invoice page and filtered count</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
 </details>
 <details class="op" id="exportInvoicesCsv">
 <summary><span class="method m-get">GET</span><code class="path">/api/invoices/export</code><span class="sum">Download the tenant-scoped invoice list as CSV</span></summary>
@@ -1814,7 +1818,62 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.98.0)
+<section id="tag-untagged">
+<h2>untagged</h2>
+<details class="op" id="listOperations">
+<summary><span class="method m-get">GET</span><code class="path">/api/operations</code><span class="sum">List the caller's authorized committed operations</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperationList</code> <span class="dim">Committed operation summaries, newest first.</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="lookupOperation">
+<summary><span class="method m-get">GET</span><code class="path">/api/operations/lookup</code><span class="sum">Recover an authorized result by command and request key</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperationDetail</code> <span class="dim">Server-verified saved command result.</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li><li><span class="status s4xx">404</span> <span class="err">RecoveryNotFound</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="getOperation">
+<summary><span class="method m-get">GET</span><code class="path">/api/operations/{id}</code><span class="sum">Recover the caller's authorized operation result</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperationDetail</code> <span class="dim">Server-verified saved command result.</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li><li><span class="status s4xx">404</span> <span class="err">RecoveryNotFound</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="createInvoiceImportRun">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoice-import-runs</code><span class="sum">Create or recover an immutable resumable import manifest</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ImportRunManifest</code></div><ul class="responses"><li><span class="status s2xx">200</span> <span class="err">ImportRunSuccess</span> <span class="dim">— error</span></li><li><span class="status s2xx">201</span> <span class="err">ImportRunSuccess</span> <span class="dim">— error</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li><li><span class="status s4xx">404</span> <span class="err">RecoveryNotFound</span> <span class="dim">— error</span></li><li><span class="status s4xx">409</span> <span class="err">RecoveryConflict</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceImportRun">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoice-import-runs/{id}</code><span class="sum">Read the authorized import checkpoint and committed chunk results</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <span class="err">ImportRunSuccess</span> <span class="dim">— error</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li><li><span class="status s4xx">404</span> <span class="err">RecoveryNotFound</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="commitInvoiceImportChunk">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoice-import-runs/{id}/chunks/{chunkIndex}</code><span class="sum">Atomically commit or replay one manifest chunk</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ImportRunChunkInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ImportRunChunkResponse</code> <span class="dim">Original durable chunk result, including partial or all-invalid outcomes.</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li><li><span class="status s4xx">404</span> <span class="err">RecoveryNotFound</span> <span class="dim">— error</span></li><li><span class="status s4xx">409</span> <span class="err">RecoveryConflict</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="finalizeInvoiceImportRun">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoice-import-runs/{id}/finalize</code><span class="sum">Finalize a fully committed run and recover its aggregate result</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <span class="err">ImportRunSuccess</span> <span class="dim">— error</span></li><li><span class="status s4xx">400</span> <span class="err">RecoveryBadRequest</span> <span class="dim">— error</span></li><li><span class="status s4xx">401</span> <span class="err">RecoveryUnauthorized</span> <span class="dim">— error</span></li><li><span class="status s4xx">403</span> <span class="err">RecoveryForbidden</span> <span class="dim">— error</span></li><li><span class="status s4xx">404</span> <span class="err">RecoveryNotFound</span> <span class="dim">— error</span></li><li><span class="status s4xx">409</span> <span class="err">RecoveryConflict</span> <span class="dim">— error</span></li></ul></div>
+</details>
+<details class="op" id="listInvoiceDrafts">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoice-drafts</code><span class="sum">List the current user's unfinished drafts for an authorized client</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ServerInvoiceDraft[]</code> <span class="dim">Up to 50 current drafts; private and no-store</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">403</span> <span class="dim">Invoice write permission and an active client engagement are required</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceDraft">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoice-drafts/{id}</code><span class="sum">Recover a draft owned by the current firm, user and client</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ServerInvoiceDraft</code> <span class="dim">Current draft; private and no-store</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">403</span> <span class="dim">Draft scope is not authorized</span></li><li><span class="status s4xx">404</span> <span class="dim">Draft absent, inaccessible, expired or discarded</span></li></ul></div>
+</details>
+<details class="op" id="saveInvoiceDraft">
+<summary><span class="method m-put">PUT</span><code class="path">/api/invoice-drafts/{id}</code><span class="sum">Save an unfinished form with a revision check and retry-safe write ID</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceDraftWriteInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ServerInvoiceDraft</code> <span class="dim">Saved draft or replay of the latest write</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">403</span> <span class="dim">Draft scope is not authorized</span></li><li><span class="status s4xx">409</span> <span class="dim">DRAFT_CONFLICT; reload or save edits under a new draft ID</span></li></ul></div>
+</details>
+<details class="op" id="deleteInvoiceDraft">
+<summary><span class="method m-delete">DELETE</span><code class="path">/api/invoice-drafts/{id}</code><span class="sum">Discard a draft without allowing late autosaves to resurrect it</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Discarded, including an already discarded draft</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">403</span> <span class="dim">Draft scope is not authorized</span></li><li><span class="status s4xx">409</span> <span class="dim">DRAFT_CONFLICT; the active draft has a different revision</span></li></ul></div>
+</details>
+<details class="op" id="listClerkReservations">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/clerk-reservations</code><span class="sum">listClerkReservations</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkReservationPage</code> <span class="dim">Expired reservations awaiting reconciliation</span></li><li><span class="status s4xx">400</span> <span class="dim">Invalid cursor or limit</span></li><li><span class="status s4xx">401</span> <span class="dim">Authentication required</span></li><li><span class="status s4xx">403</span> <span class="dim">Operator role and capability required</span></li></ul></div>
+</details>
+<details class="op" id="reconcileClerkReservation">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/clerk-reservations/{id}/reconcile</code><span class="sum">reconcileClerkReservation</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClerkReservationReconcileInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkReservationReconcileResult</code> <span class="dim">Reservation reconciled or a previous settlement replayed</span></li><li><span class="status s4xx">400</span> <span class="dim">Invalid input or proposed charge below reserved tokens</span></li><li><span class="status s4xx">401</span> <span class="dim">Authentication required</span></li><li><span class="status s4xx">403</span> <span class="dim">Operator role/capability required or CSRF marker missing</span></li><li><span class="status s4xx">404</span> <span class="dim">Reservation not found</span></li><li><span class="status s4xx">409</span> <span class="dim">Reservation has not expired or local provider work is active</span></li></ul></div>
+</details>
+</section>
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.99.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>
