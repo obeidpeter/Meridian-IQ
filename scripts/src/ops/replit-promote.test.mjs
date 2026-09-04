@@ -394,9 +394,12 @@ test("missing sibling build and symlinked dist roots refuse", (t) => {
     directory,
     process.platform === "win32" ? "junction" : "dir",
   );
+  assert.throws(() => assetInventory(f.root), /artifact directory must be real/);
+  // Git reports Linux directory symlinks as untracked files; Windows junctions
+  // reach the inventory guard instead. Both must refuse before promotion.
   assert.throws(
     () => promoteReplit("landing", f.env, f.root),
-    /artifact directory must be real/,
+    /artifact directory must be real|unexpected untracked Publish source/,
   );
 });
 
