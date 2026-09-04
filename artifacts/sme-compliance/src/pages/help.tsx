@@ -133,7 +133,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "The first time the business's own account signs in, you choose what MeridianIQ may do before the workspace opens.",
     steps: [
-      'Answer "Allow" or "Not now" for layers 1 and 2; layer 3 is shown but not yet available.',
+      'Answer "Allow" or "Not now" for layers 1 and 2. Credit readiness is a separate, optional Layer 3 choice you can review from Consent after setup.',
       'Both answers are recorded — including "Not now" — so the step never comes back.',
       "Declining layer 1 is allowed, but nothing can be submitted or stamped for you until you allow it from the Consent page.",
       "Accountant and firm accounts never see this step: consent belongs to the business's own account.",

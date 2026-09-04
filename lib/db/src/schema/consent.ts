@@ -12,7 +12,7 @@ import { createdAt, id } from "./columns.ts";
 // Three-layer consent architecture (Plan 7.2, C6):
 //   layer 1 = compliance (required)
 //   layer 2 = anonymized-aggregate (standard)
-//   layer 3 = credit-readiness (opt-in, dormant until R3)
+//   layer 3 = credit-readiness (opt-in, dark until R3 gates pass)
 // Each grant/revoke is an append-only event; the permission query reads the
 // latest event per (party, layer) (CORE-03).
 export const consentActionEnum = pgEnum("consent_action", ["grant", "revoke"]);

@@ -10,7 +10,6 @@ import {
   Compass,
   FileCheck2,
   Landmark,
-  Lock,
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,8 @@ import { serverErrorMessage } from "@/lib/errors";
  * CORE-03 first-landing capture (architecture.md D15). A client user whose
  * business has never recorded a layer-1 decision sees this step instead of
  * the workspace — once. Layers 1 and 2 are explicit choices (allow / not
- * now), layer 3 is shown but dormant, and every answer is an append-only
+ * now), layer 3 is explained as a separate optional decision after setup,
+ * and every answer is an append-only
  * consent event with channel "first_landing", so declining is recorded too
  * and the step never re-prompts. Firm users and buyers pass straight through:
  * consent belongs to the business's own account.
@@ -208,15 +208,14 @@ export function ConsentCapture({
                     Layer 3
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
-                    <Lock className="size-3" aria-hidden="true" /> Not yet
-                    available
+                    Optional after setup
                   </span>
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  One day, your compliance history could help you get paid early
-                  against invoices you have already earned. Nothing is switched
-                  on here today; when it becomes available we will ask you
-                  first.
+                  Credit readiness is separate from these setup permissions. It
+                  never applies for finance or moves money. You can review the
+                  full privacy terms and make an explicit Layer 3 choice from
+                  Consent after entering your workspace.
                 </p>
               </div>
             </div>

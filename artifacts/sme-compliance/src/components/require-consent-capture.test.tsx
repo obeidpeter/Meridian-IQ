@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // CORE-03 first-landing capture (D15): a client user whose business has no
 // layer-1 decision sees the consent step instead of the workspace; both
-// layers must be answered; layer 3 is shown but offers no choice; both
+// layers must be answered; layer 3 is shown as a separate optional choice; both
 // answers land in one idempotent command; the gate lifts by
 // invalidating /me, never by local state alone.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -63,7 +63,7 @@ describe("RequireConsentCapture", () => {
     expect(screen.queryByTestId("workspace")).toBeNull();
     // Layer 3 is present but dormant: no choice is offered.
     const layer3 = screen.getByTestId("consent-capture-layer-3");
-    expect(layer3.textContent).toContain("Not yet available");
+    expect(layer3.textContent).toContain("Optional after setup");
     expect(layer3.querySelectorAll("button").length).toBe(0);
   });
 

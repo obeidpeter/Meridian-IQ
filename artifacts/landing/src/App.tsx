@@ -54,6 +54,7 @@ import {
   ScanLine,
   UsersRound,
   Compass,
+  Landmark,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -90,6 +91,7 @@ type Role =
   | "firm_staff"
   | "client_user"
   | "operator"
+  | "bank_user"
   | "buyer_user"
   | "auditor";
 
@@ -105,6 +107,16 @@ interface AppTile {
 }
 
 const APPS: AppTile[] = [
+  {
+    key: "bank-data-room",
+    name: "Bank Data Room",
+    tagline:
+      "Review consented, anonymized credit-readiness cohorts under your institution's governed access profile.",
+    href: "/console/data-room",
+    icon: Landmark,
+    allowedRoles: ["bank_user"],
+    accent: "text-emerald-700 dark:text-emerald-400",
+  },
   {
     key: "sme",
     name: "Compliance App",
@@ -154,6 +166,7 @@ function roleLabel(role: string): string {
       firm_staff: "Firm staff",
       client_user: "Client user",
       operator: "Operator",
+      bank_user: "Bank reviewer",
       buyer_user: "Buyer",
       auditor: "Auditor",
     }[role] ?? role
@@ -1653,6 +1666,12 @@ const ACCESS_PATHS = [
     icon: Headphones,
     tone: "bg-amber-200 text-[#0e4c45]",
   },
+  {
+    title: "Bank reviewers",
+    detail: "Review protected portfolio cohorts",
+    icon: Landmark,
+    tone: "bg-emerald-200 text-[#0e4c45]",
+  },
 ];
 
 function AccessStory() {
@@ -1862,11 +1881,18 @@ function Portal() {
     );
   }
 
+  // The institutional data room is discoverable only to its intended role.
+  // Other signed-in users should not be offered a cross-tenant product they
+  // can never enter, even as a disabled tile.
+  const visibleApps = APPS.filter(
+    (app) => app.key !== "bank-data-room" || role === "bank_user",
+  );
+
   // Signed in: float the tiles this account can open to the front.
   const tiles =
     role === null
-      ? APPS
-      : [...APPS].sort((a, b) => {
+      ? visibleApps
+      : [...visibleApps].sort((a, b) => {
           const opens = (t: AppTile) =>
             t.allowedRoles === null || t.allowedRoles.includes(role) ? 0 : 1;
           return opens(a) - opens(b);

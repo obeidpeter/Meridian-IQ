@@ -37,6 +37,7 @@ import {
   BarChart3,
   Search,
   Pin,
+  Landmark,
 } from "lucide-react";
 import {
   Popover,
@@ -93,6 +94,8 @@ type NavLink = {
    * carrying `role` renders only for that role.
    */
   role?: string;
+  /** Roles that must not see a role-irrelevant generic surface. */
+  excludeRoles?: string[];
   /**
    * Launch-profile gate (PL-02, client half): the platform feature flag the
    * page's API surface rides (requireFlag on the route). Absent from
@@ -105,6 +108,18 @@ type NavLink = {
 type NavGroup = { title: string; links: NavLink[] };
 
 const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Bank assurance",
+    links: [
+      {
+        href: "/data-room",
+        label: "Credit Data Room",
+        icon: Landmark,
+        capability: "credit.data_room.read",
+        feature: "bank_data_room",
+      },
+    ],
+  },
   {
     title: "Practice",
     links: [
@@ -193,11 +208,13 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/notifications",
         label: "Notifications",
         icon: Inbox,
+        excludeRoles: ["bank_user"],
       },
       {
         href: "/activity",
         label: "Activity",
         icon: Activity,
+        excludeRoles: ["bank_user"],
       },
     ],
   },
@@ -331,6 +348,11 @@ const ROLE_CONTEXT: Record<string, RoleContext> = {
     description: "Read-only evidence and platform controls",
     badge: "Read-only auditor",
   },
+  bank_user: {
+    title: "Bank Data Room",
+    description: "Anonymized credit-readiness evidence",
+    badge: "Bank reviewer",
+  },
 };
 
 function accountInitials(
@@ -345,7 +367,13 @@ function accountInitials(
     .join("");
 }
 
-function BrandMark({ onNavigate }: { onNavigate?: () => void }) {
+function BrandMark({
+  onNavigate,
+  caption = "Accountant Console",
+}: {
+  onNavigate?: () => void;
+  caption?: string;
+}) {
   return (
     <Link
       href="/"
@@ -358,7 +386,7 @@ function BrandMark({ onNavigate }: { onNavigate?: () => void }) {
       </span>
       <span>
         <span className="mi-brand__name">MeridianIQ</span>
-        <span className="mi-brand__caption">Accountant Console</span>
+        <span className="mi-brand__caption">{caption}</span>
       </span>
     </Link>
   );
@@ -400,7 +428,12 @@ function NavLinks({
 }) {
   return (
     <nav className="mi-sidebar" aria-label="Console">
-      <BrandMark onNavigate={onNavigate} />
+      <BrandMark
+        onNavigate={onNavigate}
+        caption={
+          me?.role === "bank_user" ? "Bank Data Room" : "Accountant Console"
+        }
+      />
       <div className="mi-nav">
         <div className="mi-nav__scroll">
           {groups.map((group) => (
@@ -457,7 +490,11 @@ function NavLinks({
           <CircleHelp aria-hidden="true" />
           <span>Help</span>
         </Link>
-        <a href={PORTAL_URL} className="mi-nav__link" data-testid="link-all-apps">
+        <a
+          href={PORTAL_URL}
+          className="mi-nav__link"
+          data-testid="link-all-apps"
+        >
           <Grid2x2 aria-hidden="true" />
           <span>All apps</span>
         </a>
@@ -641,6 +678,8 @@ export function Layout({ children }: { children: ReactNode }) {
       (l) =>
         (l.capability === undefined || capabilities.has(l.capability)) &&
         (l.role === undefined || me?.role === l.role) &&
+        (l.excludeRoles === undefined ||
+          !l.excludeRoles.includes(me?.role ?? "")) &&
         (l.feature === undefined || features.has(l.feature)),
     ),
   })).filter((g) => g.links.length > 0);
@@ -652,6 +691,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // The workspace chip names the firm this session belongs to; platform
   // principals (operator, auditor) have no firm, so the role title stands in.
   const workspaceName = me?.workspaceName ?? roleContext.title;
+  const bankWorkspace = me?.role === "bank_user";
 
   const activeLink = groups
     .flatMap((group) => group.links)
@@ -771,7 +811,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const remoteSearch = useCallback(
     async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
       trackUsabilityEvent("global_search_started", "global_search");
-      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      const results = await searchWorkspace(
+        { q: query, limit: 14 },
+        { signal },
+      );
       if (results.length === 0) {
         trackUsabilityEvent("zero_result_search", "global_search");
       }
@@ -807,7 +850,7 @@ export function Layout({ children }: { children: ReactNode }) {
         onOpenChange={setCommandOpen}
         title="Go to a workspace"
         placeholder="Search pages and tools"
-        remoteSearch={remoteSearch}
+        remoteSearch={bankWorkspace ? undefined : remoteSearch}
       />
       <ShortcutsDialog
         open={shortcutsOpen}
@@ -823,18 +866,24 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
 
       <div className="mi-mobilebar">
-        <BrandMark />
+        <BrandMark
+          caption={bankWorkspace ? "Bank Data Room" : "Accountant Console"}
+        />
         <div className="mi-mobilebar__actions">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-white/10 hover:text-white"
-            aria-label="Search workspaces"
-            onClick={() => setCommandOpen(true)}
-          >
-            <Search aria-hidden="true" />
-          </Button>
-          <NotificationBell />
+          {!bankWorkspace && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 hover:text-white"
+                aria-label="Search workspaces"
+                onClick={() => setCommandOpen(true)}
+              >
+                <Search aria-hidden="true" />
+              </Button>
+              <NotificationBell />
+            </>
+          )}
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button
@@ -875,16 +924,18 @@ export function Layout({ children }: { children: ReactNode }) {
             </span>
           </div>
           <div className="mi-topbar__actions">
-            <button
-              type="button"
-              className="mi-topbar__action"
-              onClick={() => setCommandOpen(true)}
-              data-testid="button-command-menu"
-            >
-              <Search aria-hidden="true" />
-              <span>Search</span>
-              <kbd>Ctrl K</kbd>
-            </button>
+            {!bankWorkspace && (
+              <button
+                type="button"
+                className="mi-topbar__action"
+                onClick={() => setCommandOpen(true)}
+                data-testid="button-command-menu"
+              >
+                <Search aria-hidden="true" />
+                <span>Search</span>
+                <kbd>Ctrl K</kbd>
+              </button>
+            )}
             <Link
               href="/help"
               className="mi-topbar__action"
@@ -895,7 +946,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
             {/* Recent-notification inbox — render-on-success, so a server
                 without the feed endpoint shows no bell at all. */}
-            <NotificationBell />
+            {!bankWorkspace && <NotificationBell />}
             <span className="mi-topbar__divider" aria-hidden="true" />
             <ReleaseBadge tag={me?.releaseTag} />
             <AccountMenu

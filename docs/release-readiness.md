@@ -21,8 +21,8 @@ running deployment. A production release is not complete while any check is
 - **Restore drill:** run `ops:restore-drill` against a disposable target at
   least every 31 days and before a material production migration.
 - **Security:** configure signed machine-key rings, keep
-  `OP_LEGACY_TOKENS=off`, protect metrics, and require TOTP for `operator` and
-  `firm_admin`.
+  `OP_LEGACY_TOKENS=off`, protect metrics, and require TOTP for `operator`,
+  `firm_admin`, and every provisioned `bank_user`.
 - **Pipeline and flags:** clear aged outbox work and dependency violations
   before promotion.
 - **Provider readiness:** open **Integrations > Readiness** and confirm every
@@ -38,6 +38,38 @@ running deployment. A production release is not complete while any check is
 - **Collaboration retry drill:** create a task, interrupt the response, and
   retry from the same browser. Confirm that one task exists, then repeat for a
   comment and verify that its original text cannot be edited or deleted.
+- **R3 credit perimeter:** keep `credit_readiness` and `bank_data_room` dark
+  until **Control centre > Credit** has no blocker. The check requires at least
+  `CREDIT_PILOT_MIN_BUSINESSES` credit-observable businesses (default 300), a
+  dated DPIA, a conditional bank MOU reference, an agreed signed collection
+  feed, one active MFA/DPA-governed bank user, and a passing replay over at
+  least 30 assessments. A structural replay is not predictive-loss evidence.
+
+## R3 credit activation sequence
+
+1. Apply the additive schema and guardrail migration `0049`. Confirm the
+   legacy `eligibility_assessments` table is bypass-only and the new credit
+   evidence ledgers are append-only.
+2. Set `TOTP_REQUIRED_ROLES=operator,firm_admin,bank_user`, enroll the bank
+   reviewer, then record its DPA-bound access grant from **Control centre >
+   Credit**.
+3. Configure the collection provider's signed `COLLECTION_WEBHOOK_KEYS` ring,
+   leave `OP_LEGACY_TOKENS=off`, and complete a replay-safe 202 callback test.
+4. Retain the approved DPIA, conditional bank MOU and feed agreement outside
+   source control. Set `CREDIT_DPIA_APPROVED_AT`, `CREDIT_BANK_MOU_REFERENCE`,
+   `CREDIT_COLLECTION_FEED_AGREED_AT`, and
+   `CREDIT_COLLECTION_FEED_AGREEMENT_REF` to references for that evidence.
+5. Enable `credit_readiness` only for named pilot firms. Capture explicit
+   Layer-3 consent, current KYB and source-complete assessments; then run the
+   structural replay from the Credit control.
+6. When the governance panel reports ready, enable `credit_readiness`
+   platform-wide before `bank_data_room` (its manifest dependency). Verify a
+   cohort below five businesses is suppressed and that served/suppressed views
+   appear in the access ledger.
+
+This sequence does not activate finance applications, pricing, offers,
+disbursement, collections or repayment. Those remain R4 work and require a
+separate legal, security and operational release decision.
 
 ## Human and third-party evidence
 
@@ -58,6 +90,10 @@ These checks cannot be truthfully completed by source code alone:
    setting `RAIL_ACCREDITATION_CONFIRMED=true`. Set `REQUIRE_LIVE_RAILS=true`
    only for a release that must use accredited live rails; it turns any
    simulator, sandbox, or partial configuration into a blocking check.
+4. Before an R3 bank pilot, have the data-protection owner approve the DPIA and
+   verify the cohort design against realistic sparse and adversarial data.
+   Retain the signed bank MOU/DPA and collection-feed agreement, test access
+   revocation with the bank, and document who may grant or renew access.
 
 Dates are evidence attestations, not bypasses. The supporting report, mail test,
 or accreditation record must exist outside the environment variable.

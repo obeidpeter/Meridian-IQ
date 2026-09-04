@@ -118,13 +118,16 @@ const ALL = [
   // internal working context that is not audit evidence.
   "work.read",
   "work.write",
+  // R3 bank users receive one purpose-built capability. The data-room
+  // service still requires an active DPA grant and MFA on every request;
+  // this capability alone never opens cross-tenant invoice or audit data.
+  "credit.data_room.read",
 ] as const;
 
 export type Capability = (typeof ALL)[number];
 
 const READ_ONLY: Capability[] = ALL.filter(
-  (c) =>
-    (c.endsWith(".read") && c !== "work.read") || c === "audit.export",
+  (c) => (c.endsWith(".read") && c !== "work.read") || c === "audit.export",
 );
 
 // Role-permission matrix (Appendix C).
@@ -274,7 +277,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "obligation.read",
     "filing.read",
   ],
-  bank_user: ["buyer.verify", "audit.read"],
+  bank_user: ["credit.data_room.read"],
   // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation
   // responses and payment flags on invoices addressed to the buyer's own Party.
   buyer_user: [
@@ -292,7 +295,8 @@ export function can(principal: Principal, capability: Capability): boolean {
   // synthetic "api_key" role has no matrix row, so falling through would
   // deny everything — and MUST keep denying everything if the override is
   // ever absent: fail closed).
-  if (principal.capabilities) return principal.capabilities.includes(capability);
+  if (principal.capabilities)
+    return principal.capabilities.includes(capability);
   return ROLE_CAPABILITIES[principal.role]?.includes(capability) ?? false;
 }
 
@@ -355,11 +359,7 @@ export function tenantFirmId(principal: Principal): string | null {
     return null;
   }
   if (!principal.firmId) {
-    throw new DomainError(
-      "NO_TENANT",
-      "Principal is not bound to a firm",
-      403,
-    );
+    throw new DomainError("NO_TENANT", "Principal is not bound to a firm", 403);
   }
   return principal.firmId;
 }
@@ -399,11 +399,7 @@ export function assertSameTenant(
 ): void {
   const tenant = tenantFirmId(principal);
   if (tenant !== null && tenant !== resourceFirmId) {
-    throw new DomainError(
-      "CROSS_TENANT",
-      "Cross-tenant access denied",
-      403,
-    );
+    throw new DomainError("CROSS_TENANT", "Cross-tenant access denied", 403);
   }
 }
 

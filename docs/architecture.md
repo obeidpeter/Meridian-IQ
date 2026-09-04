@@ -111,25 +111,25 @@ flowchart TB
 Runtime containers above; everything else is build-time. The conformance test
 requires every package named here.
 
-| Package | What it is |
-|---|---|
-| `@workspace/api-server` | Express 5 + Drizzle data spine and rails (the one deployable). |
-| `@workspace/landing` | Marketing site + login portal at `/`. |
-| `@workspace/console` | Firm/operator/auditor web app at `/console`. |
-| `@workspace/sme-compliance` | SME client web app at `/app`. |
-| `@workspace/buyer-portal` | Buyer Rails web app at `/buyer`. |
-| `@workspace/penalty-calculator` | Standalone public tool. |
-| `@workspace/mobile` | Expo / React Native companion. |
-| `@workspace/db` | Drizzle schema, guardrail migrations, RLS context helpers. |
-| `@workspace/api-spec` | `openapi.yaml` — THE contract — plus codegen (orval). |
-| `@workspace/api-zod` | GENERATED request/response zod. Never hand-edit. |
-| `@workspace/api-client-react` | GENERATED react-query hooks. Never hand-edit. |
-| `@workspace/format` | Shared formatting (naira, dates, WHT copy). |
-| `@workspace/api-errors` | Shared error envelope helpers. |
-| `@workspace/web-ui` | Shared workspace UI (command menu, metrics, shortcuts, recents). |
-| `@workspace/web-config` | Shared Vite config for the five web apps. |
+| Package                                    | What it is                                                                                                                                      |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@workspace/api-server`                    | Express 5 + Drizzle data spine and rails (the one deployable).                                                                                  |
+| `@workspace/landing`                       | Marketing site + login portal at `/`.                                                                                                           |
+| `@workspace/console`                       | Firm/operator/auditor web app at `/console`.                                                                                                    |
+| `@workspace/sme-compliance`                | SME client web app at `/app`.                                                                                                                   |
+| `@workspace/buyer-portal`                  | Buyer Rails web app at `/buyer`.                                                                                                                |
+| `@workspace/penalty-calculator`            | Standalone public tool.                                                                                                                         |
+| `@workspace/mobile`                        | Expo / React Native companion.                                                                                                                  |
+| `@workspace/db`                            | Drizzle schema, guardrail migrations, RLS context helpers.                                                                                      |
+| `@workspace/api-spec`                      | `openapi.yaml` — THE contract — plus codegen (orval).                                                                                           |
+| `@workspace/api-zod`                       | GENERATED request/response zod. Never hand-edit.                                                                                                |
+| `@workspace/api-client-react`              | GENERATED react-query hooks. Never hand-edit.                                                                                                   |
+| `@workspace/format`                        | Shared formatting (naira, dates, WHT copy).                                                                                                     |
+| `@workspace/api-errors`                    | Shared error envelope helpers.                                                                                                                  |
+| `@workspace/web-ui`                        | Shared workspace UI (command menu, metrics, shortcuts, recents).                                                                                |
+| `@workspace/web-config`                    | Shared Vite config for the five web apps.                                                                                                       |
 | `@workspace/integrations-openai-ai-server` | The provisioned OpenAI-compatible client (base URL + key from env); imported only by `modules/clerk/provider.ts`, the gateway's provider layer. |
-| `@workspace/scripts` | e2e harness (Playwright), ux-snapshot, ops (backup/restore drill). |
+| `@workspace/scripts`                       | e2e harness (Playwright), ux-snapshot, ops (backup/restore drill).                                                                              |
 
 ## Decision log
 
@@ -343,18 +343,19 @@ audit chain against the register's hash (stale hash → 409).
 
 Context: CORE-03 makes recorded consent the basis for anything the platform
 sends, but the consent ledger is a page an owner may never open. The
-onboarding mockup captures consent at first login. Layer 3 (data sharing)
-has no live rail until the R2 releases.
+onboarding mockup captures consent at first login. Layer 3 (credit readiness)
+has a separate purpose and must never be bundled into operational consent.
 Decision: after activation, the first landing shows a one-time, resumable
 consent step before the workspace — layers 1 and 2 as explicit choices,
-layer 3 visible but dormant ("not yet available") so it is never a silent
-default. Declining is allowed and recorded. The Consent page keeps its
+with layer 3 explained but deferred to its full, separate Consent-page choice
+so it is never a silent default. Declining is allowed and recorded. The Consent page keeps its
 first-class nav entry so decisions can be revisited. Built as its own round
 (a contract change to expose "consent captured" and the landing
 interstitial).
 Consequences: outbound rails find a consent record from day one; the
 interstitial can never block a returning user (one-time by design); layer 3
-copy must not promise a rail that is dark.
+can be revoked immediately and its copy describes readiness and protected
+aggregation, never financing.
 Status: shipped in R71 — `Me.consentCaptured` (an explicit layer-1 decision
 exists, grant or recorded decline), the SME app's `RequireConsentCapture`
 gate and its `first_landing` consent events.
@@ -521,3 +522,33 @@ vendor secrets; OAuth and token rotation stay at the relay; source code can ship
 the integration boundary but cannot truthfully claim a provider is live until
 deployment secrets, accreditation and an observed sync exist. The wire contract
 and rollout checklist live in `docs/workspace-and-provider-readiness.md`.
+
+### D24 — Credit readiness is a governed evidence product, not financing
+
+Context: the R3 roadmap calls for a credit data layer and bank pilot while R4
+contains origination, pricing, funding and repayment. Reusing the dormant v0
+assessment table or exposing invoice-level records would blur that boundary,
+make historical decisions unreplayable and create a cross-tenant disclosure
+risk.
+Decision: R3 writes an additive `credit_eligibility_assessments` ledger. A
+versioned, deterministic rules engine requires a canonical stamp, buyer
+confirmation plus no-set-off, approved settlement observation and current KYB;
+caps and deterministic fraud/concentration signals produce an auditable rule
+trace. Layer-3 consent is checked before KYB or assessment. Bank users receive
+only `credit.data_room.read`; every request also requires TOTP, the latest
+append-only DPA grant and an unexpired access window. Their fixed-query Data
+Room shares quarterly, fixed-amount-band cohorts only when at least five
+distinct consenting businesses occupy a cell. It never returns business
+identifiers, exact amounts, arbitrary filters or raw exports, and every view is
+logged. Activation stays dark until the operator's governance view records the
+pilot population, DPIA, conditional bank MOU, agreed signed collection feed,
+governed bank user and a passing structural replay.
+Consequences: retries cannot duplicate evidence, consent revocation removes a
+business from subsequent aggregates, policy changes cannot rewrite history and
+the bank surface cannot be used as a general cross-tenant console. Structural
+back-tests prove deterministic replay only; they do not claim loss prediction.
+The legacy `eligibility_assessments` table is retained and locked bypass-only so
+production rollout is additive. R4 financing tables have no route or UI and
+remain bypass-only.
+Status: implemented behind the dark `credit_readiness` and `bank_data_room`
+flags in API contract `0.98.0`; activation evidence remains operational work.

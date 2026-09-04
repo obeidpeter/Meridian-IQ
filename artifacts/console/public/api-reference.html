@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.96.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.98.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.96.0</title>
+<title>MeridianIQ API reference — v0.98.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.96.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.98.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -157,7 +157,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">14</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">4</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">8</span></a><a href="#tag-operator">operator<span class="count">26</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">15</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">7</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-workspace">workspace<span class="count">2</span></a><a href="#tag-work">work<span class="count">5</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">14</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">4</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">8</span></a><a href="#tag-operator">operator<span class="count">26</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">15</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">7</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-workspace">workspace<span class="count">2</span></a><a href="#tag-work">work<span class="count">5</span></a><a href="#tag-invoice-room">invoice-room<span class="count">14</span></a><a href="#tag-credit">credit<span class="count">8</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -1563,6 +1563,100 @@ request's writes were rolled back.</li>
 <div class="opbody"><div class="req">Request body: <code>CreateWorkItemCommentInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>WorkItemComment</code> <span class="dim">Comment created, or the existing idempotent result</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
 </details>
 </section>
+<section id="tag-invoice-room">
+<h2>invoice-room</h2>
+<details class="op" id="listInvoiceRooms">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoice-rooms</code><span class="sum">List secure buyer rooms for invoices in the caller's supplier scope</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomList</code> <span class="dim">Invoice Room control-centre rows</span></li></ul></div>
+</details>
+<details class="op" id="listInvoiceRoomsForInvoice">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/invoice-rooms</code><span class="sum">listInvoiceRoomsForInvoice</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomList</code> <span class="dim">Current and historical rooms for this invoice</span></li></ul></div>
+</details>
+<details class="op" id="createInvoiceRoom">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/invoice-rooms</code><span class="sum">createInvoiceRoom</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomCreateInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>InvoiceRoomCreated</code> <span class="dim">Room created; the fragment-bearing secure URL is returned to this authorized caller</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="revokeInvoiceRoom">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoice-rooms/{id}/revoke</code><span class="sum">revokeInvoiceRoom</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomSummary</code> <span class="dim">Revoked room</span></li></ul></div>
+</details>
+<details class="op" id="replaceInvoiceRoom">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoice-rooms/{id}/replace</code><span class="sum">replaceInvoiceRoom</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomCreateInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>InvoiceRoomCreated</code> <span class="dim">Previous room revoked and a fresh secure link issued</span></li></ul></div>
+</details>
+<details class="op" id="exchangeInvoiceRoomToken">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/exchange</code><span class="sum">exchangeInvoiceRoomToken</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomExchangeInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomDetail</code> <span class="dim">Share credential exchanged for an HttpOnly room session</span></li><li><span class="status s4xx">410</span> <code>Error</code> <span class="dim">Link expired or revoked</span></li></ul></div>
+</details>
+<details class="op" id="getPublicInvoiceRoom">
+<summary><span class="method m-get">GET</span><code class="path">/api/public/invoice-room</code><span class="sum">getPublicInvoiceRoom</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomDetail</code> <span class="dim">Buyer-safe invoice room view</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="requestInvoiceRoomOtp">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/otp</code><span class="sum">requestInvoiceRoomOtp</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomOtpInput</code></div><ul class="responses"><li><span class="status s2xx">202</span> <code>InvoiceRoomOtpDispatch</code> <span class="dim">Verification code dispatched to the room's pre-bound contact</span></li></ul></div>
+</details>
+<details class="op" id="verifyInvoiceRoomOtp">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/verify</code><span class="sum">verifyInvoiceRoomOtp</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomVerifyInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomDetail</code> <span class="dim">Verified room with consequential actions unlocked</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="respondInvoiceRoom">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/respond</code><span class="sum">respondInvoiceRoom</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomResponseInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomDetail</code> <span class="dim">Confirmation response recorded in the canonical invoice lineage</span></li></ul></div>
+</details>
+<details class="op" id="reportInvoiceRoomPayment">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/payment-reports</code><span class="sum">reportInvoiceRoomPayment</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomPaymentReportInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomDetail</code> <span class="dim">Buyer-reported remittance appended to settlement evidence</span></li></ul></div>
+</details>
+<details class="op" id="createInvoiceRoomPaymentLink">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/payment-link</code><span class="sum">createInvoiceRoomPaymentLink</span></summary>
+<div class="opbody"><div class="req">Request body: <code>IdempotentRoomAction</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>InvoiceRoomPaymentRequest</code> <span class="dim">Hosted checkout initialized with the configured payment provider</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Hosted checkout is not configured; payment instructions remain available</span></li></ul></div>
+</details>
+<details class="op" id="claimInvoiceRoomAccount">
+<summary><span class="method m-post">POST</span><code class="path">/api/public/invoice-room/claim</code><span class="sum">claimInvoiceRoomAccount</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceRoomClaimInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceRoomClaimResult</code> <span class="dim">Existing account linked; sign-in is still required</span></li><li><span class="status s2xx">201</span> <code>InvoiceRoomClaimResult</code> <span class="dim">Buyer account created and signed in</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceRoomPdf">
+<summary><span class="method m-get">GET</span><code class="path">/api/public/invoice-room/pdf</code><span class="sum">getInvoiceRoomPdf</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <span class="dim">Branded invoice PDF</span></li></ul></div>
+</details>
+</section>
+<section id="tag-credit">
+<h2>credit</h2>
+<details class="op" id="getCreditGovernance">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/credit/governance</code><span class="sum">Read R3 credit activation, evidence quality and bank-access posture</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CreditGovernance</code> <span class="dim">Credit governance workspace</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li></ul></div>
+</details>
+<details class="op" id="runCreditAssessment">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/credit/assessments/run</code><span class="sum">Append an idempotent, replayable eligibility assessment</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RunCreditAssessmentInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>CreditAssessment</code> <span class="dim">Assessment created or replayed</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="recordCreditKybCheck">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/credit/kyb-checks</code><span class="sum">Append a data-minimal financing-grade KYB check</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RecordCreditKybInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>CreditKybCheck</code> <span class="dim">KYB check recorded or replayed</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="recordBankDataRoomAccess">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/credit/bank-access</code><span class="sum">Append a grant, suspension or revocation for a bank user</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RecordBankDataRoomAccessInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>BankDataRoomAccess</code> <span class="dim">Bank access event recorded or replayed</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="runCreditBacktest">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/credit/backtests</code><span class="sum">Replay scorecard inputs and append a structural back-test result</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RunCreditBacktestInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>CreditBacktest</code> <span class="dim">Structural back-test created or replayed</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="getCollectionFeedSpecification">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/credit/collection-feed-specification</code><span class="sum">Read the versioned collection-account feed profile</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CollectionFeedSpecification</code> <span class="dim">Collection-account feed specification</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li></ul></div>
+</details>
+<details class="op" id="getBankDataRoom">
+<summary><span class="method m-get">GET</span><code class="path">/api/credit/data-room</code><span class="sum">Read fixed, consented and privacy-protected credit cohorts</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BankDataRoom</code> <span class="dim">Aggregate-only bank Data Room</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listBankDataRoomAccess">
+<summary><span class="method m-get">GET</span><code class="path">/api/credit/data-room/access-log</code><span class="sum">List bounded access events for the caller's bank</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BankDataRoomAccessLogEntry[]</code> <span class="dim">Bank Data Room access history</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
 <section id="tag-sme">
 <h2>sme</h2>
 <details class="op" id="exportReceivablesCsv">
@@ -1720,7 +1814,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.96.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.98.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>

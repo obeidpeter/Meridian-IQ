@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.97.0
+ * OpenAPI spec version: 0.98.0
  */
 import * as zod from 'zod';
 
@@ -39,6 +39,370 @@ export const GetMeResponse = zod.object({
   "mfaRequired": zod.boolean().optional(),
   "mfaToken": zod.string().nullish()
 })
+
+
+/**
+ * @summary Read R3 credit activation, evidence quality and bank-access posture
+ */
+export const getCreditGovernanceResponseLatestBacktestOneInputHashRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const GetCreditGovernanceResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "activationReady": zod.boolean(),
+  "blockers": zod.array(zod.string()),
+  "versions": zod.object({
+  "scorecard": zod.string(),
+  "ruleset": zod.string(),
+  "collectionFeed": zod.string()
+}),
+  "policy": zod.object({
+  "maxInvoiceAmountNgn": zod.string(),
+  "maxSupplierOutstandingNgn": zod.string(),
+  "maxBuyerConcentrationBps": zod.number(),
+  "volumeAnomalyMultiplierBps": zod.number(),
+  "minimumHistoryInvoices": zod.number(),
+  "permittedSettlementSources": zod.array(zod.enum(['statement_match', 'buyer_flag', 'collection_account']))
+}),
+  "featurePosture": zod.object({
+  "creditReadinessEnabled": zod.boolean(),
+  "creditPilotFirms": zod.number(),
+  "bankDataRoomEnabled": zod.boolean(),
+  "bankDataRoomPilotFirms": zod.number()
+}),
+  "activationEvidence": zod.object({
+  "targetBusinesses": zod.number(),
+  "observableBusinesses": zod.number(),
+  "observableInvoices": zod.number(),
+  "mandatorySourceComplete": zod.number(),
+  "dpiaApprovedAt": zod.coerce.date().nullable(),
+  "bankMouReference": zod.string().nullable(),
+  "collectionFeedAgreedAt": zod.coerce.date().nullable(),
+  "collectionFeedAgreementReference": zod.string().nullable()
+}),
+  "assessments": zod.object({
+  "total": zod.number(),
+  "businesses": zod.number(),
+  "consentingBusinesses": zod.number(),
+  "eligible": zod.number(),
+  "manualReview": zod.number(),
+  "ineligible": zod.number(),
+  "buyerConfirmationCoverage": zod.number().nullable(),
+  "settlementObservationCoverage": zod.number().nullable(),
+  "kybCoverage": zod.number().nullable(),
+  "dataThrough": zod.coerce.date().nullable()
+}),
+  "kyb": zod.object({
+  "checked": zod.number(),
+  "verified": zod.number(),
+  "expired": zod.number(),
+  "attention": zod.number()
+}),
+  "bankAccess": zod.object({
+  "governedUsers": zod.number(),
+  "mfaUsers": zod.number(),
+  "activeUsers": zod.number(),
+  "views30d": zod.number(),
+  "viewers30d": zod.number(),
+  "suppressedViews30d": zod.number(),
+  "lastAccessAt": zod.coerce.date().nullable()
+}),
+  "latestBacktest": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "fromDate": zod.coerce.date(),
+  "toDate": zod.coerce.date(),
+  "scorecardVersion": zod.string(),
+  "rulesetVersion": zod.string(),
+  "structuralOnly": zod.boolean(),
+  "sampleSize": zod.number(),
+  "passed": zod.boolean(),
+  "metrics": zod.record(zod.string(), zod.unknown()),
+  "inputHash": zod.string().regex(getCreditGovernanceResponseLatestBacktestOneInputHashRegExp),
+  "createdAt": zod.coerce.date()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Append an idempotent, replayable eligibility assessment
+ */
+export const RunCreditAssessmentBody = zod.object({
+  "invoiceId": zod.string().uuid(),
+  "idempotencyKey": zod.string().uuid()
+})
+
+export const runCreditAssessmentResponseScoreMin = 0;
+export const runCreditAssessmentResponseScoreMax = 100;
+
+export const runCreditAssessmentResponseRulesItemWeightMin = 0;
+export const runCreditAssessmentResponseRulesItemWeightMax = 100;
+
+export const runCreditAssessmentResponseRulesItemPointsMin = 0;
+export const runCreditAssessmentResponseRulesItemPointsMax = 100;
+
+export const runCreditAssessmentResponseInputHashRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const RunCreditAssessmentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "decision": zod.enum(['eligible', 'ineligible', 'manual_review']),
+  "score": zod.number().min(runCreditAssessmentResponseScoreMin).max(runCreditAssessmentResponseScoreMax),
+  "scorecardVersion": zod.string(),
+  "rulesetVersion": zod.string(),
+  "features": zod.record(zod.string(), zod.unknown()),
+  "rules": zod.array(zod.object({
+  "key": zod.string(),
+  "outcome": zod.enum(['pass', 'fail', 'review']),
+  "reason": zod.string(),
+  "observed": zod.union([zod.string(),zod.number(),zod.boolean(),zod.null()]),
+  "threshold": zod.union([zod.string(),zod.number(),zod.boolean(),zod.null()]),
+  "weight": zod.number().min(runCreditAssessmentResponseRulesItemWeightMin).max(runCreditAssessmentResponseRulesItemWeightMax),
+  "points": zod.number().min(runCreditAssessmentResponseRulesItemPointsMin).max(runCreditAssessmentResponseRulesItemPointsMax)
+})),
+  "reasons": zod.array(zod.string()),
+  "inputHash": zod.string().regex(runCreditAssessmentResponseInputHashRegExp),
+  "evaluatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Append a data-minimal financing-grade KYB check
+ */
+export const recordCreditKybCheckBodyBeneficialOwnerCountMin = 0;
+export const recordCreditKybCheckBodyBeneficialOwnerCountMax = 100;
+
+export const recordCreditKybCheckBodyOwnershipCoverageBpsMin = 0;
+export const recordCreditKybCheckBodyOwnershipCoverageBpsMax = 10000;
+
+export const recordCreditKybCheckBodyProviderMax = 80;
+
+export const recordCreditKybCheckBodyProviderReferenceMax = 200;
+
+export const recordCreditKybCheckBodyEvidenceRefsItemMax = 200;
+
+
+export const recordCreditKybCheckBodyEvidenceRefsItemRegExp = new RegExp('^[A-Za-z0-9._:/-]+$');
+export const recordCreditKybCheckBodyEvidenceRefsMax = 20;
+
+
+
+export const RecordCreditKybCheckBody = zod.object({
+  "firmId": zod.string().uuid(),
+  "partyId": zod.string().uuid(),
+  "idempotencyKey": zod.string().uuid(),
+  "beneficialOwnerCount": zod.number().min(recordCreditKybCheckBodyBeneficialOwnerCountMin).max(recordCreditKybCheckBodyBeneficialOwnerCountMax),
+  "ownershipCoverageBps": zod.number().min(recordCreditKybCheckBodyOwnershipCoverageBpsMin).max(recordCreditKybCheckBodyOwnershipCoverageBpsMax),
+  "beneficialOwnersVerified": zod.boolean(),
+  "bankAccountOwnership": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "sanctionsScreening": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "pepScreening": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "adverseMediaScreening": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "provider": zod.string().min(1).max(recordCreditKybCheckBodyProviderMax),
+  "providerReference": zod.string().min(1).max(recordCreditKybCheckBodyProviderReferenceMax).nullish(),
+  "evidenceRefs": zod.array(zod.string().min(1).max(recordCreditKybCheckBodyEvidenceRefsItemMax).regex(recordCreditKybCheckBodyEvidenceRefsItemRegExp)).max(recordCreditKybCheckBodyEvidenceRefsMax),
+  "checkedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+export const recordCreditKybCheckResponseOneBeneficialOwnerCountMin = 0;
+export const recordCreditKybCheckResponseOneBeneficialOwnerCountMax = 100;
+
+export const recordCreditKybCheckResponseOneOwnershipCoverageBpsMin = 0;
+export const recordCreditKybCheckResponseOneOwnershipCoverageBpsMax = 10000;
+
+export const recordCreditKybCheckResponseOneProviderMax = 80;
+
+export const recordCreditKybCheckResponseOneProviderReferenceMax = 200;
+
+export const recordCreditKybCheckResponseOneEvidenceRefsItemMax = 200;
+
+
+export const recordCreditKybCheckResponseOneEvidenceRefsItemRegExp = new RegExp('^[A-Za-z0-9._:/-]+$');
+export const recordCreditKybCheckResponseOneEvidenceRefsMax = 20;
+
+
+
+export const RecordCreditKybCheckResponse = zod.object({
+  "firmId": zod.string().uuid(),
+  "partyId": zod.string().uuid(),
+  "idempotencyKey": zod.string().uuid(),
+  "beneficialOwnerCount": zod.number().min(recordCreditKybCheckResponseOneBeneficialOwnerCountMin).max(recordCreditKybCheckResponseOneBeneficialOwnerCountMax),
+  "ownershipCoverageBps": zod.number().min(recordCreditKybCheckResponseOneOwnershipCoverageBpsMin).max(recordCreditKybCheckResponseOneOwnershipCoverageBpsMax),
+  "beneficialOwnersVerified": zod.boolean(),
+  "bankAccountOwnership": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "sanctionsScreening": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "pepScreening": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "adverseMediaScreening": zod.enum(['not_checked', 'verified', 'review', 'failed']),
+  "provider": zod.string().min(1).max(recordCreditKybCheckResponseOneProviderMax),
+  "providerReference": zod.string().min(1).max(recordCreditKybCheckResponseOneProviderReferenceMax).nullish(),
+  "evidenceRefs": zod.array(zod.string().min(1).max(recordCreditKybCheckResponseOneEvidenceRefsItemMax).regex(recordCreditKybCheckResponseOneEvidenceRefsItemRegExp)).max(recordCreditKybCheckResponseOneEvidenceRefsMax),
+  "checkedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+}).and(zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['verified', 'review', 'failed', 'expired']),
+  "createdAt": zod.coerce.date()
+}))
+
+
+/**
+ * @summary Append a grant, suspension or revocation for a bank user
+ */
+export const recordBankDataRoomAccessBodyDpaReferenceMax = 160;
+
+export const recordBankDataRoomAccessBodyReasonMin = 4;
+export const recordBankDataRoomAccessBodyReasonMax = 500;
+
+
+
+export const RecordBankDataRoomAccessBody = zod.object({
+  "bankPartyId": zod.string().uuid(),
+  "userId": zod.string().uuid(),
+  "action": zod.enum(['grant', 'suspend', 'revoke']),
+  "dpaReference": zod.string().min(1).max(recordBankDataRoomAccessBodyDpaReferenceMax).nullish(),
+  "dpaExecutedAt": zod.coerce.date().nullish(),
+  "validUntil": zod.coerce.date().nullish(),
+  "reason": zod.string().min(recordBankDataRoomAccessBodyReasonMin).max(recordBankDataRoomAccessBodyReasonMax),
+  "idempotencyKey": zod.string().uuid()
+})
+
+export const RecordBankDataRoomAccessResponse = zod.object({
+  "id": zod.string().uuid(),
+  "bankPartyId": zod.string().uuid(),
+  "userId": zod.string().uuid(),
+  "action": zod.enum(['grant', 'suspend', 'revoke']),
+  "dpaReference": zod.string().nullable(),
+  "dpaExecutedAt": zod.coerce.date().nullable(),
+  "validUntil": zod.coerce.date().nullable(),
+  "reason": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Replay scorecard inputs and append a structural back-test result
+ */
+export const RunCreditBacktestBody = zod.object({
+  "fromDate": zod.coerce.date(),
+  "toDate": zod.coerce.date(),
+  "idempotencyKey": zod.string().uuid()
+})
+
+export const runCreditBacktestResponseInputHashRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const RunCreditBacktestResponse = zod.object({
+  "id": zod.string().uuid(),
+  "fromDate": zod.coerce.date(),
+  "toDate": zod.coerce.date(),
+  "scorecardVersion": zod.string(),
+  "rulesetVersion": zod.string(),
+  "structuralOnly": zod.boolean(),
+  "sampleSize": zod.number(),
+  "passed": zod.boolean(),
+  "metrics": zod.record(zod.string(), zod.unknown()),
+  "inputHash": zod.string().regex(runCreditBacktestResponseInputHashRegExp),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Read the versioned collection-account feed profile
+ */
+export const GetCollectionFeedSpecificationResponse = zod.object({
+  "version": zod.string(),
+  "status": zod.enum(['ready_for_bank_agreement']),
+  "transport": zod.string(),
+  "path": zod.string(),
+  "acknowledgementStatus": zod.number(),
+  "semantics": zod.enum(['at_least_once']),
+  "authentication": zod.record(zod.string(), zod.unknown()),
+  "payload": zod.array(zod.record(zod.string(), zod.unknown())),
+  "idempotency": zod.record(zod.string(), zod.unknown()),
+  "privacy": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * @summary Read fixed, consented and privacy-protected credit cohorts
+ */
+export const getBankDataRoomResponsePrivacyMinimumCohortSizeMin = 5;
+
+export const getBankDataRoomResponseCohortsMax = 80;
+
+
+
+export const GetBankDataRoomResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "dataThrough": zod.coerce.date().nullable(),
+  "available": zod.boolean(),
+  "accessEventId": zod.string().uuid(),
+  "privacy": zod.object({
+  "minimumCohortSize": zod.number().min(getBankDataRoomResponsePrivacyMinimumCohortSizeMin),
+  "suppressedCells": zod.number(),
+  "exactAmountsShared": zod.boolean(),
+  "directIdentifiersShared": zod.boolean(),
+  "rawExportsEnabled": zod.boolean(),
+  "layer3ConsentRequired": zod.boolean(),
+  "dateGranularity": zod.enum(['quarter']),
+  "amountGranularity": zod.enum(['fixed_band'])
+}),
+  "assurance": zod.object({
+  "dpaReference": zod.string(),
+  "accessValidUntil": zod.coerce.date().nullable(),
+  "scorecardVersions": zod.array(zod.string()),
+  "rulesetVersions": zod.array(zod.string()),
+  "decisionsAreDeterministic": zod.boolean(),
+  "backtestsAreStructuralOnly": zod.boolean()
+}),
+  "metrics": zod.union([zod.object({
+  "consentingBusinesses": zod.number(),
+  "assessedInvoices": zod.number(),
+  "eligibleInvoices": zod.number(),
+  "manualReviewInvoices": zod.number(),
+  "ineligibleInvoices": zod.number(),
+  "eligibleRate": zod.number().nullable(),
+  "buyerConfirmationCoverage": zod.number().nullable(),
+  "settlementObservationCoverage": zod.number().nullable(),
+  "kybCoverage": zod.number().nullable()
+}),zod.null()]),
+  "cohorts": zod.array(zod.object({
+  "period": zod.string(),
+  "amountBand": zod.enum(['unavailable', 'under_250k', '250k_to_1m', '1m_to_5m', '5m_to_20m', '20m_plus']),
+  "businesses": zod.number(),
+  "assessedInvoices": zod.number(),
+  "eligibleRate": zod.number().nullable(),
+  "manualReviewRate": zod.number().nullable(),
+  "ineligibleRate": zod.number().nullable(),
+  "buyerConfirmationCoverage": zod.number().nullable(),
+  "settlementObservationCoverage": zod.number().nullable(),
+  "kybCoverage": zod.number().nullable()
+})).max(getBankDataRoomResponseCohortsMax)
+})
+
+
+/**
+ * @summary List bounded access events for the caller's bank
+ */
+export const listBankDataRoomAccessQueryLimitDefault = 50;
+export const listBankDataRoomAccessQueryLimitMax = 100;
+
+
+
+export const ListBankDataRoomAccessQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listBankDataRoomAccessQueryLimitMax).default(listBankDataRoomAccessQueryLimitDefault)
+})
+
+export const ListBankDataRoomAccessResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string().uuid(),
+  "action": zod.enum(['overview', 'access_log']),
+  "outcome": zod.enum(['served', 'suppressed']),
+  "createdAt": zod.coerce.date()
+})
+export const ListBankDataRoomAccessResponse = zod.array(ListBankDataRoomAccessResponseItem).max(100)
 
 
 /**

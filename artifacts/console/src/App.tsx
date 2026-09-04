@@ -42,6 +42,7 @@ import { PracticeAnalytics } from "@/pages/analytics";
 import { ActivityPage } from "@/pages/activity";
 import { Today, WorkPage } from "@/pages/today";
 import { ClerkShell } from "@/components/clerk-shell";
+import { BankDataRoom } from "@/pages/bank-data-room";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
@@ -70,6 +71,9 @@ function Home() {
   }
   if (me.role === "auditor") {
     return <Redirect to="/audit" replace />;
+  }
+  if (me.role === "bank_user") {
+    return <Redirect to="/data-room" replace />;
   }
   return <Redirect to="/today" replace />;
 }
@@ -140,6 +144,11 @@ function ConsoleRoutes() {
         <Route path="/notifications" component={Notifications} />
         <Route path="/activity" component={ActivityPage} />
         <Route path="/help" component={Help} />
+        <Route path="/data-room">
+          <CapabilityGate capability="credit.data_room.read">
+            <BankDataRoom />
+          </CapabilityGate>
+        </Route>
         <Route path="/filing-desk">
           <CapabilityGate capability="filing.read">
             <FilingDesk />
@@ -269,6 +278,11 @@ function ConsoleRoutes() {
             <ControlCentre section="clerk" />
           </CapabilityGate>
         </Route>
+        <Route path="/control-centre/credit">
+          <CapabilityGate capability="operator.queue.read">
+            <ControlCentre section="credit" />
+          </CapabilityGate>
+        </Route>
         <Route path="/control-centre">
           <Redirect to="/control-centre/activation" replace />
         </Route>
@@ -306,7 +320,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <RequireSession
-          allowedRoles={["firm_admin", "operator", "firm_staff", "auditor"]}
+          allowedRoles={[
+            "firm_admin",
+            "operator",
+            "firm_staff",
+            "auditor",
+            "bank_user",
+          ]}
         >
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />

@@ -4,8 +4,8 @@ _One data spine. Five ways in._
 
 This manual explains everything MeridianIQ does and how to use it — written
 for the people who use it every day (SME owners, accountants, buyer finance
-teams, Compliance Desk operators, auditors) with a final section for whoever
-runs the system.
+teams, bank reviewers, Compliance Desk operators, auditors) with a final
+section for whoever runs the system.
 
 ---
 
@@ -13,12 +13,13 @@ runs the system.
 
 1. [What is MeridianIQ?](#1-what-is-meridianiq)
 2. [Quick start: signing in](#2-quick-start-signing-in)
-3. [Who sees what: the six account types](#3-who-sees-what-the-six-account-types)
+3. [Who sees what: the seven account types](#3-who-sees-what-the-seven-account-types)
 4. [The Compliance App — for SMEs](#4-the-compliance-app--for-smes)
 5. [Clerk — the AI assistant](#5-clerk--the-ai-assistant)
 6. [The Accountant Console — for firms](#6-the-accountant-console--for-firms)
 7. [The Compliance Desk — for operators](#7-the-compliance-desk--for-operators)
 8. [Buyer Rails — for buyer finance teams](#8-buyer-rails--for-buyer-finance-teams)
+   8A. [The Bank Data Room](#8a-the-bank-data-room)
 9. [The Penalty Calculator — free and public](#9-the-penalty-calculator--free-and-public)
 10. [The Mobile Companion](#10-the-mobile-companion)
 11. [The life of an invoice](#11-the-life-of-an-invoice)
@@ -57,15 +58,15 @@ MeridianIQ makes that painless, and then makes it worth more:
 Everything runs in one place, reached through **one front door** — plus a
 mobile companion app:
 
-| Address                | Workspace                                           | For                              |
-| ---------------------- | --------------------------------------------------- | -------------------------------- |
-| `/`                    | **Public site** — product, trust and access request | Everyone                         |
-| `/login`               | **The Portal** — sign in, pick a workspace          | Account holders                  |
-| `/app/`                | **Compliance App**                                  | SME owners, firm staff           |
-| `/console/`            | **Accountant Console** (incl. the Compliance Desk)  | Firms, operators, auditors       |
-| `/buyer/`              | **Buyer Rails**                                     | Buyer finance teams              |
-| `/penalty-calculator/` | **Penalty Calculator**                              | Anyone — no account needed       |
-| Mobile app             | **MeridianIQ Companion** (iOS/Android)              | SME owners, firm staff on the go |
+| Address                | Workspace                                           | For                               |
+| ---------------------- | --------------------------------------------------- | --------------------------------- |
+| `/`                    | **Public site** — product, trust and access request | Everyone                          |
+| `/login`               | **The Portal** — sign in, pick a workspace          | Account holders                   |
+| `/app/`                | **Compliance App**                                  | SME owners, firm staff            |
+| `/console/`            | **Console, Compliance Desk and Bank Data Room**     | Firms, operators, auditors, banks |
+| `/buyer/`              | **Buyer Rails**                                     | Buyer finance teams               |
+| `/penalty-calculator/` | **Penalty Calculator**                              | Anyone — no account needed        |
+| Mobile app             | **MeridianIQ Companion** (iOS/Android)              | SME owners, firm staff on the go  |
 
 ---
 
@@ -177,7 +178,7 @@ The mobile companion supports the same challenge — see
 
 ---
 
-## 3. Who sees what: the six account types
+## 3. Who sees what: the seven account types
 
 MeridianIQ enforces permissions at every level — the menus you see, the pages
 you can open, and the data the server will return.
@@ -189,6 +190,7 @@ you can open, and the data the server will return.
 | **Firm admin**  | Runs the practice. Everything staff can do, plus onboarding pipeline management, billing & payments, white-label branding, ERP integrations, client import, team invitations, and the firm's API keys & webhooks.                                   |
 | **Operator**    | MeridianIQ's own Compliance Desk. Works a cross-tenant case queue, reviews Clerk's document extractions, edits the error catalogue, manages platform health, feature flags and party data. Does **not** see firm business pages like the portfolio. |
 | **Buyer user**  | A finance person at a large buyer. Sees only invoices addressed to their own organisation.                                                                                                                                                          |
+| **Bank user**   | A governed institutional reviewer. Sees only privacy-protected credit-readiness cohorts after 2FA, a current DPA-bound grant, and platform activation. Never sees business identities, invoices, exact amounts or financing controls.               |
 | **Auditor**     | Read-only everything. Can view every screen the numbers live on, and can verify/export the audit log — but every button that would change something is absent or refused.                                                                           |
 
 A worked example of the split: **authority obligations** (tracked
@@ -201,7 +203,7 @@ their notice-review approvals create but never record or update them.
 If you open a page your account can't use, you get a clear card explaining
 which permission it needs — never a broken screen.
 
-(There is a seventh, non-human identity: a firm **API key**, used by software
+(There is an eighth, non-human identity: a firm **API key**, used by software
 the firm connects. It carries only the capabilities the firm admin granted it
 — see [section 6](#6-the-accountant-console--for-firms) → API & webhooks.)
 
@@ -697,9 +699,10 @@ data, each grantable and revocable **by you** (the client account):
    alert. Without it, nothing can be submitted on your behalf.
 2. **Anonymized benchmarking** — allows anonymized, aggregate industry
    statistics. Never shown with your name.
-3. **Credit readiness** — dormant. One day your compliance history could help
-   you get paid early against invoices you've already earned; that layer
-   activates later, and only with your explicit consent.
+3. **Credit readiness** — allows MeridianIQ to evaluate whether verified invoice evidence meets its published
+   readiness rules and include the result in protected bank cohorts. This is
+   optional, does not apply for finance or move money, and can be switched off
+   immediately.
 
 Every grant and revocation is a **ledger event** with a full history —
 revoking takes effect immediately.
@@ -717,8 +720,9 @@ shortened, and the download itself is recorded on the audit trail.
 
 The very first time a business's own account signs in, the app shows a
 one-page **consent step** before the workspace — layers 1 and 2 as plain
-choices (**Allow** or **Not now**) and layer 3 shown but marked _not yet
-available_. Both answers are recorded on the consent ledger, including
+choices (**Allow** or **Not now**) and layer 3 explained as a separate,
+optional choice available from **Consent** after setup. Both answers are
+recorded on the consent ledger, including
 "not now", so the step never appears again; the Consent page shows such a
 choice as **Declined** rather than "Revoked", and you can change it there
 at any time. Declining layer 1 is allowed, but the step says what it costs:
@@ -1684,8 +1688,8 @@ sweep trips the kill switch automatically if extraction quality collapses.
 
 ### Control centre
 
-**Control centre** (Platform group) is the operator's read-only view of the
-platform as a whole, in six workspaces, each capability-gated and built from
+**Control centre** (Platform group) is the operator's governed view of the
+platform as a whole, in seven workspaces, each capability-gated and built from
 bounded lists that count what they hide rather than loading everything:
 
 - **Activation** — evidence and activation: the release-gate scorecard read
@@ -1699,9 +1703,13 @@ bounded lists that count what they hide rather than loading everything:
   exports an auditor will ask for.
 - **Clerk assurance** — Clerk's operational assurance: provider
   configuration, failure and latency rates, budget posture and the watchdog.
+- **Credit** — R3 credit-readiness policy, evidence coverage, KYB posture,
+  activation blockers and the structural replay result. Operators can append
+  KYB outcomes, run an assessment/replay and grant, suspend or revoke a bank
+  reviewer's DPA-bound access from this governed workspace.
 
-Nothing in the Control centre changes state; every action it suggests links
-to the page that owns it.
+The first six workspaces are read-only. Credit commands are explicit,
+idempotent and append-only; repeated clicks cannot rewrite evidence.
 
 ---
 
@@ -1783,6 +1791,31 @@ Notifications page; an alert about an invoice opens that invoice.
 On an invoice, mark it **scheduled** or **paid**. A payment flag becomes a
 settlement event on the supplier's record within a minute — the second
 honest source (after bank-statement matching) of "this invoice was paid."
+
+---
+
+## 8A. The Bank Data Room
+
+A provisioned bank reviewer signs in through the ordinary portal and lands at
+`/console/data-room`. The workspace opens only when all of these are true:
+
+- `bank_data_room` is enabled after the R3 governance gates pass;
+- the account is a `bank_user` with two-factor authentication enrolled; and
+- the latest access event is a grant tied to the bank's Party, an executed DPA
+  reference and a current access window.
+
+The Data Room shows overall readiness metrics and fixed cohorts by quarter and
+amount band. A cell appears only when at least five distinct businesses with
+current Layer-3 consent are present. Below that threshold the page says the
+population is unavailable and returns no metrics. It never includes business
+names or IDs, invoice rows, exact amounts, search, arbitrary filters or export.
+The assurance tab names the scorecard/ruleset versions and the access tab shows
+the bank's own view history. Opening either view writes a separate access event
+and a tamper-evident audit event.
+
+The decision is rules-based readiness, not a lending decision. There is no
+application, offer, price, disbursement, repayment or marketplace workflow in
+R3.
 
 ---
 
@@ -2006,10 +2039,10 @@ cleared) lands on the audit chain — see the "Feature flags" page in section 7.
 | `clerk_auto_reconcile`      | R3      | Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies | Dark   | Dark       |
 | `clerk_auto_retrieval_eval` | R3      | Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day)                                                      | Dark   | Dark       |
 | `clerk_memory`              | R3      | Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings                                           | Dark   | Dark       |
-| `credit_readiness`          | R3      | Layer-3 credit readiness scoring                                                                                                                                                                                                               | Dark   | Dark       |
-| `bank_data_room`            | R4      | Bank data room and financing origination                                                                                                                                                                                                       | Dark   | Dark       |
+| `credit_readiness`          | R3      | Consented, source-complete deterministic readiness assessments and financing-grade KYB evidence                                                                                                                                                | Dark   | Dark       |
+| `bank_data_room`            | R3      | MFA/DPA-governed, privacy-protected aggregate bank Data Room; no financing execution                                                                                                                                                           | Dark   | Dark       |
 
-The credit/bank R3/R4 flags stay dark until their business gates pass — that's
+The credit/bank R3 flags stay dark until their business gates pass — that's
 policy, not an oversight. `clerk_ai` ships **dark at launch** like every
 non-core flag; once lit it is the Clerk kill switch — flipping it off
 instantly disables every Clerk surface — and `clerk_ai_runtime` is the global
@@ -2052,8 +2085,9 @@ Three principles, visible throughout the product:
 
 1. **Consent is layered and owned by the client.** Layer 1 (compliance) is
    what lets anything be submitted at all; layer 2 (anonymized benchmarking)
-   is optional; layer 3 (credit) is dormant until it's real — and every code
-   path that would use client data beyond layer 1 checks the ledger first.
+   is optional; layer 3 (credit readiness and protected bank cohorts) is a
+   separate opt-in — and every KYB, assessment and aggregate path checks the
+   latest ledger decision first.
    Revocation takes effect immediately.
 2. **Messages never carry data.** A WhatsApp/SMS/email/push alert says _how
    many_ items need attention and links into the authenticated app — never
@@ -2097,7 +2131,10 @@ unreachable (404), not broken:
 
 | Variable                                                                                   | Lights                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TOTP_REQUIRED_ROLES`                                                                      | Comma-separated roles that must have 2FA to sign in (e.g. `operator,firm_admin`). Unset = optional for everyone.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `TOTP_REQUIRED_ROLES`                                                                      | Comma-separated roles that must have 2FA to sign in (e.g. `operator,firm_admin,bank_user`). Unset = optional for everyone; it must include `bank_user` before a bank pilot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `CREDIT_PILOT_MIN_BUSINESSES` / `CREDIT_COHORT_MIN_SIZE`                                   | Credit activation population target (default 300) and bank cohort privacy threshold. The privacy threshold can be raised but never lowered below five.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `CREDIT_DPIA_APPROVED_AT` / `CREDIT_BANK_MOU_REFERENCE`                                    | ISO timestamp for the retained R3 DPIA approval and an opaque reference to the retained conditional bank MOU. Both are release blockers, not feature switches.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `CREDIT_COLLECTION_FEED_AGREED_AT` / `CREDIT_COLLECTION_FEED_AGREEMENT_REF`                | ISO timestamp and opaque evidence reference for agreement of the signed collection-account settlement feed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `INBOUND_EMAIL_TOKEN` / `INBOUND_WHATSAPP_TOKEN`                                           | The Clerk email / WhatsApp intake rails (each independently). Since R100 each rail takes a **key ring** — `INBOUND_EMAIL_KEYS` / `INBOUND_WHATSAPP_KEYS` as `id:secret,…` (see "Machine-rail credentials" below); the single `_TOKEN` still works as the `legacy` key. `INBOUND_EMAIL_DAILY_CAP` / `INBOUND_WHATSAPP_DAILY_CAP` bound per-firm daily volume.                                                                                                                                                                                                                                                                                                                                            |
 | `MESSAGING_WEBHOOK_URL` (+ `MESSAGING_WEBHOOK_TOKEN`)                                      | Real outbound message delivery, including Invoice Room links, OTPs, and reminders; unset = in-process simulator (ordinary messaging also ships dark behind `messaging_notifications`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `PAYMENT_PROVIDER_URL` (+ `PAYMENT_PROVIDER_TOKEN`)                                        | The hosted-checkout payment provider; unset = simulator (payment intents record, no checkout page).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |

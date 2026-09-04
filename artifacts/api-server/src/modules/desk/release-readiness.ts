@@ -18,6 +18,7 @@ import { describeKeyRing, legacyTokenPathEnabled } from "../../lib/op-token";
 import { railTransportSummary } from "../rails/adapter";
 import { listFlags } from "../flags/flags";
 import { invoiceRoomSecurityConfiguration } from "../invoice-room/security";
+import { getCreditGovernance } from "../credit/governance";
 
 export type ReleaseCheckStatus = "pass" | "warning" | "blocked";
 
@@ -251,7 +252,9 @@ export async function getReleaseReadiness() {
       .filter(Boolean),
   );
   const privilegedMfa =
-    totpRoles.has("operator") && totpRoles.has("firm_admin");
+    totpRoles.has("operator") &&
+    totpRoles.has("firm_admin") &&
+    totpRoles.has("bank_user");
   const securityClean =
     signedOnly && metricsSecured && schedulerSecured && privilegedMfa;
   checks.push({
@@ -266,6 +269,7 @@ export async function getReleaseReadiness() {
       metricsProtected: metricsSecured,
       schedulerProtected: schedulerSecured,
       privilegedRolesRequireTotp: privilegedMfa,
+      requiredTotpRoles: ["operator", "firm_admin", "bank_user"],
     },
   });
 
@@ -341,6 +345,41 @@ export async function getReleaseReadiness() {
       featureActive: invoiceRoomActive,
       encryptionKeyConfigured: invoiceRoomConfiguration.encryptionKeyConfigured,
       publicUrlConfigured: invoiceRoomConfiguration.publicUrlConfigured,
+    },
+  });
+
+  const creditFlag = flags.find((flag) => flag.key === "credit_readiness");
+  const bankDataRoomFlag = flags.find((flag) => flag.key === "bank_data_room");
+  const creditPilotActive = Boolean(creditFlag?.overrideCount);
+  const bankDataRoomActive = Boolean(bankDataRoomFlag?.enabled);
+  const creditGovernance = await getCreditGovernance();
+  checks.push({
+    key: "credit_data_room_governance",
+    label: "Credit Data Room governance",
+    status: bankDataRoomActive
+      ? creditGovernance.activationReady
+        ? "pass"
+        : "blocked"
+      : creditPilotActive
+        ? "warning"
+        : "pass",
+    summary: bankDataRoomActive
+      ? creditGovernance.activationReady
+        ? "The bank Data Room is active and every R3 activation gate is evidenced."
+        : "The bank Data Room is active without every R3 activation gate."
+      : creditPilotActive
+        ? "Credit-readiness pilots are collecting evidence; the bank Data Room remains dark."
+        : "The R3 credit perimeter and bank Data Room are dark.",
+    detail: {
+      creditReadinessEnabled: creditFlag?.enabled ?? false,
+      creditPilotFirms: creditFlag?.overrideCount ?? 0,
+      bankDataRoomEnabled: bankDataRoomActive,
+      activationReady: creditGovernance.activationReady,
+      blockers: creditGovernance.blockers,
+      observableBusinesses:
+        creditGovernance.activationEvidence.observableBusinesses,
+      targetBusinesses: creditGovernance.activationEvidence.targetBusinesses,
+      latestBacktestPassed: creditGovernance.latestBacktest?.passed ?? false,
     },
   });
 

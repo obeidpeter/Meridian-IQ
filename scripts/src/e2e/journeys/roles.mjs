@@ -319,11 +319,14 @@ async function journeyOwnerConsent(page, BASE, check) {
     workspaceText: "Adaeze Foods Ltd",
     homeTestId: "nav-today",
   });
+  const layer3 = page.locator('[data-testid="consent-layer-3"]');
+  const layer3Action = layer3.locator(
+    '[data-testid="button-grant-3"], [data-testid="button-revoke-3"]',
+  );
   check(
-    "consent page: layer 3 dormant",
-    (
-      await page.locator('[data-testid="consent-layer-3"]').innerText()
-    ).includes("Not yet available"),
+    "consent page: layer 3 is explicit and reversible",
+    (await layer3Action.count()) === 1 &&
+      !(await layer3.innerText()).includes("Not yet available"),
   );
   await page.waitForSelector(
     '[data-testid="button-grant-2"], [data-testid="button-revoke-2"]',
