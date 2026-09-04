@@ -869,6 +869,7 @@ test("cell 15 — unavailable on rail_primary then MBS_INVALID_TIN on rail_secon
     ["rail_primary", "error", "RAIL_UNAVAILABLE", 1],
     ["rail_secondary", "rejected", "MBS_INVALID_TIN", 1],
   ]);
+  assert.ok(bySeq[0]!.seq != null && bySeq[1]!.seq != null);
   assert.ok(bySeq[1]!.seq > bySeq[0]!.seq, "seq is strictly increasing");
   assert.equal(bySeq[0]!.createdAt.getTime(), bySeq[1]!.createdAt.getTime(), "created_at cannot tell them apart");
 

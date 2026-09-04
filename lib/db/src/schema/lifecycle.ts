@@ -1,11 +1,13 @@
 import {
-  bigserial,
+  bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
   numeric,
   pgEnum,
+  pgSequence,
   pgTable,
   text,
   timestamp,
@@ -29,6 +31,10 @@ export const submissionStatusEnum = pgEnum("submission_status", [
   "error",
 ]);
 
+export const submissionAttemptSequence = pgSequence(
+  "submission_attempts_seq_seq",
+);
+
 // Append-only: one row per rail per try; request/response retained (CORE-02).
 export const submissionAttemptsTable = pgTable(
   "submission_attempts",
@@ -49,13 +55,20 @@ export const submissionAttemptsTable = pgTable(
     // Rows of one try share attempt_no and created_at (they commit together),
     // so "the latest attempt" needs a monotonic tiebreak (R95): the order the
     // rails were called, the terminal answer last.
-    seq: bigserial("seq", { mode: "number" }).notNull(),
+    // Keep a concrete sequence default so Replit can add and backfill this
+    // column on a populated production table without truncating its rows.
+    // The CHECK provides the same write invariant as NOT NULL while leaving
+    // the column nullable in schema metadata for a non-destructive rollout.
+    seq: bigint("seq", { mode: "number" }).default(
+      sql`nextval('submission_attempts_seq_seq'::regclass)`,
+    ),
     // Read by invoice on every detail/status view; append-only, so it only grows.
     // The firm-keyed RLS policy probes invoices per candidate row (EXISTS), which
     // makes an unindexed scan pay twice — same reasoning for the two sibling
     // child tables below.
   },
   (t) => [
+    check("submission_attempts_seq_not_null", sql`${t.seq} IS NOT NULL`),
     index("submission_attempts_invoice_idx").on(t.invoiceId),
     // The catalogue coverage report (desk/catalogue-coverage.ts) walks this
     // table by code (per-code first sighting, per-catalogue-entry SLA lateral)
