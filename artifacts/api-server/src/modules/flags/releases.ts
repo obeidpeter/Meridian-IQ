@@ -25,6 +25,8 @@ export interface ReleaseFlag {
   description: string;
   launchDefault: boolean;
   devDefault: boolean;
+  /** Flags that must be effectively lit before this capability can be used. */
+  requires?: readonly string[];
 }
 
 export const RELEASE_FLAGS: ReleaseFlag[] = [
@@ -109,6 +111,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     description: "Layer-2 anonymized aggregate analytics",
     launchDefault: false,
     devDefault: false,
+    requires: ["consent_ledger"],
   },
   {
     key: "reconciliation",
@@ -117,6 +120,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Bank-statement ingestion and reconciliation v1 (SME-07, INT-05)",
     launchDefault: false,
     devDefault: false,
+    requires: ["invoice_lifecycle", "consent_ledger"],
   },
   {
     key: "b2c_reporting",
@@ -124,6 +128,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     description: "B2C 24-hour reporting module with compliance clocks (SME-08)",
     launchDefault: false,
     devDefault: false,
+    requires: ["invoice_lifecycle"],
   },
   {
     key: "buyer_rails",
@@ -132,6 +137,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)",
     launchDefault: false,
     devDefault: false,
+    requires: ["buyer_confirmations"],
   },
   {
     key: "white_label",
@@ -156,6 +162,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam)",
     launchDefault: false,
     devDefault: false,
+    requires: ["reconciliation"],
   },
   // --- R3/R4 — credit perimeter and the Clerk program. ---------------------
   {
@@ -164,6 +171,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     description: "Layer-3 credit readiness scoring",
     launchDefault: false,
     devDefault: false,
+    requires: ["consent_ledger", "invoice_lifecycle"],
   },
   {
     key: "bank_data_room",
@@ -171,6 +179,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     description: "Bank data room and financing origination",
     launchDefault: false,
     devDefault: false,
+    requires: ["credit_readiness"],
   },
   // Clerk has two independent controls. The runtime switch is the global
   // safety wall: a watchdog or operator can stop every model call even when a
@@ -192,6 +201,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Clerk AI rollout entitlement: capture extraction and register-backed Q&A; enable per firm for pilots",
     launchDefault: false,
     devDefault: true,
+    requires: ["clerk_ai_runtime", "consent_ledger"],
   },
   // Proposed actions (round 21): Clerk assembles a batch from the detector
   // predicates, a human approves it, execution rides the ordinary per-invoice
@@ -204,6 +214,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue)",
     launchDefault: false,
     devDefault: false,
+    requires: ["clerk_ai"],
   },
   // Standing approvals (round 28): a durable, revocable per-client grant lets
   // the daily sweep run a submit kind without a fresh per-batch approval,
@@ -216,6 +227,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions)",
     launchDefault: false,
     devDefault: false,
+    requires: ["clerk_actions"],
   },
   // Round 35 (Close with Clerk Phase 2): auto-accepting reconciliation
   // matches is the riskiest deterministic step, so it rides its OWN opt-in
@@ -228,6 +240,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies",
     launchDefault: false,
     devDefault: false,
+    requires: ["clerk_actions", "reconciliation"],
   },
   // Round 45 (pgvector firm memory): the semantic index over a firm's own
   // Clerk records. Spends firm tokens on embeddings (the indexer sweep), so
@@ -240,6 +253,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings",
     launchDefault: false,
     devDefault: false,
+    requires: ["clerk_ai"],
   },
   // Round 50 (Advise with Clerk Phase 2): the monthly brief sweep can spend
   // firm tokens on every engaged client's adviser's note, so generation is
@@ -253,6 +267,7 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag",
     launchDefault: false,
     devDefault: false,
+    requires: ["clerk_ai"],
   },
   // Round 47 (retrieval eval lane): seeded — unlike its phrasing sibling,
   // which is dark-by-absence and can only be lit by a manual row insert
@@ -265,8 +280,47 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
       "Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day)",
     launchDefault: false,
     devDefault: false,
+    requires: ["clerk_memory"],
   },
 ];
+
+/** Fail startup/tests on a missing prerequisite or a dependency cycle. */
+export function validateFeatureDependencies(
+  flags: readonly ReleaseFlag[] = RELEASE_FLAGS,
+): void {
+  const byKey = new Map(flags.map((flag) => [flag.key, flag]));
+  if (byKey.size !== flags.length) {
+    throw new Error("Feature flag keys must be unique");
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (key: string, path: string[]): void => {
+    if (visiting.has(key)) {
+      throw new Error(
+        `Feature dependency cycle: ${[...path, key].join(" -> ")}`,
+      );
+    }
+    if (visited.has(key)) return;
+    const flag = byKey.get(key);
+    if (!flag) {
+      throw new Error(`Unknown feature prerequisite: ${key}`);
+    }
+    visiting.add(key);
+    for (const required of flag.requires ?? []) {
+      if (!byKey.has(required)) {
+        throw new Error(
+          `Feature ${flag.key} requires unknown feature ${required}`,
+        );
+      }
+      visit(required, [...path, key]);
+    }
+    visiting.delete(key);
+    visited.add(key);
+  };
+  for (const key of byKey.keys()) visit(key, []);
+}
+
+validateFeatureDependencies();
 
 export type ReleaseTag = ReleaseFlag["releaseTag"];
 

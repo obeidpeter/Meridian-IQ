@@ -11,7 +11,13 @@
 //    role="status" live regions, and the whole Draft-with-Clerk card is
 //    absent while the clerk_ai feature is dark.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { renderWithClient } from "../test-utils";
 import type { Me, Party } from "@workspace/api-client-react";
 
@@ -107,7 +113,12 @@ function storedDraft(over: Partial<DraftState> = {}): DraftState {
     fxRateToNgn: "",
     whtCategory: "",
     lines: [
-      { description: "goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+      {
+        description: "goods",
+        quantity: "1",
+        unitPrice: "1000",
+        vatRate: "0.075",
+      },
     ],
     ...over,
   };
@@ -177,7 +188,7 @@ describe("durable draft persistence", () => {
     renderWithClient(<InvoiceNew />);
     const status = screen.getByTestId("text-draft-saved");
     expect(status.getAttribute("role")).toBe("status");
-    expect(status.textContent).toBe("Draft saved on this device");
+    expect(status.textContent).toBe("Draft saved on this device for 7 days");
     expect(screen.getByTestId("button-discard-draft")).toBeTruthy();
   });
 
@@ -195,7 +206,7 @@ describe("durable draft persistence", () => {
     sessionStorage.setItem(KEY, JSON.stringify(storedDraft()));
     renderWithClient(<InvoiceNew />);
     expect(screen.getByTestId("text-draft-saved").textContent).toBe(
-      "Draft saved on this device",
+      "Draft saved on this device for 7 days",
     );
   });
 });

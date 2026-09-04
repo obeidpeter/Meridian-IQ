@@ -20,6 +20,10 @@ import type {
 // Intl-backed formatDateTime.
 import { policyPauseReasonLabel } from "./action-copy";
 
+// One public contact address across the landing, recovery and calculator
+// surfaces. Its operational verification is tracked by Release Readiness.
+export const ADVISORY_EMAIL = "advisory@meridianiq.com";
+
 // Intl formatter construction is expensive (locale-data setup) and these run
 // per table row per render — build each once at module load.
 const NAIRA_FORMAT = new Intl.NumberFormat("en-NG", {
@@ -110,7 +114,9 @@ export function formatDate(value: string | Date | null | undefined): string {
   return DATE_FORMAT.format(d);
 }
 
-export function formatDateTime(value: string | Date | null | undefined): string {
+export function formatDateTime(
+  value: string | Date | null | undefined,
+): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
@@ -251,14 +257,17 @@ const STATUS_TONES: Record<InvoiceStatus, StatusTone> = {
 export function statusTone(status: string): StatusTone {
   // Off-contract statuses (version skew) fall back to slate with the
   // humanized raw label.
-  return (STATUS_TONES as Partial<Record<string, StatusTone>>)[status] ?? "unknown";
+  return (
+    (STATUS_TONES as Partial<Record<string, StatusTone>>)[status] ?? "unknown"
+  );
 }
 
 export function statusLabel(status: string): string {
   const tone = statusTone(status);
   if (tone === "draft") return status === "validated" ? "Validated" : "Draft";
   if (tone === "pending") return "Awaiting stamp";
-  if (tone === "stamped") return status === "confirmed" ? "Confirmed" : "Stamped";
+  if (tone === "stamped")
+    return status === "confirmed" ? "Confirmed" : "Stamped";
   if (tone === "settled") return "Settled";
   if (tone === "credited") return "Credited";
   if (tone === "failed") return "Failed";
@@ -342,7 +351,8 @@ export function confirmationLabel(state: string): string {
 
 export function confirmationBadgeClasses(state: string): string {
   return pillClasses(
-    (CONFIRMATION_TONES as Partial<Record<string, BadgeTone>>)[state] ?? "slate",
+    (CONFIRMATION_TONES as Partial<Record<string, BadgeTone>>)[state] ??
+      "slate",
   );
 }
 
@@ -438,7 +448,8 @@ export function roleLabel(role: string | undefined): string {
       operator: "Operator",
       buyer_user: "Buyer",
       auditor: "Auditor",
-    }[role ?? ""] ?? (role || "Unknown role")
+    }[role ?? ""] ??
+    (role || "Unknown role")
   );
 }
 
@@ -455,7 +466,10 @@ export function roleHomeHref(
       firm_admin: { href: "/console/", label: "the Accountant Console" },
       firm_staff: { href: "/app/", label: "the Compliance App" },
       client_user: { href: "/app/", label: "the Compliance App" },
-      operator: { href: "/console/operator-queue", label: "the Operator queue" },
+      operator: {
+        href: "/console/operator-queue",
+        label: "the Operator queue",
+      },
       buyer_user: { href: "/buyer/", label: "Buyer Rails" },
       auditor: { href: "/console/audit", label: "Audit & evidence" },
     }[role ?? ""] ?? null
@@ -488,4 +502,3 @@ export function recentQuestionRows<T extends QuestionCaseLike>(
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, limit);
 }
-

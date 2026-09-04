@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.93.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.95.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.93.0</title>
+<title>MeridianIQ API reference — v0.95.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.93.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.95.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -157,7 +157,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">13</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">7</span></a><a href="#tag-operator">operator<span class="count">24</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">13</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">4</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">7</span></a><a href="#tag-operator">operator<span class="count">26</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">26</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">10</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">79</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">5</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -493,6 +493,10 @@ request's writes were rolled back.</li>
 <summary><span class="method m-post">POST</span><code class="path">/api/parties/{id}/consent</code><span class="sum">recordConsent</span></summary>
 <div class="opbody"><div class="req">Request body: <code>ConsentInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ConsentRecord</code> <span class="dim">Recorded</span></li></ul></div>
 </details>
+<details class="op" id="captureConsent">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties/{id}/consent/capture</code><span class="sum">Atomically record the two explicit first-landing consent decisions</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ConsentCaptureInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ConsentCaptureResult</code> <span class="dim">Both decisions recorded</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
 <details class="op" id="checkConsent">
 <summary><span class="method m-get">GET</span><code class="path">/api/parties/{id}/consent/check/{purpose}</code><span class="sum">checkConsent</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ConsentDecision</code> <span class="dim">Permission decision</span></li></ul></div>
@@ -637,9 +641,17 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/operator/clerk-assurance</code><span class="sum">Clerk operational readiness, guardrails and human-review posture</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkAssuranceWorkspace</code> <span class="dim">Clerk assurance workspace</span></li></ul></div>
 </details>
+<details class="op" id="getReleaseReadiness">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/release-readiness</code><span class="sum">Deployment, data, scheduler, backup, rail and security release posture</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperationalReadiness</code> <span class="dim">Release readiness evaluated from live deployment state</span></li></ul></div>
+</details>
 <details class="op" id="listDeadLetters">
 <summary><span class="method m-get">GET</span><code class="path">/api/operator/dead-letters</code><span class="sum">listDeadLetters</span></summary>
-<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OutboxEvent[]</code> <span class="dim">Dead-lettered events</span></li></ul></div>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OutboxEventPage</code> <span class="dim">Dead-lettered events</span></li></ul></div>
+</details>
+<details class="op" id="listRetryingEvents">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/retrying</code><span class="sum">listRetryingEvents</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OutboxEventPage</code> <span class="dim">Retrying events</span></li></ul></div>
 </details>
 <details class="op" id="replayDeadLetter">
 <summary><span class="method m-post">POST</span><code class="path">/api/operator/dead-letters/{id}/replay</code><span class="sum">replayDeadLetter</span></summary>
@@ -773,7 +785,7 @@ request's writes were rolled back.</li>
 </details>
 <details class="op" id="replaceClientAssignments">
 <summary><span class="method m-put">PUT</span><code class="path">/api/console/clients/{id}/assignments</code><span class="sum">Replace the client's assignee set (firm admin) — every add and removal is an audit event</span></summary>
-<div class="opbody"><div class="req">Request body: <code>ClientAssignmentsInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClientAssignments</code> <span class="dim">Assignees after the change</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+<div class="opbody"><div class="req">Request body: <code>ClientAssignmentsInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClientAssignments</code> <span class="dim">Assignees after the change</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 <details class="op" id="getAccessRegister">
 <summary><span class="method m-get">GET</span><code class="path">/api/console/access-register</code><span class="sum">Who holds access to this firm (D14) — role, since when, last sign-in, MFA, client assignments — with the last attestation</span></summary>
@@ -1654,7 +1666,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.93.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.95.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>

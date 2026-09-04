@@ -145,6 +145,12 @@ export const outboxTable = pgTable(
     aggregateId: text("aggregate_id").notNull(),
     type: text("type").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    // Set from the request transaction's app.correlation_id GUC. Worker
+    // retries retain it so one operator reference follows request -> outbox ->
+    // rail attempt without putting customer data in logs.
+    correlationId: text("correlation_id").default(
+      sql`nullif(current_setting('app.correlation_id', true), '')`,
+    ),
     status: outboxStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(6),
@@ -152,6 +158,8 @@ export const outboxTable = pgTable(
       .notNull()
       .defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockToken: uuid("lock_token"),
+    lockExpiresAt: timestamp("lock_expires_at", { withTimezone: true }),
     lastError: text("last_error"),
     // Outage policy (R96): the retry horizon is wall-clock from the FIRST
     // attempt (a replay resets it), and a submission that met an open
@@ -173,6 +181,9 @@ export const outboxTable = pgTable(
       .where(sql`status = 'pending'`),
     // The stuck-submission reconcile sweep probes by aggregate.
     index("outbox_events_aggregate_idx").on(t.aggregateId),
+    index("outbox_events_processing_lease_idx")
+      .on(t.lockExpiresAt)
+      .where(sql`status = 'processing'`),
     // Provider redelivery of an inbound email/WhatsApp message must resolve to
     // one durable receipt even when several instances receive it concurrently.
     uniqueIndex("outbox_events_inbound_dedupe_idx")
@@ -202,6 +213,19 @@ export const railStatesTable = pgTable("rail_states", {
   // last failure's catalogue code is kept for the alert and the Desk.
   probeStartedAt: timestamp("probe_started_at", { withTimezone: true }),
   lastErrorCode: text("last_error_code"),
+  updatedAt: updatedAt(),
+});
+
+// Cross-instance operational freshness. External schedulers and backup jobs
+// update these small rows; the Release Readiness Center reads them after an
+// instance restart instead of trusting process-local timers or counters.
+export const operationalHeartbeatsTable = pgTable("operational_heartbeats", {
+  key: text("key").primaryKey(),
+  lastStartedAt: timestamp("last_started_at", { withTimezone: true }),
+  lastSucceededAt: timestamp("last_succeeded_at", { withTimezone: true }),
+  lastFailedAt: timestamp("last_failed_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   updatedAt: updatedAt(),
 });
 
@@ -246,4 +270,6 @@ export type FeatureFlag = typeof featureFlagsTable.$inferSelect;
 export type FeatureFlagOverride = typeof featureFlagOverridesTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type OutboxEvent = typeof outboxTable.$inferSelect;
+export type OperationalHeartbeat =
+  typeof operationalHeartbeatsTable.$inferSelect;
 export type MessageChannel = (typeof messageChannelEnum.enumValues)[number];

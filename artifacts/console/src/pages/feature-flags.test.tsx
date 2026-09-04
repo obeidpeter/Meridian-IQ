@@ -84,6 +84,8 @@ function flag(over: Partial<FeatureFlag> = {}): FeatureFlag {
     description: null,
     updatedAt: "2026-08-01T09:00:00.000Z",
     overrideCount: 0,
+    requires: [],
+    unmetPrerequisites: [],
     ...over,
   };
 }
@@ -174,9 +176,9 @@ describe("pilot cohort", () => {
     ];
     renderPage();
 
-    expect(screen.getByTestId("button-cohort-reconciliation").textContent).toMatch(
-      /Pilot cohort \(1\)/,
-    );
+    expect(
+      screen.getByTestId("button-cohort-reconciliation").textContent,
+    ).toMatch(/Pilot cohort \(1\)/);
     expect(screen.queryByTestId("cohort-reconciliation")).toBeNull();
     fireEvent.click(screen.getByTestId("button-cohort-reconciliation"));
     const row = screen.getByTestId("override-reconciliation-firm-a");
@@ -184,8 +186,12 @@ describe("pilot cohort", () => {
     expect(row.textContent).toMatch(/On for this firm/);
     expect(row.textContent).toMatch(/Pilot cohort 1/);
 
-    fireEvent.click(screen.getByTestId("button-clear-override-reconciliation-firm-a"));
-    expect(harness.clearCalls).toEqual([{ key: "reconciliation", firmId: "firm-a" }]);
+    fireEvent.click(
+      screen.getByTestId("button-clear-override-reconciliation-firm-a"),
+    );
+    expect(harness.clearCalls).toEqual([
+      { key: "reconciliation", firmId: "firm-a" },
+    ]);
   });
 
   test("setting an override needs a firm and a reason, then sends both", () => {
@@ -195,15 +201,23 @@ describe("pilot cohort", () => {
     fireEvent.click(screen.getByTestId("button-cohort-reconciliation"));
     expect(screen.getByTestId("text-cohort-empty-reconciliation")).toBeTruthy();
 
-    const submit = screen.getByTestId("button-set-override-reconciliation") as HTMLButtonElement;
+    const submit = screen.getByTestId(
+      "button-set-override-reconciliation",
+    ) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    fireEvent.change(screen.getByTestId("select-override-firm-reconciliation"), {
-      target: { value: "firm-b" },
-    });
+    fireEvent.change(
+      screen.getByTestId("select-override-firm-reconciliation"),
+      {
+        target: { value: "firm-b" },
+      },
+    );
     expect(submit.disabled).toBe(true);
-    fireEvent.change(screen.getByTestId("input-override-reason-reconciliation"), {
-      target: { value: "Cohort 2 pilot" },
-    });
+    fireEvent.change(
+      screen.getByTestId("input-override-reason-reconciliation"),
+      {
+        target: { value: "Cohort 2 pilot" },
+      },
+    );
     expect(submit.disabled).toBe(false);
     fireEvent.click(submit);
     expect(harness.overrideCalls).toEqual([

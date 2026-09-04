@@ -50,15 +50,42 @@ before(async () => {
   await db.insert(membershipsTable).values([
     { userId: adminId, firmId, role: "firm_admin", clientPartyId: null },
     { userId: staffId, firmId, role: "firm_staff", clientPartyId: null },
-    { userId: outsiderId, firmId: otherFirmId, role: "firm_staff", clientPartyId: null },
+    {
+      userId: outsiderId,
+      firmId: otherFirmId,
+      role: "firm_staff",
+      clientPartyId: null,
+    },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientA, type: "client_business", legalName: `Client A ${SALT}`, countryCode: "NG" },
-    { id: clientB, type: "client_business", legalName: `Client B ${SALT}`, countryCode: "NG" },
+    {
+      id: clientA,
+      type: "client_business",
+      legalName: `Client A ${SALT}`,
+      countryCode: "NG",
+    },
+    {
+      id: clientB,
+      type: "client_business",
+      legalName: `Client B ${SALT}`,
+      countryCode: "NG",
+    },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientA, type: "retainer", status: "in_progress", title: "A" },
-    { firmId: otherFirmId, clientPartyId: clientB, type: "retainer", status: "in_progress", title: "B" },
+    {
+      firmId,
+      clientPartyId: clientA,
+      type: "retainer",
+      status: "in_progress",
+      title: "A",
+    },
+    {
+      firmId: otherFirmId,
+      clientPartyId: clientB,
+      type: "retainer",
+      status: "in_progress",
+      title: "B",
+    },
   ]);
 });
 
@@ -68,32 +95,60 @@ after(async () => {
 
 test("a firm admin replaces the assignee set; adds and removals land on the audit chain", async () => {
   const base = await listen(appFor(admin, portfolioRouter));
-  const put = (userIds: string[]) =>
-    fetch(`${base}/console/clients/${clientA}/assignments`, {
-      method: "PUT",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ userIds }),
-    });
+  let version = (
+    (await (
+      await fetch(`${base}/console/clients/${clientA}/assignments`)
+    ).json()) as { version: string }
+  ).version;
+  const put = async (userIds: string[]) => {
+    const response = await fetch(
+      `${base}/console/clients/${clientA}/assignments`,
+      {
+        method: "PUT",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ userIds, expectedVersion: version }),
+      },
+    );
+    if (response.ok) {
+      version = ((await response.clone().json()) as { version: string })
+        .version;
+    }
+    return response;
+  };
   const first = await put([staffId, adminId]);
   assert.equal(first.status, 200);
-  const firstBody = (await first.json()) as { assignees: { userId: string; role: string }[] };
+  const firstBody = (await first.json()) as {
+    assignees: { userId: string; role: string }[];
+  };
   assert.deepEqual(
     firstBody.assignees.map((a) => a.userId).sort(),
     [adminId, staffId].sort(),
   );
   const second = await put([staffId]);
   assert.equal(second.status, 200);
-  const secondBody = (await second.json()) as { assignees: { userId: string }[] };
-  assert.deepEqual(secondBody.assignees.map((a) => a.userId), [staffId]);
+  const secondBody = (await second.json()) as {
+    assignees: { userId: string }[];
+  };
+  assert.deepEqual(
+    secondBody.assignees.map((a) => a.userId),
+    [staffId],
+  );
 
   const events = await getDb()
-    .select({ action: auditEventsTable.action, entityId: auditEventsTable.entityId })
+    .select({
+      action: auditEventsTable.action,
+      entityId: auditEventsTable.entityId,
+    })
     .from(auditEventsTable)
     .where(eq(auditEventsTable.entityId, clientA))
     .orderBy(desc(auditEventsTable.createdAt))
     .limit(5);
   const actions = events.map((e) => e.action).sort();
-  assert.deepEqual(actions, ["client.assign", "client.assign", "client.unassign"]);
+  assert.deepEqual(actions, [
+    "client.assign",
+    "client.assign",
+    "client.unassign",
+  ]);
 
   const list = await fetch(`${base}/console/clients/${clientA}/assignments`);
   assert.equal(list.status, 200);
@@ -107,26 +162,85 @@ test("a firm admin replaces the assignee set; adds and removals land on the audi
 
 test("assignees must belong to the firm; staff may read but not write; foreign clients are 404", async () => {
   const adminBase = await listen(appFor(admin, portfolioRouter));
-  const stranger = await fetch(`${adminBase}/console/clients/${clientA}/assignments`, {
-    method: "PUT",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ userIds: [outsiderId] }),
-  });
+  const current = (await (
+    await fetch(`${adminBase}/console/clients/${clientA}/assignments`)
+  ).json()) as { version: string };
+  const stranger = await fetch(
+    `${adminBase}/console/clients/${clientA}/assignments`,
+    {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        userIds: [outsiderId],
+        expectedVersion: current.version,
+      }),
+    },
+  );
   assert.equal(stranger.status, 400);
-  const foreign = await fetch(`${adminBase}/console/clients/${clientB}/assignments`, {
-    method: "PUT",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ userIds: [staffId] }),
-  });
+  const foreign = await fetch(
+    `${adminBase}/console/clients/${clientB}/assignments`,
+    {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        userIds: [staffId],
+        expectedVersion: "0".repeat(64),
+      }),
+    },
+  );
   assert.equal(foreign.status, 404);
 
   const staffBase = await listen(appFor(staff, portfolioRouter));
-  const read = await fetch(`${staffBase}/console/clients/${clientA}/assignments`);
+  const read = await fetch(
+    `${staffBase}/console/clients/${clientA}/assignments`,
+  );
   assert.equal(read.status, 200);
-  const write = await fetch(`${staffBase}/console/clients/${clientA}/assignments`, {
+  const write = await fetch(
+    `${staffBase}/console/clients/${clientA}/assignments`,
+    {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        userIds: [staffId],
+        expectedVersion: current.version,
+      }),
+    },
+  );
+  assert.equal(write.status, 403);
+});
+
+test("a stale replacement is rejected instead of erasing a concurrent admin change", async () => {
+  const base = await listen(appFor(admin, portfolioRouter));
+  const initial = (await (
+    await fetch(`${base}/console/clients/${clientA}/assignments`)
+  ).json()) as { version: string; assignees: { userId: string }[] };
+
+  const winner = await fetch(`${base}/console/clients/${clientA}/assignments`, {
     method: "PUT",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ userIds: [staffId] }),
+    body: JSON.stringify({
+      userIds: [adminId, staffId],
+      expectedVersion: initial.version,
+    }),
   });
-  assert.equal(write.status, 403);
+  assert.equal(winner.status, 200);
+
+  const stale = await fetch(`${base}/console/clients/${clientA}/assignments`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ userIds: [], expectedVersion: initial.version }),
+  });
+  assert.equal(stale.status, 409);
+  assert.match(
+    ((await stale.json()) as { error: string }).error,
+    /team changed since you opened it/i,
+  );
+
+  const latest = (await (
+    await fetch(`${base}/console/clients/${clientA}/assignments`)
+  ).json()) as { assignees: { userId: string }[] };
+  assert.deepEqual(
+    latest.assignees.map((row) => row.userId).sort(),
+    [adminId, staffId].sort(),
+  );
 });

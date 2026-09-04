@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // CORE-03 first-landing capture (D15): a client user whose business has no
 // layer-1 decision sees the consent step instead of the workspace; both
-// layers must be answered; layer 3 is shown but offers no choice; every
-// answer becomes a first_landing consent event; the gate lifts by
+// layers must be answered; layer 3 is shown but offers no choice; both
+// answers land in one idempotent command; the gate lifts by
 // invalidating /me, never by local state alone.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -32,7 +32,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
   return {
     ...actual,
     useGetMe: () => ({ data: harness.me }),
-    useRecordConsent: () => ({
+    useCaptureConsent: () => ({
       isPending: false,
       mutateAsync: async (vars: unknown) => {
         if (harness.fail) throw new Error("ledger unavailable");
@@ -79,7 +79,9 @@ describe("RequireConsentCapture", () => {
 
   test("Continue waits for both answers; a declined layer 1 says what it costs", () => {
     renderGate();
-    const cont = screen.getByTestId("button-consent-continue") as HTMLButtonElement;
+    const cont = screen.getByTestId(
+      "button-consent-continue",
+    ) as HTMLButtonElement;
     expect(cont.disabled).toBe(true);
     fireEvent.click(screen.getByTestId("button-consent-decline-1"));
     expect(cont.disabled).toBe(true);
@@ -90,31 +92,21 @@ describe("RequireConsentCapture", () => {
     expect(cont.disabled).toBe(false);
   });
 
-  test("continuing records one first_landing event per layer, layer 1 first", async () => {
+  test("continuing records both decisions in one atomic command", async () => {
     renderGate();
     fireEvent.click(screen.getByTestId("button-consent-allow-1"));
     fireEvent.click(screen.getByTestId("button-consent-decline-2"));
     fireEvent.click(screen.getByTestId("button-consent-continue"));
-    await waitFor(() => expect(harness.calls.length).toBe(2));
+    await waitFor(() => expect(harness.calls.length).toBe(1));
     expect(harness.calls).toEqual([
       {
         id: "cp-1",
         data: {
-          layer: 1,
-          action: "grant",
-          scope: "compliance_submission",
-          basis: "consent",
-          channel: "first_landing",
-        },
-      },
-      {
-        id: "cp-1",
-        data: {
-          layer: 2,
-          action: "revoke",
-          scope: "anonymized_benchmark",
-          basis: "declined",
-          channel: "first_landing",
+          commandId: expect.any(String),
+          decisions: [
+            { layer: 1, action: "grant" },
+            { layer: 2, action: "revoke" },
+          ],
         },
       },
     ]);
@@ -129,7 +121,8 @@ describe("RequireConsentCapture", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByTestId("consent-capture")).toBeTruthy();
     expect(
-      (screen.getByTestId("button-consent-continue") as HTMLButtonElement).disabled,
+      (screen.getByTestId("button-consent-continue") as HTMLButtonElement)
+        .disabled,
     ).toBe(false);
   });
 });

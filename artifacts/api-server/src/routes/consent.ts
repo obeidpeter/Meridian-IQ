@@ -7,11 +7,15 @@ import {
   RecordConsentResponse,
   CheckConsentParams,
   CheckConsentResponse,
+  CaptureConsentBody,
+  CaptureConsentParams,
+  CaptureConsentResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan, assertPartyAccess } from "../modules/auth/rbac";
 import {
   consentHistory,
+  captureFirstLandingConsent,
   recordConsent,
   isPurposePermitted,
   PURPOSE_LAYER,
@@ -44,16 +48,31 @@ router.post("/parties/:id/consent", async (req, res): Promise<void> => {
   res.status(201).json(RecordConsentResponse.parse(row));
 });
 
+router.post("/parties/:id/consent/capture", async (req, res): Promise<void> => {
+  assertCan(req.principal, "consent.write");
+  const params = parseOrThrow(CaptureConsentParams, req.params);
+  await assertPartyAccess(req.principal, params.id);
+  const parsed = parseOrThrow(CaptureConsentBody, req.body);
+  const records = await captureFirstLandingConsent({
+    partyId: params.id,
+    commandId: parsed.commandId,
+    decisions: parsed.decisions,
+    actorId: req.principal.userId,
+  });
+  res
+    .status(201)
+    .json(
+      CaptureConsentResponse.parse({ commandId: parsed.commandId, records }),
+    );
+});
+
 router.get(
   "/parties/:id/consent/check/:purpose",
   async (req, res): Promise<void> => {
     assertCan(req.principal, "consent.read");
     const params = parseOrThrow(CheckConsentParams, req.params);
     await assertPartyAccess(req.principal, params.id);
-    const permitted = await isPurposePermitted(
-      params.id,
-      params.purpose,
-    );
+    const permitted = await isPurposePermitted(params.id, params.purpose);
     res.json(
       CheckConsentResponse.parse({
         purpose: params.purpose,

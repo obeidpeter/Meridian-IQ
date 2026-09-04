@@ -21,6 +21,8 @@ import {
   GetGateMetricsResponse,
   ListHealthAlertsResponse,
   GetRailConfigResponse,
+  GetReleaseReadinessResponse,
+  ListDeadLettersQueryParams,
   ListRetryingEventsQueryParams,
   ListRetryingEventsResponse,
 } from "@workspace/api-zod";
@@ -49,6 +51,7 @@ import { getComplianceOperationsWorkspace } from "../modules/desk/compliance-ope
 import { getIntegrationReliabilityWorkspace } from "../modules/desk/integration-reliability";
 import { getEvidenceVaultWorkspace } from "../modules/audit/evidence-vault";
 import { getClerkAssuranceWorkspace } from "../modules/clerk/assurance";
+import { getReleaseReadiness } from "../modules/desk/release-readiness";
 
 const router: IRouter = Router();
 
@@ -69,10 +72,17 @@ function serialiseOutboxEvent(event: OutboxEvent) {
 
 router.get("/operator/dead-letters", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
+  const query = parseOrThrow(ListDeadLettersQueryParams, req.query);
+  const bounds = pageBounds(query, { defaultLimit: 50, maxLimit: 200 });
+  const page = await listDeadLetters({
+    limit: bounds.limit,
+    cursor: query.cursor,
+  });
   res.json(
-    ListDeadLettersResponse.parse(
-      (await listDeadLetters()).map(serialiseOutboxEvent),
-    ),
+    ListDeadLettersResponse.parse({
+      items: page.items.map(serialiseOutboxEvent),
+      nextCursor: page.nextCursor,
+    }),
   );
 });
 
@@ -83,11 +93,21 @@ router.get("/operator/retrying", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
   const query = parseOrThrow(ListRetryingEventsQueryParams, req.query);
   const bounds = pageBounds(query, { defaultLimit: 50, maxLimit: 200 });
+  const page = await listRetrying({
+    limit: bounds.limit,
+    cursor: query.cursor,
+  });
   res.json(
-    ListRetryingEventsResponse.parse(
-      (await listRetrying(bounds)).map(serialiseOutboxEvent),
-    ),
+    ListRetryingEventsResponse.parse({
+      items: page.items.map(serialiseOutboxEvent),
+      nextCursor: page.nextCursor,
+    }),
   );
+});
+
+router.get("/operator/release-readiness", async (req, res): Promise<void> => {
+  assertCan(req.principal, "operator.queue.read");
+  res.json(GetReleaseReadinessResponse.parse(await getReleaseReadiness()));
 });
 
 router.post(
@@ -264,7 +284,7 @@ const RAIL_CONFIG_ENTRIES: {
     key: "metrics_token",
     label: "Metrics scrape token",
     env: "METRICS_TOKEN",
-    note: "Open when unset: setting it closes /api/metrics behind the secret.",
+    note: "Required in production; non-production may leave /api/metrics open for local scraping.",
     keyRing: true,
   },
   {

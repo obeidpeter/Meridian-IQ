@@ -33,14 +33,17 @@ import {
   Store,
   X,
 } from "lucide-react";
-import { CSID_EXPANSION, IRN_EXPANSION } from "@workspace/format";
+import {
+  ADVISORY_EMAIL,
+  CSID_EXPANSION,
+  IRN_EXPANSION,
+} from "@workspace/format";
 import { trackUsabilityEvent } from "@workspace/web-ui";
 
 // The one human-contact channel for prospects: the platform is invite-only,
 // so every public surface needs a path that is not the sign-in wall. Same
-// advisory inbox as the penalty calculator's ADVISORY_EMAIL — keep in sync.
-// TODO(product): confirm the advisory inbox address before wide promotion.
-const ADVISORY_EMAIL = "advisory@meridianiq.com";
+// The inbox is shared by every public surface; deployment readiness tracks
+// when its delivery path was last verified.
 const CONTACT_MAILTO = `mailto:${ADVISORY_EMAIL}?subject=${encodeURIComponent(
   "MeridianIQ access request",
 )}`;

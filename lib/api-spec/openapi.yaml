@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.94.0
+  version: 0.95.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -745,6 +745,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ConsentRecord"
+  /parties/{id}/consent/capture:
+    post:
+      operationId: captureConsent
+      tags: [consent]
+      summary: Atomically record the two explicit first-landing consent decisions
+      description: >-
+        An idempotent command: retrying the same commandId returns the original
+        records, while reusing it with different decisions is a conflict. Both
+        layer 1 and layer 2 records commit together or neither does.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentCaptureInput"
+      responses:
+        "201":
+          description: Both decisions recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentCaptureResult"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /parties/{id}/consent/check/{purpose}:
     get:
       operationId: checkConsent
@@ -2108,19 +2134,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClerkAssuranceWorkspace"
+  /operator/release-readiness:
+    get:
+      operationId: getReleaseReadiness
+      tags: [operator]
+      summary: Deployment, data, scheduler, backup, rail and security release posture
+      responses:
+        "200":
+          description: Release readiness evaluated from live deployment state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalReadiness"
   /operator/dead-letters:
     get:
       operationId: listDeadLetters
       tags: [operator]
+      description: Dead events ordered oldest first using an opaque stable cursor.
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - in: query
+          name: cursor
+          schema:
+            type: string
+            maxLength: 512
       responses:
         "200":
           description: Dead-lettered events
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/OutboxEvent"
+                $ref: "#/components/schemas/OutboxEventPage"
   /operator/retrying:
     get:
       operationId: listRetryingEvents
@@ -2134,19 +2183,17 @@ paths:
             minimum: 1
             maximum: 200
         - in: query
-          name: offset
+          name: cursor
           schema:
-            type: integer
-            minimum: 0
+            type: string
+            maxLength: 512
       responses:
         "200":
           description: Retrying events
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/OutboxEvent"
+                $ref: "#/components/schemas/OutboxEventPage"
   /operator/dead-letters/{id}/replay:
     post:
       operationId: replayDeadLetter
@@ -3315,6 +3362,8 @@ paths:
                 $ref: "#/components/schemas/ClientAssignments"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -7416,7 +7465,7 @@ components:
 
     ConsentRecord:
       type: object
-      required: [id, partyId, layer, action, scope, basis, channel, createdAt]
+      required: [id, partyId, layer, action, scope, basis, channel, commandId, createdAt]
       properties:
         id:
           type: string
@@ -7433,6 +7482,9 @@ components:
           type: string
         channel:
           type: string
+        commandId:
+          type: ["string", "null"]
+          format: uuid
         createdAt:
           type: string
           format: date-time
@@ -7451,6 +7503,44 @@ components:
           type: string
         channel:
           type: string
+    ConsentCaptureDecision:
+      type: object
+      required: [layer, action]
+      additionalProperties: false
+      properties:
+        layer:
+          type: integer
+          enum: [1, 2]
+        action:
+          type: string
+          enum: [grant, revoke]
+    ConsentCaptureInput:
+      type: object
+      required: [commandId, decisions]
+      additionalProperties: false
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        decisions:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/ConsentCaptureDecision"
+    ConsentCaptureResult:
+      type: object
+      required: [commandId, records]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        records:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/ConsentRecord"
     ConsentDecision:
       type: object
       required: [purpose, permitted]
@@ -7898,7 +7988,7 @@ components:
     SubmissionAttempt:
       type: object
       required:
-        [id, invoiceId, rail, attemptNo, idempotencyKey, status, createdAt]
+        [id, invoiceId, rail, attemptNo, idempotencyKey, correlationId, status, createdAt]
       properties:
         id:
           type: string
@@ -7911,6 +8001,9 @@ components:
           type: integer
         idempotencyKey:
           type: string
+        correlationId:
+          type: ["string", "null"]
+          description: Request reference that originated the durable submission.
         status:
           type: string
           enum: [pending, accepted, rejected, error]
@@ -9337,7 +9430,8 @@ components:
 
     FeatureFlag:
       type: object
-      required: [key, enabled, releaseTag, updatedAt, overrideCount]
+      required:
+        [key, enabled, releaseTag, updatedAt, overrideCount, requires, unmetPrerequisites]
       properties:
         key:
           type: string
@@ -9353,6 +9447,16 @@ components:
         overrideCount:
           type: integer
           description: Size of the flag's pilot cohort (firm overrides the caller can see).
+        requires:
+          type: array
+          items:
+            type: string
+          description: Flags that must be effectively lit before this feature can run.
+        unmetPrerequisites:
+          type: array
+          items:
+            type: string
+          description: Required flags currently dark at the platform level.
     FeatureFlagUpdate:
       type: object
       required: [enabled]
@@ -9740,6 +9844,9 @@ components:
           type: string
         type:
           type: string
+        correlationId:
+          type: ["string", "null"]
+          description: Opaque request correlation reference for operator support.
         status:
           type: string
           enum: [pending, processing, done, dead]
@@ -9763,6 +9870,53 @@ components:
         createdAt:
           type: string
           format: date-time
+    OutboxEventPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutboxEvent"
+        nextCursor:
+          type: ["string", "null"]
+    OperationalReadinessCheck:
+      type: object
+      required: [key, label, status, summary]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+          enum: [pass, warning, blocked]
+        summary:
+          type: string
+        detail:
+          type: ["object", "null"]
+          additionalProperties: true
+    OperationalReadiness:
+      type: object
+      required:
+        [status, generatedAt, buildRevision, expectedBuildRevision, contractVersion, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, warning, blocked]
+        generatedAt:
+          type: string
+          format: date-time
+        buildRevision:
+          type: string
+        expectedBuildRevision:
+          type: ["string", "null"]
+        contractVersion:
+          type: string
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationalReadinessCheck"
     ReconcileResult:
       type: object
       required: [requeued]
@@ -10955,17 +11109,21 @@ components:
           format: date-time
     ClientAssignments:
       type: object
-      required: [clientPartyId, assignees]
+      required: [clientPartyId, version, assignees]
       properties:
         clientPartyId:
           type: string
+        version:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: Hash of the current assignment set for optimistic concurrency.
         assignees:
           type: array
           items:
             $ref: "#/components/schemas/ClientAssignee"
     ClientAssignmentsInput:
       type: object
-      required: [userIds]
+      required: [userIds, expectedVersion]
       properties:
         # The complete assignee set after the call. Every id must be a firm
         # admin or firm staff member of the caller's firm.
@@ -10974,6 +11132,10 @@ components:
           maxItems: 50
           items:
             type: string
+        expectedVersion:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: Version returned by the latest assignments read.
     FirmMember:
       type: object
       required: [userId, role, capabilities]

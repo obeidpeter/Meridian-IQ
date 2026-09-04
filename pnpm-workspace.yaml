@@ -31,8 +31,8 @@ catalog:
 
 # Supply-chain gate ignores, each with a reason. image-size: metro (the Expo
 # dev-time bundler) pins the v1 line and calls the package's callable default
-# export, which v2 (the only patched line, >=2.0.3) removed — forcing the
-# major would break image bundling at `expo start`. The advisories are
+# export. No patched release is currently published; forcing v2 would also
+# break image bundling at `expo start`. The advisories are
 # infinite-loop DoS in ICNS/JXL/HEIF parsers fed only by the app's own
 # bundled assets, never untrusted input. Drop these when Expo/metro ship an
 # image-size v2 bump.
@@ -71,6 +71,11 @@ overrides:
   'undici@<6.28.0': '>=6.28.0 <7.0.0'
   'esbuild@>=0.27.3 <0.28.1': '>=0.28.1'
   'nanoid@<3.3.18': '>=3.3.18 <4.0.0'
+  '@expo/plist>@xmldom/xmldom': '>=0.8.15 <0.9.0'
+  'plist>@xmldom/xmldom': '>=0.9.12 <0.10.0'
+  'decode-uri-component@<0.5.0': '>=0.5.0 <0.6.0'
+  'linkify-it@<5.0.2': '>=5.0.2 <6.0.0'
+  'qs@<6.16.0': '>=6.16.0 <7.0.0'
   # browserslist <=4.28.6: unbounded cache growth + prototype write (Aug 2026
   # advisories, reached only through the Expo CLI chain).
   'browserslist@<4.28.7': '>=4.28.7'
@@ -94,7 +99,6 @@ overrides:
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-arm64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-linux-x64-musl': '-'
   '@tailwindcss/oxide>@tailwindcss/oxide-win32-arm64-msvc': '-'
-  '@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc': '-'
   esbuild>@esbuild/aix-ppc64: '-'
   esbuild>@esbuild/android-arm: '-'
   esbuild>@esbuild/android-arm64: '-'
@@ -119,7 +123,6 @@ overrides:
   esbuild>@esbuild/sunos-x64: '-'
   esbuild>@esbuild/win32-arm64: '-'
   esbuild>@esbuild/win32-ia32: '-'
-  esbuild>@esbuild/win32-x64: '-'
   lightningcss>lightningcss-android-arm64: '-'
   lightningcss>lightningcss-darwin-arm64: '-'
   lightningcss>lightningcss-darwin-x64: '-'
@@ -129,7 +132,6 @@ overrides:
   lightningcss>lightningcss-linux-arm64-musl: '-'
   lightningcss>lightningcss-linux-x64-musl: '-'
   lightningcss>lightningcss-win32-arm64-msvc: '-'
-  lightningcss>lightningcss-win32-x64-msvc: '-'
   rollup>@rollup/rollup-android-arm-eabi: '-'
   rollup>@rollup/rollup-android-arm64: '-'
   rollup>@rollup/rollup-darwin-arm64: '-'
@@ -153,4 +155,3 @@ overrides:
   rollup>@rollup/rollup-win32-arm64-msvc: '-'
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
-  rollup>@rollup/rollup-win32-x64-msvc: '-'

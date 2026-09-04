@@ -86,26 +86,37 @@ const SCHEMA_VERSIONS: { version: number; description: string }[] = [
 const SEED_DEMO =
   process.env.NODE_ENV !== "production" && process.env.SEED_DEMO === "true";
 
+async function seedReleaseFlagsInContext(): Promise<void> {
+  // A retired flag (releases.ts RETIRED_FLAGS) leaves the table — and its
+  // overrides — so it stops appearing on the console and blocking the
+  // release badge on databases that booted before its retirement.
+  for (const key of RETIRED_FLAGS) {
+    await getDb()
+      .delete(featureFlagOverridesTable)
+      .where(eq(featureFlagOverridesTable.flagKey, key));
+    await getDb()
+      .delete(featureFlagsTable)
+      .where(eq(featureFlagsTable.key, key));
+  }
+  for (const flag of FLAGS) {
+    await getDb()
+      .insert(featureFlagsTable)
+      .values(flag)
+      .onConflictDoNothing({ target: featureFlagsTable.key });
+  }
+}
+
+// API tests use a schema-only database, but feature dependency checks need the
+// same essential release defaults that application bootstrap installs. This
+// intentionally excludes catalogue, course, and demo-account seed data.
+export async function seedReleaseFlags(): Promise<void> {
+  await runInBypassContext(seedReleaseFlagsInContext);
+}
+
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
 export async function seedPlatform(): Promise<void> {
   await runInBypassContext(async () => {
-    // A retired flag (releases.ts RETIRED_FLAGS) leaves the table — and its
-    // overrides — so it stops appearing on the console and blocking the
-    // release badge on databases that booted before its retirement.
-    for (const key of RETIRED_FLAGS) {
-      await getDb()
-        .delete(featureFlagOverridesTable)
-        .where(eq(featureFlagOverridesTable.flagKey, key));
-      await getDb()
-        .delete(featureFlagsTable)
-        .where(eq(featureFlagsTable.key, key));
-    }
-    for (const flag of FLAGS) {
-      await getDb()
-        .insert(featureFlagsTable)
-        .values(flag)
-        .onConflictDoNothing({ target: featureFlagsTable.key });
-    }
+    await seedReleaseFlagsInContext();
     for (const v of SCHEMA_VERSIONS) {
       await getDb()
         .insert(schemaVersionsTable)
@@ -164,25 +175,41 @@ function isoDate(daysFromNow: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Layer-1 (compliance) consent so submission and vault storage are permitted
-// for a demo client party; inserts only where absent, so a real consent
-// history is never duplicated by a reseed.
-async function seedLayer1ConsentIfAbsent(partyId: string): Promise<void> {
-  const [existingConsent] = await getDb()
-    .select({ id: consentRecordsTable.id })
+// Demo businesses that have already completed onboarding need one decision for
+// each first-landing layer. Query by layer so databases seeded before layer 2
+// was enforced are repaired without duplicating append-only history.
+async function seedInitialConsentIfAbsent(partyId: string): Promise<void> {
+  const existing = await getDb()
+    .select({ layer: consentRecordsTable.layer })
     .from(consentRecordsTable)
-    .where(eq(consentRecordsTable.partyId, partyId))
-    .limit(1);
-  if (!existingConsent) {
-    await getDb().insert(consentRecordsTable).values({
-      partyId,
+    .where(
+      and(
+        eq(consentRecordsTable.partyId, partyId),
+        inArray(consentRecordsTable.layer, [1, 2]),
+      ),
+    );
+  const decided = new Set(existing.map((row) => row.layer));
+  const values = [
+    {
       layer: 1,
-      action: "grant",
       scope: "compliance_submission",
       basis: "contract",
+    },
+    {
+      layer: 2,
+      scope: "anonymized_benchmark",
+      basis: "consent",
+    },
+  ]
+    .filter((decision) => !decided.has(decision.layer))
+    .map((decision) => ({
+      partyId,
+      ...decision,
+      action: "grant" as const,
       channel: "seed",
-    });
-  }
+    }));
+  if (values.length > 0)
+    await getDb().insert(consentRecordsTable).values(values);
 }
 
 type SeedLine = {
@@ -381,7 +408,7 @@ async function seedDemo(): Promise<void> {
     })
     .onConflictDoNothing({ target: engagementsTable.id });
 
-  await seedLayer1ConsentIfAbsent(DEMO.clientPartyId);
+  await seedInitialConsentIfAbsent(DEMO.clientPartyId);
 
   await seedInvoice({
     id: "aaaa1001-0000-4000-8000-000000001001",
@@ -843,7 +870,7 @@ async function seedConsoleDemo(): Promise<void> {
     .onConflictDoNothing();
 
   // Demo-client completeness so every demo client can submit and issue credit
-  // notes: UBL needs a street and submission needs layer-1 consent. The street
+  // notes: UBL needs a street and onboarding needs both consent decisions. The street
   // update backfills databases seeded before streets were added (the insert
   // above cannot amend existing rows); consent inserts only where absent.
   const CLIENT_STREETS: { id: string; street: string }[] = [
@@ -856,7 +883,7 @@ async function seedConsoleDemo(): Promise<void> {
       .update(partiesTable)
       .set({ street: c.street })
       .where(and(eq(partiesTable.id, c.id), isNull(partiesTable.street)));
-    await seedLayer1ConsentIfAbsent(c.id);
+    await seedInitialConsentIfAbsent(c.id);
   }
 
   const engagements: { id: string; clientPartyId: string; title: string }[] = [

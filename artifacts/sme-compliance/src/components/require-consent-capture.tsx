@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetMeQueryKey,
   useGetMe,
-  useRecordConsent,
+  useCaptureConsent,
 } from "@workspace/api-client-react";
 import {
   BarChart3,
@@ -57,7 +57,8 @@ export function ConsentCapture({
   clientPartyId: string;
   onCaptured: () => void;
 }) {
-  const record = useRecordConsent();
+  const capture = useCaptureConsent();
+  const [commandId] = useState(() => crypto.randomUUID());
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,20 +74,16 @@ export function ConsentCapture({
     setSaving(true);
     setError(null);
     try {
-      // Sequential, layer 1 first: the ledger is append-only and the server
-      // reads the latest event per layer, so order is the record's meaning.
-      for (const l of LAYERS) {
-        await record.mutateAsync({
-          id: clientPartyId,
-          data: {
+      await capture.mutateAsync({
+        id: clientPartyId,
+        data: {
+          commandId,
+          decisions: LAYERS.map((l) => ({
             layer: l.layer,
             action: decisions[l.layer],
-            scope: l.scope,
-            basis: decisions[l.layer] === "grant" ? "consent" : "declined",
-            channel: "first_landing",
-          },
-        });
-      }
+          })),
+        },
+      });
       onCaptured();
     } catch (e) {
       setError(serverErrorMessage(e));

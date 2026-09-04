@@ -322,17 +322,33 @@ async function journeyOwnerConsent(page, BASE, check) {
       await page.locator('[data-testid="consent-layer-3"]').innerText()
     ).includes("Not yet available"),
   );
-  await page.getByTestId("button-grant-2").click();
-  await page.waitForSelector('[data-testid="button-revoke-2"]', {
-    timeout: 10000,
-  });
-  await page.getByTestId("button-revoke-2").click();
-  // Revocation is confirm-gated: the dialog restates the consequence before
-  // the ledger event is recorded.
-  await page.getByTestId("button-confirm-revoke").click();
-  await page.waitForSelector('[data-testid="button-grant-2"]', {
-    timeout: 10000,
-  });
+  await page.waitForSelector(
+    '[data-testid="button-grant-2"], [data-testid="button-revoke-2"]',
+    { timeout: 10000 },
+  );
+  const startedGranted = (await page.getByTestId("button-revoke-2").count()) > 0;
+  const grant = async () => {
+    await page.getByTestId("button-grant-2").click();
+    await page.waitForSelector('[data-testid="button-revoke-2"]', {
+      timeout: 10000,
+    });
+  };
+  const revoke = async () => {
+    await page.getByTestId("button-revoke-2").click();
+    // Revocation is confirm-gated: the dialog restates the consequence before
+    // the ledger event is recorded.
+    await page.getByTestId("button-confirm-revoke").click();
+    await page.waitForSelector('[data-testid="button-grant-2"]', {
+      timeout: 10000,
+    });
+  };
+  if (startedGranted) {
+    await revoke();
+    await grant();
+  } else {
+    await grant();
+    await revoke();
+  }
   check("consent layer 2 grant/revoke round-trips", true);
   await signOutFromApp(page, BASE);
 }
@@ -421,11 +437,20 @@ async function journeyClientAssignment(page, BASE, check) {
   const staff = team.find((m) => m.email === "demo.staff@meridianiq.example");
   const admin = team.find((m) => m.email === "demo.admin@meridianiq.example");
   check("firm team lists the demo admin and staff", !!staff && !!admin);
-  const assign = async (clientId, userIds) =>
-    page.request.put(BASE + `/api/console/clients/${clientId}/assignments`, {
-      data: { userIds },
-      headers: CSRF,
-    });
+  const assign = async (clientId, userIds) => {
+    const current = await (
+      await page.request.get(
+        BASE + `/api/console/clients/${clientId}/assignments`,
+      )
+    ).json();
+    return page.request.put(
+      BASE + `/api/console/clients/${clientId}/assignments`,
+      {
+        data: { userIds, expectedVersion: current.version },
+        headers: CSRF,
+      },
+    );
+  };
   const kano = await assign(KANO, [staff.userId]);
   const pharma = await assign(PHARMA, [admin.userId]);
   check(

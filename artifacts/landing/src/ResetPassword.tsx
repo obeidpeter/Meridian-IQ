@@ -3,6 +3,7 @@ import {
   useRequestPasswordReset,
   useResetPassword,
 } from "@workspace/api-client-react";
+import { ADVISORY_EMAIL } from "@workspace/format";
 import {
   Loader2,
   CheckCircle2,
@@ -21,7 +22,7 @@ import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
 // The platform's one public contact address (the penalty calculator's
 // advisory desk) — reused here so a locked-out firm admin, who has no
 // administrator above them in-product, still has a human path.
-const SUPPORT_EMAIL = "advisory@meridianiq.com";
+const SUPPORT_EMAIL = ADVISORY_EMAIL;
 
 // Password recovery (IDN-02), mirroring the accept-invite page: a public,
 // non-enumerating request sends a single-use link when the account exists;

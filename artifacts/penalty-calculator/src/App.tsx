@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { requestAdvisoryReview } from "@workspace/api-client-react";
 import { serverError } from "@workspace/api-errors";
+import { ADVISORY_EMAIL } from "@workspace/format";
 import { trackUsabilityEvent } from "@workspace/web-ui";
 import {
   ArrowLeft,
@@ -33,8 +34,6 @@ import {
   type WaveStatus,
 } from "@/lib/deadlines";
 
-// TODO(product): confirm the advisory inbox address before wide promotion.
-const ADVISORY_EMAIL = "advisory@meridianiq.com";
 const MODEL_BASIS_REVIEWED = "28 August 2026";
 
 const FOCUS_RING =

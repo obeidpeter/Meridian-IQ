@@ -6,6 +6,7 @@ import {
   isForbidden,
   killSwitchTripped,
   serverError,
+  requestReference,
 } from "./index";
 
 describe("errorStatus", () => {
@@ -19,6 +20,15 @@ describe("errorStatus", () => {
     expect(errorStatus({})).toBeUndefined();
     expect(errorStatus(null)).toBeUndefined();
     expect(errorStatus(new Error("boom"))).toBeUndefined();
+  });
+});
+
+describe("requestReference", () => {
+  test("returns only a non-empty API request id", () => {
+    expect(requestReference({ requestId: "req-42" })).toBe("req-42");
+    expect(requestReference({ requestId: "" })).toBeUndefined();
+    expect(requestReference({ requestId: 42 })).toBeUndefined();
+    expect(requestReference(null)).toBeUndefined();
   });
 });
 

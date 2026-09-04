@@ -40,6 +40,7 @@ export const submissionAttemptsTable = pgTable(
     rail: railEnum("rail").notNull(),
     attemptNo: integer("attempt_no").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
+    correlationId: text("correlation_id"),
     status: submissionStatusEnum("status").notNull(),
     requestPayload: jsonb("request_payload").$type<Record<string, unknown>>(),
     responsePayload: jsonb("response_payload").$type<Record<string, unknown>>(),

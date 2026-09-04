@@ -10,7 +10,10 @@ import {
   getListFeatureFlagsQueryKey,
   getListFeatureFlagOverridesQueryKey,
 } from "@workspace/api-client-react";
-import type { FeatureFlag, FeatureFlagOverride } from "@workspace/api-client-react";
+import type {
+  FeatureFlag,
+  FeatureFlagOverride,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -32,7 +35,14 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { serverErrorToast } from "@/lib/errors";
-import { Info, ToggleRight, Users, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  AlertTriangle,
+  Info,
+  ToggleRight,
+  Users,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
 // Flags ship dark and are flipped per release gate (PL-02). Grouping by
@@ -270,7 +280,24 @@ function FlagRow({
             </span>
           </p>
           {flag.description && (
-            <p className="text-xs text-muted-foreground mt-1">{flag.description}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {flag.description}
+            </p>
+          )}
+          {flag.requires.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Requires {flag.requires.join(", ")}
+            </p>
+          )}
+          {flag.unmetPrerequisites.length > 0 && (
+            <p
+              className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400"
+              role="status"
+              data-testid={`flag-prerequisites-${flag.key}`}
+            >
+              <AlertTriangle className="size-3.5" aria-hidden="true" />
+              Enable {flag.unmetPrerequisites.join(", ")} first
+            </p>
           )}
           <p className="text-xs text-muted-foreground mt-0.5">
             Updated {formatDateTime(flag.updatedAt)}
@@ -393,8 +420,7 @@ export function FeatureFlags() {
         <p className="text-muted-foreground mt-1">
           Release-tagged surfaces ship dark and go live per gate (PL-02). A
           firm's pilot cohort lights a flag for that firm ahead of the platform
-          switch — every override carries a reason and lands on the audit
-          chain.
+          switch — every override carries a reason and lands on the audit chain.
         </p>
       </div>
 
@@ -468,9 +494,9 @@ export function FeatureFlags() {
               Turn off {disableTarget?.key ?? "this flag"} for every firm?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The surface goes dark immediately — its routes answer 404 for
-              all tenants until the flag is switched back on. Firms with an
-              explicit "on" override keep it.
+              The surface goes dark immediately — its routes answer 404 for all
+              tenants until the flag is switched back on. Firms with an explicit
+              "on" override keep it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

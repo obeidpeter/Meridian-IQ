@@ -10,6 +10,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "**/static-build/**",
       "**/node_modules/**",
       "**/.expo/**",
       "**/*.d.ts",

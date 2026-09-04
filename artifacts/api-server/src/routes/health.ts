@@ -5,22 +5,9 @@ import { registry } from "../lib/metrics";
 import { requireOpToken } from "../lib/op-token";
 import { logger } from "../lib/logger";
 import { getReadiness } from "../lib/readiness";
+import { deployedBuildRevision } from "../lib/build";
 
 const router: IRouter = Router();
-
-export function deployedBuildRevision(): string {
-  const candidate = [
-    process.env.BUILD_REVISION,
-    process.env.REPLIT_DEPLOYMENT_ID,
-    process.env.GITHUB_SHA,
-    process.env.COMMIT_SHA,
-  ]
-    .map((value) => value?.trim())
-    .find(Boolean);
-  if (!candidate)
-    return process.env.NODE_ENV === "production" ? "unknown" : "development";
-  return /^[A-Za-z0-9._-]{1,128}$/.test(candidate) ? candidate : "unknown";
-}
 
 // contractVersion is baked in at build time from openapi.yaml info.version.
 // The web apps compare it with their own baked-in copy and show a "stale
@@ -69,12 +56,20 @@ router.get("/readyz", async (_req, res): Promise<void> => {
 });
 
 // Prometheus scrape endpoint (OBS-01). Aggregate process + request + sweep
-// metrics only — no per-tenant labels or PII — so it is safe to serve on the
-// public path like /healthz. Deployments that want scrape access closed set
-// METRICS_TOKEN (opt-in; unset keeps it open) — see lib/op-token.ts.
+// metrics only — no per-tenant labels or PII. Non-production can leave the
+// endpoint open for local scraping; production fails closed when its key ring
+// is missing and requires a signed request when configured.
+export function metricsTokenRequired(nodeEnv = process.env.NODE_ENV): boolean {
+  return nodeEnv === "production";
+}
+
 router.get(
   "/metrics",
-  requireOpToken("METRICS_TOKEN"),
+  requireOpToken("METRICS_TOKEN", {
+    // Development keeps the frictionless local scrape. A production process
+    // never exposes operational topology merely because a secret was omitted.
+    required: metricsTokenRequired(),
+  }),
   async (_req, res): Promise<void> => {
     res.set("Content-Type", registry.contentType);
     res.end(await registry.metrics());

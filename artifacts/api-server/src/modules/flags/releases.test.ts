@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RELEASE_FLAGS, RETIRED_FLAGS, activationReleaseTag } from "./releases.ts";
+import {
+  RELEASE_FLAGS,
+  RETIRED_FLAGS,
+  activationReleaseTag,
+  validateFeatureDependencies,
+  type ReleaseFlag,
+} from "./releases.ts";
 
 // The activation badge the shells render (Me.releaseTag) must move only on a
 // COMPLETE activation of a release — a single pilot override or a partial
@@ -17,10 +23,7 @@ test("the launch profile amounts to R0 (the Field Kit core)", () => {
 });
 
 test("a fully lit manifest reaches R4; nothing lit floors at R0", () => {
-  assert.equal(
-    activationReleaseTag(RELEASE_FLAGS.map((f) => f.key)),
-    "R4",
-  );
+  assert.equal(activationReleaseTag(RELEASE_FLAGS.map((f) => f.key)), "R4");
   assert.equal(activationReleaseTag([]), "R0");
   assert.equal(activationReleaseTag(["not-a-real-flag"]), "R0");
 });
@@ -44,6 +47,35 @@ test("a retired flag is out of the manifest and never gates the badge (D17)", ()
 
 test("a later release cannot count while an earlier one is incomplete", () => {
   // Every R2 flag lit but one R1 flag dark: still R0 — stages are cumulative.
-  const lit = [...keysAt(["R0"]), ...keysAt(["R1"]).slice(1), ...keysAt(["R2"])];
+  const lit = [
+    ...keysAt(["R0"]),
+    ...keysAt(["R1"]).slice(1),
+    ...keysAt(["R2"]),
+  ];
   assert.equal(activationReleaseTag(lit), "R0");
+});
+
+test("the release manifest has a complete acyclic dependency graph", () => {
+  assert.doesNotThrow(() => validateFeatureDependencies());
+  const base: Omit<ReleaseFlag, "key" | "requires"> = {
+    releaseTag: "R1",
+    description: "test",
+    launchDefault: false,
+    devDefault: false,
+  };
+  assert.throws(
+    () =>
+      validateFeatureDependencies([
+        { ...base, key: "a", requires: ["missing"] },
+      ]),
+    /requires unknown feature missing/,
+  );
+  assert.throws(
+    () =>
+      validateFeatureDependencies([
+        { ...base, key: "a", requires: ["b"] },
+        { ...base, key: "b", requires: ["a"] },
+      ]),
+    /dependency cycle/,
+  );
 });

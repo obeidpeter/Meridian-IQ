@@ -1,0 +1,9 @@
+[[IgnoredVulns]]
+id = "GHSA-w3rx-r6r6-pgpr"
+ignoreUntil = 2026-10-04
+reason = "No patched image-size release exists; Metro only parses repository-controlled mobile assets at build time."
+
+[[IgnoredVulns]]
+id = "GHSA-5p2g-fcmc-qvqq"
+ignoreUntil = 2026-10-04
+reason = "No patched image-size release exists; Metro only parses repository-controlled mobile assets at build time."

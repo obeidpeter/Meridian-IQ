@@ -439,6 +439,12 @@
   font: inherit;
   font-size: 0.875rem;
 }
+
+.mi-help-search input:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid var(--mi-teal);
+  outline-offset: 2px;
+}
 .mi-help-search button {
   display: grid;
   width: 2rem;
