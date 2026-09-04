@@ -215,7 +215,7 @@ export async function reliabilityRollbackFixtures(pool: pg.Pool) {
   await assertUniqueLine();
   await pool.query(
     `INSERT INTO operations (id,firm_id,actor_id,client_party_id,command,idempotency_key,payload_hash,status,response_status,response_body)
-    VALUES ($1,$2,'rollback-actor',$3,'invoice.create',$1::text,$4,'succeeded',201,'{"retained":true}')`,
+    VALUES ($1::uuid,$2,'rollback-actor',$3,'invoice.create',($1::uuid)::text,$4,'succeeded',201,'{"retained":true}')`,
     [operation, firm, party, "a".repeat(64)],
   );
   await pool.query(
