@@ -437,11 +437,20 @@ async function journeyClientAssignment(page, BASE, check) {
   const staff = team.find((m) => m.email === "demo.staff@meridianiq.example");
   const admin = team.find((m) => m.email === "demo.admin@meridianiq.example");
   check("firm team lists the demo admin and staff", !!staff && !!admin);
-  const assign = async (clientId, userIds) =>
-    page.request.put(BASE + `/api/console/clients/${clientId}/assignments`, {
-      data: { userIds },
-      headers: CSRF,
-    });
+  const assign = async (clientId, userIds) => {
+    const current = await (
+      await page.request.get(
+        BASE + `/api/console/clients/${clientId}/assignments`,
+      )
+    ).json();
+    return page.request.put(
+      BASE + `/api/console/clients/${clientId}/assignments`,
+      {
+        data: { userIds, expectedVersion: current.version },
+        headers: CSRF,
+      },
+    );
+  };
   const kano = await assign(KANO, [staff.userId]);
   const pharma = await assign(PHARMA, [admin.userId]);
   check(
