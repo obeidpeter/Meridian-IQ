@@ -473,7 +473,9 @@ async function journeyClientAssignment(page, BASE, check) {
   await apiLogout(page, BASE);
 
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
-  await page.goto(BASE + "/console", { waitUntil: "networkidle" });
+  await page.goto(BASE + "/console/portfolio?view=clients", {
+    waitUntil: "networkidle",
+  });
   await page.waitForSelector('[data-testid="button-client-scope-mine"]', {
     timeout: 15000,
   });
@@ -481,8 +483,6 @@ async function journeyClientAssignment(page, BASE, check) {
     "assigned staff land on My clients by default",
     (await page.getByTestId("button-client-scope-mine").first().getAttribute("aria-pressed")) === "true",
   );
-  await page.getByTestId("nav-portfolio").first().click();
-  await page.goto(BASE + "/console?view=clients", { waitUntil: "networkidle" });
   await page.waitForSelector(`[data-testid="row-client-${KANO}"]`, { timeout: 15000 });
   check(
     "My clients hides a client assigned only to someone else",
