@@ -322,17 +322,33 @@ async function journeyOwnerConsent(page, BASE, check) {
       await page.locator('[data-testid="consent-layer-3"]').innerText()
     ).includes("Not yet available"),
   );
-  await page.getByTestId("button-grant-2").click();
-  await page.waitForSelector('[data-testid="button-revoke-2"]', {
-    timeout: 10000,
-  });
-  await page.getByTestId("button-revoke-2").click();
-  // Revocation is confirm-gated: the dialog restates the consequence before
-  // the ledger event is recorded.
-  await page.getByTestId("button-confirm-revoke").click();
-  await page.waitForSelector('[data-testid="button-grant-2"]', {
-    timeout: 10000,
-  });
+  await page.waitForSelector(
+    '[data-testid="button-grant-2"], [data-testid="button-revoke-2"]',
+    { timeout: 10000 },
+  );
+  const startedGranted = (await page.getByTestId("button-revoke-2").count()) > 0;
+  const grant = async () => {
+    await page.getByTestId("button-grant-2").click();
+    await page.waitForSelector('[data-testid="button-revoke-2"]', {
+      timeout: 10000,
+    });
+  };
+  const revoke = async () => {
+    await page.getByTestId("button-revoke-2").click();
+    // Revocation is confirm-gated: the dialog restates the consequence before
+    // the ledger event is recorded.
+    await page.getByTestId("button-confirm-revoke").click();
+    await page.waitForSelector('[data-testid="button-grant-2"]', {
+      timeout: 10000,
+    });
+  };
+  if (startedGranted) {
+    await revoke();
+    await grant();
+  } else {
+    await grant();
+    await revoke();
+  }
   check("consent layer 2 grant/revoke round-trips", true);
   await signOutFromApp(page, BASE);
 }
