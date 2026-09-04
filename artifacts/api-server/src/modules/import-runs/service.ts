@@ -23,6 +23,10 @@ import {
   type ImportRunManifest,
 } from "./manifest";
 import { parseOrThrow } from "../../lib/parse";
+import {
+  databaseTimestampIso,
+  type DatabaseTimestamp,
+} from "../../lib/database-timestamp";
 
 interface Run extends Record<string, unknown> {
   id: string;
@@ -34,9 +38,9 @@ interface Run extends Record<string, unknown> {
   chunk_size: number;
   chunk_hashes: string[];
   next_chunk_index: number;
-  finalized_at: Date | null;
-  created_at: Date;
-  updated_at: Date;
+  finalized_at: DatabaseTimestamp | null;
+  created_at: DatabaseTimestamp;
+  updated_at: DatabaseTimestamp;
 }
 
 async function loadRun(
@@ -81,6 +85,8 @@ async function describeRun(tx: Database, row: Run) {
   if (chunks.length !== row.next_chunk_index)
     throw new Error("Import checkpoint is inconsistent with saved results");
   const aggregate = aggregateChunkResults(chunks.map((chunk) => chunk.result));
+  const finalizedAt =
+    row.finalized_at === null ? null : databaseTimestampIso(row.finalized_at);
   return {
     id: row.id,
     clientPartyId: row.client_party_id,
@@ -89,7 +95,7 @@ async function describeRun(tx: Database, row: Run) {
     chunkSize: row.chunk_size,
     chunkHashes: row.chunk_hashes,
     nextChunkIndex: row.next_chunk_index,
-    status: row.finalized_at
+    status: finalizedAt
       ? ("completed" as const)
       : row.next_chunk_index === row.chunk_hashes.length
         ? ("ready" as const)
@@ -97,11 +103,11 @@ async function describeRun(tx: Database, row: Run) {
     committedRows: aggregate.total,
     createdCount: aggregate.createdCount,
     invalidCount: aggregate.invalidCount,
-    createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
-    finalizedAt: row.finalized_at?.toISOString() ?? null,
+    createdAt: databaseTimestampIso(row.created_at),
+    updatedAt: databaseTimestampIso(row.updated_at),
+    finalizedAt,
     chunks,
-    result: row.finalized_at ? aggregate : null,
+    result: finalizedAt ? aggregate : null,
   };
 }
 

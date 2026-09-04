@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { after, before, describe, test } from "node:test";
 import { getDb, pool, runRequestContext } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -50,6 +51,85 @@ const rejected = (rows: ImportRow[]): ImportResult => ({
 const rejectImporter: typeof importInvoices = async (_firm, _client, rows) =>
   rejected(rows);
 
+test("run summaries normalize raw PostgreSQL timestamps and mapped dates", async (t) => {
+  const id = randomUUID();
+  const result = rejected([{ rowNumber: 1 }]);
+  const row = {
+    id,
+    firm_id: principal.firmId,
+    actor_id: principal.userId,
+    client_party_id: principal.clientPartyId,
+    manifest_hash: "a".repeat(64),
+    total_rows: 1,
+    chunk_size: 1,
+    chunk_hashes: ["b".repeat(64)],
+    next_chunk_index: 0,
+    created_at: "2026-09-04 01:00:00.123456+01",
+    updated_at: new Date("2026-09-04T00:01:00.987Z"),
+    finalized_at: null as Date | string | null,
+  };
+  const chunk = {
+    chunk_index: 0,
+    operation_id: randomUUID(),
+    row_count: 1,
+    response_body: JSON.stringify({
+      runId: id,
+      chunkIndex: 0,
+      nextChunkIndex: 1,
+      result,
+    }),
+  };
+  const client = Object.assign(new EventEmitter(), {
+    release: () => undefined,
+    query: async (query: string | { text: string }) => {
+      const statement = typeof query === "string" ? query : query.text;
+      if (statement.includes("current_setting('app.firm_id'")) {
+        return {
+          rows: [
+            {
+              firm_id: principal.firmId,
+              bypass: "off",
+              role: "meridian_app",
+              isolation: "read committed",
+            },
+          ],
+        };
+      }
+      if (statement.includes("FROM import_runs o")) return { rows: [row] };
+      if (statement.includes("FROM import_run_chunks c JOIN operations op")) {
+        return { rows: row.next_chunk_index ? [chunk] : [] };
+      }
+      return { rows: [] };
+    },
+  });
+  const transaction = t.mock.method(pool, "connect", async () => client);
+  try {
+    const open = await inTenant(() => getImportRun(principal, id));
+    assert.equal(open.createdAt, "2026-09-04T00:00:00.123Z");
+    assert.equal(open.updatedAt, "2026-09-04T00:01:00.987Z");
+    assert.equal(open.finalizedAt, null);
+    assert.equal(open.status, "open");
+    assert.equal(open.result, null);
+
+    row.next_chunk_index = 1;
+    const ready = await inTenant(() => getImportRun(principal, id));
+    assert.equal(ready.status, "ready");
+    assert.equal(ready.finalizedAt, null);
+    for (const finalizedAt of [
+      "2026-09-04 00:02:00.654321+00",
+      new Date("2026-09-04T00:02:00.654Z"),
+    ]) {
+      row.finalized_at = finalizedAt;
+      const completed = await inTenant(() => getImportRun(principal, id));
+      assert.equal(completed.finalizedAt, "2026-09-04T00:02:00.654Z");
+      assert.equal(completed.status, "completed");
+      assert.deepEqual(completed.result, result);
+    }
+  } finally {
+    transaction.mock.restore();
+  }
+});
+
 async function makeRun(total = 3, chunkSize = 2) {
   const id = randomUUID();
   const rows: ImportRow[] = Array.from({ length: total }, (_, i) => ({
@@ -74,7 +154,16 @@ async function makeRun(total = 3, chunkSize = 2) {
     chunkSize,
     chunkHashes: chunks.map(operationPayloadHash),
   };
-  await inTenant(() => createImportRun(principal, manifest));
+  const created = await inTenant(() => createImportRun(principal, manifest));
+  assert.equal(
+    created.run.createdAt,
+    new Date(created.run.createdAt).toISOString(),
+  );
+  assert.equal(
+    created.run.updatedAt,
+    new Date(created.run.updatedAt).toISOString(),
+  );
+  assert.equal(created.run.finalizedAt, null);
   return { id, rows, chunks, manifest };
 }
 
@@ -114,6 +203,10 @@ describe(
       );
       assert.equal(replay.created, false);
       assert.equal(replay.run.id, run.id);
+      assert.deepEqual(
+        replay.run,
+        await inTenant(() => getImportRun(principal, run.id)),
+      );
       await assert.rejects(
         inTenant(() =>
           createImportRun(principal, {
@@ -138,6 +231,9 @@ describe(
       const saved = await inTenant(() => getImportRun(principal, run.id));
       assert.equal(saved.nextChunkIndex, 1);
       assert.equal(saved.committedRows, 2);
+      assert.equal(saved.createdAt, new Date(saved.createdAt).toISOString());
+      assert.equal(saved.updatedAt, new Date(saved.updatedAt).toISOString());
+      assert.equal(saved.finalizedAt, null);
       await inTenant(() =>
         executeImportRunChunk(
           principal,
@@ -151,6 +247,24 @@ describe(
       assert.equal(ready.createdCount, 3);
       const done = await inTenant(() => finalizeImportRun(principal, run.id));
       assert.equal(done.status, "completed");
+      assert.ok(done.finalizedAt);
+      assert.equal(done.finalizedAt, new Date(done.finalizedAt).toISOString());
+      const timestamps = await pool.query(
+        "SELECT created_at::text, updated_at::text, finalized_at::text FROM import_runs WHERE id = $1",
+        [run.id],
+      );
+      assert.equal(
+        done.createdAt,
+        new Date(timestamps.rows[0].created_at).toISOString(),
+      );
+      assert.equal(
+        done.updatedAt,
+        new Date(timestamps.rows[0].updated_at).toISOString(),
+      );
+      assert.equal(
+        done.finalizedAt,
+        new Date(timestamps.rows[0].finalized_at).toISOString(),
+      );
       assert.equal(done.result?.total, 3);
       assert.deepEqual(
         done.result?.rows.map((row) => row.rowNumber),

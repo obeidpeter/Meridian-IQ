@@ -11,6 +11,7 @@ import { createDraft } from "../invoice/service.ts";
 import {
   executeOperation,
   listOperations,
+  operationOwnerTransaction,
   recoverOperation,
 } from "./service.ts";
 
@@ -115,13 +116,16 @@ test("history route mapping consumes only the scoped database run reference", as
     { id: randomUUID(), command: "invoice.import", import_run_id: runId },
     { id: randomUUID(), command: "invoice.import", import_run_id: null },
     { id: randomUUID(), command: "invoice.create", import_run_id: null },
-  ].map((row) => ({
+  ].map((row, index) => ({
     ...row,
     idempotency_key: `${spoofedId}:0`,
     status: "succeeded",
     summary: "Completed",
-    created_at: new Date("2026-09-04T00:00:00Z"),
-    updated_at: new Date("2026-09-04T00:00:00Z"),
+    created_at:
+      index === 1
+        ? new Date("2026-09-04T00:00:00.123Z")
+        : "2026-09-04 01:00:00.123456+01",
+    updated_at: "2026-09-04 00:01:00.987654+00",
     response_status: 200,
     response_body: JSON.stringify({ runId: spoofedId }),
   }));
@@ -175,6 +179,10 @@ test("history route mapping consumes only the scoped database run reference", as
         recoverOperation(principal, { id: row.id }),
       );
       assert.equal(detail.route, history.operations[index].route);
+      assert.equal(detail.startedAt, "2026-09-04T00:00:00.123Z");
+      assert.equal(detail.updatedAt, "2026-09-04T00:01:00.987Z");
+      assert.equal(history.operations[index].startedAt, detail.startedAt);
+      assert.equal(history.operations[index].updatedAt, detail.updatedAt);
     }
   } finally {
     transaction.mock.restore();
@@ -243,6 +251,14 @@ describe(
         recoverOperation(principal, { id: first.operationId }),
       );
       assert.deepEqual(recovered.result.body, JSON.parse(first.body));
+      assert.equal(
+        new Date(recovered.startedAt).toISOString(),
+        recovered.startedAt,
+      );
+      assert.equal(
+        new Date(recovered.updatedAt).toISOString(),
+        recovered.updatedAt,
+      );
     });
 
     test("concurrent duplicate reservations wait for commit and execute once", async () => {
@@ -602,13 +618,18 @@ describe(
 
     test("bounded keyset history preserves microseconds and never repeats a page", async () => {
       const owner = { ...principal, userId: `apikey:${randomUUID()}` };
+      const ids = [randomUUID(), randomUUID(), randomUUID()].sort();
       await inTenant(async () => {
-        for (let i = 0; i < 3; i++)
-          await executeOperation({
-            ...input(),
-            principal: owner,
-            execute: async () => ({ statusCode: 200, body: {} }),
-          });
+        await operationOwnerTransaction(owner, "invoice.write");
+        for (let i = 0; i < 3; i++) {
+          const timestamp = `2026-09-04T00:00:00.12345${6 + i}+00:00`;
+          await getDb().execute(sql`INSERT INTO operations
+            (id, firm_id, actor_id, client_party_id, command, idempotency_key, payload_hash,
+              status, response_status, response_body, created_at, updated_at)
+            VALUES (${ids[i]}::uuid, ${firmId}::uuid, ${owner.userId}, ${clientId}::uuid,
+              'invoice.create', ${randomUUID()}, ${"a".repeat(64)}, 'succeeded', 200, '{}',
+              ${timestamp}::timestamptz, ${timestamp}::timestamptz)`);
+        }
       }, owner);
       const seen: string[] = [];
       let cursor: string | undefined;
@@ -617,11 +638,24 @@ describe(
           () => listOperations(owner, { limit: 1, cursor }),
           owner,
         );
+        assert.equal(page.operations[0].startedAt, "2026-09-04T00:00:00.123Z");
+        assert.equal(page.operations[0].updatedAt, "2026-09-04T00:00:00.123Z");
+        if (page.nextCursor) {
+          const saved = JSON.parse(
+            Buffer.from(page.nextCursor, "base64url").toString("utf8"),
+          );
+          assert.match(
+            saved.createdAt,
+            /\.12345[678]/,
+            "cursor must retain PostgreSQL microseconds independently of response normalization",
+          );
+        }
         seen.push(...page.operations.map((row) => row.id));
         cursor = page.nextCursor ?? undefined;
       } while (cursor && seen.length < 10);
       assert.equal(seen.length, 3);
       assert.equal(new Set(seen).size, 3);
+      assert.deepEqual(seen, [...ids].reverse());
       await assert.rejects(
         inTenant(() => listOperations(principal, { cursor: "bad" })),
         { status: 400 },

@@ -5,8 +5,11 @@ import { and, eq } from "drizzle-orm";
 import {
   getDb,
   runRequestContext,
+  runHttpDatabaseBoundary,
+  finishHttpAuthentication,
   firmsTable,
   partiesTable,
+  engagementsTable,
   invoicesTable,
   submissionAttemptsTable,
   clerkClientStatementsTable,
@@ -35,6 +38,7 @@ import {
 import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { recipientRefFor } from "../messaging/recipient-ref.ts";
+import { isPurposePermitted } from "../consent/consent.ts";
 
 // Per-client monthly statement (idea #5). The digest covenant, per client and
 // per closed Lagos month: every number is SQL over the client's own invoices;
@@ -53,6 +57,7 @@ const buyer = randomUUID();
 const deliverClient = randomUUID();
 const quietClient = randomUUID();
 const noConsentClient = randomUUID();
+const foreignConsentClient = randomUUID();
 
 const MESSAGING_FLAG = "messaging_notifications";
 // Flag save/restore: the delivery tests need messaging live, so put the flag
@@ -156,17 +161,50 @@ before(async () => {
   ]);
   await db.insert(partiesTable).values([
     { id: clientA, type: "client_business", legalName: `CS Client A ${SALT}` },
-    { id: clientA2, type: "client_business", legalName: `CS Client A2 ${SALT}` },
+    {
+      id: clientA2,
+      type: "client_business",
+      legalName: `CS Client A2 ${SALT}`,
+    },
     { id: clientB, type: "client_business", legalName: `CS Client B ${SALT}` },
     { id: buyer, type: "buyer", legalName: `CS Buyer ${SALT}` },
-    { id: deliverClient, type: "client_business", legalName: `CS Deliver ${SALT}` },
+    {
+      id: deliverClient,
+      type: "client_business",
+      legalName: `CS Deliver ${SALT}`,
+    },
     { id: quietClient, type: "client_business", legalName: `CS Quiet ${SALT}` },
-    { id: noConsentClient, type: "client_business", legalName: `CS NoConsent ${SALT}` },
+    {
+      id: noConsentClient,
+      type: "client_business",
+      legalName: `CS NoConsent ${SALT}`,
+    },
+    {
+      id: foreignConsentClient,
+      type: "client_business",
+      legalName: `CS ForeignConsent ${SALT}`,
+    },
+  ]);
+  // Consent and preferences are party-keyed, but RLS exposes them only to
+  // an engaged firm. A stored statement is not itself an access grant.
+  await db.insert(engagementsTable).values([
+    ...[deliverClient, quietClient, noConsentClient].map((clientPartyId) => ({
+      firmId: firmA,
+      clientPartyId,
+      type: "retainer" as const,
+      title: `CS delivery ${SALT}`,
+    })),
+    {
+      firmId: firmB,
+      clientPartyId: foreignConsentClient,
+      type: "retainer",
+      title: `CS foreign delivery ${SALT}`,
+    },
   ]);
   // Alert fan-out is gated on layer-1 consent (CORE-03): grant it for the
   // delivery fixtures EXCEPT the party proving the no-grant path.
   await db.insert(consentRecordsTable).values(
-    [deliverClient, quietClient].map((partyId) => ({
+    [deliverClient, quietClient, foreignConsentClient].map((partyId) => ({
       partyId,
       layer: 1,
       action: "grant" as const,
@@ -182,7 +220,9 @@ before(async () => {
   const failedId = randomUUID();
 
   type Seed = typeof invoicesTable.$inferInsert;
-  const inv = (over: Partial<Seed> & Pick<Seed, "invoiceNumber" | "issueDate">): Seed => ({
+  const inv = (
+    over: Partial<Seed> & Pick<Seed, "invoiceNumber" | "issueDate">,
+  ): Seed => ({
     firmId: firmA,
     supplierPartyId: clientA,
     buyerPartyId: buyer,
@@ -192,17 +232,54 @@ before(async () => {
   await db.insert(invoicesTable).values([
     // Two invoices issued in the month (one draft, one stamped) — both count
     // toward issuedCount/issuedTotal.
-    inv({ invoiceNumber: ISSUED_1, issueDate: `${MONTH.slice(0, 7)}-03`, status: "draft", grandTotal: "100.00" }),
-    inv({ invoiceNumber: ISSUED_2, issueDate: `${MONTH.slice(0, 7)}-20`, status: "stamped", grandTotal: "200.00" }),
+    inv({
+      invoiceNumber: ISSUED_1,
+      issueDate: `${MONTH.slice(0, 7)}-03`,
+      status: "draft",
+      grandTotal: "100.00",
+    }),
+    inv({
+      invoiceNumber: ISSUED_2,
+      issueDate: `${MONTH.slice(0, 7)}-20`,
+      status: "stamped",
+      grandTotal: "200.00",
+    }),
     // Accepted by the rails during the month (attempt row below).
-    inv({ id: acceptedId, invoiceNumber: ACCEPTED, issueDate: `${MONTH.slice(0, 7)}-05`, status: "submitted", grandTotal: "500.00", vatTotal: "34.88" }),
+    inv({
+      id: acceptedId,
+      invoiceNumber: ACCEPTED,
+      issueDate: `${MONTH.slice(0, 7)}-05`,
+      status: "submitted",
+      grandTotal: "500.00",
+      vatTotal: "34.88",
+    }),
     // Rejected during the month (attempt row below); issued earlier, so it is
     // NOT in issuedCount but IS in failedCount.
-    inv({ id: failedId, invoiceNumber: FAILED, issueDate: lagosMonthStart(2), status: "failed", grandTotal: "9.00" }),
+    inv({
+      id: failedId,
+      invoiceNumber: FAILED,
+      issueDate: lagosMonthStart(2),
+      status: "failed",
+      grandTotal: "9.00",
+    }),
     // Another client of the same firm — must never leak into client A's row.
-    inv({ invoiceNumber: OTHER_CLIENT, supplierPartyId: clientA2, issueDate: `${MONTH.slice(0, 7)}-08`, status: "draft", grandTotal: "77.00" }),
+    inv({
+      invoiceNumber: OTHER_CLIENT,
+      supplierPartyId: clientA2,
+      issueDate: `${MONTH.slice(0, 7)}-08`,
+      status: "draft",
+      grandTotal: "77.00",
+    }),
     // Another firm entirely.
-    { firmId: firmB, supplierPartyId: clientB, buyerPartyId: buyer, invoiceNumber: FOREIGN, issueDate: `${MONTH.slice(0, 7)}-08`, status: "draft", grandTotal: "88.00" },
+    {
+      firmId: firmB,
+      supplierPartyId: clientB,
+      buyerPartyId: buyer,
+      invoiceNumber: FOREIGN,
+      issueDate: `${MONTH.slice(0, 7)}-08`,
+      status: "draft",
+      grandTotal: "88.00",
+    },
   ]);
 
   await db.insert(submissionAttemptsTable).values([
@@ -318,7 +395,12 @@ test("a quiet client-month never calls the model (dormant clients cost nothing)"
     calls.push(req);
     return JSON.stringify({ headline: "should not be used", bullets: [] });
   });
-  const row = await generateClientStatement(firmA, clientA2, emptyMonth, gateway);
+  const row = await generateClientStatement(
+    firmA,
+    clientA2,
+    emptyMonth,
+    gateway,
+  );
   assert.equal(row.source, "template");
   assert.equal(calls.length, 0, "no provider call for a quiet month");
 });
@@ -362,7 +444,9 @@ test("the model phrases an active month; the call is ledgered to the firm", asyn
 
   // The read path returns newest-first for the client.
   const list = await listClientStatements(firmA, clientA2);
-  assert.ok(list.some((s) => s.clientPartyId === clientA2 && s.monthStart === MONTH));
+  assert.ok(
+    list.some((s) => s.clientPartyId === clientA2 && s.monthStart === MONTH),
+  );
 });
 
 test("generate stores the template when the gateway throws (kill-switch TOCTOU)", async () => {
@@ -395,7 +479,18 @@ test("generate stores the template when the gateway throws (kill-switch TOCTOU)"
 
 test("delivery: a busy statement is offered exactly once across two passes", async () => {
   const row = await seedStatement(deliverClient, BUSY_FACTS);
-  await drainDeliveries();
+  await runHttpDatabaseBoundary(async () => {
+    finishHttpAuthentication();
+    assert.throws(getDb, /explicit database context/);
+    assert.equal(
+      await runRequestContext({ bypass: false, firmId: firmA }, () =>
+        isPurposePermitted(deliverClient, "deadline_alerts"),
+      ),
+      true,
+      "the actual sending firm can see the fixture's live consent",
+    );
+    await drainDeliveries();
+  });
 
   const claimed = await statementById(row.id);
   assert.ok(claimed.deliveredAt, "the claim marked the row delivered");
@@ -436,7 +531,11 @@ test("the sweep delivers even while the generation flag is off", async () => {
     // A quiet row (fresh month — the unique key already holds this client's
     // MONTH row from the quiet-delivery test): the claim retires it without
     // needing consent fixtures.
-    const row = await seedStatement(quietClient, QUIET_FACTS, lagosMonthStart(3));
+    const row = await seedStatement(
+      quietClient,
+      QUIET_FACTS,
+      lagosMonthStart(3),
+    );
     // One delivery pass is bounded; other suites' undelivered backlog could
     // outsize it, so sweep until our row is claimed (bounded — each pass
     // claims up to 50 rows, so a stuck loop fails the assertion instead of
@@ -463,6 +562,28 @@ test("delivery: no layer-1 consent claims the row but sends nothing (CORE-03)", 
   const claimed = await statementById(row.id);
   assert.ok(claimed.deliveredAt);
   assert.equal((await statementMessagesFor(noConsentClient)).length, 0);
+});
+
+test("delivery: another firm's live consent cannot authorize a forged statement recipient", async () => {
+  assert.equal(
+    await runRequestContext({ bypass: false, firmId: firmB }, () =>
+      isPurposePermitted(foreignConsentClient, "deadline_alerts"),
+    ),
+    true,
+  );
+  assert.equal(
+    await runRequestContext({ bypass: false, firmId: firmA }, () =>
+      isPurposePermitted(foreignConsentClient, "deadline_alerts"),
+    ),
+    false,
+  );
+  const row = await seedStatement(foreignConsentClient, BUSY_FACTS);
+  await runHttpDatabaseBoundary(async () => {
+    finishHttpAuthentication();
+    await drainDeliveries();
+  });
+  assert.ok((await statementById(row.id)).deliveredAt);
+  assert.equal((await statementMessagesFor(foreignConsentClient)).length, 0);
 });
 
 test("sweep-posture generation is walled by RLS: a mismatched firm pin cannot store a statement", async () => {

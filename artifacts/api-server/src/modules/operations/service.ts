@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db, getDb, type Database } from "@workspace/db";
 import {
+  databaseTimestampIso,
+  type DatabaseTimestamp,
+} from "../../lib/database-timestamp";
+import {
   assertCan,
   assertClientPartyScope,
   requireFirmScope,
@@ -26,8 +30,8 @@ interface StoredOperation extends Record<string, unknown> {
   response_status: number | null;
   response_body: string | null;
   summary: string | null;
-  created_at: Date;
-  updated_at: Date;
+  created_at: DatabaseTimestamp;
+  updated_at: DatabaseTimestamp;
   cursor_time: string;
   import_run_id?: string | null;
 }
@@ -251,8 +255,8 @@ function summary(row: StoredOperation): OperationSummary {
           ? `/import?run=${row.import_run_id}`
           : "/import",
     summary: row.summary ?? "Command completed.",
-    startedAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString(),
+    startedAt: databaseTimestampIso(row.created_at),
+    updatedAt: databaseTimestampIso(row.updated_at),
   };
 }
 

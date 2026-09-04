@@ -9,7 +9,8 @@ promotion gate; it is not a production alias.
 ## Release Sequence
 
 1. Record the candidate Git SHA and expected contract version.
-2. Confirm CI, dependency audit, migration rollback, restore drill, and E2E.
+2. Confirm CI, dependency audit, migration rollback, restore drill, E2E, and a
+   qualified application fallback under the compatibility rules below.
 3. Create a verified backup before any staging schema or data migration.
 4. Deploy the candidate to staging with `EXPECTED_BUILD_REVISION` set.
 5. Verify health, readiness, release-readiness checks, logs, and core journeys.
@@ -162,20 +163,52 @@ production data.
 
 ## Rollback
 
+For the contract 0.99.0 transition, baseline
+`8347dd29f3d947634a62739088e67548a8d0a946` (0.98) is not write-compatible with
+the new revision/idempotency guarantees. Its application does not enforce
+invoice content revisions or create/import idempotency, bind approvals to the
+reviewed revision, or account for outstanding Clerk reservations. Additive
+database columns and tables do not supply those missing application checks.
+Do not serve that build against upgraded production data as an ordinary rollback.
+
+No qualified 0.99-compatible fallback has yet been established for R198.
+Qualification requires a successful immutable CI artifact and staging tests
+against post-upgrade data: stale edit/approval rejection, original-key replay
+and changed-payload refusal, import checkpoints, draft tombstones, and unsettled
+Clerk spend. Record the fallback's full manifest revision and evidence before
+setting `RELEASE_ROLLBACK_REVISION`. The current gate checks SHA syntax, not this
+compatibility evidence; an arbitrary, baseline or candidate SHA must not be used
+merely to satisfy it.
+
+Without a qualified fallback, the alternative is a separately reviewed,
+externally enforced maintenance and forward-recovery policy: stop all APIs,
+workers, schedules and other writers, retain database evidence, and resume only
+after a verified corrective release. The current release gate does not accept
+that alternative. Documenting it is not approval or a bypass; a separately
+reviewed policy/gate change would be required before using it for release.
+
 Application-only rollback:
 
-1. Stop promotion and preserve logs/request IDs.
-2. Redeploy the last known-good immutable revision.
-3. Set `EXPECTED_BUILD_REVISION` to that SHA.
-4. Recheck health/readiness and replay only idempotent work.
+1. Stop promotion and affected writes; preserve logs/request IDs.
+2. Redeploy only the qualified contract-compatible immutable artifact, including
+   its matching API, web and mobile assets. Do not mix 0.98 and 0.99 writers.
+3. Keep migrations 0050-0054 applied, with all constraints, grants, RLS policies
+   and triggers intact. No ordinary down migration is part of this procedure.
+4. Verify the runtime revision against the fallback manifest, recheck readiness,
+   asset/security parity and recovery journeys, then reopen approved traffic.
+   Replay work only with its original idempotency key and payload.
 
 Database-impacting rollback:
 
-1. Disable affected writes or feature flags.
+1. Externally stop every affected writer, including workers and schedules.
 2. Prefer a forward corrective migration.
-3. Use a tested down migration only when data preservation is proven.
+3. Do not run 0050-0054 downs for ordinary recovery. The ladder proves specific
+   data-preservation behavior, not old-application write compatibility; 0051 and
+   0054 downs remove operation/import safeguards. Any exceptional database
+   recovery requires its own reviewed and tested incident plan.
 4. Restore from the pre-release backup only as an incident decision, with the
-   accepted recovery-point loss recorded.
+   accepted recovery-point loss and reconciliation of external side effects
+   recorded. A historical restore is not a contract-compatible application rollback.
 
 Never roll back append-only audit or inference ledgers by deleting evidence.
 

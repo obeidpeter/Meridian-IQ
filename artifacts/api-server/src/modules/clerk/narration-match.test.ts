@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   getDb,
+  runHttpDatabaseBoundary,
+  finishHttpAuthentication,
+  runInBypassContext,
   firmsTable,
   partiesTable,
   invoicesTable,
@@ -155,7 +158,12 @@ function proposal(
     statementLineId,
     invoiceId,
     confidence,
-    features: { amountScore: 1, referenceScore: 0, dateScore: 0.5, nameScore: 0.5 },
+    features: {
+      amountScore: 1,
+      referenceScore: 0,
+      dateScore: 0.5,
+      nameScore: 0.5,
+    },
     status: "proposed" as const,
   };
 }
@@ -228,25 +236,45 @@ before(async () => {
       `TRF FROM ALPHA DIST FOR GOODS ${SALT}`,
       "150000.00",
     ),
-    creditLine(lineAbstainId, stmtAbstainId, 1, `TRF UNCLEAR ${SALT}`, "90000.00"),
-    creditLine(lineInvalidId, stmtInvalidId, 1, `TRF MAYBE ${SALT}`, "80000.00"),
+    creditLine(
+      lineAbstainId,
+      stmtAbstainId,
+      1,
+      `TRF UNCLEAR ${SALT}`,
+      "90000.00",
+    ),
+    creditLine(
+      lineInvalidId,
+      stmtInvalidId,
+      1,
+      `TRF MAYBE ${SALT}`,
+      "80000.00",
+    ),
     {
-      ...creditLine(lineBillId, stmtBillId, 1, `TRF TO OMEGA SUPPLIES ${SALT}`, "70000.00"),
+      ...creditLine(
+        lineBillId,
+        stmtBillId,
+        1,
+        `TRF TO OMEGA SUPPLIES ${SALT}`,
+        "70000.00",
+      ),
       direction: "debit" as const,
     },
     creditLine(lineBrokeId, stmtBrokeId, 1, `TRF BROKE ${SALT}`, "50000.00"),
   ]);
-  await db.insert(matchProposalsTable).values([
-    proposal(randomUUID(), firmId, lineHighId, invHighId, "0.8500"),
-    proposal(randomUUID(), firmId, lineMidId, invMidId, "0.8400"),
-    proposal(propAId, firmId, lineHappyId, invAId, "0.6000"),
-    proposal(propBId, firmId, lineHappyId, invBId, "0.4600"),
-    proposal(propAbId, firmId, lineAbstainId, invAbId, "0.5000"),
-    proposal(propI1Id, firmId, lineInvalidId, invI1Id, "0.6000"),
-    proposal(propI2Id, firmId, lineInvalidId, invI2Id, "0.4000"),
-    proposal(propBillId, firmId, lineBillId, invBillId, "0.5000"),
-    proposal(propBrokeId, brokeFirmId, lineBrokeId, invBrokeId, "0.5000"),
-  ]);
+  await db
+    .insert(matchProposalsTable)
+    .values([
+      proposal(randomUUID(), firmId, lineHighId, invHighId, "0.8500"),
+      proposal(randomUUID(), firmId, lineMidId, invMidId, "0.8400"),
+      proposal(propAId, firmId, lineHappyId, invAId, "0.6000"),
+      proposal(propBId, firmId, lineHappyId, invBId, "0.4600"),
+      proposal(propAbId, firmId, lineAbstainId, invAbId, "0.5000"),
+      proposal(propI1Id, firmId, lineInvalidId, invI1Id, "0.6000"),
+      proposal(propI2Id, firmId, lineInvalidId, invI2Id, "0.4000"),
+      proposal(propBillId, firmId, lineBillId, invBillId, "0.5000"),
+      proposal(propBrokeId, brokeFirmId, lineBrokeId, invBrokeId, "0.5000"),
+    ]);
   // Spend the broke firm's entire default allowance (2,000,000 tokens) so its
   // sweep must refuse before any provider call. Append-only ledger — the
   // random firm id keeps runs independent.
@@ -270,7 +298,9 @@ after(async () => {
 
 async function loadSuggestion(lineId: string) {
   const [line] = await getDb()
-    .select({ narrationSuggestion: bankStatementLinesTable.narrationSuggestion })
+    .select({
+      narrationSuggestion: bankStatementLinesTable.narrationSuggestion,
+    })
     .from(bankStatementLinesTable)
     .where(eq(bankStatementLinesTable.id, lineId))
     .limit(1);
@@ -347,7 +377,11 @@ test("happy pick: positional candidate maps back to the top proposal", async () 
   assert.ok(user.includes(`Candidate 2: invoice NM-B-${SALT}`));
   assert.ok(user.includes(BUYER_NAME), "receivable candidates name the buyer");
   for (const id of [propAId, propBId, invAId, invBId, lineHappyId]) {
-    assert.equal(user.includes(id), false, `no id leaks into the prompt (${id})`);
+    assert.equal(
+      user.includes(id),
+      false,
+      `no id leaks into the prompt (${id})`,
+    );
   }
 });
 
@@ -377,7 +411,11 @@ test("abstention persists and a re-run skips the line (no second spend)", async 
     providerCalls += 1;
     return JSON.stringify({ pick: "none", cue: null });
   });
-  const first = await suggestNarrationMatches(stmtAbstainId, firmPrincipal, gateway);
+  const first = await suggestNarrationMatches(
+    stmtAbstainId,
+    firmPrincipal,
+    gateway,
+  );
   assert.equal(first.considered, 1);
   assert.equal(first.abstained, 1);
   assert.deepEqual(first.lines[0], {
@@ -392,7 +430,11 @@ test("abstention persists and a re-run skips the line (no second spend)", async 
   assert.equal(suggestion.promptVersion, NARRATION_MATCH_PROMPT_VERSION);
   assert.equal(providerCalls, 1);
 
-  const second = await suggestNarrationMatches(stmtAbstainId, firmPrincipal, gateway);
+  const second = await suggestNarrationMatches(
+    stmtAbstainId,
+    firmPrincipal,
+    gateway,
+  );
   assert.equal(second.considered, 0, "the read line is not re-swept");
   assert.deepEqual(second.lines, []);
   assert.equal(providerCalls, 1, "no second model call for the same line");
@@ -476,9 +518,27 @@ test("tenancy: cross-tenant, sibling client and missing statement are refused be
     return JSON.stringify({ pick: "none", cue: null });
   });
   const foreign: Principal = { ...firmPrincipal, firmId: otherFirmId };
+  await runHttpDatabaseBoundary(async () => {
+    finishHttpAuthentication();
+    // The principal-pinned lookup must not reveal whether a foreign ID exists.
+    for (const id of [stmtHappyId, randomUUID()]) {
+      await assert.rejects(
+        suggestNarrationMatches(id, foreign, gateway),
+        (err: Error & { code?: string; status?: number }) =>
+          err.code === "NOT_FOUND" &&
+          err.status === 404 &&
+          err.message === "Statement not found",
+      );
+    }
+  });
+  // Defense in depth remains intact when a trusted caller already owns a
+  // broader context: visibility alone never authorizes a foreign principal.
   await assert.rejects(
-    suggestNarrationMatches(stmtHappyId, foreign, gateway),
-    (err: Error & { code?: string }) => err.code === "CROSS_TENANT",
+    runInBypassContext(() =>
+      suggestNarrationMatches(stmtHappyId, foreign, gateway),
+    ),
+    (err: Error & { code?: string; status?: number }) =>
+      err.code === "CROSS_TENANT" && err.status === 403,
   );
   // SEC-03: a sibling client of the SAME firm is refused too.
   const siblingClient = makeClientPrincipal(firmId, randomUUID());
@@ -545,11 +605,13 @@ test("narrationKeptRate labels kept / overridden / abstained from decisions", as
   const propK1 = randomUUID();
   const propK2a = randomUUID();
   const propK2b = randomUUID();
-  await db.insert(invoicesTable).values([
-    receivable(invK1, firmId, `NM-K1-${SALT}`, "10000.00"),
-    receivable(invK2a, firmId, `NM-K2A-${SALT}`, "20000.00"),
-    receivable(invK2b, firmId, `NM-K2B-${SALT}`, "20100.00"),
-  ]);
+  await db
+    .insert(invoicesTable)
+    .values([
+      receivable(invK1, firmId, `NM-K1-${SALT}`, "10000.00"),
+      receivable(invK2a, firmId, `NM-K2A-${SALT}`, "20000.00"),
+      receivable(invK2b, firmId, `NM-K2B-${SALT}`, "20100.00"),
+    ]);
   await db.insert(bankStatementsTable).values({
     id: stmtKeptId,
     firmId,
@@ -595,10 +657,19 @@ test("narrationKeptRate labels kept / overridden / abstained from decisions", as
   ]);
   await db.insert(matchProposalsTable).values([
     // Kept: the human accepted the suggested proposal.
-    { ...proposal(propK1, firmId, lineK1, invK1, "0.6000"), status: "accepted" as const },
+    {
+      ...proposal(propK1, firmId, lineK1, invK1, "0.6000"),
+      status: "accepted" as const,
+    },
     // Overridden: the suggestion named K2a but the human accepted K2b.
-    { ...proposal(propK2a, firmId, lineK2, invK2a, "0.6000"), status: "superseded" as const },
-    { ...proposal(propK2b, firmId, lineK2, invK2b, "0.5000"), status: "accepted" as const },
+    {
+      ...proposal(propK2a, firmId, lineK2, invK2a, "0.6000"),
+      status: "superseded" as const,
+    },
+    {
+      ...proposal(propK2b, firmId, lineK2, invK2b, "0.5000"),
+      status: "accepted" as const,
+    },
   ]);
 
   const after = await narrationKeptRate(30);
