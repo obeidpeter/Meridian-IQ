@@ -178,13 +178,10 @@ test("an unrelated firm cannot discover or update another firm's buyer", async (
     404,
     "out-of-sphere reads hide the party's existence",
   );
-  assert.equal(((await getRes.json()) as { error: string }).error, "NOT_FOUND");
+  assert.deepEqual(await getRes.json(), { error: "Party not found" });
   const missingRes = await fetch(`${base}/parties/${randomUUID()}`);
   assert.equal(missingRes.status, 404);
-  assert.equal(
-    ((await missingRes.json()) as { error: string }).error,
-    "NOT_FOUND",
-  );
+  assert.deepEqual(await missingRes.json(), { error: "Party not found" });
   const patchRes = await fetch(`${base}/parties/${buyerPartyId}`, {
     method: "PATCH",
     headers: JSON_HEADERS,
@@ -232,7 +229,7 @@ test("client_user cannot hydrate or update a sibling client's invoice buyer", as
   const clientBase = await listen(appFor(clientUser(), partiesRouter));
   const denied = await fetch(`${clientBase}/parties/${siblingBuyerId}`);
   assert.equal(denied.status, 404);
-  assert.equal(((await denied.json()) as { error: string }).error, "NOT_FOUND");
+  assert.deepEqual(await denied.json(), { error: "Party not found" });
   const patch = await fetch(`${clientBase}/parties/${siblingBuyerId}`, {
     method: "PATCH",
     headers: JSON_HEADERS,
