@@ -224,6 +224,36 @@ const PINNED: Record<string, PinnedPolicy> = {
     qual: "5074b35259440c75",
     withCheck: "5074b35259440c75",
   },
+  "credit_backtest_runs/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
+  },
+  "credit_bank_access_events/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
+  },
+  "credit_data_room_access_events/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
+  },
+  "credit_eligibility_assessments/meridian_tenant_isolation": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "5074b35259440c75",
+    withCheck: "5074b35259440c75",
+  },
+  "credit_kyb_checks/meridian_tenant_isolation": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "5074b35259440c75",
+    withCheck: "5074b35259440c75",
+  },
   "deadline_reminder_sends/meridian_tenant_isolation": {
     cmd: "ALL",
     roles: "public",
@@ -253,6 +283,18 @@ const PINNED: Record<string, PinnedPolicy> = {
     roles: "public",
     qual: "5074b35259440c75",
     withCheck: "5074b35259440c75",
+  },
+  "eligibility_assessments/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
+  },
+  "facility_positions/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
   },
   "feature_flag_overrides/meridian_tenant_isolation": {
     cmd: "ALL",
@@ -301,6 +343,12 @@ const PINNED: Record<string, PinnedPolicy> = {
     roles: "public",
     qual: "5074b35259440c75",
     withCheck: "5074b35259440c75",
+  },
+  "financing_requests/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
   },
   "firms/meridian_tenant_isolation": {
     cmd: "ALL",
@@ -433,6 +481,12 @@ const PINNED: Record<string, PinnedPolicy> = {
     roles: "public",
     qual: "5074b35259440c75",
     withCheck: "5074b35259440c75",
+  },
+  "repayment_events/meridian_bypass_only": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
   },
   "revenue_share_statements/meridian_tenant_isolation": {
     cmd: "ALL",
