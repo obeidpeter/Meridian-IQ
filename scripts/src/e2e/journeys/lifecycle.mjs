@@ -66,7 +66,7 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
 
   // Dashboard renders its summary and the receivables card; the server and
   // bundle were built from the same contract, so the skew banner must be off.
-  await page.goto(BASE + "/app/", { waitUntil: "networkidle" });
+  await page.goto(BASE + "/app/dashboard", { waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="text-page-title"]', {
     timeout: 15000,
   });
