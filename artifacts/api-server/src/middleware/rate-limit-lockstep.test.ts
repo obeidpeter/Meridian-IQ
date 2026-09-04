@@ -114,12 +114,12 @@ const NON_MODEL_NO_CONTEXT_PATTERNS = new Set([
 
 test("every NO_CONTEXT route is rate-classed or explicitly allowlisted", () => {
   const noContext = literalEntries(
-    src("app.ts"),
+    src("middleware/request-policy.ts"),
     "NO_CONTEXT_ROUTES = new Set(",
   );
   const model = new Set(
     literalEntries(
-      src("middleware/rate-limit.ts"),
+      src("middleware/request-policy.ts"),
       "MODEL_RATE_LIMITED_ROUTES",
     ),
   );
@@ -136,11 +136,11 @@ test("every NO_CONTEXT route is rate-classed or explicitly allowlisted", () => {
 
 test("the allowlists stay honest", () => {
   const noContext = new Set(
-    literalEntries(src("app.ts"), "NO_CONTEXT_ROUTES = new Set("),
+    literalEntries(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set("),
   );
   const model = new Set(
     literalEntries(
-      src("middleware/rate-limit.ts"),
+      src("middleware/request-policy.ts"),
       "MODEL_RATE_LIMITED_ROUTES",
     ),
   );
@@ -158,11 +158,11 @@ test("the allowlists stay honest", () => {
 
 test("every parameterized NO_CONTEXT pattern has a MODEL twin or explicit non-model exemption", () => {
   const noContextPatterns = patternEntries(
-    src("app.ts"),
+    src("middleware/request-policy.ts"),
     "NO_CONTEXT_ROUTE_PATTERNS",
   );
   const modelPatterns = patternEntries(
-    src("middleware/rate-limit.ts"),
+    src("middleware/request-policy.ts"),
     "MODEL_RATE_LIMITED_ROUTE_PATTERNS",
   );
   assert.ok(noContextPatterns.length >= 1, "the pattern list parsed");
@@ -177,11 +177,11 @@ test("every parameterized NO_CONTEXT pattern has a MODEL twin or explicit non-mo
 
 test("the parameterized non-model exemptions stay honest", () => {
   const noContextPatterns = patternEntries(
-    src("app.ts"),
+    src("middleware/request-policy.ts"),
     "NO_CONTEXT_ROUTE_PATTERNS",
   );
   const modelPatterns = patternEntries(
-    src("middleware/rate-limit.ts"),
+    src("middleware/request-policy.ts"),
     "MODEL_RATE_LIMITED_ROUTE_PATTERNS",
   );
   for (const pattern of NON_MODEL_NO_CONTEXT_PATTERNS) {
@@ -253,12 +253,12 @@ const GATEWAY_MARKS = [
 test("every gateway-touching route handler is in the MODEL rate class", () => {
   const model = new Set(
     literalEntries(
-      src("middleware/rate-limit.ts"),
+      src("middleware/request-policy.ts"),
       "MODEL_RATE_LIMITED_ROUTES",
     ),
   );
   const modelPatterns = patternEntries(
-    src("middleware/rate-limit.ts"),
+    src("middleware/request-policy.ts"),
     "MODEL_RATE_LIMITED_ROUTE_PATTERNS",
   ).map((p) => ({
     method: p.method,

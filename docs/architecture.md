@@ -552,3 +552,30 @@ production rollout is additive. R4 financing tables have no route or UI and
 remain bypass-only.
 Status: implemented behind the dark `credit_readiness` and `bank_data_room`
 flags in API contract `0.98.0`; activation evidence remains operational work.
+
+### D25 - Request policy is one security boundary
+
+Context: transaction exemptions and model-capacity classifications were split
+between app and rate-limit middleware, making drift possible.
+Decision: one import-free policy catalogue owns route matching and tenant-bypass
+role classification; middleware consumes pure predicates and posture tests pin
+every exception.
+Consequences: a route cannot silently change transaction or model-rate posture
+in one middleware only. Every exemption remains an explicit reviewed decision.
+
+### D26 - Clean builds use checked-in web profiles
+
+Context: a clean root build failed unless deployment supplied five pairs of
+port/base-path variables, and recursive build pulled in Expo hosting concerns.
+Decision: each web app declares its canonical path and local port; validated
+environment overrides remain available. Mobile has a separate build command.
+Consequences: local and CI web/API builds are deterministic, while environment-
+specific mobile packaging remains explicit.
+
+### D27 - Structural debt has executable gates
+
+Context: six import cycles and unmeasured boundary drift increased change risk.
+Decision: zero cycles, browser/server separation, domain/route direction, Clerk
+provider ownership, and high-confidence secret hygiene run in the main check.
+Consequences: architectural erosion fails early; legacy size, duplication, and
+formatting debt is measured and handled through a ratcheted debt register.

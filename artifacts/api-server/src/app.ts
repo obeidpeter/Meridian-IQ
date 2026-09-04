@@ -15,192 +15,14 @@ import inboundRouter from "./routes/inbound";
 import { logger } from "./lib/logger";
 import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
 import { rateLimit } from "./middleware/rate-limit";
+import {
+  principalBypassesTenantContext,
+  requestSkipsTenantContext,
+} from "./middleware/request-policy";
 import { errorHandler } from "./middleware/error";
 import { metricsMiddleware } from "./lib/metrics";
 import { getReadiness } from "./lib/readiness";
 import { resolveRequestId } from "./lib/request-id";
-
-// Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
-// (buyer_user — scoped to a buyer Party at the route level, not to a firm) and
-// unauthenticated public endpoints (e.g. stamp verification) run with RLS
-// bypassed; firm-scoped principals are pinned to their own firm_id.
-const BYPASS_ROLES = new Set([
-  "operator",
-  "auditor",
-  "bank_user",
-  "buyer_user",
-]);
-
-// Liveness probe must not depend on the database, so it skips the per-request
-// transaction entirely. The external sweep trigger also skips it: each
-// pipeline pass opens its own bypass transactions, which must not nest inside
-// the per-request tenant transaction (nor inherit its 30-second cap).
-const NO_CONTEXT_PATHS = new Set([
-  "/api/healthz",
-  "/api/readyz",
-  "/api/metrics",
-  "/api/internal/sweep",
-]);
-
-// Method-scoped variant for the Clerk routes that call the model provider
-// in-request. NOTE: these model-calling exemptions are mirrored by the MODEL
-// rate-limit class in middleware/rate-limit.ts (MODEL_RATE_LIMITED_ROUTES /
-// _PATTERNS, which also covers the digest-posture single-completion routes
-// that stay inside the transaction) — when a route joins or leaves this list
-// because of a provider call, update that list too.
-// A multi-second completion (up to eleven for a full batch
-// intake) must not pin a pooled connection inside an open transaction or run
-// into the 30s request-transaction cap — a full batch at realistic provider
-// latencies EXCEEDS the cap and would roll back every created case after the
-// tokens were already spent. These handlers instead commit each DB stage in a
-// short firm-scoped transaction of their own (modules/clerk/scope.ts) with
-// the same RLS posture this middleware would have given them; only the
-// method+path pairs listed here are exempt, so the GET list/read routes that
-// share the paths keep the ordinary tenant transaction.
-const NO_CONTEXT_ROUTES = new Set([
-  // Public recovery/contact rails own short raw-pool throttles. Password reset
-  // issuance opens its own bypass transaction before the external relay call;
-  // the other two do no tenant data work at all.
-  "POST /api/auth/request-password-reset",
-  "POST /api/public/advisory-requests",
-  "POST /api/public/usability-events",
-  "POST /api/public/access-requests",
-  // Provider connectivity test performs no database work and must not hold a
-  // tenant transaction open while the external relay responds.
-  "POST /api/connections/test",
-  "POST /api/statement-connections/test",
-  "POST /api/clerk/cases",
-  "POST /api/clerk/cases/batch",
-  "POST /api/clerk/ask",
-  "POST /api/clerk/eval/run",
-  "POST /api/clerk/catalogue-draft",
-  // Queues only (no model call), but the batch row must be COMMITTED before
-  // the fire-and-forget processor kick can claim it on another connection.
-  "POST /api/clerk/batches",
-  "POST /api/clerk/format-draft",
-  // Two sequential provider calls on the voice path (transcription + draft
-  // inference) — far too slow to hold a pooled connection or fit the 30s cap.
-  "POST /api/clerk/draft-invoice",
-  // Narration match sweep: up to NARRATION_SWEEP_CAP (20) sequential
-  // closed-list classification calls — far past the 30s cap. The module
-  // commits each line's suggestion in its own short firm-bound transaction
-  // (clerk scope.ts), so a mid-sweep failure keeps every already-read line.
-  "POST /api/clerk/narration-suggestions",
-  "POST /api/clerk/client-import-draft",
-  // A canary is 2× a corpus pass of model calls — far past the 30s cap.
-  "POST /api/clerk/eval/canary",
-  "POST /api/clerk/eval/model-canary",
-  // The intent corpus is one classify call per fixture — 14 static plus up
-  // to 40 grown (double in canary mode) — same story (round-15 review H1);
-  // the stored run then lands on the raw pool like clerk_eval_runs does.
-  "POST /api/clerk/eval/intent",
-  // The phrasing corpus is one completion per fixture (double in canary
-  // mode) — the intent eval's posture exactly.
-  "POST /api/clerk/eval/phrasing",
-  // The retrieval eval is ONE embedding call, but still an in-request
-  // provider round-trip; its run row commits under its own bypass scope
-  // (retrieval-eval.ts), so it must not nest inside the request
-  // transaction — the eval-lane posture.
-  "POST /api/clerk/eval/retrieval",
-  // Inbound webhooks (routes/inbound.ts) commit a deduplicated outbox row
-  // before returning 202. The request has no tenant principal; the worker
-  // resolves the sender and processes the payload later in its own bypass
-  // transaction. Keeping these routes outside tenantContext prevents a
-  // request transaction from being inherited by worker-owned processing.
-  "POST /api/inbound/email",
-  "POST /api/inbound/whatsapp",
-  // Statement import: the PDF branch makes one bounded model call
-  // (scan-intake.ts) that must not pin a pooled connection under the 30s
-  // request-transaction cap. The handler re-establishes atomicity for the
-  // writes itself: ingestStatement runs inside its own short bypass
-  // transaction (routes/statements.ts), so statement + lines + reconcile
-  // outbox still commit all-or-nothing.
-  "POST /api/statements",
-  // No model call, but up to 50 decideCase items each append audit rows —
-  // and appendAudit serializes on a GLOBAL advisory xact lock. Inside one
-  // request transaction the first item's audit lock would be held until the
-  // whole batch commits (a platform-wide appendAudit convoy, plus a deadlock
-  // window against the row-lock→audit-lock order of reject/claim). Instead
-  // each item commits in its own short bypass transaction (bulk-approve.ts),
-  // holding the audit lock per item only.
-  "POST /api/clerk/cases/bulk-approve",
-  // Payment confirmation webhook (routes/billing-payments.ts): a machine
-  // rail like the inbound webhooks — no model call, but the settle path
-  // appends an audit row, and appendAudit serializes on the GLOBAL advisory
-  // xact lock (the bulk-approve rationale): inside the buffered request
-  // transaction that lock would be held until the response settled. The
-  // module instead commits CAS + audit in its own short bypass transaction
-  // (modules/billing/payments.ts confirmPaymentIntent), so the 202 goes out
-  // only after the settle is durably committed.
-  "POST /api/billing/payments/confirm",
-  // Inbound collection webhook (routes/collections.ts): the payment
-  // confirmation's posture exactly — the settle path appends audit rows
-  // under the GLOBAL advisory xact lock, so the module commits event + CAS
-  // + audit in its own short bypass transaction
-  // (modules/collections/service.ts recordInboundCollection) and the 202
-  // goes out only after the settle is durably committed.
-  "POST /api/collections/inbound",
-  // Account-optional Invoice Room writes own short bypass/tenant scopes.
-  // Provider and relay calls therefore never hold the ambient request
-  // transaction, and OTP/KDF work cannot pin a pooled connection.
-  "POST /api/public/invoice-room/exchange",
-  "POST /api/public/invoice-room/otp",
-  "POST /api/public/invoice-room/verify",
-  "POST /api/public/invoice-room/respond",
-  "POST /api/public/invoice-room/payment-reports",
-  "POST /api/public/invoice-room/payment-link",
-  "POST /api/public/invoice-room/claim",
-  "POST /api/invoice-room/payments/confirm",
-  // Provider-backed creation uses three stages: a short tenant-scoped
-  // reservation transaction, the external call, then a short finalization
-  // transaction. Keeping these routes out of the ambient request transaction
-  // makes the idempotency reservation durable before any provider side effect
-  // and avoids holding a pooled connection during network I/O.
-  "POST /api/billing/payments",
-  "POST /api/collection-accounts",
-  // Proposed-action execution (round 22): a draft_chasers batch makes up to
-  // ten sequential model calls (far past the 30s cap), and a submit batch's
-  // per-invoice audits would otherwise hold the GLOBAL audit advisory lock
-  // batch-wide (the bulk-approve rationale). The module commits every stage
-  // in its own short FIRM-BOUND context (modules/clerk/actions.ts) — not
-  // bypass: callers are firm principals and the per-stage transactions
-  // carry their firm GUC, so RLS posture matches the ordinary request.
-  "POST /api/clerk/action-proposals/execute",
-  // Plan runs (round 32): creation manages its own short scopes and kicks
-  // background processing — the batches posture.
-  "POST /api/clerk/plan-runs",
-  // Bulk submit (posture round): the LAST batch surface still inside the
-  // request transaction. No model call — but each row's submit appends
-  // audit rows under the GLOBAL audit advisory lock (the bulk-approve
-  // rationale: one request transaction would hold it batch-wide, a
-  // platform-wide appendAudit convoy plus the documented row-lock →
-  // audit-lock deadlock window against concurrent single submits). The
-  // module commits every stage in its own short CALLER-POSTURE context
-  // (modules/invoice/bulk-submit.ts): firm principals get their firm GUC,
-  // cross-tenant staff get bypass — RLS exactly as their ordinary request.
-  "POST /api/invoices/bulk-submit",
-]);
-
-// Parameterized-path variant of NO_CONTEXT_ROUTES: the Set above can only
-// match literal paths, so routes with an :id segment that must skip the
-// request transaction are listed here as method + pattern instead. Keep this
-// list short — every entry gives up the ambient-transaction atomicity and
-// must manage its own commits (clerk scope.ts / raw-pool audit).
-const NO_CONTEXT_ROUTE_PATTERNS: ReadonlyArray<{
-  method: string;
-  pattern: RegExp;
-}> = [
-  // Case retry re-runs a FULL extraction on the stored source — up to a
-  // 4-page vision call — exactly the multi-second provider work the capture
-  // routes above are exempted for; its writes commit via inClerkScope and
-  // the audit row lands on the raw pool.
-  { method: "POST", pattern: /^\/api\/clerk\/cases\/[^/]+\/retry$/ },
-  { method: "POST", pattern: /^\/api\/invoices\/[^/]+\/invoice-rooms$/ },
-  {
-    method: "POST",
-    pattern: /^\/api\/invoice-rooms\/[^/]+\/(?:replace|revoke)$/,
-  },
-];
 
 // Hard cap on how long a request may hold its transaction open. A handler that
 // never responds (and whose socket never closes) would otherwise pin a pooled
@@ -229,19 +51,12 @@ const REQUEST_TX_TIMEOUT_MS = 30_000;
 class RequestRollback extends Error {}
 
 function tenantContext(req: Request, res: Response, next: NextFunction): void {
-  if (
-    NO_CONTEXT_PATHS.has(req.path) ||
-    NO_CONTEXT_ROUTES.has(`${req.method} ${req.path}`) ||
-    NO_CONTEXT_ROUTE_PATTERNS.some(
-      (r) => r.method === req.method && r.pattern.test(req.path),
-    )
-  ) {
+  if (requestSkipsTenantContext(req.method, req.path)) {
     next();
     return;
   }
   const principal = req.principal;
-  const bypass =
-    !principal || BYPASS_ROLES.has(principal.role) || !principal.firmId;
+  const bypass = principalBypassesTenantContext(principal);
   const firmId = bypass ? null : principal!.firmId;
 
   type AnyFn = (...args: unknown[]) => unknown;
@@ -553,8 +368,8 @@ app.use(rateLimit);
 app.use(tenantContext);
 // Machine webhook rail (not in the OpenAPI contract): mounted directly here
 // rather than through routes/index.ts so the contract-facing router stays
-// exactly the generated surface. Shares the /api prefix so the PUBLIC_PATHS /
-// NO_CONTEXT_ROUTES entries above match on req.path.
+// exactly the generated surface. Shares the /api prefix so PUBLIC_PATHS and
+// middleware/request-policy.ts entries match on req.path.
 app.use("/api", inboundRouter);
 app.use("/api", router);
 

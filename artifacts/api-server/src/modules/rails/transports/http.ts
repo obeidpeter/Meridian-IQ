@@ -1,7 +1,7 @@
 import type { Rail } from "@workspace/db";
 import type { CanonicalInvoice } from "../../invoice/canonical";
 import { logger } from "../../../lib/logger";
-import type { RailTransport, StampResult } from "../adapter";
+import type { RailTransport, StampResult } from "../contracts";
 import { RailLookupError, sanitiseRejectionCode, type StampFields } from "../faults";
 
 // The HTTP rail transport (R95): the first RailTransport that leaves the

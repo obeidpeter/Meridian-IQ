@@ -3,7 +3,7 @@ import { runRequestContext } from "@workspace/db";
 // Short, explicit DB scope for the model-calling Clerk paths.
 //
 // The capture/batch/ask routes run OUTSIDE the per-request transaction
-// (app.ts NO_CONTEXT_ROUTES): a multi-second provider call — up to eleven of
+// (middleware/request-policy.ts NO_CONTEXT_ROUTES): a multi-second provider call — up to eleven of
 // them for a full batch — must never pin a pooled connection or run into the
 // 30s request-transaction cap. Each DB stage instead commits in its own short
 // transaction opened here, with the SAME tenancy posture tenantContext would

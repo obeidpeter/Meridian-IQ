@@ -12,7 +12,7 @@ import { logger } from "../../lib/logger";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { getClerkGateway } from "./provider";
 import { fenceUntrusted, CANONICAL_FIELDS, CRITICAL_FIELDS } from "./prompts";
-import { fieldMatches } from "./eval";
+import { fieldMatches } from "./eval-scoring";
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures";
 
 // Adversarial eval growth (Clerk idea #9). The static corpus carries two

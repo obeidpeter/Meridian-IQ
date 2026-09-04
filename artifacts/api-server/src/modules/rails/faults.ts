@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import type { Rail } from "@workspace/db";
 import type { CanonicalInvoice } from "../invoice/canonical";
 import { canonicalJson } from "../../lib/canonical-json";
-import type { StampResult } from "./adapter";
+import type { StampResult } from "./contracts";
 
 // The rail fault vocabulary (R95). ONE table that the HTTP transport, the
 // in-process scripted fake and the conformance fake-rail server all agree

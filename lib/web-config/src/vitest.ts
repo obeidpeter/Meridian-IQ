@@ -3,8 +3,7 @@ import path from "path";
 
 /**
  * The standalone unit-test config shared by the web apps. It exists so vitest
- * does NOT auto-load vite.config.ts, which throws at eval time when PORT /
- * BASE_PATH are unset (the dev/build contract). The unit tests are pure and
+ * does NOT auto-load the plugin-heavy application Vite config. The unit tests are pure and
  * default to the node environment — component tests opt into jsdom per file
  * with a `// @vitest-environment jsdom` docblock. The `@` alias mirrors
  * vite.config.ts / tsconfig for any test that imports via the alias.

@@ -248,7 +248,7 @@ export async function askClerk(
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
-  // The route runs outside the request transaction (app.ts NO_CONTEXT_ROUTES)
+  // The route runs outside the request transaction (middleware/request-policy.ts NO_CONTEXT_ROUTES)
   // so the classification model call never pins a pooled connection; each DB
   // stage commits in its own short firm scope (see scope.ts). Committing the
   // question case before inferring also lets the gateway's raw-pool ledger

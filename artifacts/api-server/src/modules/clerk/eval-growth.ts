@@ -1,41 +1,22 @@
 import { and, desc, eq, inArray, isNull, isNotNull } from "drizzle-orm";
 import {
   getDb,
-  runInBypassContext,
   clerkCasesTable,
   clerkEvalFixturesTable,
-  clerkEvalRunsTable,
   invoicesTable,
   partiesTable,
   type ClerkCase,
 } from "@workspace/db";
-import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
-import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
-import { logger } from "../../lib/logger";
-import { getClerkGateway } from "./provider";
-import { unattendedRunDueToday } from "./watch-shared";
-import { runEvalCorpus } from "./eval";
 import type { EvalFixture } from "./eval-fixtures";
 
 // The learning loop (Clerk expansion B). Every approval where the operator
 // corrected the model's proposal already leaves labeled ground truth on the
 // case (corrections: extracted vs final, per field). This module turns that
 // exhaust into eval fixtures — the document text plus the human-approved
-// values — and, optionally, runs the eval corpus on a nightly cadence so
-// prompt/model changes are measured against real corrected documents, not
-// only the hand-written static corpus.
-//
-// Two independent pieces:
-//   1. Fixture growth: free (no model calls), runs on the shared sweep loop.
-//   2. Auto-eval: spends real tokens, so it is OPT-IN behind the
-//      clerk_auto_eval feature flag (off/missing = fail closed) and runs at
-//      most once per UTC day, attributed as startedBy = null.
+// values. `eval-sweep.ts` owns scheduling and the optional token-spending
+// nightly run, keeping this corpus repository independent of the eval runner.
 
-const AUTO_EVAL_FLAG_KEY = "clerk_auto_eval";
 const GROWTH_BATCH = 20;
-// Advisory lock so concurrent instances can't grow/run twice in one pass.
-const EVAL_GROWTH_LOCK_ID = 731_842;
 
 // Notice corrections record the operator's approved OBLIGATION values, and
 // for these two fields those are contract catalogue KEYS ("firs", "vat"),
@@ -183,40 +164,3 @@ export async function growEvalFixtures(
   }
   return grown;
 }
-
-registerSweep("clerk.eval_growth", async function sweepEvalGrowth(): Promise<void> {
-  // Fixture growth (free, DB-only) runs in a SHORT bypass transaction; the
-  // nightly auto-eval — one model call per fixture, potentially minutes of
-  // provider time — runs OUTSIDE it. Holding the transaction (and its
-  // advisory lock, and a pooled connection) across the whole eval run made a
-  // slow provider stall the shared sweep loop and every time-sensitive sweep
-  // behind it. The lock still de-duplicates growth within a pass; the eval's
-  // once-per-day guard is re-checked here and race losers merely record a
-  // second run row (startedBy null), which the due-today check then ignores
-  // for the rest of the day.
-  const runEval = await runInBypassContext(async () => {
-    const locked = await tryAdvisoryXactLock(EVAL_GROWTH_LOCK_ID);
-    if (!locked) return false;
-
-    const grown = await growEvalFixtures();
-    if (grown > 0) {
-      logger.info({ grown }, "clerk learning loop: eval fixtures grown");
-    }
-
-    // Auto-eval spends tokens: opt-in flag, at most once per UTC day.
-    if (!(await isFeatureEnabled(AUTO_EVAL_FLAG_KEY))) return false;
-    return unattendedRunDueToday(clerkEvalRunsTable);
-  });
-  if (!runEval) return;
-
-  const gateway = await getClerkGateway();
-  const run = await runEvalCorpus(null, gateway);
-  logger.info(
-    {
-      fixtureCount: run.fixtureCount,
-      fieldsCorrect: run.fieldsCorrect,
-      fieldsCompared: run.fieldsCompared,
-    },
-    "clerk learning loop: nightly eval run complete",
-  );
-});

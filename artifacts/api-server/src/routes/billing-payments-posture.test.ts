@@ -47,7 +47,7 @@ test("the confirmation webhook is public, and ONLY because it fails closed", () 
 });
 
 test("the webhook skips the request transaction; the module owns its commit", () => {
-  const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const set = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/billing/payments/confirm"'),
     "the settle must not ride the buffered request transaction — the module commits durably before the 202, and the global audit lock is held per-settle only",

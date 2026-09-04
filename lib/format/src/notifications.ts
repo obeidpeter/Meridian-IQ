@@ -9,7 +9,12 @@
 // Type-only, same as index.ts: erased at compile time.
 import type { NotificationFeed } from "@workspace/api-zod";
 
-import { formatDate, humanize, pillClasses, type BadgeTone } from "./index";
+import {
+  formatDate,
+  humanize,
+  pillClasses,
+  type BadgeTone,
+} from "./primitives";
 
 /** Rows requested for the bell's popover (the server caps limit at 100). */
 export const NOTIFICATION_FEED_LIMIT = 20;

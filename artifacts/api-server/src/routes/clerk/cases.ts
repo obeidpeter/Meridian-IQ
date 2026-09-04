@@ -231,7 +231,7 @@ router.post("/clerk/cases/:id/release", async (req, res): Promise<void> => {
 
 // Retry re-runs a FULL extraction (up to a 4-page vision call) on the stored
 // source, so like first-time capture it runs outside the request transaction
-// (app.ts NO_CONTEXT_ROUTE_PATTERNS — the parameterized-path variant of
+// (middleware/request-policy.ts NO_CONTEXT_ROUTE_PATTERNS — the parameterized-path variant of
 // NO_CONTEXT_ROUTES): the module's writes commit in their own short
 // transactions and the audit row on the raw pool.
 router.post("/clerk/cases/:id/retry", async (req, res): Promise<void> => {

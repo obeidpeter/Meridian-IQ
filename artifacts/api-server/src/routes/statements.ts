@@ -75,7 +75,7 @@ const MAX_STATEMENT_CSV_CHARS = 4_000_000;
 
 const router: IRouter = Router();
 
-// NOTE (app.ts NO_CONTEXT_ROUTES): POST /api/statements runs OUTSIDE the
+// NOTE (middleware/request-policy.ts NO_CONTEXT_ROUTES): POST /api/statements runs OUTSIDE the
 // per-request transaction — the PDF branch's model call is multi-second work
 // that must not pin a pooled connection under the 30s request-tx cap. The
 // gates below (requireFlag, assertCan, assertPartyAccess, the consent/budget

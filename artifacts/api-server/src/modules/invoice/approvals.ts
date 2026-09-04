@@ -9,11 +9,7 @@ import {
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
 import { isUuid } from "../../lib/uuid";
-// Circular with service.ts by design (service's submit guard calls back into
-// assertSubmitApproved below): safe because both sides export hoisted function
-// declarations and only reference each other inside call bodies, never at
-// module-evaluation time.
-import { assertReceivableOriented } from "./service";
+import { assertReceivableOriented } from "./orientation";
 import { RECEIVABLE_ORIENTATION } from "./receivables";
 import { invoiceOrientation } from "./payables";
 

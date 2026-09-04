@@ -27,7 +27,7 @@ answer; dark rails fail closed. Paths in this document are relative to
   accounting survives any request rollback; consequence: a `caseId` passed to
   `infer()` must reference an already COMMITTED case row.
 - The model-calling routes (capture, batch, ask, eval-run) run OUTSIDE the
-  per-request transaction (`app.ts NO_CONTEXT_ROUTES`) — each DB stage
+  per-request transaction (`middleware/request-policy.ts NO_CONTEXT_ROUTES`) — each DB stage
   commits in its own short firm-scoped transaction (`modules/clerk/scope.ts`,
   same RLS posture) so a multi-second provider call never pins a pooled
   connection or hits the 30s transaction cap.

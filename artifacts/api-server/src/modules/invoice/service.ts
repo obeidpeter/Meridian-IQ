@@ -29,30 +29,11 @@ import {
   type LineInput,
 } from "./lines";
 import { computeLinesWithTotals, type ComputedLine } from "./line-totals";
-import { invoiceOrientation } from "./payables";
 import { assertSubmitApproved, revokeLiveApprovals } from "./approvals";
+import { assertReceivableOriented } from "./orientation";
 
 export { computeLineFinancials, type LineInput };
-
-// Payables guard (contract 0.44.0): only a RECEIVABLE-oriented invoice — one
-// whose supplier is a client the firm engages — may enter the stamping
-// lifecycle. A captured supplier BILL (the client is the buyer) must stay a
-// draft forever; without this guard a firm principal could submit a vendor's
-// document to the rails under the client's name, and only the vendor's
-// missing consent would (accidentally) block it. Shared by validateInvoice,
-// submitInvoice and the credit-note route (routes/invoices/lifecycle.ts).
-const NOT_SUBMITTABLE_MESSAGE =
-  "Only your own issued invoices can be submitted for stamping — this document's supplier is not a client of your practice.";
-
-export async function assertReceivableOriented(invoice: {
-  firmId: string;
-  supplierPartyId: string;
-  buyerPartyId: string;
-}): Promise<void> {
-  if ((await invoiceOrientation(invoice)) !== "receivable") {
-    throw new DomainError("NOT_SUBMITTABLE", NOT_SUBMITTABLE_MESSAGE, 409);
-  }
-}
+export { assertReceivableOriented } from "./orientation";
 
 export interface CreateInvoiceInput {
   firmId: string;

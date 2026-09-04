@@ -9,7 +9,12 @@
     "ops:backup": "node src/ops/backup.mjs",
     "ops:sweep": "node src/ops/sweep-ping.mjs",
     "ops:restore-drill": "node src/ops/restore-drill.mjs",
-    "ops:release": "node src/ops/release.mjs"
+    "ops:release": "node src/ops/release.mjs",
+    "quality:architecture": "node src/quality/architecture.mjs",
+    "quality:secrets": "node src/quality/secrets.mjs",
+    "quality:metrics": "node src/quality/maintainability.mjs",
+    "quality:complexity": "node src/quality/complexity.mjs",
+    "quality:docs": "node src/quality/docs.mjs"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

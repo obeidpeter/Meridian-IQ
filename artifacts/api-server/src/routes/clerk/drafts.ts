@@ -77,7 +77,7 @@ router.post(
 // client_user holds only reconciliation.read so it can never trigger spend),
 // the firm budget gate BEFORE any provider touch, and getClerkGateway() so a
 // broken provider or dark kill switch is an error, never a silent no-op.
-// Runs OUTSIDE the request transaction (app.ts NO_CONTEXT_ROUTES, mirrored
+// Runs OUTSIDE the request transaction (middleware/request-policy.ts NO_CONTEXT_ROUTES, mirrored
 // in the MODEL rate class): up to 20 sequential model calls must not pin a
 // pooled connection under the 30s cap — the module commits each line's write
 // in its own short firm-bound transaction (clerk scope.ts).
