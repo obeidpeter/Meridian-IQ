@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.96.0
+ * OpenAPI spec version: 0.97.0
  */
 import {
   useMutation,
@@ -252,6 +252,7 @@ import type {
   GrantPlanPolicyInput,
   HealthAlert,
   HealthStatus,
+  IdempotentRoomAction,
   IdentifierCheck,
   IntegrationReadiness,
   IntegrationReliabilityWorkspace,
@@ -269,6 +270,19 @@ import type {
   InvoiceImportInput,
   InvoiceImportResult,
   InvoiceInput,
+  InvoiceRoomClaimInput,
+  InvoiceRoomClaimResult,
+  InvoiceRoomCreateInput,
+  InvoiceRoomCreated,
+  InvoiceRoomDetail,
+  InvoiceRoomExchangeInput,
+  InvoiceRoomList,
+  InvoiceRoomOtpDispatch,
+  InvoiceRoomOtpInput,
+  InvoiceRoomPaymentReportInput,
+  InvoiceRoomPaymentRequest,
+  InvoiceRoomResponseInput,
+  InvoiceRoomVerifyInput,
   InvoiceUpdateInput,
   LineItemSuggestion,
   ListAdvisoryBriefsParams,
@@ -382,6 +396,7 @@ import type {
   ResolveCaseInput,
   RetrievalEvalRun,
   RevenueShareStatement,
+  RevokeInvoiceRoom200,
   RunAssessmentInput,
   RunIntentEvalInput,
   RunModelCanaryInput,
@@ -7853,6 +7868,948 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getCreateSettlementMutationOptions(options));
     }
+
+export const getListInvoiceRoomsUrl = () => {
+
+
+
+
+  return `/api/invoice-rooms`
+}
+
+/**
+ * @summary List secure buyer rooms for invoices in the caller's supplier scope
+ */
+export const listInvoiceRooms = async ( options?: RequestInit): Promise<InvoiceRoomList> => {
+
+  return customFetch<InvoiceRoomList>(getListInvoiceRoomsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoiceRoomsQueryKey = () => {
+    return [
+    `/api/invoice-rooms`
+    ] as const;
+    }
+
+
+export const getListInvoiceRoomsQueryOptions = <TData = Awaited<ReturnType<typeof listInvoiceRooms>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoiceRoomsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoiceRooms>>> = ({ signal }) => listInvoiceRooms({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoiceRooms>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoiceRoomsQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoiceRooms>>>
+export type ListInvoiceRoomsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List secure buyer rooms for invoices in the caller's supplier scope
+ */
+
+export function useListInvoiceRooms<TData = Awaited<ReturnType<typeof listInvoiceRooms>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceRooms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoiceRoomsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListInvoiceRoomsForInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/invoice-rooms`
+}
+
+export const listInvoiceRoomsForInvoice = async (id: string, options?: RequestInit): Promise<InvoiceRoomList> => {
+
+  return customFetch<InvoiceRoomList>(getListInvoiceRoomsForInvoiceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoiceRoomsForInvoiceQueryKey = (id: string,) => {
+    return [
+    `/api/invoices/${id}/invoice-rooms`
+    ] as const;
+    }
+
+
+export const getListInvoiceRoomsForInvoiceQueryOptions = <TData = Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoiceRoomsForInvoiceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>> = ({ signal }) => listInvoiceRoomsForInvoice(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoiceRoomsForInvoiceQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>>
+export type ListInvoiceRoomsForInvoiceQueryError = ErrorType<unknown>
+
+
+
+export function useListInvoiceRoomsForInvoice<TData = Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceRoomsForInvoice>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoiceRoomsForInvoiceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateInvoiceRoomUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/invoice-rooms`
+}
+
+export const createInvoiceRoom = async (id: string,
+    invoiceRoomCreateInput: InvoiceRoomCreateInput, options?: RequestInit): Promise<InvoiceRoomCreated> => {
+
+  return customFetch<InvoiceRoomCreated>(getCreateInvoiceRoomUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomCreateInput)
+  }
+);}
+
+
+
+
+
+export const getCreateInvoiceRoomMutationOptions = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvoiceRoom>>, TError,{id: string;data: BodyType<InvoiceRoomCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createInvoiceRoom>>, TError,{id: string;data: BodyType<InvoiceRoomCreateInput>}, TContext> => {
+
+const mutationKey = ['createInvoiceRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInvoiceRoom>>, {id: string;data: BodyType<InvoiceRoomCreateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createInvoiceRoom(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateInvoiceRoomMutationResult = NonNullable<Awaited<ReturnType<typeof createInvoiceRoom>>>
+    export type CreateInvoiceRoomMutationBody = BodyType<InvoiceRoomCreateInput>
+    export type CreateInvoiceRoomMutationError = ErrorType<ConflictResponse>
+
+    export const useCreateInvoiceRoom = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvoiceRoom>>, TError,{id: string;data: BodyType<InvoiceRoomCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createInvoiceRoom>>,
+        TError,
+        {id: string;data: BodyType<InvoiceRoomCreateInput>},
+        TContext
+      > => {
+      return useMutation(getCreateInvoiceRoomMutationOptions(options));
+    }
+
+export const getRevokeInvoiceRoomUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoice-rooms/${id}/revoke`
+}
+
+export const revokeInvoiceRoom = async (id: string, options?: RequestInit): Promise<RevokeInvoiceRoom200> => {
+
+  return customFetch<RevokeInvoiceRoom200>(getRevokeInvoiceRoomUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeInvoiceRoomMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeInvoiceRoom>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeInvoiceRoom>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['revokeInvoiceRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeInvoiceRoom>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokeInvoiceRoom(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeInvoiceRoomMutationResult = NonNullable<Awaited<ReturnType<typeof revokeInvoiceRoom>>>
+
+    export type RevokeInvoiceRoomMutationError = ErrorType<unknown>
+
+    export const useRevokeInvoiceRoom = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeInvoiceRoom>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeInvoiceRoom>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRevokeInvoiceRoomMutationOptions(options));
+    }
+
+export const getReplaceInvoiceRoomUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoice-rooms/${id}/replace`
+}
+
+export const replaceInvoiceRoom = async (id: string,
+    invoiceRoomCreateInput: InvoiceRoomCreateInput, options?: RequestInit): Promise<InvoiceRoomCreated> => {
+
+  return customFetch<InvoiceRoomCreated>(getReplaceInvoiceRoomUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomCreateInput)
+  }
+);}
+
+
+
+
+
+export const getReplaceInvoiceRoomMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceInvoiceRoom>>, TError,{id: string;data: BodyType<InvoiceRoomCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof replaceInvoiceRoom>>, TError,{id: string;data: BodyType<InvoiceRoomCreateInput>}, TContext> => {
+
+const mutationKey = ['replaceInvoiceRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof replaceInvoiceRoom>>, {id: string;data: BodyType<InvoiceRoomCreateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  replaceInvoiceRoom(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReplaceInvoiceRoomMutationResult = NonNullable<Awaited<ReturnType<typeof replaceInvoiceRoom>>>
+    export type ReplaceInvoiceRoomMutationBody = BodyType<InvoiceRoomCreateInput>
+    export type ReplaceInvoiceRoomMutationError = ErrorType<unknown>
+
+    export const useReplaceInvoiceRoom = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceInvoiceRoom>>, TError,{id: string;data: BodyType<InvoiceRoomCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof replaceInvoiceRoom>>,
+        TError,
+        {id: string;data: BodyType<InvoiceRoomCreateInput>},
+        TContext
+      > => {
+      return useMutation(getReplaceInvoiceRoomMutationOptions(options));
+    }
+
+export const getExchangeInvoiceRoomTokenUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/exchange`
+}
+
+export const exchangeInvoiceRoomToken = async (invoiceRoomExchangeInput: InvoiceRoomExchangeInput, options?: RequestInit): Promise<InvoiceRoomDetail> => {
+
+  return customFetch<InvoiceRoomDetail>(getExchangeInvoiceRoomTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomExchangeInput)
+  }
+);}
+
+
+
+
+
+export const getExchangeInvoiceRoomTokenMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeInvoiceRoomToken>>, TError,{data: BodyType<InvoiceRoomExchangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exchangeInvoiceRoomToken>>, TError,{data: BodyType<InvoiceRoomExchangeInput>}, TContext> => {
+
+const mutationKey = ['exchangeInvoiceRoomToken'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exchangeInvoiceRoomToken>>, {data: BodyType<InvoiceRoomExchangeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exchangeInvoiceRoomToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExchangeInvoiceRoomTokenMutationResult = NonNullable<Awaited<ReturnType<typeof exchangeInvoiceRoomToken>>>
+    export type ExchangeInvoiceRoomTokenMutationBody = BodyType<InvoiceRoomExchangeInput>
+    export type ExchangeInvoiceRoomTokenMutationError = ErrorType<Error>
+
+    export const useExchangeInvoiceRoomToken = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeInvoiceRoomToken>>, TError,{data: BodyType<InvoiceRoomExchangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exchangeInvoiceRoomToken>>,
+        TError,
+        {data: BodyType<InvoiceRoomExchangeInput>},
+        TContext
+      > => {
+      return useMutation(getExchangeInvoiceRoomTokenMutationOptions(options));
+    }
+
+export const getGetPublicInvoiceRoomUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room`
+}
+
+export const getPublicInvoiceRoom = async ( options?: RequestInit): Promise<InvoiceRoomDetail> => {
+
+  return customFetch<InvoiceRoomDetail>(getGetPublicInvoiceRoomUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicInvoiceRoomQueryKey = () => {
+    return [
+    `/api/public/invoice-room`
+    ] as const;
+    }
+
+
+export const getGetPublicInvoiceRoomQueryOptions = <TData = Awaited<ReturnType<typeof getPublicInvoiceRoom>>, TError = ErrorType<UnauthorizedResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicInvoiceRoom>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicInvoiceRoomQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicInvoiceRoom>>> = ({ signal }) => getPublicInvoiceRoom({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicInvoiceRoom>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicInvoiceRoomQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicInvoiceRoom>>>
+export type GetPublicInvoiceRoomQueryError = ErrorType<UnauthorizedResponse>
+
+
+
+export function useGetPublicInvoiceRoom<TData = Awaited<ReturnType<typeof getPublicInvoiceRoom>>, TError = ErrorType<UnauthorizedResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicInvoiceRoom>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicInvoiceRoomQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequestInvoiceRoomOtpUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/otp`
+}
+
+export const requestInvoiceRoomOtp = async (invoiceRoomOtpInput: InvoiceRoomOtpInput, options?: RequestInit): Promise<InvoiceRoomOtpDispatch> => {
+
+  return customFetch<InvoiceRoomOtpDispatch>(getRequestInvoiceRoomOtpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomOtpInput)
+  }
+);}
+
+
+
+
+
+export const getRequestInvoiceRoomOtpMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestInvoiceRoomOtp>>, TError,{data: BodyType<InvoiceRoomOtpInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestInvoiceRoomOtp>>, TError,{data: BodyType<InvoiceRoomOtpInput>}, TContext> => {
+
+const mutationKey = ['requestInvoiceRoomOtp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestInvoiceRoomOtp>>, {data: BodyType<InvoiceRoomOtpInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestInvoiceRoomOtp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestInvoiceRoomOtpMutationResult = NonNullable<Awaited<ReturnType<typeof requestInvoiceRoomOtp>>>
+    export type RequestInvoiceRoomOtpMutationBody = BodyType<InvoiceRoomOtpInput>
+    export type RequestInvoiceRoomOtpMutationError = ErrorType<unknown>
+
+    export const useRequestInvoiceRoomOtp = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestInvoiceRoomOtp>>, TError,{data: BodyType<InvoiceRoomOtpInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestInvoiceRoomOtp>>,
+        TError,
+        {data: BodyType<InvoiceRoomOtpInput>},
+        TContext
+      > => {
+      return useMutation(getRequestInvoiceRoomOtpMutationOptions(options));
+    }
+
+export const getVerifyInvoiceRoomOtpUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/verify`
+}
+
+export const verifyInvoiceRoomOtp = async (invoiceRoomVerifyInput: InvoiceRoomVerifyInput, options?: RequestInit): Promise<InvoiceRoomDetail> => {
+
+  return customFetch<InvoiceRoomDetail>(getVerifyInvoiceRoomOtpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomVerifyInput)
+  }
+);}
+
+
+
+
+
+export const getVerifyInvoiceRoomOtpMutationOptions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyInvoiceRoomOtp>>, TError,{data: BodyType<InvoiceRoomVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyInvoiceRoomOtp>>, TError,{data: BodyType<InvoiceRoomVerifyInput>}, TContext> => {
+
+const mutationKey = ['verifyInvoiceRoomOtp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyInvoiceRoomOtp>>, {data: BodyType<InvoiceRoomVerifyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyInvoiceRoomOtp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyInvoiceRoomOtpMutationResult = NonNullable<Awaited<ReturnType<typeof verifyInvoiceRoomOtp>>>
+    export type VerifyInvoiceRoomOtpMutationBody = BodyType<InvoiceRoomVerifyInput>
+    export type VerifyInvoiceRoomOtpMutationError = ErrorType<UnauthorizedResponse>
+
+    export const useVerifyInvoiceRoomOtp = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyInvoiceRoomOtp>>, TError,{data: BodyType<InvoiceRoomVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyInvoiceRoomOtp>>,
+        TError,
+        {data: BodyType<InvoiceRoomVerifyInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyInvoiceRoomOtpMutationOptions(options));
+    }
+
+export const getRespondInvoiceRoomUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/respond`
+}
+
+export const respondInvoiceRoom = async (invoiceRoomResponseInput: InvoiceRoomResponseInput, options?: RequestInit): Promise<InvoiceRoomDetail> => {
+
+  return customFetch<InvoiceRoomDetail>(getRespondInvoiceRoomUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomResponseInput)
+  }
+);}
+
+
+
+
+
+export const getRespondInvoiceRoomMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof respondInvoiceRoom>>, TError,{data: BodyType<InvoiceRoomResponseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof respondInvoiceRoom>>, TError,{data: BodyType<InvoiceRoomResponseInput>}, TContext> => {
+
+const mutationKey = ['respondInvoiceRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof respondInvoiceRoom>>, {data: BodyType<InvoiceRoomResponseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  respondInvoiceRoom(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RespondInvoiceRoomMutationResult = NonNullable<Awaited<ReturnType<typeof respondInvoiceRoom>>>
+    export type RespondInvoiceRoomMutationBody = BodyType<InvoiceRoomResponseInput>
+    export type RespondInvoiceRoomMutationError = ErrorType<unknown>
+
+    export const useRespondInvoiceRoom = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof respondInvoiceRoom>>, TError,{data: BodyType<InvoiceRoomResponseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof respondInvoiceRoom>>,
+        TError,
+        {data: BodyType<InvoiceRoomResponseInput>},
+        TContext
+      > => {
+      return useMutation(getRespondInvoiceRoomMutationOptions(options));
+    }
+
+export const getReportInvoiceRoomPaymentUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/payment-reports`
+}
+
+export const reportInvoiceRoomPayment = async (invoiceRoomPaymentReportInput: InvoiceRoomPaymentReportInput, options?: RequestInit): Promise<InvoiceRoomDetail> => {
+
+  return customFetch<InvoiceRoomDetail>(getReportInvoiceRoomPaymentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomPaymentReportInput)
+  }
+);}
+
+
+
+
+
+export const getReportInvoiceRoomPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportInvoiceRoomPayment>>, TError,{data: BodyType<InvoiceRoomPaymentReportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reportInvoiceRoomPayment>>, TError,{data: BodyType<InvoiceRoomPaymentReportInput>}, TContext> => {
+
+const mutationKey = ['reportInvoiceRoomPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reportInvoiceRoomPayment>>, {data: BodyType<InvoiceRoomPaymentReportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reportInvoiceRoomPayment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReportInvoiceRoomPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof reportInvoiceRoomPayment>>>
+    export type ReportInvoiceRoomPaymentMutationBody = BodyType<InvoiceRoomPaymentReportInput>
+    export type ReportInvoiceRoomPaymentMutationError = ErrorType<unknown>
+
+    export const useReportInvoiceRoomPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportInvoiceRoomPayment>>, TError,{data: BodyType<InvoiceRoomPaymentReportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reportInvoiceRoomPayment>>,
+        TError,
+        {data: BodyType<InvoiceRoomPaymentReportInput>},
+        TContext
+      > => {
+      return useMutation(getReportInvoiceRoomPaymentMutationOptions(options));
+    }
+
+export const getCreateInvoiceRoomPaymentLinkUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/payment-link`
+}
+
+export const createInvoiceRoomPaymentLink = async (idempotentRoomAction: IdempotentRoomAction, options?: RequestInit): Promise<InvoiceRoomPaymentRequest> => {
+
+  return customFetch<InvoiceRoomPaymentRequest>(getCreateInvoiceRoomPaymentLinkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(idempotentRoomAction)
+  }
+);}
+
+
+
+
+
+export const getCreateInvoiceRoomPaymentLinkMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvoiceRoomPaymentLink>>, TError,{data: BodyType<IdempotentRoomAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createInvoiceRoomPaymentLink>>, TError,{data: BodyType<IdempotentRoomAction>}, TContext> => {
+
+const mutationKey = ['createInvoiceRoomPaymentLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInvoiceRoomPaymentLink>>, {data: BodyType<IdempotentRoomAction>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createInvoiceRoomPaymentLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateInvoiceRoomPaymentLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createInvoiceRoomPaymentLink>>>
+    export type CreateInvoiceRoomPaymentLinkMutationBody = BodyType<IdempotentRoomAction>
+    export type CreateInvoiceRoomPaymentLinkMutationError = ErrorType<Error>
+
+    export const useCreateInvoiceRoomPaymentLink = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvoiceRoomPaymentLink>>, TError,{data: BodyType<IdempotentRoomAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createInvoiceRoomPaymentLink>>,
+        TError,
+        {data: BodyType<IdempotentRoomAction>},
+        TContext
+      > => {
+      return useMutation(getCreateInvoiceRoomPaymentLinkMutationOptions(options));
+    }
+
+export const getClaimInvoiceRoomAccountUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/claim`
+}
+
+export const claimInvoiceRoomAccount = async (invoiceRoomClaimInput: InvoiceRoomClaimInput, options?: RequestInit): Promise<InvoiceRoomClaimResult> => {
+
+  return customFetch<InvoiceRoomClaimResult>(getClaimInvoiceRoomAccountUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceRoomClaimInput)
+  }
+);}
+
+
+
+
+
+export const getClaimInvoiceRoomAccountMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimInvoiceRoomAccount>>, TError,{data: BodyType<InvoiceRoomClaimInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimInvoiceRoomAccount>>, TError,{data: BodyType<InvoiceRoomClaimInput>}, TContext> => {
+
+const mutationKey = ['claimInvoiceRoomAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimInvoiceRoomAccount>>, {data: BodyType<InvoiceRoomClaimInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  claimInvoiceRoomAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimInvoiceRoomAccountMutationResult = NonNullable<Awaited<ReturnType<typeof claimInvoiceRoomAccount>>>
+    export type ClaimInvoiceRoomAccountMutationBody = BodyType<InvoiceRoomClaimInput>
+    export type ClaimInvoiceRoomAccountMutationError = ErrorType<unknown>
+
+    export const useClaimInvoiceRoomAccount = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimInvoiceRoomAccount>>, TError,{data: BodyType<InvoiceRoomClaimInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimInvoiceRoomAccount>>,
+        TError,
+        {data: BodyType<InvoiceRoomClaimInput>},
+        TContext
+      > => {
+      return useMutation(getClaimInvoiceRoomAccountMutationOptions(options));
+    }
+
+export const getGetInvoiceRoomPdfUrl = () => {
+
+
+
+
+  return `/api/public/invoice-room/pdf`
+}
+
+export const getInvoiceRoomPdf = async ( options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetInvoiceRoomPdfUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceRoomPdfQueryKey = () => {
+    return [
+    `/api/public/invoice-room/pdf`
+    ] as const;
+    }
+
+
+export const getGetInvoiceRoomPdfQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceRoomPdf>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceRoomPdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceRoomPdfQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceRoomPdf>>> = ({ signal }) => getInvoiceRoomPdf({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceRoomPdf>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceRoomPdfQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceRoomPdf>>>
+export type GetInvoiceRoomPdfQueryError = ErrorType<unknown>
+
+
+
+export function useGetInvoiceRoomPdf<TData = Awaited<ReturnType<typeof getInvoiceRoomPdf>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceRoomPdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceRoomPdfQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getVerifyStampUrl = () => {
 

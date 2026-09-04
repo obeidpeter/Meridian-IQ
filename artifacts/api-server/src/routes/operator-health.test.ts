@@ -138,6 +138,9 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
     TOTP_REQUIRED_ROLES: process.env.TOTP_REQUIRED_ROLES,
     RAIL_PRIMARY_URL: process.env.RAIL_PRIMARY_URL,
     RAIL_SECONDARY_URL: process.env.RAIL_SECONDARY_URL,
+    INVOICE_ROOM_ENCRYPTION_KEY: process.env.INVOICE_ROOM_ENCRYPTION_KEY,
+    INVOICE_PAYMENT_PROVIDER_URL: process.env.INVOICE_PAYMENT_PROVIDER_URL,
+    INVOICE_PAYMENT_WEBHOOK_TOKEN: process.env.INVOICE_PAYMENT_WEBHOOK_TOKEN,
   };
   process.env.INBOUND_EMAIL_TOKEN = secret;
   process.env.TOTP_REQUIRED_ROLES = "operator";
@@ -145,6 +148,9 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
   // One access-point rail lit (R95): presence only, never the URL itself.
   process.env.RAIL_PRIMARY_URL = `https://rail.example/${secret}`;
   delete process.env.RAIL_SECONDARY_URL;
+  process.env.INVOICE_ROOM_ENCRYPTION_KEY = secret.padEnd(32, "x");
+  process.env.INVOICE_PAYMENT_PROVIDER_URL = `https://pay.example/${secret}`;
+  delete process.env.INVOICE_PAYMENT_WEBHOOK_TOKEN;
   try {
     const base = await listen(appFor(operator, operatorRouter));
     const res = await fetch(`${base}/operator/rail-config`);
@@ -166,10 +172,13 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
         "inbound_email",
         "inbound_whatsapp",
         "messaging_relay",
+        "invoice_room_encryption",
+        "invoice_payment_provider",
         "payment_provider",
         "rail_primary",
         "rail_secondary",
         "payment_webhook",
+        "invoice_payment_webhook",
         "collection_webhook",
         "metrics_token",
         "sweep_token",
@@ -180,6 +189,9 @@ test("GET /operator/rail-config reports presence booleans and never echoes a val
     assert.equal(byKey.get("inbound_email")?.configured, true);
     assert.equal(byKey.get("rail_primary")?.configured, true);
     assert.equal(byKey.get("rail_secondary")?.configured, false);
+    assert.equal(byKey.get("invoice_room_encryption")?.configured, true);
+    assert.equal(byKey.get("invoice_payment_provider")?.configured, true);
+    assert.equal(byKey.get("invoice_payment_webhook")?.configured, false);
     // Key IDS only (R100): the single legacy token reads as the `legacy` id;
     // a ring lists its ids; a URL-style entry has none.
     assert.deepEqual(
@@ -532,7 +544,10 @@ test("GET /operator/dead-letters returns a page, redacts inbound payloads and re
         seenCursors.add(cursor);
       }
     } while (!event && cursor);
-    assert.ok(event, "the inserted dead letter is reachable through pagination");
+    assert.ok(
+      event,
+      "the inserted dead letter is reachable through pagination",
+    );
     assert.ok(
       !("payload" in event),
       "operator responses omit payloads instead of returning sensitive content",

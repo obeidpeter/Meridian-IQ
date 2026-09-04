@@ -140,6 +140,15 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
     requires: ["buyer_confirmations"],
   },
   {
+    key: "invoice_room",
+    releaseTag: "R2",
+    description:
+      "Account-optional buyer invoice workspace with confirmation, payment evidence, secure sharing and Buyer Rails account claiming",
+    launchDefault: false,
+    devDefault: true,
+    requires: ["invoice_lifecycle", "buyer_confirmations"],
+  },
+  {
     key: "white_label",
     releaseTag: "R2",
     description:

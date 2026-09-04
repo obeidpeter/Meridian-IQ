@@ -158,6 +158,9 @@ export const settlementSourceEnum = pgEnum("settlement_source", [
   // a bill's invoice status never transitions. Appended last: drizzle push
   // emits ALTER TYPE ... ADD VALUE for trailing additions.
   "payer_flag",
+  // A hosted-checkout provider callback. Unlike buyer_flag this is a trusted
+  // machine observation authenticated by the payment rail's key ring.
+  "payment_provider",
 ]);
 
 // Buyer payment-status flags (BR-04). `scheduled` is an intent signal only;

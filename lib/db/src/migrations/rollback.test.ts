@@ -492,6 +492,23 @@ const LADDER: LadderStep[] = [
       not(appendOnly("work_item_comments")),
     ],
   },
+  {
+    version: 48, // account-optional buyer Invoice Room guardrails
+    atTop: [
+      pol("invoice_room_shares"),
+      bypass("invoice_room_sessions"),
+      pol("invoice_room_events"),
+      pol("invoice_room_payment_requests"),
+      appendOnly("invoice_room_events"),
+    ],
+    afterRollback: [
+      not(pol("invoice_room_shares")),
+      not(bypass("invoice_room_sessions")),
+      not(pol("invoice_room_events")),
+      not(pol("invoice_room_payment_requests")),
+      not(appendOnly("invoice_room_events")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

@@ -1,5 +1,10 @@
 import { eq } from "drizzle-orm";
-import { getDb, messagesTable, type Message, type MessageChannel } from "@workspace/db";
+import {
+  getDb,
+  messagesTable,
+  type Message,
+  type MessageChannel,
+} from "@workspace/db";
 import { DomainError } from "../errors";
 
 // Messaging abstraction with a strict data boundary (PL-04, SEC-12): the
@@ -109,7 +114,8 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
   close_pack_ready: {
     key: "close_pack_ready",
     channels: ["whatsapp", "sms", "email", "push"],
-    description: "A Clerk month-end close run finished — results are ready to review.",
+    description:
+      "A Clerk month-end close run finished — results are ready to review.",
   },
   // Notice Desk: an authority notice's response deadline is approaching /
   // has passed. Channels mirror deadline_reminder, the invoice twin. Pointer
@@ -146,12 +152,14 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
   wht_note_due_soon: {
     key: "wht_note_due_soon",
     channels: ["whatsapp", "sms", "email", "push"],
-    description: "A withholding credit note is still outstanding — chase due soon",
+    description:
+      "A withholding credit note is still outstanding — chase due soon",
   },
   wht_note_overdue: {
     key: "wht_note_overdue",
     channels: ["whatsapp", "sms", "email", "push"],
-    description: "A withholding credit note is still outstanding — chase overdue",
+    description:
+      "A withholding credit note is still outstanding — chase overdue",
   },
 };
 
@@ -265,6 +273,7 @@ export function relayConfigured(): boolean {
 async function postToMessagingRelay(
   url: string,
   body: Record<string, unknown>,
+  idempotencyKey?: string,
 ): Promise<{ ok: true; resp: Response } | { ok: false; error: string }> {
   try {
     const headers: Record<string, string> = {
@@ -272,6 +281,7 @@ async function postToMessagingRelay(
     };
     const token = process.env.MESSAGING_WEBHOOK_TOKEN;
     if (token) headers["x-op-token"] = token;
+    if (idempotencyKey) headers["idempotency-key"] = idempotencyKey;
     const resp = await fetch(url, {
       method: "POST",
       headers,
@@ -283,7 +293,10 @@ async function postToMessagingRelay(
     }
     return { ok: true, resp };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -298,10 +311,15 @@ async function postToMessagingRelay(
 export async function sendRawToRelay(
   kind: string,
   payload: Record<string, unknown>,
+  options: { idempotencyKey?: string } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const url = process.env.MESSAGING_WEBHOOK_URL;
   if (!url) return { ok: false, error: "relay not configured" };
-  const posted = await postToMessagingRelay(url, { kind, ...payload });
+  const posted = await postToMessagingRelay(
+    url,
+    { kind, ...payload },
+    options.idempotencyKey,
+  );
   return posted.ok ? { ok: true } : posted;
 }
 

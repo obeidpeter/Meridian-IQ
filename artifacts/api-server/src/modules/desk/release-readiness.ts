@@ -17,6 +17,7 @@ import { getReadiness } from "../../lib/readiness";
 import { describeKeyRing, legacyTokenPathEnabled } from "../../lib/op-token";
 import { railTransportSummary } from "../rails/adapter";
 import { listFlags } from "../flags/flags";
+import { invoiceRoomSecurityConfiguration } from "../invoice-room/security";
 
 export type ReleaseCheckStatus = "pass" | "warning" | "blocked";
 
@@ -312,6 +313,35 @@ export async function getReleaseReadiness() {
         ? "Every enabled platform feature has its prerequisites."
         : `${violations.length} enabled feature(s) have missing prerequisites.`,
     detail: { violations },
+  });
+
+  const invoiceRoomFlag = flags.find((flag) => flag.key === "invoice_room");
+  const invoiceRoomActive = Boolean(
+    invoiceRoomFlag?.enabled || invoiceRoomFlag?.overrideCount,
+  );
+  const invoiceRoomConfiguration = invoiceRoomSecurityConfiguration();
+  const invoiceRoomReady =
+    invoiceRoomConfiguration.encryptionKeyConfigured &&
+    invoiceRoomConfiguration.publicUrlConfigured;
+  checks.push({
+    key: "invoice_room_configuration",
+    label: "Invoice Room security",
+    status:
+      !invoiceRoomActive || invoiceRoomReady
+        ? "pass"
+        : production
+          ? "blocked"
+          : "warning",
+    summary: !invoiceRoomActive
+      ? "Invoice Room is dark on this deployment."
+      : invoiceRoomReady
+        ? "Share credentials and the public link origin are configured."
+        : "Invoice Room is enabled without all required production security settings.",
+    detail: {
+      featureActive: invoiceRoomActive,
+      encryptionKeyConfigured: invoiceRoomConfiguration.encryptionKeyConfigured,
+      publicUrlConfigured: invoiceRoomConfiguration.publicUrlConfigured,
+    },
   });
 
   const readiness = getReadiness();

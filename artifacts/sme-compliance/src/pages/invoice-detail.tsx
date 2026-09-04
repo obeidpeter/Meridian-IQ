@@ -93,6 +93,7 @@ import {
 } from "@/lib/invoice-draft";
 import { LineItemRow } from "@/components/line-item-row";
 import { FieldError } from "@/components/field-error";
+import { InvoiceRoomCard } from "@/components/invoice-room-card";
 import {
   emptyLine,
   lineTotals,
@@ -2198,6 +2199,14 @@ export function InvoiceDetail() {
         onRequest={handleRequestConfirmation}
         isPending={createConfirmation.isPending}
       />
+
+      {me?.features.includes("invoice_room") && stampedFamily && (
+        <InvoiceRoomCard
+          invoiceId={id}
+          invoiceNumber={invoice.invoiceNumber}
+          buyerName={buyer?.legalName ?? "Buyer"}
+        />
+      )}
 
       {settlements && settlements.length > 0 && (
         <SettlementsCard settlements={settlements} />

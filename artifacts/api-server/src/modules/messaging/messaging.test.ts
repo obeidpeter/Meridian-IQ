@@ -65,7 +65,10 @@ test("the ledger row carries the caller's recipient identity — sent AND failed
   // (inbox.ts); the lossy ref is display/correlation only. Both terminal row
   // shapes must carry them, or a failed send would vanish from the feed.
   const partyId = randomUUID();
-  setMessageTransport(async () => ({ ok: true, providerMessageId: `ok_${SALT}` }));
+  setMessageTransport(async () => ({
+    ok: true,
+    providerMessageId: `ok_${SALT}`,
+  }));
   try {
     const sent = await sendMessage({
       channel: "whatsapp",
@@ -166,11 +169,19 @@ test("a throwing transport is a channel failure; all-fail lands the historical f
 });
 
 test("webhook transport: pointer-only POST with x-op-token; provider id flows into the row", async () => {
-  const seen: Array<{ body: unknown; token: string | undefined }> = [];
+  const seen: Array<{
+    body: unknown;
+    token: string | undefined;
+    idempotency: string | undefined;
+  }> = [];
   const relay = express();
   relay.use(express.json());
   relay.post("/hook", (req, res) => {
-    seen.push({ body: req.body, token: req.get("x-op-token") });
+    seen.push({
+      body: req.body,
+      token: req.get("x-op-token"),
+      idempotency: req.get("idempotency-key"),
+    });
     res.json({ providerMessageId: `wh_${SALT}` });
   });
   const base = await listen(relay);
@@ -249,14 +260,25 @@ test("sendRawToRelay: dark relay refuses locally; a live relay gets the kind-tag
   delete process.env.MESSAGING_WEBHOOK_URL;
   delete process.env.MESSAGING_WEBHOOK_TOKEN;
   assert.equal(relayConfigured(), false);
-  const dark = await sendRawToRelay("staff_email_verify", { email: "x@y.z", code: "123456" });
+  const dark = await sendRawToRelay("staff_email_verify", {
+    email: "x@y.z",
+    code: "123456",
+  });
   assert.equal(dark.ok, false, "no relay: nothing to send to");
 
-  const seen: Array<{ body: unknown; token: string | undefined }> = [];
+  const seen: Array<{
+    body: unknown;
+    token: string | undefined;
+    idempotency: string | undefined;
+  }> = [];
   const relay = express();
   relay.use(express.json());
   relay.post("/hook", (req, res) => {
-    seen.push({ body: req.body, token: req.get("x-op-token") });
+    seen.push({
+      body: req.body,
+      token: req.get("x-op-token"),
+      idempotency: req.get("idempotency-key"),
+    });
     res.json({});
   });
   const base = await listen(relay);
@@ -264,13 +286,18 @@ test("sendRawToRelay: dark relay refuses locally; a live relay gets the kind-tag
   process.env.MESSAGING_WEBHOOK_TOKEN = `raw-secret-${SALT}`;
   try {
     assert.equal(relayConfigured(), true);
-    const ok = await sendRawToRelay("staff_email_verify", {
-      email: `raw-${SALT}@test.example`,
-      code: "654321",
-    });
+    const ok = await sendRawToRelay(
+      "staff_email_verify",
+      {
+        email: `raw-${SALT}@test.example`,
+        code: "654321",
+      },
+      { idempotencyKey: `staff-verify:${SALT}` },
+    );
     assert.equal(ok.ok, true);
     assert.equal(seen.length, 1);
     assert.equal(seen[0].token, `raw-secret-${SALT}`);
+    assert.equal(seen[0].idempotency, `staff-verify:${SALT}`);
     // The kind tag rides first-class next to the payload fields (the shape
     // routes/staff.ts's verification dispatch relies on).
     assert.deepEqual(seen[0].body, {
@@ -293,7 +320,10 @@ test("sendRawToRelay: a non-2xx reply reports failure, never throws", async () =
   process.env.MESSAGING_WEBHOOK_URL = `${base}/hook`;
   delete process.env.MESSAGING_WEBHOOK_TOKEN;
   try {
-    const result = await sendRawToRelay("staff_email_verify", { email: "a@b.c", code: "1" });
+    const result = await sendRawToRelay("staff_email_verify", {
+      email: "a@b.c",
+      code: "1",
+    });
     assert.equal(result.ok, false);
     assert.match(result.error ?? "", /500/);
   } finally {

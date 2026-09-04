@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.96.0
+ * OpenAPI spec version: 0.97.0
  */
 export interface HealthStatus {
   status: string;
@@ -933,6 +933,369 @@ export interface EngagementUpdate {
   status?: EngagementUpdateStatus;
   title?: string;
   findings?: EngagementUpdateFindings;
+}
+
+export type InvoiceRoomCreateInputDeliveryChannel = typeof InvoiceRoomCreateInputDeliveryChannel[keyof typeof InvoiceRoomCreateInputDeliveryChannel];
+
+
+export const InvoiceRoomCreateInputDeliveryChannel = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  copy: 'copy',
+} as const;
+
+export interface InvoiceRoomCreateInput {
+  clientRequestId: string;
+  /**
+     * @maxLength 254
+     * @nullable
+     */
+  recipientEmail?: string | null;
+  /**
+     * @minLength 8
+     * @maxLength 40
+     * @nullable
+     */
+  recipientPhone?: string | null;
+  deliveryChannel: InvoiceRoomCreateInputDeliveryChannel;
+  /**
+     * @minimum 1
+     * @maximum 90
+     */
+  expiresInDays: number;
+  sendNow: boolean;
+  remindersEnabled: boolean;
+  contactConsent: boolean;
+}
+
+export interface InvoiceRoomExchangeInput {
+  /**
+     * @minLength 32
+     * @maxLength 128
+     */
+  token: string;
+}
+
+export type InvoiceRoomOtpInputChannel = typeof InvoiceRoomOtpInputChannel[keyof typeof InvoiceRoomOtpInputChannel];
+
+
+export const InvoiceRoomOtpInputChannel = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+} as const;
+
+export interface InvoiceRoomOtpInput {
+  channel: InvoiceRoomOtpInputChannel;
+}
+
+export interface InvoiceRoomVerifyInput {
+  /** @pattern ^[0-9]{6}$ */
+  code: string;
+}
+
+export type InvoiceRoomSummaryStatus = typeof InvoiceRoomSummaryStatus[keyof typeof InvoiceRoomSummaryStatus];
+
+
+export const InvoiceRoomSummaryStatus = {
+  active: 'active',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+
+export type InvoiceRoomSummaryDeliveryChannel = typeof InvoiceRoomSummaryDeliveryChannel[keyof typeof InvoiceRoomSummaryDeliveryChannel];
+
+
+export const InvoiceRoomSummaryDeliveryChannel = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+  copy: 'copy',
+} as const;
+
+export interface InvoiceRoomSummary {
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  buyerName: string;
+  amount: string;
+  currency: string;
+  invoiceStatus: string;
+  status: InvoiceRoomSummaryStatus;
+  deliveryChannel: InvoiceRoomSummaryDeliveryChannel;
+  /** @nullable */
+  recipient: string | null;
+  remindersEnabled: boolean;
+  expiresAt: string;
+  createdAt: string;
+  /** @nullable */
+  lastDeliveredAt: string | null;
+  /** @nullable */
+  lastActivityAt: string | null;
+  /** @nullable */
+  openedAt: string | null;
+  /** @nullable */
+  verifiedAt: string | null;
+  /** @nullable */
+  responseState: string | null;
+  /** @nullable */
+  paymentStatus: string | null;
+}
+
+export interface InvoiceRoomList {
+  rooms: InvoiceRoomSummary[];
+}
+
+export type InvoiceRoomDeliveryStatus = typeof InvoiceRoomDeliveryStatus[keyof typeof InvoiceRoomDeliveryStatus];
+
+
+export const InvoiceRoomDeliveryStatus = {
+  not_requested: 'not_requested',
+  sent: 'sent',
+  failed: 'failed',
+} as const;
+
+export interface InvoiceRoomDelivery {
+  attempted: boolean;
+  status: InvoiceRoomDeliveryStatus;
+  error?: string;
+}
+
+export interface InvoiceRoomCreated {
+  room: InvoiceRoomSummary;
+  url: string;
+  delivery: InvoiceRoomDelivery;
+}
+
+export type InvoiceRoomSessionStatus = typeof InvoiceRoomSessionStatus[keyof typeof InvoiceRoomSessionStatus];
+
+
+export const InvoiceRoomSessionStatus = {
+  active: 'active',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+
+/**
+ * @nullable
+ */
+export type InvoiceRoomSessionVerifiedChannel = typeof InvoiceRoomSessionVerifiedChannel[keyof typeof InvoiceRoomSessionVerifiedChannel] | null;
+
+
+export const InvoiceRoomSessionVerifiedChannel = {
+  email: 'email',
+  whatsapp: 'whatsapp',
+} as const;
+
+export interface InvoiceRoomSession {
+  id: string;
+  status: InvoiceRoomSessionStatus;
+  expiresAt: string;
+  identityVerified: boolean;
+  /** @nullable */
+  verifiedChannel: InvoiceRoomSessionVerifiedChannel;
+  /** @nullable */
+  recipientEmail: string | null;
+  /** @nullable */
+  recipientPhone: string | null;
+}
+
+export interface InvoiceRoomInvoice {
+  invoiceNumber: string;
+  kind: string;
+  issueDate: string;
+  /** @nullable */
+  dueDate: string | null;
+  currency: string;
+  subtotal: string;
+  vatTotal: string;
+  grandTotal: string;
+  status: string;
+  /** @nullable */
+  notes: string | null;
+}
+
+export interface InvoiceRoomLine {
+  lineNo: number;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  vatRate: string;
+  lineExtension: string;
+  vatAmount: string;
+}
+
+export interface InvoiceRoomSupplier {
+  legalName: string;
+  /** @nullable */
+  tin: string | null;
+  tinValidated: boolean;
+}
+
+export interface InvoiceRoomBuyer {
+  legalName: string;
+}
+
+export interface InvoiceRoomStamp {
+  irn: string;
+  csid: string;
+  rail: string;
+  provider: string;
+  environment: string;
+  stampedAt: string;
+}
+
+export type InvoiceRoomConfirmationState = typeof InvoiceRoomConfirmationState[keyof typeof InvoiceRoomConfirmationState];
+
+
+export const InvoiceRoomConfirmationState = {
+  requested: 'requested',
+  confirmed: 'confirmed',
+  queried: 'queried',
+  rejected: 'rejected',
+} as const;
+
+export interface InvoiceRoomConfirmation {
+  state: InvoiceRoomConfirmationState;
+  /** @nullable */
+  note: string | null;
+  noSetOff: boolean;
+  createdAt: string;
+}
+
+export interface InvoiceRoomPaymentInstructions {
+  provider: string;
+  accountReference: string;
+  /** @nullable */
+  label: string | null;
+}
+
+export type InvoiceRoomPaymentRequestStatus = typeof InvoiceRoomPaymentRequestStatus[keyof typeof InvoiceRoomPaymentRequestStatus];
+
+
+export const InvoiceRoomPaymentRequestStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  failed: 'failed',
+  expired: 'expired',
+} as const;
+
+export interface InvoiceRoomPaymentRequest {
+  id: string;
+  provider: string;
+  amount: string;
+  currency: string;
+  status: InvoiceRoomPaymentRequestStatus;
+  /** @nullable */
+  checkoutUrl: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  confirmedAt: string | null;
+  createdAt: string;
+}
+
+export interface InvoiceRoomPayment {
+  settled: boolean;
+  /** @nullable */
+  latestEvidenceAt: string | null;
+  instructions: InvoiceRoomPaymentInstructions | null;
+  requests: InvoiceRoomPaymentRequest[];
+}
+
+export interface InvoiceRoomPermissions {
+  canRespond: boolean;
+  canReportPayment: boolean;
+  canCreatePaymentLink: boolean;
+  canClaimAccount: boolean;
+}
+
+export type InvoiceRoomTimelineEventDetail = { [key: string]: unknown };
+
+export interface InvoiceRoomTimelineEvent {
+  id: string;
+  kind: string;
+  detail: InvoiceRoomTimelineEventDetail;
+  createdAt: string;
+}
+
+export interface InvoiceRoomDetail {
+  room: InvoiceRoomSession;
+  invoice: InvoiceRoomInvoice;
+  lines: InvoiceRoomLine[];
+  supplier: InvoiceRoomSupplier;
+  buyer: InvoiceRoomBuyer;
+  stamp: InvoiceRoomStamp | null;
+  confirmation: InvoiceRoomConfirmation | null;
+  payment: InvoiceRoomPayment;
+  permissions: InvoiceRoomPermissions;
+  timeline: InvoiceRoomTimelineEvent[];
+}
+
+export interface InvoiceRoomOtpDispatch {
+  sentTo: string;
+  expiresAt: string;
+  /** Returned only outside production for local testing */
+  debugCode?: string;
+}
+
+export interface IdempotentRoomAction {
+  idempotencyKey: string;
+}
+
+export type InvoiceRoomResponseInputState = typeof InvoiceRoomResponseInputState[keyof typeof InvoiceRoomResponseInputState];
+
+
+export const InvoiceRoomResponseInputState = {
+  confirmed: 'confirmed',
+  queried: 'queried',
+  rejected: 'rejected',
+} as const;
+
+export interface InvoiceRoomResponseInput {
+  idempotencyKey: string;
+  state: InvoiceRoomResponseInputState;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  note?: string | null;
+  noSetOff?: boolean;
+}
+
+export interface InvoiceRoomPaymentReportInput {
+  idempotencyKey: string;
+  amount?: string;
+  paidAt: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  reference: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  note?: string | null;
+}
+
+export interface InvoiceRoomClaimInput {
+  /**
+     * @minLength 2
+     * @maxLength 160
+     * @nullable
+     */
+  fullName?: string | null;
+  /**
+     * @minLength 12
+     * @maxLength 256
+     * @nullable
+     */
+  password?: string | null;
+}
+
+export interface InvoiceRoomClaimResult {
+  created: boolean;
+  loginRequired: boolean;
+  buyerPath: string;
 }
 
 export type InvoiceKind = typeof InvoiceKind[keyof typeof InvoiceKind];
@@ -7969,6 +8332,10 @@ export type GetMonthEndCloseParams = {
  * Required for firm principals; a client_user is pinned to its own party.
  */
 clientPartyId?: string;
+};
+
+export type RevokeInvoiceRoom200 = {
+  room: InvoiceRoomSummary;
 };
 
 export type ListDeadLettersParams = {

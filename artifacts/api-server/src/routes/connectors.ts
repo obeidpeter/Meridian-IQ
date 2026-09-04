@@ -1,6 +1,11 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq } from "drizzle-orm";
-import { getDb, erpConnectionsTable, erpSyncRunsTable, outboxTable } from "@workspace/db";
+import {
+  getDb,
+  erpConnectionsTable,
+  erpSyncRunsTable,
+  outboxTable,
+} from "@workspace/db";
 import {
   ListConnectorsResponse,
   ListErpConnectionsQueryParams,
@@ -27,7 +32,10 @@ import {
 import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
-import { CONNECTORS, findConnector } from "../modules/connectors/implementations";
+import {
+  CONNECTORS,
+  findConnector,
+} from "../modules/connectors/implementations";
 import { isBankRelayConfigured } from "../modules/statements/feed-contract";
 // Importing the engine registers the erp.sync outbox handler.
 import "../modules/connectors/engine";
@@ -99,6 +107,13 @@ const readinessEntries = () => [
     note: "Hosted checkout initialization uses a deployment-owned payment relay.",
   },
   {
+    key: "invoice_payments",
+    label: "Invoice Room checkout",
+    category: "payments" as const,
+    configured: Boolean(process.env.INVOICE_PAYMENT_PROVIDER_URL?.trim()),
+    note: "Buyer checkout links are priced server-side and opened through a deployment-owned payment relay.",
+  },
+  {
     key: "banking",
     label: "Open-banking feed",
     category: "banking" as const,
@@ -138,21 +153,25 @@ router.get("/integration-readiness", async (req, res): Promise<void> => {
   );
 });
 
-router.get("/connectors", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "connector.read");
-  res.json(
-    ListConnectorsResponse.parse(
-      Object.values(CONNECTORS).map((c) => ({
-        key: c.key,
-        name: c.name,
-        description: c.description,
-        mode: c.mode,
-        configured: c.isConfigured(),
-        configurationFields: c.configurationFields,
-      })),
-    ),
-  );
-});
+router.get(
+  "/connectors",
+  requireFlag("erp_connectors"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "connector.read");
+    res.json(
+      ListConnectorsResponse.parse(
+        Object.values(CONNECTORS).map((c) => ({
+          key: c.key,
+          name: c.name,
+          description: c.description,
+          mode: c.mode,
+          configured: c.isConfigured(),
+          configurationFields: c.configurationFields,
+        })),
+      ),
+    );
+  },
+);
 
 router.post(
   "/connections/test",
@@ -189,137 +208,158 @@ router.post(
   },
 );
 
-router.get("/connections", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "connector.read");
-  const query = parseOrThrow(ListErpConnectionsQueryParams, req.query);
-  const clientPartyId = narrowToClientPartyScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const tenant = tenantFirmId(req.principal);
-  const conditions = [];
-  if (tenant) conditions.push(eq(erpConnectionsTable.firmId, tenant));
-  if (clientPartyId)
-    conditions.push(eq(erpConnectionsTable.clientPartyId, clientPartyId));
-  const rows = await getDb()
-    .select()
-    .from(erpConnectionsTable)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(erpConnectionsTable.createdAt));
-  res.json(ListErpConnectionsResponse.parse(rows));
-});
-
-router.post("/connections", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "connector.write");
-  const firmId = requireFirmScope(req.principal);
-  const parsed = parseOrThrow(CreateErpConnectionBody, req.body);
-  const connector = findConnector(parsed.connectorKey);
-  if (!connector || !connector.isConfigured()) {
-    throw new DomainError(
-      "UNKNOWN_CONNECTOR",
-      `No configured connector is available for "${parsed.connectorKey}"`,
-      422,
+router.get(
+  "/connections",
+  requireFlag("erp_connectors"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "connector.read");
+    const query = parseOrThrow(ListErpConnectionsQueryParams, req.query);
+    const clientPartyId = narrowToClientPartyScope(
+      req.principal,
+      query.clientPartyId,
     );
-  }
-  const authConfig = normalizeConnectorConfig(
-    connector,
-    parsed.authConfig ?? {},
-  );
-  // Sandbox checks are local and safe inside the request transaction. A live
-  // relay round-trip belongs on /connections/test (NO_CONTEXT) so a slow
-  // provider never pins the tenant transaction; the worker authenticates
-  // again before every pull.
-  if (connector.mode === "sandbox") {
-    const authentication = await connector.authenticate(authConfig);
-    if (!authentication.ok) {
+    const tenant = tenantFirmId(req.principal);
+    const conditions = [];
+    if (tenant) conditions.push(eq(erpConnectionsTable.firmId, tenant));
+    if (clientPartyId)
+      conditions.push(eq(erpConnectionsTable.clientPartyId, clientPartyId));
+    const rows = await getDb()
+      .select()
+      .from(erpConnectionsTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(erpConnectionsTable.createdAt));
+    res.json(ListErpConnectionsResponse.parse(rows));
+  },
+);
+
+router.post(
+  "/connections",
+  requireFlag("erp_connectors"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "connector.write");
+    const firmId = requireFirmScope(req.principal);
+    const parsed = parseOrThrow(CreateErpConnectionBody, req.body);
+    const connector = findConnector(parsed.connectorKey);
+    if (!connector || !connector.isConfigured()) {
       throw new DomainError(
-        "CONNECTOR_AUTH_FAILED",
-        authentication.error ?? "Connector rejected the configuration",
+        "UNKNOWN_CONNECTOR",
+        `No configured connector is available for "${parsed.connectorKey}"`,
         422,
       );
     }
-  }
-  await assertPartyAccess(req.principal, parsed.clientPartyId);
-  const [row] = await getDb()
-    .insert(erpConnectionsTable)
-    .values({
+    const authConfig = normalizeConnectorConfig(
+      connector,
+      parsed.authConfig ?? {},
+    );
+    // Sandbox checks are local and safe inside the request transaction. A live
+    // relay round-trip belongs on /connections/test (NO_CONTEXT) so a slow
+    // provider never pins the tenant transaction; the worker authenticates
+    // again before every pull.
+    if (connector.mode === "sandbox") {
+      const authentication = await connector.authenticate(authConfig);
+      if (!authentication.ok) {
+        throw new DomainError(
+          "CONNECTOR_AUTH_FAILED",
+          authentication.error ?? "Connector rejected the configuration",
+          422,
+        );
+      }
+    }
+    await assertPartyAccess(req.principal, parsed.clientPartyId);
+    const [row] = await getDb()
+      .insert(erpConnectionsTable)
+      .values({
+        firmId,
+        clientPartyId: parsed.clientPartyId,
+        connectorKey: parsed.connectorKey,
+        authConfig: Object.keys(authConfig).length ? authConfig : null,
+        fieldMap: (parsed.fieldMap ?? null) as Record<string, string> | null,
+      })
+      .returning();
+    await appendAudit({
+      actorId: req.principal.userId,
       firmId,
-      clientPartyId: parsed.clientPartyId,
-      connectorKey: parsed.connectorKey,
-      authConfig: Object.keys(authConfig).length ? authConfig : null,
-      fieldMap: (parsed.fieldMap ?? null) as Record<string, string> | null,
-    })
-    .returning();
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId,
-    action: "connector.connection_created",
-    entityType: "erp_connection",
-    entityId: row.id,
-    after: { connectorKey: row.connectorKey, clientPartyId: row.clientPartyId },
-  });
-  res.status(201).json(CreateErpConnectionResponse.parse(row));
-});
+      action: "connector.connection_created",
+      entityType: "erp_connection",
+      entityId: row.id,
+      after: {
+        connectorKey: row.connectorKey,
+        clientPartyId: row.clientPartyId,
+      },
+    });
+    res.status(201).json(CreateErpConnectionResponse.parse(row));
+  },
+);
 
-router.post("/connections/:id/sync", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "connector.write");
-  const params = parseOrThrow(SyncErpConnectionParams, req.params);
-  const [connection] = await getDb()
-    .select()
-    .from(erpConnectionsTable)
-    .where(eq(erpConnectionsTable.id, params.id))
-    .limit(1);
-  if (!connection) {
-    throw new DomainError("NOT_FOUND", "Connection not found", 404);
-  }
-  assertSameTenant(req.principal, connection.firmId);
-  if (connection.status === "paused") {
-    throw new DomainError("CONNECTION_PAUSED", "Connection is paused", 409);
-  }
-  // Create the run marker synchronously so the caller has something to watch,
-  // then hand the pull to the worker via the outbox (async, INT-09 pattern).
-  const [run] = await getDb()
-    .insert(erpSyncRunsTable)
-    .values({
-      connectionId: connection.id,
-      status: "running",
-      fromCursor: connection.cursor,
-    })
-    .returning();
-  await getDb().insert(outboxTable).values({
-    aggregateType: "erp_connection",
-    aggregateId: connection.id,
-    type: "erp.sync",
-    payload: { connectionId: connection.id, requestRunId: run.id },
-  });
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId: connection.firmId,
-    action: "connector.sync_requested",
-    entityType: "erp_connection",
-    entityId: connection.id,
-  });
-  res.status(202).json(SyncErpConnectionResponse.parse(run));
-});
+router.post(
+  "/connections/:id/sync",
+  requireFlag("erp_connectors"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "connector.write");
+    const params = parseOrThrow(SyncErpConnectionParams, req.params);
+    const [connection] = await getDb()
+      .select()
+      .from(erpConnectionsTable)
+      .where(eq(erpConnectionsTable.id, params.id))
+      .limit(1);
+    if (!connection) {
+      throw new DomainError("NOT_FOUND", "Connection not found", 404);
+    }
+    assertSameTenant(req.principal, connection.firmId);
+    if (connection.status === "paused") {
+      throw new DomainError("CONNECTION_PAUSED", "Connection is paused", 409);
+    }
+    // Create the run marker synchronously so the caller has something to watch,
+    // then hand the pull to the worker via the outbox (async, INT-09 pattern).
+    const [run] = await getDb()
+      .insert(erpSyncRunsTable)
+      .values({
+        connectionId: connection.id,
+        status: "running",
+        fromCursor: connection.cursor,
+      })
+      .returning();
+    await getDb()
+      .insert(outboxTable)
+      .values({
+        aggregateType: "erp_connection",
+        aggregateId: connection.id,
+        type: "erp.sync",
+        payload: { connectionId: connection.id, requestRunId: run.id },
+      });
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId: connection.firmId,
+      action: "connector.sync_requested",
+      entityType: "erp_connection",
+      entityId: connection.id,
+    });
+    res.status(202).json(SyncErpConnectionResponse.parse(run));
+  },
+);
 
-router.get("/connections/:id/runs", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "connector.read");
-  const params = parseOrThrow(ListErpSyncRunsParams, req.params);
-  const [connection] = await getDb()
-    .select({ firmId: erpConnectionsTable.firmId })
-    .from(erpConnectionsTable)
-    .where(eq(erpConnectionsTable.id, params.id))
-    .limit(1);
-  if (!connection) {
-    throw new DomainError("NOT_FOUND", "Connection not found", 404);
-  }
-  assertSameTenant(req.principal, connection.firmId);
-  const rows = await getDb()
-    .select()
-    .from(erpSyncRunsTable)
-    .where(eq(erpSyncRunsTable.connectionId, params.id))
-    .orderBy(desc(erpSyncRunsTable.startedAt));
-  res.json(ListErpSyncRunsResponse.parse(rows));
-});
+router.get(
+  "/connections/:id/runs",
+  requireFlag("erp_connectors"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "connector.read");
+    const params = parseOrThrow(ListErpSyncRunsParams, req.params);
+    const [connection] = await getDb()
+      .select({ firmId: erpConnectionsTable.firmId })
+      .from(erpConnectionsTable)
+      .where(eq(erpConnectionsTable.id, params.id))
+      .limit(1);
+    if (!connection) {
+      throw new DomainError("NOT_FOUND", "Connection not found", 404);
+    }
+    assertSameTenant(req.principal, connection.firmId);
+    const rows = await getDb()
+      .select()
+      .from(erpSyncRunsTable)
+      .where(eq(erpSyncRunsTable.connectionId, params.id))
+      .orderBy(desc(erpSyncRunsTable.startedAt));
+    res.json(ListErpSyncRunsResponse.parse(rows));
+  },
+);
 
 export default router;

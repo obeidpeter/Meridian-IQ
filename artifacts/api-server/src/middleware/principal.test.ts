@@ -103,6 +103,7 @@ test("token-authenticated machine webhooks are exempt", async () => {
     "/api/inbound/whatsapp",
     "/api/billing/payments/confirm",
     "/api/collections/inbound",
+    "/api/invoice-room/payments/confirm",
   ]) {
     const res = await fetch(`${base}${path}`, {
       method: "POST",

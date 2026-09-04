@@ -119,7 +119,7 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    min-width: 320px;
+    min-width: 0;
     overflow-x: clip;
   }
 
@@ -128,6 +128,16 @@
   h3,
   h4 {
     letter-spacing: 0;
+  }
+}
+
+@media (max-width: 351px) {
+  .mi-mobilebar {
+    padding-inline: 0.75rem;
+  }
+
+  .mi-mobilebar .mi-brand__caption {
+    display: none;
   }
 }
 

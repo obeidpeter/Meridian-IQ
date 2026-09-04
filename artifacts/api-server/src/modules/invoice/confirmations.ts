@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import {
   getDb,
   confirmationsTable,
+  invoicesTable,
   partiesTable,
   type Invoice,
 } from "@workspace/db";
@@ -40,13 +41,27 @@ export async function recordConfirmation(
   invoice: Invoice,
   input: ConfirmationInput,
   principal: Principal,
+  options: { confirmingUserId?: string | null } = {},
 ): Promise<ConfirmationRow> {
   const isRequest = input.state === "requested";
+
+  // The invoice row is the concurrency boundary for the confirmation state
+  // machine. Without this lock, two simultaneous buyer responses can both
+  // observe the same latest `requested` row and append conflicting outcomes.
+  const [currentInvoice] = await getDb()
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, invoice.id))
+    .for("update")
+    .limit(1);
+  if (!currentInvoice || currentInvoice.firmId !== invoice.firmId) {
+    throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+  }
 
   // The confirmation always belongs to the invoice's own buyer; a mismatched
   // body buyerPartyId must never be trusted (it would bypass the TIN gate and
   // could reference a cross-tenant party).
-  if (input.buyerPartyId !== invoice.buyerPartyId) {
+  if (input.buyerPartyId !== currentInvoice.buyerPartyId) {
     throw new DomainError(
       "BUYER_PARTY_MISMATCH",
       "Confirmation buyerPartyId must match the invoice buyer",
@@ -58,7 +73,7 @@ export async function recordConfirmation(
   const [buyer] = await getDb()
     .select({ tinValidated: partiesTable.tinValidated })
     .from(partiesTable)
-    .where(eq(partiesTable.id, invoice.buyerPartyId))
+    .where(eq(partiesTable.id, currentInvoice.buyerPartyId))
     .limit(1);
   if (!buyer?.tinValidated) {
     throw new DomainError(
@@ -78,14 +93,17 @@ export async function recordConfirmation(
   if (isRequest) {
     // Confirmation is requested on a stamped invoice; re-requesting is allowed
     // only after a queried/rejected response (Appendix B).
-    if (invoice.status !== "stamped") {
+    if (currentInvoice.status !== "stamped") {
       throw new DomainError(
         "NOT_STAMPED",
         "Confirmation can only be requested on a stamped invoice",
         409,
       );
     }
-    if (latest && (latest.state === "requested" || latest.state === "confirmed")) {
+    if (
+      latest &&
+      (latest.state === "requested" || latest.state === "confirmed")
+    ) {
       throw new DomainError(
         "CONFIRMATION_ALREADY_OPEN",
         `Confirmation is already ${latest.state}`,
@@ -110,10 +128,10 @@ export async function recordConfirmation(
     // CORE-09: an invoice cancelled or credited after the request was raised
     // can no longer collect a confirmation (a confirmed dead invoice would
     // read as financeable evidence).
-    if (!isPresentableAsEligible(invoice.status)) {
+    if (!isPresentableAsEligible(currentInvoice.status)) {
       throw new DomainError(
         "INVOICE_NOT_ELIGIBLE",
-        `Invoice is ${invoice.status}; the confirmation request is void`,
+        `Invoice is ${currentInvoice.status}; the confirmation request is void`,
         409,
       );
     }
@@ -122,21 +140,25 @@ export async function recordConfirmation(
   const [row] = await getDb()
     .insert(confirmationsTable)
     .values({
-      invoiceId: invoice.id,
-      buyerPartyId: invoice.buyerPartyId,
+      invoiceId: currentInvoice.id,
+      buyerPartyId: currentInvoice.buyerPartyId,
       state: input.state,
       method: input.method ?? null,
       noSetOff: input.noSetOff ?? false,
       note: input.note ?? null,
       // BR-02: the confirming user is captured on buyer responses with lineage.
-      confirmingUserId: isRequest ? null : principal.userId,
+      confirmingUserId: isRequest
+        ? null
+        : options.confirmingUserId === undefined
+          ? principal.userId
+          : options.confirmingUserId,
     })
     .returning();
   if (input.state === "confirmed") {
     // Compare-and-set (tryTransition): if the invoice moved concurrently
     // (cancel/credit), the confirmation row stands as lineage but the status
     // transition is skipped.
-    await tryTransition(invoice, "confirmed", {
+    await tryTransition(currentInvoice, "confirmed", {
       actorId: principal.userId,
       actorRole: principal.role,
     });
@@ -158,11 +180,11 @@ export async function recordConfirmation(
         await getDb().transaction(async () => {
           await sendMessage({
             channel: "email",
-            recipientRef: pointerEntityRef("pty", invoice.buyerPartyId),
-            recipientPartyId: invoice.buyerPartyId,
+            recipientRef: pointerEntityRef("pty", currentInvoice.buyerPartyId),
+            recipientPartyId: currentInvoice.buyerPartyId,
             templateKey: "confirmation_request",
             entityType: "invoice",
-            entityId: pointerEntityRef("inv", invoice.id),
+            entityId: pointerEntityRef("inv", currentInvoice.id),
           });
         });
       }
@@ -170,14 +192,14 @@ export async function recordConfirmation(
       // invoiceId makes the absorbed failure correlatable — the module logger
       // carries no per-request bindings (the route's req.log did).
       logger.warn(
-        { err, invoiceId: invoice.id },
+        { err, invoiceId: currentInvoice.id },
         "confirmation request notification failed",
       );
     }
   }
   await appendAudit({
     actorId: principal.userId,
-    firmId: invoice.firmId,
+    firmId: currentInvoice.firmId,
     action: "invoice.confirmation",
     entityType: "confirmation",
     entityId: row.id,

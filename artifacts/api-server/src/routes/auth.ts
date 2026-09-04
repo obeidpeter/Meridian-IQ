@@ -146,6 +146,15 @@ async function loadMemberships(userId: string) {
 
 type Membership = Awaited<ReturnType<typeof loadMemberships>>[number];
 
+function selectMembership(req: Request, memberships: Membership[]): Membership {
+  const workspace = req.get("x-meridian-workspace");
+  return (
+    (workspace === "buyer"
+      ? memberships.find((membership) => membership.role === "buyer_user")
+      : undefined) ?? memberships[0]
+  );
+}
+
 // The account fields every sign-in response shares (login, its mfa branch, the
 // TOTP challenge). Branches spread their extras on top and still parse through
 // their own contract schema.
@@ -277,7 +286,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   // The response surfaces the OLDEST membership (loadMemberships orders by
   // createdAt); a multi-membership user re-scopes per request with x-firm-id.
-  const membership = memberships[0];
+  const membership = selectMembership(req, memberships);
   // The enrolment requirement is judged against EVERY membership, not just the
   // one this response happens to surface: the effective role is chosen
   // per-request (x-firm-id), so a user who ALSO holds a listed role elsewhere
@@ -450,7 +459,7 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
     return;
   }
   // Same deterministic pick as login: the OLDEST membership is surfaced.
-  const membership = memberships[0];
+  const membership = selectMembership(req, memberships);
   // From here this is exactly the login success path: cookie for browsers,
   // bearer token in the body only for the self-identified mobile client.
   res.json(

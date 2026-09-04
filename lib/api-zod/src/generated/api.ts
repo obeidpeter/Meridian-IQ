@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.96.0
+ * OpenAPI spec version: 0.97.0
  */
 import * as zod from 'zod';
 
@@ -2481,6 +2481,734 @@ export const CreateSettlementResponse = zod.object({
   "occurredAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary List secure buyer rooms for invoices in the caller's supplier scope
+ */
+export const ListInvoiceRoomsResponse = zod.object({
+  "rooms": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "invoiceStatus": zod.string(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "recipient": zod.string().nullable(),
+  "remindersEnabled": zod.boolean(),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "lastActivityAt": zod.coerce.date().nullable(),
+  "openedAt": zod.coerce.date().nullable(),
+  "verifiedAt": zod.coerce.date().nullable(),
+  "responseState": zod.string().nullable(),
+  "paymentStatus": zod.string().nullable()
+}))
+})
+
+
+export const ListInvoiceRoomsForInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListInvoiceRoomsForInvoiceResponse = zod.object({
+  "rooms": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "invoiceStatus": zod.string(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "recipient": zod.string().nullable(),
+  "remindersEnabled": zod.boolean(),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "lastActivityAt": zod.coerce.date().nullable(),
+  "openedAt": zod.coerce.date().nullable(),
+  "verifiedAt": zod.coerce.date().nullable(),
+  "responseState": zod.string().nullable(),
+  "paymentStatus": zod.string().nullable()
+}))
+})
+
+
+export const CreateInvoiceRoomParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const createInvoiceRoomBodyRecipientEmailMax = 254;
+
+export const createInvoiceRoomBodyRecipientPhoneMin = 8;
+export const createInvoiceRoomBodyRecipientPhoneMax = 40;
+
+export const createInvoiceRoomBodyExpiresInDaysMax = 90;
+
+
+
+export const CreateInvoiceRoomBody = zod.object({
+  "clientRequestId": zod.string().uuid(),
+  "recipientEmail": zod.string().email().max(createInvoiceRoomBodyRecipientEmailMax).nullish(),
+  "recipientPhone": zod.string().min(createInvoiceRoomBodyRecipientPhoneMin).max(createInvoiceRoomBodyRecipientPhoneMax).nullish(),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "expiresInDays": zod.number().min(1).max(createInvoiceRoomBodyExpiresInDaysMax),
+  "sendNow": zod.boolean(),
+  "remindersEnabled": zod.boolean(),
+  "contactConsent": zod.boolean()
+})
+
+export const CreateInvoiceRoomResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "invoiceStatus": zod.string(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "recipient": zod.string().nullable(),
+  "remindersEnabled": zod.boolean(),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "lastActivityAt": zod.coerce.date().nullable(),
+  "openedAt": zod.coerce.date().nullable(),
+  "verifiedAt": zod.coerce.date().nullable(),
+  "responseState": zod.string().nullable(),
+  "paymentStatus": zod.string().nullable()
+}),
+  "url": zod.string().url(),
+  "delivery": zod.object({
+  "attempted": zod.boolean(),
+  "status": zod.enum(['not_requested', 'sent', 'failed']),
+  "error": zod.string().optional()
+})
+})
+
+
+export const RevokeInvoiceRoomParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokeInvoiceRoomResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "invoiceStatus": zod.string(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "recipient": zod.string().nullable(),
+  "remindersEnabled": zod.boolean(),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "lastActivityAt": zod.coerce.date().nullable(),
+  "openedAt": zod.coerce.date().nullable(),
+  "verifiedAt": zod.coerce.date().nullable(),
+  "responseState": zod.string().nullable(),
+  "paymentStatus": zod.string().nullable()
+})
+})
+
+
+export const ReplaceInvoiceRoomParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const replaceInvoiceRoomBodyRecipientEmailMax = 254;
+
+export const replaceInvoiceRoomBodyRecipientPhoneMin = 8;
+export const replaceInvoiceRoomBodyRecipientPhoneMax = 40;
+
+export const replaceInvoiceRoomBodyExpiresInDaysMax = 90;
+
+
+
+export const ReplaceInvoiceRoomBody = zod.object({
+  "clientRequestId": zod.string().uuid(),
+  "recipientEmail": zod.string().email().max(replaceInvoiceRoomBodyRecipientEmailMax).nullish(),
+  "recipientPhone": zod.string().min(replaceInvoiceRoomBodyRecipientPhoneMin).max(replaceInvoiceRoomBodyRecipientPhoneMax).nullish(),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "expiresInDays": zod.number().min(1).max(replaceInvoiceRoomBodyExpiresInDaysMax),
+  "sendNow": zod.boolean(),
+  "remindersEnabled": zod.boolean(),
+  "contactConsent": zod.boolean()
+})
+
+export const ReplaceInvoiceRoomResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "invoiceStatus": zod.string(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
+  "recipient": zod.string().nullable(),
+  "remindersEnabled": zod.boolean(),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "lastDeliveredAt": zod.coerce.date().nullable(),
+  "lastActivityAt": zod.coerce.date().nullable(),
+  "openedAt": zod.coerce.date().nullable(),
+  "verifiedAt": zod.coerce.date().nullable(),
+  "responseState": zod.string().nullable(),
+  "paymentStatus": zod.string().nullable()
+}),
+  "url": zod.string().url(),
+  "delivery": zod.object({
+  "attempted": zod.boolean(),
+  "status": zod.enum(['not_requested', 'sent', 'failed']),
+  "error": zod.string().optional()
+})
+})
+
+
+export const exchangeInvoiceRoomTokenBodyTokenMin = 32;
+export const exchangeInvoiceRoomTokenBodyTokenMax = 128;
+
+
+
+export const ExchangeInvoiceRoomTokenBody = zod.object({
+  "token": zod.string().min(exchangeInvoiceRoomTokenBodyTokenMin).max(exchangeInvoiceRoomTokenBodyTokenMax)
+})
+
+export const ExchangeInvoiceRoomTokenResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "identityVerified": zod.boolean(),
+  "verifiedChannel": zod.union([zod.literal('email'),zod.literal('whatsapp'),zod.literal(null)]).nullable(),
+  "recipientEmail": zod.string().nullable(),
+  "recipientPhone": zod.string().nullable()
+}),
+  "invoice": zod.object({
+  "invoiceNumber": zod.string(),
+  "kind": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string(),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullable()
+}),
+  "lines": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+})),
+  "supplier": zod.object({
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "tinValidated": zod.boolean()
+}),
+  "buyer": zod.object({
+  "legalName": zod.string()
+}),
+  "stamp": zod.union([zod.object({
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "rail": zod.string(),
+  "provider": zod.string(),
+  "environment": zod.string(),
+  "stampedAt": zod.coerce.date()
+}),zod.null()]),
+  "confirmation": zod.union([zod.object({
+  "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
+  "note": zod.string().nullable(),
+  "noSetOff": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
+  "payment": zod.object({
+  "settled": zod.boolean(),
+  "latestEvidenceAt": zod.coerce.date().nullable(),
+  "instructions": zod.union([zod.object({
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "provider": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
+  "checkoutUrl": zod.string().url().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "confirmedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+}),
+  "permissions": zod.object({
+  "canRespond": zod.boolean(),
+  "canReportPayment": zod.boolean(),
+  "canCreatePaymentLink": zod.boolean(),
+  "canClaimAccount": zod.boolean()
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.string(),
+  "detail": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+export const GetPublicInvoiceRoomResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "identityVerified": zod.boolean(),
+  "verifiedChannel": zod.union([zod.literal('email'),zod.literal('whatsapp'),zod.literal(null)]).nullable(),
+  "recipientEmail": zod.string().nullable(),
+  "recipientPhone": zod.string().nullable()
+}),
+  "invoice": zod.object({
+  "invoiceNumber": zod.string(),
+  "kind": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string(),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullable()
+}),
+  "lines": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+})),
+  "supplier": zod.object({
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "tinValidated": zod.boolean()
+}),
+  "buyer": zod.object({
+  "legalName": zod.string()
+}),
+  "stamp": zod.union([zod.object({
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "rail": zod.string(),
+  "provider": zod.string(),
+  "environment": zod.string(),
+  "stampedAt": zod.coerce.date()
+}),zod.null()]),
+  "confirmation": zod.union([zod.object({
+  "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
+  "note": zod.string().nullable(),
+  "noSetOff": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
+  "payment": zod.object({
+  "settled": zod.boolean(),
+  "latestEvidenceAt": zod.coerce.date().nullable(),
+  "instructions": zod.union([zod.object({
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "provider": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
+  "checkoutUrl": zod.string().url().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "confirmedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+}),
+  "permissions": zod.object({
+  "canRespond": zod.boolean(),
+  "canReportPayment": zod.boolean(),
+  "canCreatePaymentLink": zod.boolean(),
+  "canClaimAccount": zod.boolean()
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.string(),
+  "detail": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+export const RequestInvoiceRoomOtpBody = zod.object({
+  "channel": zod.enum(['email', 'whatsapp'])
+})
+
+export const RequestInvoiceRoomOtpResponse = zod.object({
+  "sentTo": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "debugCode": zod.string().optional().describe('Returned only outside production for local testing')
+})
+
+
+export const verifyInvoiceRoomOtpBodyCodeRegExp = new RegExp('^[0-9]{6}$');
+
+
+export const VerifyInvoiceRoomOtpBody = zod.object({
+  "code": zod.string().regex(verifyInvoiceRoomOtpBodyCodeRegExp)
+})
+
+export const VerifyInvoiceRoomOtpResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "identityVerified": zod.boolean(),
+  "verifiedChannel": zod.union([zod.literal('email'),zod.literal('whatsapp'),zod.literal(null)]).nullable(),
+  "recipientEmail": zod.string().nullable(),
+  "recipientPhone": zod.string().nullable()
+}),
+  "invoice": zod.object({
+  "invoiceNumber": zod.string(),
+  "kind": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string(),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullable()
+}),
+  "lines": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+})),
+  "supplier": zod.object({
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "tinValidated": zod.boolean()
+}),
+  "buyer": zod.object({
+  "legalName": zod.string()
+}),
+  "stamp": zod.union([zod.object({
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "rail": zod.string(),
+  "provider": zod.string(),
+  "environment": zod.string(),
+  "stampedAt": zod.coerce.date()
+}),zod.null()]),
+  "confirmation": zod.union([zod.object({
+  "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
+  "note": zod.string().nullable(),
+  "noSetOff": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
+  "payment": zod.object({
+  "settled": zod.boolean(),
+  "latestEvidenceAt": zod.coerce.date().nullable(),
+  "instructions": zod.union([zod.object({
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "provider": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
+  "checkoutUrl": zod.string().url().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "confirmedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+}),
+  "permissions": zod.object({
+  "canRespond": zod.boolean(),
+  "canReportPayment": zod.boolean(),
+  "canCreatePaymentLink": zod.boolean(),
+  "canClaimAccount": zod.boolean()
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.string(),
+  "detail": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+export const respondInvoiceRoomBodyNoteMax = 2000;
+
+
+
+export const RespondInvoiceRoomBody = zod.object({
+  "idempotencyKey": zod.string().uuid(),
+  "state": zod.enum(['confirmed', 'queried', 'rejected']),
+  "note": zod.string().max(respondInvoiceRoomBodyNoteMax).nullish(),
+  "noSetOff": zod.boolean().optional()
+})
+
+export const RespondInvoiceRoomResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "identityVerified": zod.boolean(),
+  "verifiedChannel": zod.union([zod.literal('email'),zod.literal('whatsapp'),zod.literal(null)]).nullable(),
+  "recipientEmail": zod.string().nullable(),
+  "recipientPhone": zod.string().nullable()
+}),
+  "invoice": zod.object({
+  "invoiceNumber": zod.string(),
+  "kind": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string(),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullable()
+}),
+  "lines": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+})),
+  "supplier": zod.object({
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "tinValidated": zod.boolean()
+}),
+  "buyer": zod.object({
+  "legalName": zod.string()
+}),
+  "stamp": zod.union([zod.object({
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "rail": zod.string(),
+  "provider": zod.string(),
+  "environment": zod.string(),
+  "stampedAt": zod.coerce.date()
+}),zod.null()]),
+  "confirmation": zod.union([zod.object({
+  "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
+  "note": zod.string().nullable(),
+  "noSetOff": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
+  "payment": zod.object({
+  "settled": zod.boolean(),
+  "latestEvidenceAt": zod.coerce.date().nullable(),
+  "instructions": zod.union([zod.object({
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "provider": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
+  "checkoutUrl": zod.string().url().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "confirmedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+}),
+  "permissions": zod.object({
+  "canRespond": zod.boolean(),
+  "canReportPayment": zod.boolean(),
+  "canCreatePaymentLink": zod.boolean(),
+  "canClaimAccount": zod.boolean()
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.string(),
+  "detail": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+export const reportInvoiceRoomPaymentBodyReferenceMax = 200;
+
+export const reportInvoiceRoomPaymentBodyNoteMax = 2000;
+
+
+
+export const ReportInvoiceRoomPaymentBody = zod.object({
+  "idempotencyKey": zod.string().uuid(),
+  "amount": zod.string().optional(),
+  "paidAt": zod.coerce.date(),
+  "reference": zod.string().min(1).max(reportInvoiceRoomPaymentBodyReferenceMax),
+  "note": zod.string().max(reportInvoiceRoomPaymentBodyNoteMax).nullish()
+})
+
+export const ReportInvoiceRoomPaymentResponse = zod.object({
+  "room": zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['active', 'expired', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "identityVerified": zod.boolean(),
+  "verifiedChannel": zod.union([zod.literal('email'),zod.literal('whatsapp'),zod.literal(null)]).nullable(),
+  "recipientEmail": zod.string().nullable(),
+  "recipientPhone": zod.string().nullable()
+}),
+  "invoice": zod.object({
+  "invoiceNumber": zod.string(),
+  "kind": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string(),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullable()
+}),
+  "lines": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+})),
+  "supplier": zod.object({
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "tinValidated": zod.boolean()
+}),
+  "buyer": zod.object({
+  "legalName": zod.string()
+}),
+  "stamp": zod.union([zod.object({
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "rail": zod.string(),
+  "provider": zod.string(),
+  "environment": zod.string(),
+  "stampedAt": zod.coerce.date()
+}),zod.null()]),
+  "confirmation": zod.union([zod.object({
+  "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
+  "note": zod.string().nullable(),
+  "noSetOff": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
+  "payment": zod.object({
+  "settled": zod.boolean(),
+  "latestEvidenceAt": zod.coerce.date().nullable(),
+  "instructions": zod.union([zod.object({
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "provider": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
+  "checkoutUrl": zod.string().url().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "confirmedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+}),
+  "permissions": zod.object({
+  "canRespond": zod.boolean(),
+  "canReportPayment": zod.boolean(),
+  "canCreatePaymentLink": zod.boolean(),
+  "canClaimAccount": zod.boolean()
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.string(),
+  "detail": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+export const CreateInvoiceRoomPaymentLinkBody = zod.object({
+  "idempotencyKey": zod.string().uuid()
+})
+
+export const CreateInvoiceRoomPaymentLinkResponse = zod.object({
+  "id": zod.string().uuid(),
+  "provider": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
+  "checkoutUrl": zod.string().url().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "confirmedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const claimInvoiceRoomAccountBodyFullNameMin = 2;
+export const claimInvoiceRoomAccountBodyFullNameMax = 160;
+
+export const claimInvoiceRoomAccountBodyPasswordMin = 12;
+export const claimInvoiceRoomAccountBodyPasswordMax = 256;
+
+
+
+export const ClaimInvoiceRoomAccountBody = zod.object({
+  "fullName": zod.string().min(claimInvoiceRoomAccountBodyFullNameMin).max(claimInvoiceRoomAccountBodyFullNameMax).nullish(),
+  "password": zod.string().min(claimInvoiceRoomAccountBodyPasswordMin).max(claimInvoiceRoomAccountBodyPasswordMax).nullish()
+})
+
+export const ClaimInvoiceRoomAccountResponse = zod.object({
+  "created": zod.boolean(),
+  "loginRequired": zod.boolean(),
+  "buyerPath": zod.string()
+})
+
+
+export const GetInvoiceRoomPdfResponse = zod.unknown()
 
 
 export const VerifyStampBody = zod.object({

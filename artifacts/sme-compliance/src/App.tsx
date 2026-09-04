@@ -33,6 +33,7 @@ import { Notifications } from "@/pages/notifications";
 import { Help } from "@/pages/help";
 import { ActivityPage } from "@/pages/activity";
 import { Today, WorkPage } from "@/pages/today";
+import { InvoiceRooms } from "@/pages/invoice-rooms";
 
 // A 401 must not retry-spin — the session guard redirects to the portal instead.
 const queryClient = new QueryClient({
@@ -62,6 +63,7 @@ function Router() {
         <Route path="/invoices" component={Invoices} />
         <Route path="/invoices/new" component={InvoiceNew} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
+        <Route path="/invoice-rooms" component={InvoiceRooms} />
         <Route path="/bills" component={Bills} />
         <Route path="/vat" component={Vat} />
         <Route path="/recurring" component={Recurring} />

@@ -61,10 +61,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
-import {
-  mfaChallengeDisposition,
-  mfaExpiryHint,
-} from "@/lib/mfa";
+import { mfaChallengeDisposition, mfaExpiryHint } from "@/lib/mfa";
 import { TOTP_CARD_INITIAL, totpCardTransition } from "@/lib/totp-card";
 import {
   defaultWorkspaceFor,
@@ -74,6 +71,7 @@ import {
 import LandingPage from "@/LandingPage";
 import { AcceptInvite } from "@/AcceptInvite";
 import { ResetPassword } from "@/ResetPassword";
+import InvoiceRoom from "@/InvoiceRoom";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -510,8 +508,8 @@ function SignInPanel() {
             />
             <p id="totp-help" className="text-xs text-slate-500">
               Your app shows a new code every 30 seconds. A recovery code also
-              works here. For security this step expires five minutes after
-              you entered your password (
+              works here. For security this step expires five minutes after you
+              entered your password (
               <span data-testid="text-totp-expiry">
                 {mfaExpiryHint(mfa.issuedAt, now)}
               </span>
@@ -1571,7 +1569,10 @@ function SignedInPanel({ me }: { me: Me }) {
                 disabled={revokeSessions.isPending}
               >
                 {revokeSessions.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
                 ) : null}
                 Sign out all
               </Button>
@@ -1967,13 +1968,15 @@ function Portal() {
 export default function App() {
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
   const pageTitle =
-    pathname === "/login"
-      ? "Sign in | MeridianIQ"
-      : pathname === "/reset-password"
-        ? "Reset password | MeridianIQ"
-        : pathname === "/accept-invite"
-          ? "Accept invitation | MeridianIQ"
-          : "MeridianIQ | Turn every invoice into evidence";
+    pathname === "/invoice-room"
+      ? "Secure Invoice Room | MeridianIQ"
+      : pathname === "/login"
+        ? "Sign in | MeridianIQ"
+        : pathname === "/reset-password"
+          ? "Reset password | MeridianIQ"
+          : pathname === "/accept-invite"
+            ? "Accept invitation | MeridianIQ"
+            : "MeridianIQ | Turn every invoice into evidence";
 
   useEffect(() => {
     document.title = pageTitle;
@@ -1991,6 +1994,14 @@ export default function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <ResetPassword />
+      </QueryClientProvider>
+    );
+  }
+
+  if (pathname === "/invoice-room") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <InvoiceRoom />
       </QueryClientProvider>
     );
   }

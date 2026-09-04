@@ -45,7 +45,7 @@ function patternEntries(
   return [
     ...source
       .slice(start, end)
-      .matchAll(/method: "(\w+)", pattern: (\/\^.*?\$\/)/g),
+      .matchAll(/method:\s*"(\w+)",\s*pattern:\s*(\/\^.*?\$\/)/g),
   ].map((m) => ({ method: m[1], pattern: m[2] }));
 }
 
@@ -91,6 +91,25 @@ const PUBLIC_NO_CONTEXT = new Set([
   // schema apply before the deployment-owned messaging relay is called.
   "POST /api/public/access-requests",
   "POST /api/public/usability-events",
+  // Invoice Room browser writes are authenticated by an opaque room-session
+  // cookie and carry their own raw-pool throttle. The payment callback uses
+  // a deployment-owned webhook secret instead of a browser principal.
+  "POST /api/public/invoice-room/exchange",
+  "POST /api/public/invoice-room/otp",
+  "POST /api/public/invoice-room/verify",
+  "POST /api/public/invoice-room/respond",
+  "POST /api/public/invoice-room/payment-reports",
+  "POST /api/public/invoice-room/payment-link",
+  "POST /api/public/invoice-room/claim",
+  "POST /api/invoice-room/payments/confirm",
+]);
+
+// Authenticated Invoice Room routes that intentionally manage their own short
+// tenant scopes around relay/provider calls. They never invoke a model and
+// remain covered by the normal authenticated per-principal limiter.
+const NON_MODEL_NO_CONTEXT_PATTERNS = new Set([
+  "/^\\/api\\/invoices\\/[^/]+\\/invoice-rooms$/",
+  "/^\\/api\\/invoice-rooms\\/[^/]+\\/(?:replace|revoke)$/",
 ]);
 
 test("every NO_CONTEXT route is rate-classed or explicitly allowlisted", () => {
@@ -137,7 +156,7 @@ test("the allowlists stay honest", () => {
   }
 });
 
-test("every parameterized NO_CONTEXT pattern has a MODEL twin", () => {
+test("every parameterized NO_CONTEXT pattern has a MODEL twin or explicit non-model exemption", () => {
   const noContextPatterns = patternEntries(
     src("app.ts"),
     "NO_CONTEXT_ROUTE_PATTERNS",
@@ -149,8 +168,34 @@ test("every parameterized NO_CONTEXT pattern has a MODEL twin", () => {
   assert.ok(noContextPatterns.length >= 1, "the pattern list parsed");
   for (const { method, pattern } of noContextPatterns) {
     assert.ok(
-      modelPatterns.some((m) => m.method === method && m.pattern === pattern),
-      `${method} ${pattern} is NO_CONTEXT (a provider-calling shape by construction — the literal list holds the non-model exemptions) but has no identical MODEL pattern twin`,
+      modelPatterns.some((m) => m.method === method && m.pattern === pattern) ||
+        NON_MODEL_NO_CONTEXT_PATTERNS.has(pattern),
+      `${method} ${pattern} is NO_CONTEXT but has neither an identical MODEL pattern twin nor an explicit non-model exemption`,
+    );
+  }
+});
+
+test("the parameterized non-model exemptions stay honest", () => {
+  const noContextPatterns = patternEntries(
+    src("app.ts"),
+    "NO_CONTEXT_ROUTE_PATTERNS",
+  );
+  const modelPatterns = patternEntries(
+    src("middleware/rate-limit.ts"),
+    "MODEL_RATE_LIMITED_ROUTE_PATTERNS",
+  );
+  for (const pattern of NON_MODEL_NO_CONTEXT_PATTERNS) {
+    assert.ok(
+      noContextPatterns.some(
+        (entry) => entry.method === "POST" && entry.pattern === pattern,
+      ),
+      `${pattern} is exempted here but no longer leaves the request transaction`,
+    );
+    assert.ok(
+      !modelPatterns.some(
+        (entry) => entry.method === "POST" && entry.pattern === pattern,
+      ),
+      `${pattern} is both non-model exempted and in the MODEL class`,
     );
   }
 });
