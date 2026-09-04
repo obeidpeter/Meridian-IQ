@@ -231,9 +231,9 @@ test("a stale replacement is rejected instead of erasing a concurrent admin chan
     body: JSON.stringify({ userIds: [], expectedVersion: initial.version }),
   });
   assert.equal(stale.status, 409);
-  assert.equal(
-    ((await stale.json()) as { code: string }).code,
-    "ASSIGNMENTS_CHANGED",
+  assert.match(
+    ((await stale.json()) as { error: string }).error,
+    /team changed since you opened it/i,
   );
 
   const latest = (await (

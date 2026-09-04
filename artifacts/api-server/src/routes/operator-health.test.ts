@@ -507,18 +507,32 @@ test("GET /operator/dead-letters returns a page, redacts inbound payloads and re
     });
   try {
     const base = await listen(appFor(operator, operatorRouter));
-    const response = await fetch(`${base}/operator/dead-letters?limit=200`);
-    assert.equal(response.status, 200);
-    const page = (await response.json()) as {
-      items: Array<{
-        id: string;
-        payload: unknown;
-        correlationId: string | null;
-      }>;
-      nextCursor: string | null;
+    type DeadLetter = {
+      id: string;
+      payload: unknown;
+      correlationId: string | null;
     };
-    assert.ok("nextCursor" in page);
-    const event = page.items.find((item) => item.id === id);
+    let cursor: string | null = null;
+    let event: DeadLetter | undefined;
+    const seenCursors = new Set<string>();
+    do {
+      const query = cursor
+        ? `?limit=200&cursor=${encodeURIComponent(cursor)}`
+        : "?limit=200";
+      const response = await fetch(`${base}/operator/dead-letters${query}`);
+      assert.equal(response.status, 200);
+      const page = (await response.json()) as {
+        items: DeadLetter[];
+        nextCursor: string | null;
+      };
+      assert.ok("nextCursor" in page);
+      event = page.items.find((item) => item.id === id);
+      cursor = page.nextCursor;
+      if (cursor) {
+        assert.ok(!seenCursors.has(cursor), "cursor pagination must advance");
+        seenCursors.add(cursor);
+      }
+    } while (!event && cursor);
     assert.deepEqual(event?.payload, { redacted: true });
     assert.equal(event?.correlationId, correlationId);
     assert.equal(

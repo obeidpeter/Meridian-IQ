@@ -86,26 +86,37 @@ const SCHEMA_VERSIONS: { version: number; description: string }[] = [
 const SEED_DEMO =
   process.env.NODE_ENV !== "production" && process.env.SEED_DEMO === "true";
 
+async function seedReleaseFlagsInContext(): Promise<void> {
+  // A retired flag (releases.ts RETIRED_FLAGS) leaves the table — and its
+  // overrides — so it stops appearing on the console and blocking the
+  // release badge on databases that booted before its retirement.
+  for (const key of RETIRED_FLAGS) {
+    await getDb()
+      .delete(featureFlagOverridesTable)
+      .where(eq(featureFlagOverridesTable.flagKey, key));
+    await getDb()
+      .delete(featureFlagsTable)
+      .where(eq(featureFlagsTable.key, key));
+  }
+  for (const flag of FLAGS) {
+    await getDb()
+      .insert(featureFlagsTable)
+      .values(flag)
+      .onConflictDoNothing({ target: featureFlagsTable.key });
+  }
+}
+
+// API tests use a schema-only database, but feature dependency checks need the
+// same essential release defaults that application bootstrap installs. This
+// intentionally excludes catalogue, course, and demo-account seed data.
+export async function seedReleaseFlags(): Promise<void> {
+  await runInBypassContext(seedReleaseFlagsInContext);
+}
+
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
 export async function seedPlatform(): Promise<void> {
   await runInBypassContext(async () => {
-    // A retired flag (releases.ts RETIRED_FLAGS) leaves the table — and its
-    // overrides — so it stops appearing on the console and blocking the
-    // release badge on databases that booted before its retirement.
-    for (const key of RETIRED_FLAGS) {
-      await getDb()
-        .delete(featureFlagOverridesTable)
-        .where(eq(featureFlagOverridesTable.flagKey, key));
-      await getDb()
-        .delete(featureFlagsTable)
-        .where(eq(featureFlagsTable.key, key));
-    }
-    for (const flag of FLAGS) {
-      await getDb()
-        .insert(featureFlagsTable)
-        .values(flag)
-        .onConflictDoNothing({ target: featureFlagsTable.key });
-    }
+    await seedReleaseFlagsInContext();
     for (const v of SCHEMA_VERSIONS) {
       await getDb()
         .insert(schemaVersionsTable)

@@ -77,7 +77,9 @@ test("the contract routes keep the statement-connections audience", () => {
     );
   }
   // The POST registration appears after the GET; check it separately.
-  const postStart = routesSrc.indexOf('router.post("/collection-accounts"');
+  const postStart = routesSrc.search(
+    /router\.post\(\s*["']\/collection-accounts["']/,
+  );
   assert.ok(postStart >= 0, "the create route exists");
   const postBlock = routesSrc.slice(
     postStart,
