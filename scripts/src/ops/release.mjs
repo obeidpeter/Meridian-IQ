@@ -5,7 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { psql, run, dbNameFromUrl, hostPortFromUrl } from "./common.mjs";
 import { loadManifest, verifyLocalArtifact, ROOT } from "./build-manifest.mjs";
-import { recoveryMode, loadMaintenancePlan } from "./recovery-plan.mjs";
+import {
+  recoveryMode,
+  loadMaintenancePlan,
+  loadRollbackApproval,
+} from "./recovery-plan.mjs";
 import {
   compareSecurityCatalog,
   readSecurityCatalog,
@@ -131,6 +135,9 @@ export function release(
     env.RELEASE_MANIFEST_SHA256,
   );
   verifyArtifact(manifest);
+  const mode = recoveryMode(env);
+  if (mode === "rollback")
+    loadRollbackApproval(env, { revision: manifest.source.revision });
   const evidence = JSON.parse(
     query(
       env.DATABASE_URL,
@@ -138,7 +145,6 @@ export function release(
     ),
   );
   assertRecoveryEvidence(evidence);
-  const mode = recoveryMode(env);
   if (mode === "maintenance-forward") {
     const backup = evidence.find((row) => row.key === "backup");
     const plan = loadMaintenancePlan(env, {

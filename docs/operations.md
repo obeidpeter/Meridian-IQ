@@ -67,7 +67,8 @@ host requires an explicit reviewed build configuration, not runtime URL rewritin
    manifest outside every static `publicDir`; do not use a `VITE_` variable.
 3. Supply the API build's existing `DATABASE_URL` for the actual production
    target and the chosen recovery-mode configuration. Rollback mode requires a
-   qualified `RELEASE_ROLLBACK_REVISION` from the reviewed release record;
+   qualified `RELEASE_ROLLBACK_REVISION` plus `RELEASE_ROLLBACK_APPROVAL` and
+   independently trusted `RELEASE_ROLLBACK_APPROVAL_SHA256`;
    maintenance-forward requires the
    independently approved recovery plan. Apply any separately reviewed
    versioned migrations and establish genuine backup/restore evidence first.
@@ -149,10 +150,38 @@ Each selection overrides inherited `RELEASE_RUNTIME_STATE` and
 `RELEASE_RECOVERY_MODE`.
 
 HOLD and rollback selection require a qualified full
-`RELEASE_ROLLBACK_REVISION` supplied through reviewed release metadata or
-configuration. The artifact descriptor deliberately contains no fallback SHA;
-update the reviewed release value for each approval rather than retaining a
-long-lived artifact constant. `--run` never converts rollback evidence into
+`RELEASE_ROLLBACK_REVISION` and a retained reviewed record. Create
+`release/rollback-approval.json` only after compatibility qualification, with
+this exact contract:
+
+```json
+{
+  "format": 1,
+  "mode": "rollback",
+  "revision": "<full candidate SHA>",
+  "rollbackRevision": "<full qualified fallback SHA>",
+  "approved": true,
+  "approvedBy": "<reviewer identity>",
+  "approvedAt": "<UTC timestamp>",
+  "expiresAt": "<later UTC timestamp>",
+  "qualificationEvidence": "<retained staging/CI evidence reference>"
+}
+```
+
+Retain the immutable record and its independently captured SHA-256 alongside
+the candidate's release evidence; do not overwrite an earlier candidate's
+record. Set `RELEASE_ROLLBACK_APPROVAL` to that private file and
+`RELEASE_ROLLBACK_APPROVAL_SHA256` to the trusted digest. Promotion preflight
+and API startup hash the exact bytes and bind both full SHAs before accepting
+rollback mode. Unknown fields, self-fallback, unapproved records, future
+approval, expiry, tampering, or either SHA mismatch fail closed. The fixed
+in-checkout path `release/rollback-approval.json` is permitted for secure
+staging, but it is not a public asset; storing it outside the checkout is also
+supported.
+
+The artifact descriptor deliberately contains no fallback SHA or approval;
+create a fresh candidate-bound record for each approval rather than retaining a
+long-lived provider value. `--run` never converts rollback evidence into
 maintenance authorization: it still requires the current plan, held evidence,
 and a fresh promotion-time activation permit. An expired permit therefore
 blocks only an explicitly selected maintenance-forward RUN, not an ordinary
@@ -161,7 +190,8 @@ descriptor-driven HOLD Publish.
 Both states require
 `RELEASE_BASE_URL` as the exact origin matching the CI manifest's mobile domain,
 `RELEASE_TARGET_REPL_ID` matching its mandatory mobile Repl ID, and independently trusted
-`RELEASE_MANIFEST_SHA256`, `RELEASE_RECOVERY_PLAN_SHA256` and
+`RELEASE_MANIFEST_SHA256`, the rollback approval checksum when rollback mode is
+selected, `RELEASE_RECOVERY_PLAN_SHA256` and
 `RELEASE_BACKUP_SHA256`. Never derive these trust inputs from unreviewed staged
 files. HOLD runtime performs no database connection, API import or plan-TTL
 validation; it serves maintenance health and rejects business/readiness requests
@@ -210,8 +240,9 @@ the exact candidate, manifest, target, backup, plan and held evidence, and
 explicitly authorizes startup writes. External ingress and schedules must stay
 held until real post-RUN readiness and operator signoff.
 
-Inside the checkout, only the fixed `release/recovery-plan.json`,
-`release/held-evidence.json` and `release/activation-permit.json` evidence paths
+Inside the checkout, only the fixed `release/rollback-approval.json`,
+`release/recovery-plan.json`, `release/held-evidence.json` and
+`release/activation-permit.json` evidence paths
 are permitted; alternatively keep evidence outside the checkout. They are not
 public assets. RUN runtime verifies the permit and digest bindings; plan and
 held-evidence files need not be present there. Approval TTLs apply to each new
@@ -413,10 +444,10 @@ No qualified 0.99-compatible fallback has yet been established for R198.
 Qualification requires a successful immutable CI artifact and staging tests
 against post-upgrade data: stale edit/approval rejection, original-key replay
 and changed-payload refusal, import checkpoints, draft tombstones, and unsettled
-Clerk spend. Record the fallback's full manifest revision and evidence before
-setting `RELEASE_ROLLBACK_REVISION`. The current gate checks SHA syntax, not this
-compatibility evidence; an arbitrary, baseline or candidate SHA must not be used
-merely to satisfy it.
+Clerk spend. Record the fallback's full manifest revision and qualification
+evidence in the checksum-bound, candidate-specific rollback approval before
+setting `RELEASE_ROLLBACK_REVISION`. An arbitrary, baseline, candidate, expired,
+or previous candidate's fallback record is rejected.
 
 Without a qualified fallback, the alternative is a separately reviewed,
 externally enforced maintenance and forward-recovery policy: stop all APIs,

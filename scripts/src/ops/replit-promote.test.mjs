@@ -254,6 +254,24 @@ function fixture(t) {
     env.RELEASE_MANIFEST_SHA256 = digest(bytes);
   };
   stamp();
+  const rollbackApproval = {
+    format: 1,
+    mode: "rollback",
+    revision: manifest.source.revision,
+    rollbackRevision: env.RELEASE_ROLLBACK_REVISION,
+    approved: true,
+    approvedBy: "synthetic-approver",
+    approvedAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    qualificationEvidence: "Synthetic staging qualification evidence",
+  };
+  const rollbackBytes = JSON.stringify(rollbackApproval);
+  write("release/rollback-approval.json", rollbackBytes);
+  env.RELEASE_ROLLBACK_APPROVAL = path.join(
+    root,
+    "release/rollback-approval.json",
+  );
+  env.RELEASE_ROLLBACK_APPROVAL_SHA256 = digest(rollbackBytes);
   const cli = (...args) =>
     spawnSync(
       process.execPath,
@@ -646,6 +664,24 @@ test("native API promotion cannot bypass missing recovery, drift or rollback con
       ),
     /RELEASE_ROLLBACK_REVISION/,
   );
+  for (const changes of [
+    { RELEASE_ROLLBACK_APPROVAL: undefined },
+    { RELEASE_ROLLBACK_APPROVAL_SHA256: "0".repeat(64) },
+    { RELEASE_ROLLBACK_REVISION: "d".repeat(40) },
+  ])
+    assert.throws(
+      () =>
+        promoteReplit(
+          "api-server",
+          { ...f.env, ...changes },
+          f.root,
+          {
+            query: () =>
+              assert.fail("rollback approval must fail before DB preflight"),
+          },
+        ),
+      /ROLLBACK_APPROVAL|checksum mismatch|revision mismatch|unexpected untracked Publish source/,
+    );
   assert.throws(
     () =>
       promoteReplit("api-server", f.env, f.root, {

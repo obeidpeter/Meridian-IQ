@@ -13,7 +13,11 @@ import {
 import { run } from "./common.mjs";
 import { release } from "./release.mjs";
 import { MOBILE_DIR, validateMobileArtifact } from "./mobile-artifact.mjs";
-import { loadMaintenancePlan, recoveryMode } from "./recovery-plan.mjs";
+import {
+  loadMaintenancePlan,
+  loadRollbackApproval,
+  recoveryMode,
+} from "./recovery-plan.mjs";
 import { loadActivationPermit } from "./activation-permit.mjs";
 import { loadHeldEvidence } from "./postdeploy.mjs";
 import {
@@ -144,6 +148,7 @@ export function promoteReplit(
     ["recovery-plan", "RELEASE_RECOVERY_PLAN"],
     ["held-evidence", "RELEASE_HELD_EVIDENCE"],
     ["activation-permit", "RELEASE_ACTIVATION_PERMIT"],
+    ["rollback-approval", "RELEASE_ROLLBACK_APPROVAL"],
   ]) {
     const file = `release/${name}.json`;
     if (
@@ -240,6 +245,7 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
     const identity = maintenanceIdentity(manifest, env);
     logExecutionContext(identity, env);
     if (state === "HOLD") {
+      loadRollbackApproval(env, { revision: manifest.source.revision });
       assert.match(
         env.PORT ?? "",
         /^[1-9][0-9]{0,4}$/,
@@ -262,6 +268,7 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
         `replit: RUN activation ${permit.activationId}; startup writes authorized; external ingress and schedules must remain held pending real API readiness`,
       );
     } else {
+      loadRollbackApproval(env, { revision: manifest.source.revision });
       console.log(
         `replit: starting normal release with reviewed rollback ${env.RELEASE_ROLLBACK_REVISION}`,
       );

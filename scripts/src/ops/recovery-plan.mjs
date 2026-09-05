@@ -11,6 +11,7 @@ import {
 import { TextDecoder } from "node:util";
 
 export const RECOVERY_PLAN_MAX_BYTES = 64 * 1024;
+export const ROLLBACK_APPROVAL_MAX_BYTES = 64 * 1024;
 export const MAINTENANCE_WINDOW_MAX_MS = 4 * 3600_000;
 export const PLAN_APPROVAL_MAX_AGE_MS = 3600_000;
 
@@ -80,6 +81,12 @@ export function recoveryMode(env = process.env) {
       REVISION,
       "rollback mode requires RELEASE_ROLLBACK_REVISION as a full SHA",
     );
+    text(env.RELEASE_ROLLBACK_APPROVAL, "RELEASE_ROLLBACK_APPROVAL", 4096);
+    assert.match(
+      env.RELEASE_ROLLBACK_APPROVAL_SHA256 ?? "",
+      SHA256,
+      "independently trusted RELEASE_ROLLBACK_APPROVAL_SHA256 is required",
+    );
   } else {
     assert.equal(
       env.RELEASE_TRAFFIC_DRAINED,
@@ -94,6 +101,68 @@ export function recoveryMode(env = process.env) {
     );
   }
   return mode;
+}
+
+export function validateRollbackApproval(
+  record,
+  { revision, rollbackRevision, now = Date.now() },
+) {
+  assert.match(revision ?? "", REVISION, "candidate must be a full SHA");
+  assert.match(
+    rollbackRevision ?? "",
+    REVISION,
+    "rollback revision must be a full SHA",
+  );
+  assert.ok(Number.isSafeInteger(now), "now must be epoch milliseconds");
+  fields(
+    record,
+    [
+      "format",
+      "mode",
+      "revision",
+      "rollbackRevision",
+      "approved",
+      "approvedBy",
+      "approvedAt",
+      "expiresAt",
+      "qualificationEvidence",
+    ],
+    "rollback approval",
+  );
+  assert.equal(record.format, 1, "unsupported rollback approval format");
+  assert.equal(record.mode, "rollback", "rollback approval mode mismatch");
+  assert.equal(
+    record.revision,
+    revision,
+    "rollback approval candidate mismatch",
+  );
+  assert.equal(
+    record.rollbackRevision,
+    rollbackRevision,
+    "approved rollback revision mismatch",
+  );
+  assert.notEqual(
+    record.rollbackRevision,
+    record.revision,
+    "candidate cannot approve itself as its rollback fallback",
+  );
+  assert.equal(record.approved, true, "rollback record is not approved");
+  text(record.approvedBy, "rollback approval approvedBy", 200);
+  text(
+    record.qualificationEvidence,
+    "rollback approval qualificationEvidence",
+  );
+  const approvedAt = timestamp(
+    record.approvedAt,
+    "rollback approval approvedAt",
+  );
+  const expiresAt = timestamp(record.expiresAt, "rollback approval expiresAt");
+  assert.ok(
+    approvedAt <= now && now < expiresAt,
+    "rollback approval is expired or future-dated",
+  );
+  assert.ok(expiresAt > approvedAt, "rollback approval expiry must follow approval");
+  return record;
 }
 
 // Validates recorded attestations, not the truth of external drain/backup evidence.
@@ -243,11 +312,11 @@ export function validateMaintenancePlan(
   return plan;
 }
 
-function readPlanBytes(file) {
+function readRecordBytes(file, maxBytes, label) {
   const entry = lstatSync(file);
   assert.ok(
     entry.isFile() && !entry.isSymbolicLink(),
-    "recovery plan must be a regular non-symlink file",
+    `${label} must be a regular non-symlink file`,
   );
   // Bound the actual read too, even if a file grows after stat. Nonblocking open
   // and the descriptor check also refuse a raced special file without hanging.
@@ -260,10 +329,10 @@ function readPlanBytes(file) {
   try {
     const stat = fstatSync(fd);
     assert.ok(
-      stat.isFile() && stat.size > 0 && stat.size <= RECOVERY_PLAN_MAX_BYTES,
-      "recovery plan must be a nonempty regular file at most 64 KiB",
+      stat.isFile() && stat.size > 0 && stat.size <= maxBytes,
+      `${label} must be a nonempty regular file at most 64 KiB`,
     );
-    const bytes = Buffer.alloc(RECOVERY_PLAN_MAX_BYTES + 1);
+    const bytes = Buffer.alloc(maxBytes + 1);
     let size = 0;
     while (size < bytes.length) {
       const read = readSync(fd, bytes, size, bytes.length - size, null);
@@ -271,13 +340,49 @@ function readPlanBytes(file) {
       size += read;
     }
     assert.ok(
-      size > 0 && size <= RECOVERY_PLAN_MAX_BYTES,
-      "recovery plan exceeds bounded size",
+      size > 0 && size <= maxBytes,
+      `${label} exceeds bounded size`,
     );
     return bytes.subarray(0, size);
   } finally {
     closeSync(fd);
   }
+}
+
+function parseRecord(bytes, label) {
+  try {
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
+    );
+  } catch {
+    throw new Error(`${label} must contain valid UTF-8 JSON`);
+  }
+}
+
+export function loadRollbackApproval(
+  env,
+  { revision, rollbackRevision = env.RELEASE_ROLLBACK_REVISION, now = Date.now() },
+) {
+  assert.equal(
+    recoveryMode(env),
+    "rollback",
+    "rollback approval requires rollback mode",
+  );
+  const bytes = readRecordBytes(
+    env.RELEASE_ROLLBACK_APPROVAL,
+    ROLLBACK_APPROVAL_MAX_BYTES,
+    "rollback approval",
+  );
+  assert.equal(
+    createHash("sha256").update(bytes).digest("hex"),
+    env.RELEASE_ROLLBACK_APPROVAL_SHA256,
+    "rollback approval checksum mismatch",
+  );
+  return validateRollbackApproval(parseRecord(bytes, "rollback approval"), {
+    revision,
+    rollbackRevision,
+    now,
+  });
 }
 
 export function loadMaintenancePlan(
@@ -289,20 +394,17 @@ export function loadMaintenancePlan(
     "maintenance-forward",
     "maintenance plan requires maintenance-forward mode",
   );
-  const bytes = readPlanBytes(env.RELEASE_RECOVERY_PLAN);
+  const bytes = readRecordBytes(
+    env.RELEASE_RECOVERY_PLAN,
+    RECOVERY_PLAN_MAX_BYTES,
+    "recovery plan",
+  );
   assert.equal(
     createHash("sha256").update(bytes).digest("hex"),
     env.RELEASE_RECOVERY_PLAN_SHA256,
     "recovery plan checksum mismatch",
   );
-  let plan;
-  try {
-    plan = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
-    );
-  } catch {
-    throw new Error("recovery plan must contain valid UTF-8 JSON");
-  }
+  const plan = parseRecord(bytes, "recovery plan");
   return validateMaintenancePlan(plan, {
     revision,
     backupSha256,

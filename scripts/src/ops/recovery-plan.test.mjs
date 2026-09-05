@@ -6,7 +6,9 @@ import path from "node:path";
 import test from "node:test";
 import {
   loadMaintenancePlan,
+  loadRollbackApproval,
   recoveryMode,
+  validateRollbackApproval,
   validateMaintenancePlan,
   RECOVERY_PLAN_MAX_BYTES,
 } from "./recovery-plan.mjs";
@@ -22,6 +24,35 @@ const stopped = (target) => ({
   targets: [target],
   evidence: `Synthetic fixture: ${target} stopped, active writers zero`,
 });
+
+function rollbackFixture() {
+  return {
+    format: 1,
+    mode: "rollback",
+    revision,
+    rollbackRevision: "c".repeat(40),
+    approved: true,
+    approvedBy: "fixture-approver",
+    approvedAt: "2026-09-04T11:50:00Z",
+    expiresAt: "2026-09-04T13:00:00Z",
+    qualificationEvidence: "Synthetic immutable CI and staging evidence",
+  };
+}
+
+function rollbackFile(t, value = rollbackFixture()) {
+  const directory = mkdtempSync(
+    path.join(tmpdir(), "meridian-rollback-approval-test-"),
+  );
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const file = path.join(directory, "synthetic-rollback-approval.json");
+  const bytes = Buffer.from(JSON.stringify(value));
+  writeFileSync(file, bytes);
+  return {
+    RELEASE_ROLLBACK_REVISION: value.rollbackRevision,
+    RELEASE_ROLLBACK_APPROVAL: file,
+    RELEASE_ROLLBACK_APPROVAL_SHA256: digest(bytes),
+  };
+}
 
 function fixture() {
   return {
@@ -86,23 +117,65 @@ function planFile(t, bytes = Buffer.from(JSON.stringify(fixture()))) {
   };
 }
 
-test("rollback stays the default and requires the existing full rollback SHA", () => {
+test("rollback stays the default and requires approval record configuration", (t) => {
+  const rollback = rollbackFile(t);
   assert.equal(
-    recoveryMode({ RELEASE_ROLLBACK_REVISION: revision }),
+    recoveryMode(rollback),
     "rollback",
   );
   assert.equal(
     recoveryMode({
+      ...rollback,
       RELEASE_RECOVERY_MODE: "rollback",
-      RELEASE_ROLLBACK_REVISION: revision,
     }),
     "rollback",
   );
   for (const rollback of [undefined, "", "main", revision.slice(0, 7)])
     assert.throws(
-      () => recoveryMode({ RELEASE_ROLLBACK_REVISION: rollback }),
+      () => recoveryMode({ ...rollbackFile(t), RELEASE_ROLLBACK_REVISION: rollback }),
       /RELEASE_ROLLBACK_REVISION/,
     );
+  assert.throws(
+    () => recoveryMode({ RELEASE_ROLLBACK_REVISION: "c".repeat(40) }),
+    /RELEASE_ROLLBACK_APPROVAL/,
+  );
+});
+
+test("rollback approval binds exact bytes, candidate, fallback, review and expiry", (t) => {
+  const record = rollbackFixture();
+  const context = {
+    revision,
+    rollbackRevision: record.rollbackRevision,
+    now,
+  };
+  assert.equal(validateRollbackApproval(record, context), record);
+  assert.deepEqual(loadRollbackApproval(rollbackFile(t, record), context), record);
+  for (const [change, expected] of [
+    [{ revision: "d".repeat(40) }, /candidate mismatch/],
+    [{ rollbackRevision: "d".repeat(40) }, /revision mismatch/],
+    [{ now: Date.parse(record.expiresAt) }, /expired/],
+  ])
+    assert.throws(
+      () => loadRollbackApproval(rollbackFile(t, record), { ...context, ...change }),
+      expected,
+    );
+  for (const mutate of [
+    (value) => (value.approved = false),
+    (value) => (value.rollbackRevision = value.revision),
+    (value) => (value.extra = true),
+  ]) {
+    const invalid = structuredClone(record);
+    mutate(invalid);
+    assert.throws(() =>
+      validateRollbackApproval(invalid, {
+        ...context,
+        rollbackRevision: invalid.rollbackRevision,
+      }),
+    );
+  }
+  const env = rollbackFile(t, record);
+  writeFileSync(env.RELEASE_ROLLBACK_APPROVAL, "{}");
+  assert.throws(() => loadRollbackApproval(env, context), /checksum mismatch/);
 });
 
 test("unknown modes never fall back or enable maintenance", () => {
@@ -563,7 +636,7 @@ test("loader enforces candidate, backup, time and approval after verifying bytes
     /not approved/,
   );
   assert.throws(
-    () => loadMaintenancePlan({ RELEASE_ROLLBACK_REVISION: revision }, context),
+    () => loadMaintenancePlan(rollbackFile(t), context),
     /requires maintenance-forward/,
   );
 });

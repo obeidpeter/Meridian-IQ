@@ -9,11 +9,14 @@ import { digest, loadManifest, stampManifest } from "./build-manifest.mjs";
 import { verifyDeployment } from "./postdeploy.mjs";
 
 const revision = "a".repeat(40);
+const rollbackRevision = "c".repeat(40);
 const env = {
   DATABASE_URL: "postgres://localhost/disposable",
   RELEASE_MANIFEST: "manifest.json",
   RELEASE_MANIFEST_SHA256: "b".repeat(64),
-  RELEASE_ROLLBACK_REVISION: revision,
+  RELEASE_ROLLBACK_REVISION: rollbackRevision,
+  RELEASE_ROLLBACK_APPROVAL: "rollback-approval.json",
+  RELEASE_ROLLBACK_APPROVAL_SHA256: "d".repeat(64),
 };
 const catalog = {
   postgresMajor: 16,
@@ -286,6 +289,22 @@ test("CI stamping and manifest tampering refuse; online mode executes zero migra
       RELEASE_MANIFEST: file,
       RELEASE_MANIFEST_SHA256: digest(bytes),
     };
+    const rollbackApproval = {
+      format: 1,
+      mode: "rollback",
+      revision,
+      rollbackRevision,
+      approved: true,
+      approvedBy: "fixture-approver",
+      approvedAt: new Date(Date.now() - 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      qualificationEvidence: "Synthetic staging qualification evidence",
+    };
+    const rollbackApprovalBytes = JSON.stringify(rollbackApproval);
+    const rollbackApprovalFile = path.join(dir, "rollback-approval.json");
+    writeFileSync(rollbackApprovalFile, rollbackApprovalBytes);
+    options.RELEASE_ROLLBACK_APPROVAL = rollbackApprovalFile;
+    options.RELEASE_ROLLBACK_APPROVAL_SHA256 = digest(rollbackApprovalBytes);
     let commands = 0;
     const deps = {
       verifyArtifact() {},
