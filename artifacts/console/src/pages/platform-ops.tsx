@@ -64,6 +64,7 @@ export const HEALTH_ALERT_ACTION_LABELS: Record<string, string> = {
   "clerk.spend.anomaly": "Firm spend anomaly",
   "clerk.quality.drop": "Extraction quality drop",
   "clerk.injection_resistance.dropped": "Injection resistance drop",
+  "clerk.reconcile_agreement.drop": "Reconciliation agreement drop",
 };
 
 export function healthAlertLabel(action: string): string {
