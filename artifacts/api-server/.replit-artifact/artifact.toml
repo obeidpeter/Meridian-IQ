@@ -19,6 +19,9 @@ args = ["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server"]
 
 [services.production.build.env]
 NODE_ENV = "production"
+RELEASE_RUNTIME_STATE = "HOLD"
+RELEASE_RECOVERY_MODE = "rollback"
+RELEASE_ROLLBACK_REVISION = "ea275be456a2c19babd06139de10cdbe322bc049"
 
 [services.production.run]
 # Verify the packaged CI bytes before loading the unchanged API bundle.
@@ -27,6 +30,9 @@ args = ["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "s
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
+RELEASE_RUNTIME_STATE = "HOLD"
+RELEASE_RECOVERY_MODE = "rollback"
+RELEASE_ROLLBACK_REVISION = "ea275be456a2c19babd06139de10cdbe322bc049"
 # Production uses reviewed versioned migrations, never a dev-data overwrite.
 # Do not set SEED_DEMO: production must never create known-password accounts.
 
