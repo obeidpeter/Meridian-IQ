@@ -36,10 +36,18 @@ export function deploymentOrigin(base) {
 }
 
 export function maintenanceIdentity(manifest, env) {
+  const targetIdPattern =
+    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
   assert.ok(
     typeof manifest.mobile?.domain === "string" &&
       manifest.mobile.domain.length > 0,
     "CI mobile production target is required",
+  );
+  assert.ok(
+    typeof manifest.mobile.replId === "string" &&
+      manifest.mobile.replId.length === 36 &&
+      targetIdPattern.test(manifest.mobile.replId),
+    "CI mobile production Repl ID is required as a canonical UUID",
   );
   const identity = {
     buildRevision: manifest.source.revision,
@@ -47,7 +55,8 @@ export function maintenanceIdentity(manifest, env) {
     manifestSha256: env.RELEASE_MANIFEST_SHA256,
     target: {
       origin: deploymentOrigin(env.RELEASE_BASE_URL),
-      replId: env.REPL_ID,
+      // Operator-approved stable app target, not the provider's build context.
+      replId: env.RELEASE_TARGET_REPL_ID,
     },
     recoveryPlanSha256: env.RELEASE_RECOVERY_PLAN_SHA256,
     backupSha256: env.RELEASE_BACKUP_SHA256,
@@ -70,20 +79,20 @@ export function maintenanceIdentity(manifest, env) {
     );
   assert.ok(
     typeof identity.target.replId === "string" &&
-      /^[\x21-\x7e]{1,200}$/.test(identity.target.replId),
-    "REPL_ID must identify the intended Replit target",
+      identity.target.replId.length === 36 &&
+      targetIdPattern.test(identity.target.replId),
+    "RELEASE_TARGET_REPL_ID must identify the intended Replit app as a canonical UUID",
   );
   assert.equal(
     identity.target.origin,
     deploymentOrigin(`https://${manifest.mobile.domain}`),
     "release origin differs from the CI mobile production target",
   );
-  if (manifest.mobile?.replId != null)
-    assert.equal(
-      identity.target.replId,
-      manifest.mobile.replId,
-      "REPL_ID differs from the CI mobile production target",
-    );
+  assert.equal(
+    identity.target.replId,
+    manifest.mobile.replId,
+    "RELEASE_TARGET_REPL_ID differs from the CI mobile production target",
+  );
   return identity;
 }
 

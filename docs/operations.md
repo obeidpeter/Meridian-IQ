@@ -138,12 +138,30 @@ recovery evidence. No production Publish was performed by this implementation.
 
 API startup defaults to `RELEASE_RUNTIME_STATE=HOLD`. Both states require
 `RELEASE_BASE_URL` as the exact origin matching the CI manifest's mobile domain,
-`REPL_ID` matching its Repl ID, and independently trusted
+`RELEASE_TARGET_REPL_ID` matching its mandatory mobile Repl ID, and independently trusted
 `RELEASE_MANIFEST_SHA256`, `RELEASE_RECOVERY_PLAN_SHA256` and
 `RELEASE_BACKUP_SHA256`. Never derive these trust inputs from unreviewed staged
 files. HOLD runtime performs no database connection, API import or plan-TTL
 validation; it serves maintenance health and rejects business/readiness requests
 with 503. It has no remote resume endpoint.
+
+The stable target is explicit operator configuration, not provider attestation.
+Before configuring `RELEASE_TARGET_REPL_ID`, retain independent control-plane
+evidence associating the source app ID, selected production deployment and
+production origin. Both the configured target and CI mobile target must be
+canonical lowercase UUIDs and match exactly. Set the same value for Publish
+builds, HOLD/RUN runtime and external postdeploy verification; it remains bound
+through held evidence and the activation permit. Missing targets never fall
+back to the manifest, `EXPO_PUBLIC_REPL_ID` or provider `REPL_ID`.
+
+Provider `REPL_ID` identifies the observed execution context and is not assumed
+to be the stable source-app target across build/runtime contexts. Preserve it
+unchanged. Build/start diagnostics record it separately in sanitized form;
+health identity excludes it so verification from another host does not depend
+on the verifier's execution context. A diagnostic ID is not authorization or
+proof of deployment ownership. Do not overwrite it, alter auth/DB credentials,
+or accept an arbitrary target just to make a failed gate pass. If independent
+target/origin association cannot be established, keep maintenance in place.
 
 The maintenance-forward release validator is integrated, but operational use
 still needs actual approvals and evidence under

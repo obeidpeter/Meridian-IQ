@@ -216,10 +216,27 @@ rollback SHA. Its explicit alternative is `maintenance-forward`, requiring
 plus actual external drain evidence. Preparation approval is not a populated plan.
 
 `RELEASE_RUNTIME_STATE` defaults to `HOLD`. API HOLD and RUN require
-`RELEASE_BASE_URL` matching the CI mobile domain, `REPL_ID` matching its Repl ID,
+`RELEASE_BASE_URL` matching the CI mobile domain and the mandatory
+`RELEASE_TARGET_REPL_ID` matching the CI mobile Repl ID exactly,
 and independently trusted `RELEASE_MANIFEST_SHA256`,
 `RELEASE_RECOVERY_PLAN_SHA256` and `RELEASE_BACKUP_SHA256`. HOLD does not import
 the API, connect to the database or check plan TTL at runtime.
+
+`RELEASE_TARGET_REPL_ID` is a nonsecret, operator-configured stable app target.
+Both it and `manifest.mobile.replId` must be lowercase UUIDs in canonical
+8-4-4-4-12 form; missing or malformed values fail closed. Provide the same target
+in Publish build/runtime configuration and the external postdeploy environment.
+There is no fallback to `REPL_ID`, `EXPO_PUBLIC_REPL_ID` or the manifest itself.
+Before setting it, independently verify and record the control-plane association
+between the source app, selected production deployment and `RELEASE_BASE_URL`.
+Matching configuration values are not provider attestation or proof of that
+association. Do not copy a value merely to satisfy the check.
+
+Provider `REPL_ID` is left unchanged and is not an authorization binding. It is
+recorded separately as sanitized build/start diagnostics, not in maintenance
+health or held/activation target identity. An external postdeploy process need
+not have `REPL_ID`. Do not override provider identity or change authentication
+or database credentials to configure the release target.
 
 RUN additionally requires maintenance-forward, `RELEASE_TRAFFIC_DRAINED=1`,
 `RELEASE_ACTIVATION_PERMIT`, `RELEASE_ACTIVATION_PERMIT_SHA256`,

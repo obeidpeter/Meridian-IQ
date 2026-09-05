@@ -25,6 +25,8 @@ import {
 } from "./postdeploy.mjs";
 
 const revision = "a".repeat(40);
+const targetReplId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const providerReplId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const catalog = {
   postgresMajor: 16,
   role: {
@@ -154,7 +156,7 @@ function fixture(t) {
       format: 1,
       domain: "fixture.invalid",
       basePath: "/mobile/",
-      replId: null,
+      replId: targetReplId,
     },
   };
   const env = {
@@ -166,7 +168,8 @@ function fixture(t) {
     RELEASE_RECOVERY_PLAN: path.join(root, "plan.json"),
     RELEASE_RECOVERY_PLAN_SHA256: digest(JSON.stringify(plan)),
     RELEASE_BASE_URL: "https://fixture.invalid",
-    REPL_ID: "11111111-1111-4111-8111-111111111111",
+    RELEASE_TARGET_REPL_ID: targetReplId,
+    REPL_ID: providerReplId,
     RELEASE_BACKUP_SHA256: plan.backup.sha256,
     DATABASE_URL: "postgres://localhost/synthetic-only",
   };
@@ -190,15 +193,98 @@ function fixture(t) {
   return { root, manifest, plan, env, identity, output, deps, fetcher };
 }
 
+test("stable target and CI mobile target require explicit canonical UUIDs without fallback", (t) => {
+  const f = fixture(t);
+  const invalid = [
+    undefined,
+    null,
+    "",
+    "not-a-uuid",
+    targetReplId.toUpperCase(),
+    ` ${targetReplId}`,
+    `${targetReplId}\n`,
+    `{${targetReplId}}`,
+    targetReplId.replaceAll("-", ""),
+    123,
+  ];
+  for (const value of invalid) {
+    assert.throws(
+      () =>
+        maintenanceIdentity(f.manifest, {
+          ...f.env,
+          RELEASE_TARGET_REPL_ID: value,
+          REPL_ID: targetReplId,
+          EXPO_PUBLIC_REPL_ID: targetReplId,
+        }),
+      /canonical UUID/,
+    );
+    assert.throws(
+      () =>
+        maintenanceIdentity(
+          {
+            ...f.manifest,
+            mobile: { ...f.manifest.mobile, replId: value },
+          },
+          f.env,
+        ),
+      /canonical UUID/,
+    );
+  }
+  for (const mobile of [undefined, null]) {
+    assert.throws(
+      () => maintenanceIdentity({ ...f.manifest, mobile }, f.env),
+      /CI mobile production target is required/,
+    );
+  }
+  assert.throws(
+    () =>
+      maintenanceIdentity(f.manifest, {
+        ...f.env,
+        RELEASE_TARGET_REPL_ID: providerReplId,
+        REPL_ID: targetReplId,
+      }),
+    /RELEASE_TARGET_REPL_ID differs/,
+  );
+});
+
+test("provider identity is unchanged diagnostic input, never health identity or a target fallback", (t) => {
+  const f = fixture(t);
+  const expected = structuredClone(f.identity);
+  for (const provider of [
+    undefined,
+    providerReplId,
+    targetReplId,
+    "different-build-context",
+  ]) {
+    const env = Object.freeze({ ...f.env, REPL_ID: provider });
+    assert.deepEqual(maintenanceIdentity(f.manifest, env), expected);
+    assert.equal(env.REPL_ID, provider);
+    assert.deepEqual(
+      maintenanceResponse(maintenanceIdentity(f.manifest, env)),
+      maintenanceResponse(expected),
+    );
+  }
+  assert.equal(expected.target.replId, targetReplId);
+  assert.notEqual(expected.target.replId, f.env.REPL_ID);
+  assert.equal(
+    JSON.stringify(maintenanceResponse(expected)).includes(providerReplId),
+    false,
+  );
+});
+
 test("held verification emits honest independently hashable evidence only after all checks", async (t) => {
   const f = fixture(t);
   const evidence = await postdeploy(
     ["--held", "--evidence-out", f.output],
-    f.env,
+    { ...f.env, REPL_ID: undefined },
     f.deps,
   );
   assert.equal(evidence.apiReadinessVerified, false);
   assert.equal(evidence.kind, "held-verification");
+  assert.deepEqual(evidence.target, {
+    origin: f.env.RELEASE_BASE_URL,
+    replId: targetReplId,
+  });
   assert.ok(
     Object.values(evidence.checks).every((checked) => checked === true),
   );
@@ -321,7 +407,14 @@ test("held verification rejects running API, ready responses, permissive busines
       route: "/api/healthz",
       body: {
         ...maintenanceResponse(f.identity),
-        target: { origin: "https://elsewhere.invalid", replId: f.env.REPL_ID },
+        target: { origin: "https://elsewhere.invalid", replId: targetReplId },
+      },
+    },
+    {
+      route: "/api/healthz",
+      body: {
+        ...maintenanceResponse(f.identity),
+        target: { origin: f.env.RELEASE_BASE_URL, replId: f.env.REPL_ID },
       },
     },
     { route: "/api/healthz", headers: {} },
@@ -370,6 +463,8 @@ test("held catalog, CI, recovery-plan and target failures cannot emit evidence",
     { RELEASE_RECOVERY_PLAN_SHA256: "0".repeat(64) },
     { RELEASE_BACKUP_SHA256: "0".repeat(64) },
     { RELEASE_BASE_URL: "https://elsewhere.invalid" },
+    { RELEASE_TARGET_REPL_ID: undefined, REPL_ID: targetReplId },
+    { RELEASE_TARGET_REPL_ID: providerReplId },
     { RELEASE_RUNTIME_STATE: "RUN" },
     { RELEASE_TRAFFIC_DRAINED: "0" },
   ]) {
@@ -437,7 +532,9 @@ test("ordinary postdeploy is real API readiness only after explicit RUN and keep
   runEnv.RELEASE_ACTIVATION_PERMIT_SHA256 = digest(bytes);
   for (const changes of [
     { RELEASE_BASE_URL: "https://wrong.invalid" },
-    { REPL_ID: "wrong-target" },
+    { RELEASE_TARGET_REPL_ID: undefined, REPL_ID: targetReplId },
+    { RELEASE_TARGET_REPL_ID: "wrong-target" },
+    { RELEASE_TARGET_REPL_ID: providerReplId },
     { RELEASE_ACTIVATION_ID: "33333333-3333-4333-8333-333333333333" },
     { RELEASE_ACTIVATION_PERMIT_SHA256: undefined },
     { RELEASE_ACTIVATION_PERMIT: undefined },
@@ -480,7 +577,21 @@ test("ordinary postdeploy is real API readiness only after explicit RUN and keep
       return Response.json({ status: "ready" });
     return new Response("immutable page");
   };
-  await postdeploy([], runEnv, { ...f.deps, fetcher });
+  for (const provider of [
+    undefined,
+    providerReplId,
+    "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  ]) {
+    await postdeploy(
+      [],
+      { ...runEnv, REPL_ID: provider },
+      { ...f.deps, fetcher },
+    );
+    assert.deepEqual(
+      readFileSync(runEnv.RELEASE_ACTIVATION_PERMIT),
+      Buffer.from(bytes),
+    );
+  }
   assert.equal(
     existsSync(f.output),
     false,
