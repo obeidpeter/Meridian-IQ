@@ -556,8 +556,8 @@ back-tests prove deterministic replay only; they do not claim loss prediction.
 The legacy `eligibility_assessments` table is retained and locked bypass-only so
 production rollout is additive. R4 financing tables have no route or UI and
 remain bypass-only.
-Status: implemented behind the dark `credit_readiness` and `bank_data_room`
-flags in API contract `0.98.0`; activation evidence remains operational work.
+Status: landed in API contract `0.98.0` behind the dark `credit_readiness` and
+`bank_data_room` flags; activation evidence remains operational work.
 
 ### D25 - Request policy is one security boundary
 

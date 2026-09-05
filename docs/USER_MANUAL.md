@@ -2031,6 +2031,7 @@ cleared) lands on the audit chain — see the "Feature flags" page in section 7.
 | `b2c_reporting`             | R2      | B2C 24-hour reporting module with compliance clocks (SME-08)                                                                                                                                                                                   | Dark   | Dark       |
 | `bank_feeds`                | R2      | Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam)                                                                                                                               | Dark   | Dark       |
 | `buyer_rails`               | R2      | Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)                                                                                                                                                                | Dark   | Dark       |
+| `invoice_room`              | R2      | Invoice Rooms: the account-optional buyer workspace for a shared stamped invoice — confirmation, payment evidence, secure expiring links and Buyer Rails account claiming (requires `invoice_lifecycle` and `buyer_confirmations`)              | Dark   | On         |
 | `erp_connectors`            | R2      | ERP connector contract and first two connectors (PL-03, INT-06)                                                                                                                                                                                | Dark   | Dark       |
 | `reconciliation`            | R2      | Bank-statement ingestion and reconciliation v1 (SME-07, INT-05)                                                                                                                                                                                | Dark   | Dark       |
 | `white_label`               | R2      | White-label theming, subdomains, bulk client import, certification (CON-05)                                                                                                                                                                    | Dark   | Dark       |
@@ -2238,11 +2239,14 @@ if the running server's version differs, every app shows a dismissible
   `openapi.yaml`), typecheck, lint, the unit suites for the api-server and
   all six app packages (mobile, SME app, console, buyer portal, landing,
   penalty calculator) plus the shared libs, the migration rollback test
-  against a real Postgres, the restore drill (pg_dump → pg_restore →
-  assert, see "Backups, restore drill and release" below), and all
-  **five** production web builds.
-- **e2e** — boots the built API server and five built frontends behind a
-  path-router and drives **183 headless user-journey checks** on the
+  against a real Postgres, the migration-only upgrade parity check, a
+  snapshot-consistent backup retained and restored with a full catalog
+  check (see "Backups, restore drill and release" below), the architecture,
+  secret and documentation gates, and all **five** production web builds.
+- **e2e** — builds the API (verifying its PDF worker) and the mobile package,
+  boots the built API server and five built frontends behind a path-router,
+  runs the accessibility matrices and bundle budgets, and drives **424
+  headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
@@ -2376,8 +2380,10 @@ bypass.
 
 **The server is running an older build (stale-build banner).**
 The web apps and the API server were built from different contract versions.
-An administrator needs to restart the api-server workflow so the deployed
-build matches; the banner disappears on its own once versions agree.
+An administrator needs to promote the matching build through the verified
+release path (`docs/operations.md`: Publish the immutable CI artifact, then
+the approved RUN activation); the banner disappears on its own once versions
+agree.
 
 **My API key stopped working (401).**
 Keys are revocable instantly and non-recoverable by design — the secret is
