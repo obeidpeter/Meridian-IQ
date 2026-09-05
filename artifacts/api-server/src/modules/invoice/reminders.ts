@@ -22,7 +22,10 @@ import {
 } from "../messaging/reminder-sweep";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { lagosDateString } from "../../lib/lagos-time";
-import { SUBMISSION_WINDOW_DAYS, submissionDeadline } from "./compliance-window";
+import {
+  SUBMISSION_WINDOW_DAYS,
+  submissionDeadline,
+} from "./compliance-window";
 
 // Mirrors the dashboard's classification exactly (routes/sme/dashboard.ts): due_soon at
 // <= 3 days to the submission deadline, overdue past it. A reminder fires once
@@ -46,7 +49,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // dark flag and stale invoices claim silently). Zero means the book is fully
 // processed — callers can drain by looping until then.
 //
-// Sweep-only: must run OUTSIDE any request context (the shared driver's
+// Sweep-only: no enclosing database transaction (the shared driver's
 // transaction-scope note in reminder-sweep.ts tells the story).
 export async function sweepDeadlineReminders(
   now = new Date(),
@@ -85,19 +88,21 @@ export async function sweepDeadlineReminders(
       AND e.client_party_id = ${invoicesTable.supplierPartyId}
       AND e.status IN ('open', 'in_progress')
   )`;
-  const candidates = await getDb()
-    .select()
-    .from(invoicesTable)
-    .where(
-      and(
-        inArray(invoicesTable.status, ["draft", "validated"]),
-        lte(invoicesTable.issueDate, cutoff),
-        unclaimedAtThreshold,
-        liveEngagement,
-      ),
-    )
-    .orderBy(invoicesTable.issueDate)
-    .limit(BATCH_LIMIT * 2);
+  const candidates = await runInBypassContext(() =>
+    getDb()
+      .select()
+      .from(invoicesTable)
+      .where(
+        and(
+          inArray(invoicesTable.status, ["draft", "validated"]),
+          lte(invoicesTable.issueDate, cutoff),
+          unclaimedAtThreshold,
+          liveEngagement,
+        ),
+      )
+      .orderBy(invoicesTable.issueDate)
+      .limit(BATCH_LIMIT * 2),
+  );
 
   return runClaimFirstReminderSweep(now, candidates, {
     batchLimit: BATCH_LIMIT,

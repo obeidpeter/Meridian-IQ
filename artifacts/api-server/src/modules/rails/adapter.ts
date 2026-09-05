@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   getDb,
+  withDatabaseContext,
   pool,
   railStatesTable,
   stampRecordsTable,
@@ -195,12 +196,16 @@ export async function breakerStatus(rail: Rail): Promise<BreakerStatus> {
 // upsert on every gate would queue behind another worker's uncommitted
 // breaker write for as long as that worker's rail call takes.
 async function ensureRailState(rail: Rail) {
+  // HTTP-triggered workers retain the HTTP boundary between their short
+  // transactions. Scope the read, never the external rail call that follows.
   const read = () =>
-    getDb()
-      .select()
-      .from(railStatesTable)
-      .where(eq(railStatesTable.rail, rail))
-      .limit(1);
+    withDatabaseContext({ bypass: true, firmId: null }, () =>
+      getDb()
+        .select()
+        .from(railStatesTable)
+        .where(eq(railStatesTable.rail, rail))
+        .limit(1),
+    );
   const [existing] = await read();
   if (existing) return existing;
   await pool.query(

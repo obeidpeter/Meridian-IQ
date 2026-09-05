@@ -1,5 +1,9 @@
 import { sql } from "drizzle-orm";
-import { getDb, alertPreferencesTable } from "@workspace/db";
+import {
+  getDb,
+  runInBypassContext,
+  alertPreferencesTable,
+} from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { daysUntil } from "../invoice/compliance-window";
 import { fanOutAlert } from "./fan-out";
@@ -16,12 +20,11 @@ import type { PushTemplateKey } from "../push/push";
 // prefilter + NOT-EXISTS fragment (one home per predicate), its deadline
 // function and window constants, its claim ledger, and its template keys.
 //
-// Sweep-only: must run OUTSIDE any request context, mirroring the digest
-// delivery shape (deliverFirmDigests). The candidate read, the prefs read and
-// the sends run on the ambient-free raw pool (autocommit — each message/push
-// insert is individually durable); only the per-row CLAIM (the module's
-// `claim` callback) opens a transaction, and it COMMITS before any send
-// leaves. Holding one bypass transaction across the whole pass — claims,
+// Sweep-only: run without an enclosing database transaction, including when
+// invoked by the HTTP scheduler. Candidate and preference reads use short
+// contexts; each per-row CLAIM commits before any send leaves. Messaging and
+// push own their separate database stages around transaction-free provider I/O.
+// Holding one bypass transaction across the whole pass — claims,
 // prefs reads AND the provider sends — meant a mid-pass failure rolled back
 // every claim and message row while real-provider sends had already left the
 // building, and sibling instances blocked on the row locks for the duration.
@@ -87,16 +90,18 @@ export async function runClaimFirstReminderSweep<Row>(
     if (days < -cfg.staleOverdueDays) continue;
 
     const clientPartyId = cfg.clientPartyIdOf(row);
-    const [prefs] = await getDb()
-      .select()
-      .from(alertPreferencesTable)
-      .where(sql`${alertPreferencesTable.clientPartyId} = ${clientPartyId}`)
-      .limit(1);
+    const [prefs] = await runInBypassContext(() =>
+      getDb()
+        .select()
+        .from(alertPreferencesTable)
+        .where(sql`${alertPreferencesTable.clientPartyId} = ${clientPartyId}`)
+        .limit(1),
+    );
     // No prefs row means the table defaults apply: whatsapp/email/push on,
     // sms off, deadline alerts on.
     if (prefs && !prefs.deadlineAlerts) continue;
     // Sends happen strictly AFTER the claim committed, outside any open
-    // transaction: each message/push write is an autocommit insert, so a
+    // transaction: each message/push write is committed independently, so a
     // failure here loses at most this reminder's remaining channels — never
     // a committed claim (fanOutAlert absorbs per-channel failures; they land
     // in the messages ledger). Consent (CORE-03) is checked inside

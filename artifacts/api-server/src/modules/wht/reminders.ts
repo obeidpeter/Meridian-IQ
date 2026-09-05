@@ -57,7 +57,7 @@ function chaseDeadline(deductedDate: string): Date {
 // opt-outs, dark flag and stale credits claim silently). Zero means the
 // ledger is fully processed — callers can drain by looping until then.
 //
-// Sweep-only: must run OUTSIDE any request context (the shared driver's
+// Sweep-only: no enclosing database transaction (the shared driver's
 // transaction-scope note in reminder-sweep.ts tells the story).
 export async function sweepWhtReminders(now = new Date()): Promise<number> {
   // SQL prefilter: any awaiting-note credit whose chase deadline falls
@@ -95,19 +95,21 @@ export async function sweepWhtReminders(now = new Date()): Promise<number> {
       AND e.client_party_id = ${whtCreditsTable.clientPartyId}
       AND e.status IN ('open', 'in_progress')
   )`;
-  const candidates = await getDb()
-    .select()
-    .from(whtCreditsTable)
-    .where(
-      and(
-        eq(whtCreditsTable.status, "awaiting_note"),
-        sql`(${whtCreditsTable.deductedDate}::date + ${sql.raw(String(WHT_NOTE_CHASE_DAYS))}) <= ${cutoff}::date`,
-        unclaimedAtThreshold,
-        liveEngagement,
-      ),
-    )
-    .orderBy(whtCreditsTable.deductedDate)
-    .limit(BATCH_LIMIT * 2);
+  const candidates = await runInBypassContext(() =>
+    getDb()
+      .select()
+      .from(whtCreditsTable)
+      .where(
+        and(
+          eq(whtCreditsTable.status, "awaiting_note"),
+          sql`(${whtCreditsTable.deductedDate}::date + ${sql.raw(String(WHT_NOTE_CHASE_DAYS))}) <= ${cutoff}::date`,
+          unclaimedAtThreshold,
+          liveEngagement,
+        ),
+      )
+      .orderBy(whtCreditsTable.deductedDate)
+      .limit(BATCH_LIMIT * 2),
+  );
 
   // Reminders honour the SAME deadline-alerts opt-out and the same
   // deadline_alerts consent purpose as the invoice, obligation and filing

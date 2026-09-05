@@ -771,17 +771,18 @@ async function openCaseForDeadEvent(
   }
 }
 
-// A claim failure must never kill the drain loop, but it must not be silent
-// either: a persistent one (permissions regression, schema drift) would
+// A claim failure must not be confused with an empty queue: a persistent
+// one (permissions regression, schema drift) would
 // otherwise make the pipeline process nothing while every dashboard stays
-// green. Log it and count it so the condition is scrapeable.
+// green. Log/count it, then let the guarded pass report failure without
+// killing the interval loop. The short claim transaction rolls back.
 async function claimnextSafe(): Promise<OutboxEvent | null> {
   try {
     return await claimnext();
   } catch (err) {
     outboxClaimFailuresTotal.inc();
     logger.error({ err }, "outbox claim failed");
-    return null;
+    throw err;
   }
 }
 
@@ -1484,11 +1485,16 @@ async function withDistributedLock<T>(
 // — when its prior run is still in flight, isolates its own errors (logged,
 // not silently swallowed), and reports whether it actually ran.
 
-async function guardedSweepPass(): Promise<boolean> {
-  if (sweeping || stopping) return false;
+interface SweepPassResult {
+  ran: boolean;
+  failures: number;
+}
+
+async function guardedSweepPass(): Promise<SweepPassResult> {
+  if (sweeping || stopping) return { ran: false, failures: 0 };
   sweeping = true;
-  let report!: (ran: boolean) => void;
-  const response = new Promise<boolean>((resolve) => {
+  let report!: (result: SweepPassResult) => void;
+  const response = new Promise<SweepPassResult>((resolve) => {
     report = resolve;
   });
   track(
@@ -1497,22 +1503,25 @@ async function guardedSweepPass(): Promise<boolean> {
         const result = await withDistributedLock(991_102, async () => {
           const owned: Promise<unknown>[] = [];
           try {
-            await runSweepPass(owned);
-            report(true);
+            const failures = await runSweepPass(owned);
+            // A timeout must report failure promptly while retaining ownership
+            // until the underlying work settles. Healthy passes await unlock.
+            if (failures > 0) report({ ran: true, failures });
+            return failures;
           } finally {
             // The caller may stop waiting, but another process must not acquire
             // our pass lock while a timed-out sweep still has side effects.
             await Promise.allSettled(owned);
           }
         });
-        report(result.acquired);
+        report({ ran: result.acquired, failures: result.value ?? 0 });
       } catch (err) {
         // The pass itself (lock acquisition / release) failed — the sweeps
         // inside never throw past runSweepsOnce. Count it under its own
         // label so an unhandled rejection never escapes the interval.
         sweepErrorsTotal.inc({ sweep: "pass", kind: "error" });
         logger.error({ err }, "compliance sweep pass failed");
-        report(false);
+        report({ ran: false, failures: 1 });
       } finally {
         sweeping = false;
       }
@@ -1522,21 +1531,25 @@ async function guardedSweepPass(): Promise<boolean> {
 }
 
 /** One guarded sweep pass on demand (the external trigger and tests). */
-export function runSweepPassOnce(): Promise<boolean> {
-  return guardedSweepPass();
+export async function runSweepPassOnce(): Promise<boolean> {
+  return (await guardedSweepPass()).ran;
 }
 
-async function guardedDrainPass(): Promise<{ ran: boolean; drained: number }> {
-  if (draining || stopping) return { ran: false, drained: 0 };
+async function guardedDrainPass(): Promise<{
+  ran: boolean;
+  drained: number;
+  failed: boolean;
+}> {
+  if (draining || stopping) return { ran: false, drained: 0, failed: false };
   draining = true;
   return track(
     (async () => {
       try {
         const drained = await drain();
-        return { ran: true, drained };
+        return { ran: true, drained, failed: false };
       } catch (err) {
         logger.error({ err }, "outbox drain failed");
-        return { ran: false, drained: 0 };
+        return { ran: false, drained: 0, failed: true };
       } finally {
         draining = false;
       }
@@ -1554,8 +1567,11 @@ async function guardedDrainPass(): Promise<{ ran: boolean; drained: number }> {
 const DUPLICATE_STAMP_INTERVAL_MS = 60 * 60 * 1000;
 let lastDuplicateStampSweep = 0;
 
-async function guardedReconcilePass(): Promise<boolean> {
-  if (reconciling || stopping) return false;
+async function guardedReconcilePass(): Promise<{
+  ran: boolean;
+  failed: boolean;
+}> {
+  if (reconciling || stopping) return { ran: false, failed: false };
   reconciling = true;
   return track(
     (async () => {
@@ -1570,10 +1586,10 @@ async function guardedReconcilePass(): Promise<boolean> {
             await reconcileDuplicateStamps();
           }
         });
-        return result.acquired;
+        return { ran: result.acquired, failed: false };
       } catch (err) {
         logger.error({ err }, "pipeline reconcile sweep failed");
-        return false;
+        return { ran: false, failed: true };
       } finally {
         reconciling = false;
       }
@@ -1593,13 +1609,19 @@ async function guardedReconcilePass(): Promise<boolean> {
 export async function runScheduledWorkOnce(): Promise<{
   ran: { drain: boolean; reconcile: boolean; sweeps: boolean };
   drained: number;
+  failed: { drain: boolean; reconcile: boolean; sweeps: number };
 }> {
   const sweeps = await guardedSweepPass();
-  const { ran: drainRan, drained } = await guardedDrainPass();
-  const reconcileRan = await guardedReconcilePass();
+  const drain = await guardedDrainPass();
+  const reconcile = await guardedReconcilePass();
   return {
-    ran: { drain: drainRan, reconcile: reconcileRan, sweeps },
-    drained,
+    ran: { drain: drain.ran, reconcile: reconcile.ran, sweeps: sweeps.ran },
+    drained: drain.drained,
+    failed: {
+      drain: drain.failed,
+      reconcile: reconcile.failed,
+      sweeps: sweeps.failures,
+    },
   };
 }
 
@@ -1649,7 +1671,7 @@ export async function runSweepsOnce(
   return failures;
 }
 
-async function runSweepPass(owned: Promise<unknown>[]): Promise<void> {
+async function runSweepPass(owned: Promise<unknown>[]): Promise<number> {
   const failures = await runSweepsOnce(SWEEPS, owned);
   // Record pass health for scraping: the run counter advances every pass (the
   // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
@@ -1658,6 +1680,7 @@ async function runSweepPass(owned: Promise<unknown>[]): Promise<void> {
   // an alertable condition rather than a green gauge.
   sweepRunsTotal.inc();
   if (failures === 0) sweepLastSuccess.setToCurrentTime();
+  return failures;
 }
 
 // In-process polling worker (modular monolith). Guarded against double-start.

@@ -48,7 +48,7 @@ function filingDeadline(dueDate: string): Date {
 // opt-outs, dark flag and stale returns claim silently). Zero means the
 // register is fully processed — callers can drain by looping until then.
 //
-// Sweep-only: must run OUTSIDE any request context (the shared driver's
+// Sweep-only: no enclosing database transaction (the shared driver's
 // transaction-scope note in reminder-sweep.ts tells the story).
 export async function sweepFilingReminders(now = new Date()): Promise<number> {
   // SQL prefilter: anything due within the window (or already past it).
@@ -91,19 +91,21 @@ export async function sweepFilingReminders(now = new Date()): Promise<number> {
       AND e.client_party_id = ${filingReturnsTable.clientPartyId}
       AND e.status IN ('open', 'in_progress')
   )`;
-  const candidates = await getDb()
-    .select()
-    .from(filingReturnsTable)
-    .where(
-      and(
-        FILING_UNFILED,
-        lte(filingReturnsTable.dueDate, cutoff),
-        unclaimedAtThreshold,
-        liveEngagement,
-      ),
-    )
-    .orderBy(filingReturnsTable.dueDate)
-    .limit(BATCH_LIMIT * 2);
+  const candidates = await runInBypassContext(() =>
+    getDb()
+      .select()
+      .from(filingReturnsTable)
+      .where(
+        and(
+          FILING_UNFILED,
+          lte(filingReturnsTable.dueDate, cutoff),
+          unclaimedAtThreshold,
+          liveEngagement,
+        ),
+      )
+      .orderBy(filingReturnsTable.dueDate)
+      .limit(BATCH_LIMIT * 2),
+  );
 
   // Returns get the same runway as obligations: FILING_DUE_SOON_DAYS is a
   // full week (filings.ts). Reminders honour the SAME deadline-alerts

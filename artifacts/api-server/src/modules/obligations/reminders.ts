@@ -46,7 +46,7 @@ function responseDeadline(responseDueDate: string): Date {
 // opt-outs, dark flag and stale obligations claim silently). Zero means the
 // book is fully processed — callers can drain by looping until then.
 //
-// Sweep-only: must run OUTSIDE any request context (the shared driver's
+// Sweep-only: no enclosing database transaction (the shared driver's
 // transaction-scope note in reminder-sweep.ts tells the story).
 export async function sweepObligationReminders(
   now = new Date(),
@@ -91,19 +91,21 @@ export async function sweepObligationReminders(
       AND e.client_party_id = ${obligationsTable.clientPartyId}
       AND e.status IN ('open', 'in_progress')
   )`;
-  const candidates = await getDb()
-    .select()
-    .from(obligationsTable)
-    .where(
-      and(
-        OBLIGATION_OPEN,
-        lte(obligationsTable.responseDueDate, cutoff),
-        unclaimedAtThreshold,
-        liveEngagement,
-      ),
-    )
-    .orderBy(obligationsTable.responseDueDate)
-    .limit(BATCH_LIMIT * 2);
+  const candidates = await runInBypassContext(() =>
+    getDb()
+      .select()
+      .from(obligationsTable)
+      .where(
+        and(
+          OBLIGATION_OPEN,
+          lte(obligationsTable.responseDueDate, cutoff),
+          unclaimedAtThreshold,
+          liveEngagement,
+        ),
+      )
+      .orderBy(obligationsTable.responseDueDate)
+      .limit(BATCH_LIMIT * 2),
+  );
 
   // Notices deserve more runway than invoices: OBLIGATION_DUE_SOON_DAYS is a
   // full week (obligations.ts). Reminders honour the SAME deadline-alerts

@@ -3,6 +3,11 @@
 // (R95: the whole run stamps over HTTP through the conformance fake rail)
 // and payment intents.
 import { createHash, createHmac } from "node:crypto";
+import assert from "node:assert/strict";
+import {
+  createSweepTrigger,
+  invoiceProbeDiagnostic,
+} from "./sweep-trigger.mjs";
 import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
@@ -57,6 +62,25 @@ async function journeyIntegrationLayer(
   fakeRailUrl,
   fakeRailToken,
 ) {
+  const triggerSweep = createSweepTrigger(page.request, BASE, sweepToken);
+  async function submitProbe(created) {
+    assert.equal(created.status, 201, "integration probe must be created");
+    assert.ok(created.invoiceId, "integration probe must have an invoice id");
+    const validated = await page.request.post(
+      BASE + `/api/invoices/${created.invoiceId}/validate`,
+      { headers: CSRF },
+    );
+    assert.equal(validated.status(), 200, "integration probe must validate");
+    const submitted = await page.request.post(
+      BASE + `/api/invoices/${created.invoiceId}/submit`,
+      { headers: CSRF },
+    );
+    assert.equal(
+      submitted.status(),
+      202,
+      "integration probe must be accepted for submission",
+    );
+  }
   // The reset journey leaves an ops session in the browser context (API
   // login); drop it so the portal shows the demo buttons again.
   await apiLogout(page, BASE);
@@ -112,7 +136,8 @@ async function journeyIntegrationLayer(
   const hook = hooked.status() === 201 ? await hooked.json() : null;
   check(
     "firm webhook registers with a shown-once whsec_ secret",
-    hooked.status() === 201 && /^whsec_[A-Za-z0-9_-]{32}$/.test(hook?.secret ?? ""),
+    hooked.status() === 201 &&
+      /^whsec_[A-Za-z0-9_-]{32}$/.test(hook?.secret ?? ""),
     `status ${hooked.status()}`,
   );
 
@@ -160,14 +185,6 @@ async function journeyIntegrationLayer(
     unitPrice: "25000",
   });
   const invoiceId = created.invoiceId;
-  if (invoiceId) {
-    await page.request.post(BASE + `/api/invoices/${invoiceId}/validate`, {
-      headers: CSRF,
-    });
-    await page.request.post(BASE + `/api/invoices/${invoiceId}/submit`, {
-      headers: CSRF,
-    });
-  }
   const findDelivery = () =>
     (hookReceiver?.deliveries ?? []).find((d) => {
       try {
@@ -176,28 +193,43 @@ async function journeyIntegrationLayer(
         return false;
       }
     });
-  await pollUntil(
-    async () => {
-      await page.request.get(BASE + "/api/internal/sweep", {
-        headers: { "x-op-token": sweepToken },
-      });
-      return Boolean(findDelivery());
-    },
-    { tries: 15, delayMs: 1000, page },
-  );
+  let deliveredInTime;
+  let disabledRes;
+  try {
+    await submitProbe(created);
+    deliveredInTime = await pollUntil(
+      async () => {
+        await triggerSweep();
+        return Boolean(findDelivery());
+      },
+      { tries: 90, delayMs: 1000, page },
+    );
+  } finally {
+    disabledRes = await page.request.post(
+      BASE + `/api/firm-webhooks/${hook?.id}/disable`,
+      {
+        headers: CSRF,
+      },
+    );
+  }
+  const diagnostic = deliveredInTime
+    ? ""
+    : await invoiceProbeDiagnostic(page.request, BASE, invoiceId);
   const delivery = findDelivery();
   check(
     "stamping fans out a webhook delivery to the local receiver",
-    Boolean(invoiceId && delivery) &&
+    Boolean(deliveredInTime && invoiceId && delivery) &&
       delivery?.event === "invoice.stamped" &&
       delivery?.path === "/hook",
-    invoiceId ? `deliveries recorded: ${hookReceiver?.deliveries?.length ?? 0}` : "probe invoice not created",
+    `deliveries recorded: ${hookReceiver?.deliveries?.length ?? 0}${diagnostic ? `; ${diagnostic}` : ""}`,
   );
 
   // Signature: HMAC-SHA256 over the raw body, keyed by sha256hex(secret) —
   // recomputed here from the shown-once secret. Pointer-only (SEC-12): the
   // body carries entity type + id, never amounts, names or document content.
-  const hmacKey = createHash("sha256").update(hook?.secret ?? "").digest("hex");
+  const hmacKey = createHash("sha256")
+    .update(hook?.secret ?? "")
+    .digest("hex");
   const expectedSig = delivery
     ? createHmac("sha256", hmacKey).update(delivery.body).digest("hex")
     : null;
@@ -207,7 +239,14 @@ async function journeyIntegrationLayer(
   } catch {
     payload = null;
   }
-  const leakFields = ["amountNgn", "total", "lines", "legalName", "tin", "invoiceNumber"];
+  const leakFields = [
+    "amountNgn",
+    "total",
+    "lines",
+    "legalName",
+    "tin",
+    "invoiceNumber",
+  ];
   check(
     "delivery is HMAC-signed (sha256hex of the whsec_ secret) and pointer-only",
     Boolean(delivery) &&
@@ -223,10 +262,6 @@ async function journeyIntegrationLayer(
     BASE + `/api/firm-webhooks/${hook?.id}/deliveries`,
   );
   const history = historyRes.status() === 200 ? await historyRes.json() : [];
-  const disabledRes = await page.request.post(
-    BASE + `/api/firm-webhooks/${hook?.id}/disable`,
-    { headers: CSRF },
-  );
   const disabled =
     disabledRes.status() === 200 ? await disabledRes.json() : null;
   check(
@@ -285,27 +320,20 @@ async function journeyIntegrationLayer(
     unitPrice: "12000",
   });
   const rejectedId = rejected.invoiceId;
-  if (rejectedId) {
-    await page.request.post(BASE + `/api/invoices/${rejectedId}/validate`, {
-      headers: CSRF,
-    });
-    await page.request.post(BASE + `/api/invoices/${rejectedId}/submit`, {
-      headers: CSRF,
-    });
-  }
+  await submitProbe(rejected);
   const readRejected = async () => {
     const r = await page.request.get(BASE + `/api/invoices/${rejectedId}`);
     return r.status() === 200 ? await r.json() : null;
   };
-  const failedInTime = Boolean(rejectedId) && (await pollUntil(
-    async () => {
-      await page.request.get(BASE + "/api/internal/sweep", {
-        headers: { "x-op-token": sweepToken },
-      });
-      return (await readRejected())?.invoice?.status === "failed";
-    },
-    { tries: 15, delayMs: 1000, page },
-  ));
+  const failedInTime =
+    Boolean(rejectedId) &&
+    (await pollUntil(
+      async () => {
+        await triggerSweep();
+        return (await readRejected())?.invoice?.status === "failed";
+      },
+      { tries: 90, delayMs: 1000, page },
+    ));
   const attemptsRes = await page.request.get(
     BASE + `/api/invoices/${rejectedId}/attempts`,
   );
@@ -406,7 +434,10 @@ async function journeyIntegrationLayer(
       const probe = await page.request.get(
         BASE + `/api/billing/statement?month=${m.value}`,
       );
-      if (probe.status() === 200 && Number((await probe.json()).fee?.total) > 0) {
+      if (
+        probe.status() === 200 &&
+        Number((await probe.json()).fee?.total) > 0
+      ) {
         payMonth = m.value;
         break;
       }

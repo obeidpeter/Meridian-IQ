@@ -52,7 +52,7 @@ async function limitSweep(
 //   is a status transition, batch collection uses onConflictDoNothing, and the
 //   outbox drain claims with FOR UPDATE SKIP LOCKED.
 // - No auth bypass: it takes no input, acts on no caller-chosen entity, and
-//   returns no tenant data — only booleans saying which passes ran. This is
+//   returns no tenant data — only pass outcomes and failure counts. This is
 //   the same work the server already runs on its own timers.
 // - Hammering it is a cheap no-op: module-level guards collapse concurrent
 //   triggers, a pass with nothing due does no writes, and limitSweep bounds
@@ -78,6 +78,41 @@ router.get(
     try {
       const result = await runScheduledWorkOnce();
       const tookMs = Date.now() - startedAt;
+      if (
+        result.failed.sweeps ||
+        result.failed.drain ||
+        result.failed.reconcile
+      ) {
+        await markOperationFailed(
+          "scheduled_work",
+          new Error("Scheduled work partially failed"),
+          {
+            requestId: String(req.id),
+            tookMs,
+            ...result,
+          },
+        );
+        req.log.warn(
+          { ...result, tookMs },
+          "external sweep trigger partially failed",
+        );
+        res.setHeader("Retry-After", "60");
+        res
+          .status(503)
+          .json({
+            status: "partial_failure",
+            ran: result.ran,
+            failed: result.failed,
+          });
+        return;
+      }
+      if (!result.ran.sweeps || !result.ran.drain || !result.ran.reconcile) {
+        // A concurrent owner may still fail. Skipping its work is not proof
+        // of success and must not clear the last failed heartbeat.
+        res.setHeader("Retry-After", "5");
+        res.status(202).json({ status: "busy", ran: result.ran });
+        return;
+      }
       await markOperationSucceeded("scheduled_work", {
         requestId: String(req.id),
         tookMs,

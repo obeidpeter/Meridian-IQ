@@ -1,9 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 const P = "sweep-ping";
-const url = new URL(
-  process.env.SWEEP_URL ?? "https://meridian-iq.replit.app/api/internal/sweep",
-);
 
 function signingKey() {
   const directId = process.env.SWEEP_KEY_ID?.trim();
@@ -28,7 +26,7 @@ function signingKey() {
   );
 }
 
-function signedHeaders(key, timestamp = Math.floor(Date.now() / 1000)) {
+function signedHeaders(url, key, timestamp = Math.floor(Date.now() / 1000)) {
   const bodyHash = createHash("sha256").update("").digest("hex");
   const digest = createHmac("sha256", key.secret)
     .update(`${timestamp}.GET.${url.pathname}.${bodyHash}`)
@@ -40,34 +38,85 @@ function signedHeaders(key, timestamp = Math.floor(Date.now() / 1000)) {
   };
 }
 
-const key = signingKey();
-let lastError;
-for (let attempt = 1; attempt <= 3; attempt += 1) {
-  const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(new Error("sweep request timed out")),
-    120_000,
-  );
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: signedHeaders(key),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+export async function pingSweep(
+  url,
+  key,
+  {
+    fetchImpl = fetch,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now = Date.now,
+  } = {},
+) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let retryMs = 5_000;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error("sweep request timed out")),
+      120_000,
+    );
+    try {
+      const response = await fetchImpl(url, {
+        method: "GET",
+        headers: signedHeaders(url, key, Math.floor(now() / 1000)),
+        signal: controller.signal,
+        redirect: "error",
+      });
+      const retryAfter = response.headers.get("retry-after");
+      if (retryAfter) {
+        const seconds = Number(retryAfter);
+        const delay =
+          Number.isFinite(seconds) && seconds >= 0
+            ? seconds * 1_000
+            : Date.parse(retryAfter) - now();
+        if (Number.isFinite(delay)) retryMs = Math.max(retryMs, delay);
+      }
+      const result = await response.json().catch(() => null);
+      if (
+        response.status === 200 &&
+        result?.status === "ok" &&
+        ["drain", "reconcile", "sweeps"].every(
+          (pass) => result.ran?.[pass] === true,
+        )
+      ) {
+        return {
+          status: "ok",
+          ran: { drain: true, reconcile: true, sweeps: true },
+        };
+      }
+      throw new Error(`Sweep did not complete (HTTP ${response.status})`);
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timer);
     }
-    const result = await response.json();
+    if (attempt < 3) {
+      // A long server delay belongs to the next scheduled run, not an
+      // unbounded sleep in this three-attempt command.
+      if (retryMs > 120_000) break;
+      await sleep(retryMs);
+    }
+  }
+  throw new Error(
+    `failed within 3 attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+  );
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  try {
+    const url = new URL(
+      process.env.SWEEP_URL ??
+        "https://meridian-iq.replit.app/api/internal/sweep",
+    );
+    const result = await pingSweep(url, signingKey());
     console.log(`${P}: completed`, JSON.stringify(result));
-    process.exit(0);
   } catch (error) {
-    lastError = error;
-    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 5_000));
-  } finally {
-    clearTimeout(timer);
+    console.error(
+      `${P}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exitCode = 1;
   }
 }
-console.error(
-  `${P}: failed after 3 attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-);
-process.exit(1);
