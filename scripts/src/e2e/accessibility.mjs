@@ -122,10 +122,19 @@ export async function collectAccessibilityIssues(page, { reportAxe } = {}) {
     }
 
     const visibleMains = [...document.querySelectorAll("main")].filter(visible);
-    if (visibleMains.length !== 1) {
+    // A modal correctly hides the underlying page from the accessibility tree.
+    const dialogOpen = [
+      ...document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+    ].some(visible);
+    const modalOpen =
+      dialogOpen &&
+      [...document.querySelectorAll("main")].some((main) =>
+        main.closest('[aria-hidden="true"], [inert]'),
+      );
+    if (!modalOpen && visibleMains.length !== 1) {
       findings.push("page must contain exactly one main landmark");
     }
-    if (!headings.some((heading) => heading.tagName === "H1")) {
+    if (!modalOpen && !headings.some((heading) => heading.tagName === "H1")) {
       findings.push("page has no visible h1");
     }
     if (!document.documentElement.lang) findings.push("html lang is missing");

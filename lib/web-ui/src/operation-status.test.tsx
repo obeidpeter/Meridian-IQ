@@ -8,10 +8,23 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
-import { ActivityCenter, OperationStatusPanel } from "./operation-status";
+import {
+  ActivityCenter,
+  OperationStatusPanel,
+  operationActionLabel,
+} from "./operation-status";
 import type { OperationRecord } from "./operation-journal";
 
 afterEach(cleanup);
+test("recovery actions describe the task rather than its technical source", () => {
+  expect(
+    operationActionLabel({ command: "invoice.create", kind: "invoice" }),
+  ).toBe("View invoice");
+  expect(
+    operationActionLabel({ command: "invoice.import", kind: "import" }),
+  ).toBe("View import");
+  expect(operationActionLabel({ kind: "clerk" })).toBe("Return to task");
+});
 const operation: OperationRecord = {
   id: "local",
   serverId: "server",

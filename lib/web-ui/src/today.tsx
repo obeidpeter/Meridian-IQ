@@ -46,7 +46,8 @@ function readableDate(value: string | null): string | null {
   return new Intl.DateTimeFormat("en-NG", {
     day: "numeric",
     month: "short",
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
   }).format(date);
 }
 
@@ -159,7 +160,11 @@ export function TodayWorkspace({
           emptyDescription="No failed, overdue or open records need attention right now."
           toolbar={
             onManageWork ? (
-              <button type="button" className="mi-today__text-action" onClick={onManageWork}>
+              <button
+                type="button"
+                className="mi-today__text-action"
+                onClick={onManageWork}
+              >
                 Manage work
                 <ArrowRight aria-hidden="true" />
               </button>
@@ -167,7 +172,10 @@ export function TodayWorkspace({
           }
         />
 
-        <section className="mi-today__setup" aria-labelledby="mi-today-setup-title">
+        <section
+          className="mi-today__setup"
+          aria-labelledby="mi-today-setup-title"
+        >
           <div className="mi-today__setup-heading">
             <div>
               <p id="mi-today-setup-title">Getting ready</p>
@@ -186,7 +194,9 @@ export function TodayWorkspace({
             <span style={{ width: `${setupPercent}%` }} />
           </div>
           {setup.length === 0 ? (
-            <p className="mi-today__setup-empty">No setup steps apply to this role.</p>
+            <p className="mi-today__setup-empty">
+              No setup steps apply to this role.
+            </p>
           ) : (
             <ol className="mi-today__setup-list">
               {setup.map((step) => (
@@ -196,6 +206,9 @@ export function TodayWorkspace({
                   </span>
                   <button type="button" onClick={() => onOpen(step.href)}>
                     <strong>{step.label}</strong>
+                    <span className="mi-today__step-status">
+                      {step.complete ? "Completed" : "Not completed"}
+                    </span>
                     <small>{step.description}</small>
                   </button>
                 </li>

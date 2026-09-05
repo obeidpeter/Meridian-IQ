@@ -508,7 +508,7 @@ export function Import() {
             detail:
               "The connection ended before the server confirmed the import.",
             savedSummary:
-              "Outcome unconfirmed. Retry this import with its original command key.",
+              "We could not confirm the import result. Retry the same import to check what was saved without creating duplicates.",
           });
         } else {
           updateOperation(operationKey, operation?.id, {
@@ -803,12 +803,12 @@ export function Import() {
           <Alert variant="destructive" data-testid="alert-commit-interrupted">
             <AlertTitle>We couldn't confirm the import</AlertTitle>
             <AlertDescription>
-              The server has not confirmed the outcome. Retrying these unchanged
-              rows reuses the same command key.{" "}
+              We could not confirm which invoices were saved. Retrying these
+              unchanged rows checks the same import without creating duplicates.{" "}
               <Link href="/invoices" className="font-medium underline">
                 Check your Invoices list
               </Link>{" "}
-              or reconcile this import now.
+              or retry this import now.
               {rows.length > 0 ? (
                 <Button
                   type="button"

@@ -99,6 +99,7 @@ export {
 import {
   emptyLine,
   lineTotals,
+  invoiceLineErrors,
   todayIsoDate,
   toInvoiceLineInputs,
   updateLineAt,
@@ -1094,12 +1095,10 @@ export function InvoiceDetail() {
       fixErrors.invoiceNumber = "Invoice number is required.";
     if (!fix.issueDate) fixErrors.issueDate = "Issue date is required.";
     fix.lines.forEach((l, i) => {
-      if (!l.description.trim())
-        fixErrors[`line-${i}-desc`] = "Description required.";
-      if (!(Number(l.quantity) > 0))
-        fixErrors[`line-${i}-qty`] = "Qty must be > 0.";
-      if (!(Number(l.unitPrice) >= 0) || l.unitPrice === "")
-        fixErrors[`line-${i}-price`] = "Price required.";
+      const errors = invoiceLineErrors(l);
+      if (errors.description) fixErrors[`line-${i}-desc`] = errors.description;
+      if (errors.quantity) fixErrors[`line-${i}-qty`] = errors.quantity;
+      if (errors.unitPrice) fixErrors[`line-${i}-price`] = errors.unitPrice;
     });
   }
 

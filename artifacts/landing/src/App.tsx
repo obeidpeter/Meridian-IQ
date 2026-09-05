@@ -132,7 +132,7 @@ const APPS: AppTile[] = [
   },
   {
     key: "sme",
-    name: "Compliance App",
+    name: "Compliance Workspace",
     tagline:
       "Create and submit invoices, keep the stamped copies, and stay ahead of deadlines.",
     href: "/app/",
@@ -177,7 +177,7 @@ function roleLabel(role: string): string {
     {
       firm_admin: "Firm admin",
       firm_staff: "Firm staff",
-      client_user: "Client user",
+      client_user: "Business user",
       operator: "Operator",
       bank_user: "Bank reviewer",
       buyer_user: "Buyer",

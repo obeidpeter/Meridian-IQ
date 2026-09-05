@@ -21,13 +21,13 @@ export interface WorkspaceTarget {
 // Where each role starts after sign-in. The operator goes straight to the
 // Compliance Desk work queue — that is the account's job, not the portfolio.
 // firm_staff is resolved by defaultWorkspaceFor below: only client-pinned
-// staff belong in the Compliance App.
+// staff belong in the Compliance Workspace.
 const DEFAULT_WORKSPACE: Readonly<Record<string, WorkspaceTarget>> = {
   operator: { href: "/console/operator-queue", label: "Operator queue" },
   bank_user: { href: "/console/data-room", label: "Bank Data Room" },
   firm_admin: { href: "/console/", label: "Accountant Console" },
-  firm_staff: { href: "/app/", label: "Compliance App" },
-  client_user: { href: "/app/", label: "Compliance App" },
+  firm_staff: { href: "/app/", label: "Compliance Workspace" },
+  client_user: { href: "/app/", label: "Compliance Workspace" },
   buyer_user: { href: "/buyer/", label: "Buyer Rails" },
   auditor: { href: "/console/audit", label: "Audit & evidence" },
 };
@@ -35,7 +35,7 @@ const DEFAULT_WORKSPACE: Readonly<Record<string, WorkspaceTarget>> = {
 /**
  * The workspace an account starts in after sign-in. Role decides — except
  * firm_staff, where the membership's client pin decides: staff pinned to a
- * client live in that client's Compliance App, while unpinned staff have no
+ * client live in that client's Compliance Workspace, while unpinned staff have no
  * client scope (every SME page dead-ends on the "not scoped to a client
  * business" card), so they land on the firm's portfolio in the console.
  */

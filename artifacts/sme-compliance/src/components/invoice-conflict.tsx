@@ -53,7 +53,8 @@ export function InvoiceConflict({
         </h3>
         <p className="text-sm text-muted-foreground">
           Your edits are preserved. Saved version {saved.contentRevision} is
-          shown below.
+          shown below. Keeping your edits returns them to the form; review and
+          save them separately.
         </p>
       </div>
       <div className="overflow-x-auto">

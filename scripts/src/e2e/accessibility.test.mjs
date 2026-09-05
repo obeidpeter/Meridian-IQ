@@ -3,9 +3,51 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import {
   collectAxeResults,
+  collectAccessibilityIssues,
   tabTo,
   checkDialogKeyboard,
 } from "./accessibility.mjs";
+
+test("landmark checks respect modal isolation without hiding page defects", async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+  });
+  try {
+    const page = await browser.newPage();
+    const cases = [
+      {
+        body: '<main aria-hidden="true"><h1>Page</h1></main><div role="dialog" aria-label="Navigation"><button>Close</button></div>',
+        main: false,
+        heading: false,
+      },
+      {
+        body: "<main><p>No heading</p><button>Action</button></main>",
+        main: false,
+        heading: true,
+      },
+      {
+        body: "<h1>Page</h1><button>Action</button>",
+        main: true,
+        heading: false,
+      },
+    ];
+    for (const fixture of cases) {
+      await page.setContent(
+        `<html lang="en"><head><title>Landmark fixture</title></head><body>${fixture.body}</body></html>`,
+      );
+      await page.getByRole("button").focus();
+      const issues = await collectAccessibilityIssues(page);
+      assert.equal(
+        issues.includes("page must contain exactly one main landmark"),
+        fixture.main,
+      );
+      assert.equal(issues.includes("page has no visible h1"), fixture.heading);
+    }
+  } finally {
+    await browser.close();
+  }
+});
 
 test("real axe engine detects names and contrast; keyboard assertion catches a leaking dialog", async () => {
   const browser = await chromium.launch({

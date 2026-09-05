@@ -316,8 +316,11 @@ rate) before **Create invoice** is offered.
   street / city), so a new buyer never blocks an invoice.
 - **Frequent items** — chips mined from your own past invoices; one click
   appends a prefilled line.
-- Your work is auto-saved as a draft in the browser, so a dropped connection
-  never loses a half-entered invoice.
+- Drafts automatically save to your account and expire seven days after the
+  last successful account save. Check the save status before leaving: an
+  unsaved or device-only copy is not yet available on another device. Local
+  recovery depends on this browser retaining its storage. Created invoices
+  are separate records and do not expire with the draft.
 
 ### The invoice vault
 
@@ -2167,7 +2170,7 @@ unreachable (404), not broken:
 | `OUTBOX_LEASE_MS` / `OUTBOX_RELEASE_MAX_AGE_SECONDS`                                       | Outbox worker lease duration and the oldest-pending threshold that blocks release readiness. Defaults are 120 seconds and 900 seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `CLERK_SECRET_KEY` (+ `CLERK_AUTHORIZED_PARTIES`)                                          | The hosted identity provider (unrelated to the AI assistant). In production the key without authorized parties (or `REPLIT_DOMAINS`) disables it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `FRAME_ANCESTORS`                                                                          | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `ENABLE_DEV_AUTH` | The `x-mock-*` identity bypass requires exactly `ENABLE_DEV_AUTH=true` AND `NODE_ENV=development` or `test`, in isolated processes only. Always forbidden in production and other modes; no `.replit` or artifact descriptor enables it. |
+| `ENABLE_DEV_AUTH`                                                                          | The `x-mock-*` identity bypass requires exactly `ENABLE_DEV_AUTH=true` AND `NODE_ENV=development` or `test`, in isolated processes only. Always forbidden in production and other modes; no `.replit` or artifact descriptor enables it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 **Machine-rail credentials (R100).** Every machine rail — the two intake
 rails, the payment, Invoice Room payment, and collection webhooks,

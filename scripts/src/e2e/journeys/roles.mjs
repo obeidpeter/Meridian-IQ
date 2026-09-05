@@ -12,6 +12,14 @@ import {
 } from "./shared.mjs";
 import { checkPageAccessibility } from "../accessibility.mjs";
 
+async function openNavLink(page, id) {
+  const link = page.getByTestId(id).first();
+  if (!(await link.isVisible())) {
+    await link.locator("..").locator("..").getByRole("button").first().click();
+  }
+  await link.click();
+}
+
 // ---------- public landing + portal ----------
 // ---------- app shell (R69): workspace chip + flag-derived release badge ----------
 // The header names the workspace the session is scoped to and shows the
@@ -194,14 +202,14 @@ async function journeyOperatorDesk(page, BASE, check) {
   );
 
   // Error catalogue renders with entries
-  await page.getByTestId("nav-error-catalogue").click();
+  await openNavLink(page, "nav-error-catalogue");
   await page.waitForSelector('[data-testid="entry-MBS_INVALID_TIN"]', {
     timeout: 10000,
   });
   check("error catalogue lists entries", true);
 
   // Feature flag round trip
-  await page.getByTestId("nav-feature-flags").click();
+  await openNavLink(page, "nav-feature-flags");
   await page.waitForSelector('[data-testid="switch-reconciliation"]');
   await page.getByTestId("switch-reconciliation").click();
   await page.waitForSelector("text=reconciliation enabled", { timeout: 8000 });
@@ -212,7 +220,7 @@ async function journeyOperatorDesk(page, BASE, check) {
   check("feature flag toggles round-trip", true);
 
   // Platform ops: rails + retrying + messages sections render
-  await page.getByTestId("nav-platform-ops").click();
+  await openNavLink(page, "nav-platform-ops");
   await page.waitForSelector('[data-testid="card-rails"]', { timeout: 10000 });
   await page.waitForSelector('[data-testid="card-retrying"]', {
     timeout: 10000,
@@ -223,19 +231,19 @@ async function journeyOperatorDesk(page, BASE, check) {
   check("platform ops renders rails, retrying events and message log", true);
 
   // Control centre activation evidence + audit evidence
-  await page.getByTestId("nav-control-centre").click();
+  await openNavLink(page, "nav-control-centre");
   await page.waitForSelector('[data-testid="gate-time-to-stamp"]', {
     timeout: 10000,
   });
   check("control centre activation evidence renders", true);
-  await page.getByTestId("nav-audit-&-evidence").click();
+  await openNavLink(page, "nav-audit-&-evidence");
   await page.waitForSelector('[data-testid="card-chain-valid"]', {
     timeout: 10000,
   });
   check("audit chain verifies", true);
 
   // Party integrity workbench renders
-  await page.getByTestId("nav-party-integrity").click();
+  await openNavLink(page, "nav-party-integrity");
   await page.waitForSelector('[data-testid="stat-parties"]', {
     timeout: 10000,
   });
@@ -263,7 +271,7 @@ async function journeyFirmAdminAdvisory(page, BASE, check) {
   });
   check("console ? opens the keyboard shortcut sheet", true);
   await page.keyboard.press("Escape");
-  await page.getByTestId("nav-advisory").click();
+  await openNavLink(page, "nav-advisory");
   await page.getByTestId("tab-vat-risk").click();
   await page
     .getByTestId("input-vat-csv")
@@ -288,7 +296,7 @@ async function journeyAuditorReadOnly(page, BASE, check) {
     label: "console auditor",
     roleText: "Read-only auditor",
   });
-  await page.getByTestId("nav-operator-queue").first().click();
+  await openNavLink(page, "nav-operator-queue");
   await page.waitForSelector('[data-testid^="card-case-"]', { timeout: 10000 });
   check(
     "auditor queue is read-only",
@@ -536,7 +544,7 @@ async function journeyClientAssignment(page, BASE, check) {
 // and a stale hash is refused.
 async function journeyAccessReview(page, BASE, check) {
   await signIn(page, BASE, "button-demo-demo.admin", "**/console/**");
-  await page.getByTestId("nav-access-review").first().click();
+  await openNavLink(page, "nav-access-review");
   await page.waitForSelector('[data-testid="card-access-register"]', {
     timeout: 15000,
   });

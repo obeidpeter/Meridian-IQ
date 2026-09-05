@@ -69,6 +69,28 @@ export const emptyLine = (): LineDraft => ({
   vatRate: VAT_STANDARD,
 });
 
+export function invoiceLineErrors(line: LineDraft) {
+  const errors: {
+    description?: string;
+    quantity?: string;
+    unitPrice?: string;
+  } = {};
+  if (!line.description.trim()) errors.description = "Enter a description.";
+  try {
+    normalizeDecimal(line.quantity, "Quantity", 14, 4, true);
+  } catch {
+    errors.quantity =
+      "Enter a quantity greater than zero, with up to 14 digits and 4 decimal places.";
+  }
+  try {
+    normalizeDecimal(line.unitPrice, "Unit price", 16, 2);
+  } catch {
+    errors.unitPrice =
+      "Enter a price of zero or more, with up to 16 digits and 2 decimal places.";
+  }
+  return errors;
+}
+
 export const todayIsoDate = (): string => new Date().toISOString().slice(0, 10);
 
 /** Patch line i immutably, leaving every other row untouched. */

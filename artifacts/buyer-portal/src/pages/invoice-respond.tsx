@@ -102,7 +102,13 @@ const RESPONSE_OPTIONS: Array<{
 export function InvoiceRespond() {
   const params = useParams();
   const id = params.id as string;
-  const { data: invoice, isLoading, error, refetch } = useGetBuyerInvoice(id);
+  const {
+    data: invoice,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useGetBuyerInvoice(id);
   const { data: me } = useGetMe();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -230,6 +236,33 @@ export function InvoiceRespond() {
   // flagged paid again (a second settlement POST would be a duplicate event).
   const isSettled = invoice.status === "settled";
 
+  const checkForNewRequest = async () => {
+    try {
+      const result = await refetch({ throwOnError: true });
+      if (result.data?.confirmationState === "requested") {
+        setResponse(null);
+        setNote("");
+        setNoteError(null);
+        setNoSetOff(false);
+        setMethod("portal");
+        setSubmitted(null);
+        toast({ title: "A new request is ready for your response" });
+      } else {
+        toast({
+          title: "No new request yet",
+          description:
+            "Your earlier response is still recorded. Check again after the supplier sends a new request.",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Could not check for a new request",
+        description: errorDescription(err),
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSubmit = () => {
     if (!response) return;
     if (!me?.buyerPartyId) {
@@ -262,7 +295,7 @@ export function InvoiceRespond() {
           setSubmitted(response);
           toast({
             title: `Invoice ${confirmationLabel(response).toLowerCase()}`,
-            description: "The supplier has been notified of your response.",
+            description: "The supplier can view your recorded response.",
           });
           queryClient.invalidateQueries({
             queryKey: getListBuyerInvoicesQueryKey(),
@@ -401,6 +434,18 @@ export function InvoiceRespond() {
             <p className="text-sm text-muted-foreground max-w-md">
               {responseRecordedCopy(submitted).description}
             </p>
+            {submitted === "queried" && (
+              <Button
+                className="mt-2"
+                variant="outline"
+                disabled={isFetching}
+                onClick={() => void checkForNewRequest()}
+              >
+                {isFetching
+                  ? "Checking for a new request..."
+                  : "Check for a new request"}
+              </Button>
+            )}
             <Button
               asChild
               variant="outline"
@@ -571,6 +616,24 @@ export function InvoiceRespond() {
                 ? "No confirmation has been requested for this invoice yet. The response form appears here once the supplier requests one."
                 : `You have already responded to this invoice (${confirmationLabel(invoice.confirmationState).toLowerCase()}).`}
             </p>
+            {invoice.confirmationState === "queried" && (
+              <>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Ask the supplier to clarify and send a new confirmation
+                  request. Your earlier response remains in the history.
+                </p>
+                <Button
+                  className="mt-3"
+                  variant="outline"
+                  disabled={isFetching}
+                  onClick={() => void checkForNewRequest()}
+                >
+                  {isFetching
+                    ? "Checking for a new request..."
+                    : "Check for a new request"}
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

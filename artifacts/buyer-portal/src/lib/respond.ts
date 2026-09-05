@@ -16,7 +16,7 @@ export const RESPONSE_DESCRIPTIONS: Record<ResponseState, string> = {
   confirmed:
     "Accepts the invoice as issued. The supplier is notified, and with the no-set-off acknowledgement below the invoice becomes financeable.",
   queried:
-    "Sends the invoice back with your question. The supplier sees your note and can correct or clarify before you accept — nothing is finalised.",
+    "Records your question and sends it to the supplier. You cannot change this response. Ask the supplier to clarify and send a new confirmation request; you can respond again when that request arrives.",
   rejected:
     "Declines the invoice. The supplier is notified with your reason and must reissue it if they still intend to bill you.",
 };
@@ -69,7 +69,7 @@ export function responseRecordedCopy(state: ResponseState): {
       return {
         title: "Query sent",
         description:
-          "Your question has been recorded and the supplier has been notified. They can correct or clarify the invoice before you accept it.",
+          "Your question has been recorded. Ask the supplier to clarify and send a new confirmation request for the stamped invoice. You can respond to the new request, but this recorded response cannot be changed.",
       };
     case "rejected":
       return {
@@ -85,8 +85,7 @@ export function errorDescription(error: unknown): string {
   const status = errorStatus(error);
   if (status === 401)
     return "Your session has expired — sign in again from the portal.";
-  if (status === 403)
-    return "Your account doesn't have permission to do this.";
+  if (status === 403) return "Your account doesn't have permission to do this.";
   if (status === 409)
     return "This invoice was already responded to — refresh to see the latest state.";
   if (status !== undefined && status >= 500)

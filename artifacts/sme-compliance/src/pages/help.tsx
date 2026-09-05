@@ -87,11 +87,25 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "drafts",
     title: "Where your unfinished work goes",
     summary:
-      "The invoice form saves to this device as you type; drafts in the vault live on the server.",
+      "Unfinished invoices save automatically to your account when connected, with a separate recovery copy on this device.",
     steps: [
-      "While you fill in a new invoice, it is saved on this device automatically — closing the tab is safe on this same browser.",
-      '"Discard draft" clears it (with an Undo in case you slip).',
-      'Once you select "Create invoice", the draft is in your vault from any device.',
+      'Check the save status above the form. "Saved to your account" means you can resume from New invoice on another device, signed into the same account and business.',
+      "Unfinished account drafts expire seven days after their last successful save. Check the saved time and expiry before leaving important work unfinished.",
+      '"Saved on this device only" means account sync is pending. Return on this browser and reconnect. If it says "Not saved", keep the tab open and retry.',
+      '"Discard" removes the unfinished account draft and this tab\'s recovery copy. Use the immediate Undo action to restore it as a new draft.',
+      '"Create invoice" creates a separate invoice record in Invoices. The seven-day unfinished-draft limit does not apply to that record; it still needs submission for stamping.',
+    ],
+  },
+  {
+    id: "recover-invoice",
+    title: "Recover an interrupted invoice or conflicting edit",
+    summary:
+      "Check the existing result before starting again, so you do not create a duplicate.",
+    steps: [
+      'If creation is not confirmed, select "Retry original invoice" on the same device. MeridianIQ checks the original request without creating a second invoice.',
+      'Use Operation history to check whether recent work completed. "View invoice" returns you to the invoice or unfinished form.',
+      "If the original request is unavailable on this device, check Invoices and Operation history, or ask your accountant, before creating a replacement.",
+      'For conflicting edits, compare your version with the saved version. Reload the account version, or save your unfinished edits as a new draft. For an existing invoice, "Keep my edits" keeps them in the form for review; it does not save them yet.',
     ],
   },
   {

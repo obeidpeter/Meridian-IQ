@@ -120,7 +120,7 @@ const WORKSPACES = [
   {
     icon: ReceiptText,
     audience: "For business owners and their teams",
-    title: "SME Compliance",
+    title: "Compliance Workspace",
     body: "Create invoices, upload in bulk, see your VAT position and never miss a deadline.",
     accent: "text-teal-700",
     line: "bg-teal-600",
@@ -1476,12 +1476,12 @@ export default function LandingPage() {
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a
-                  href="/login"
+                  href="#request-access"
                   onClick={trackLandingCta}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-lime-300 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-lime-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
-                  data-testid="link-hero-login"
+                  data-testid="link-hero-contact"
                 >
-                  Sign in to MeridianIQ
+                  Request access
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </a>
                 <a
@@ -1491,15 +1491,19 @@ export default function LandingPage() {
                   See the product
                 </a>
                 <a
-                  href="#request-access"
+                  href="/login"
                   onClick={trackLandingCta}
-                  data-testid="link-hero-contact"
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+                  data-testid="link-hero-login"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md px-3 text-sm font-bold text-white underline underline-offset-4 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
                 >
-                  Request access
-                  <Mail className="size-4" aria-hidden="true" />
+                  Already invited? Sign in
+                  <ArrowRight className="size-4" aria-hidden="true" />
                 </a>
               </div>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80">
+                Access is by invitation. Tell us about your team and we will
+                reply by email with the next steps.
+              </p>
 
               <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/75">
                 {[

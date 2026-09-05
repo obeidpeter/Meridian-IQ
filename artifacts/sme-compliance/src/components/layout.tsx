@@ -60,6 +60,7 @@ import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
+  NavigationSection,
   NetworkStatus,
   readRecentItems,
   ReleaseBadge,
@@ -93,7 +94,7 @@ type NavGroup = {
 // a prioritised work list for this business, not a dashboard of charts.
 const NAV_GROUPS: NavGroup[] = [
   {
-    title: "Work",
+    title: "Daily work",
     links: [
       { href: "/", label: "Today", icon: LayoutDashboard },
       { href: "/dashboard", label: "Overview", icon: Gauge },
@@ -103,8 +104,14 @@ const NAV_GROUPS: NavGroup[] = [
         icon: ListChecks,
         capability: "work.read",
       },
-      { href: "/month-end", label: "Month-end", icon: CalendarCheck2 },
       { href: "/invoices", label: "Invoices", icon: FileText },
+      { href: "/import", label: "Import", icon: Upload },
+    ],
+  },
+  {
+    title: "Invoices and money",
+    links: [
+      { href: "/month-end", label: "Month-end", icon: CalendarCheck2 },
       {
         href: "/invoice-rooms",
         label: "Invoice Rooms",
@@ -129,7 +136,6 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Repeat,
         feature: "money_analytics",
       },
-      { href: "/import", label: "Import", icon: Upload },
     ],
   },
   {
@@ -320,8 +326,15 @@ function NavLinks({
           className="mi-nav__scroll"
         >
           {groups.map((group) => (
-            <div key={group.title} className="mi-nav__group">
-              <p className="mi-nav__title">{group.title}</p>
+            <NavigationSection
+              key={group.title}
+              title={group.title}
+              primary={group.title === "Daily work"}
+              active={group.links.some((link) =>
+                isLinkActive(location, link.href),
+              )}
+              route={location}
+            >
               {group.links.map((link) => {
                 const Icon = link.icon;
                 const active = isLinkActive(location, link.href);
@@ -339,7 +352,7 @@ function NavLinks({
                   </Link>
                 );
               })}
-            </div>
+            </NavigationSection>
           ))}
         </div>
         {hasMoreTools && (
@@ -712,7 +725,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--mi-canvas)] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen bg-[var(--mi-canvas)] lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -760,6 +773,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent
               side="left"
+              aria-describedby={undefined}
               className="w-[17rem] border-r-0 bg-[var(--mi-sidebar)] p-0 text-white [&>button]:text-white"
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -773,7 +787,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <p>{pageTitle}</p>
       </section>
 
-      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col lg:flex">
         <NavLinks {...navProps} />
       </aside>
 

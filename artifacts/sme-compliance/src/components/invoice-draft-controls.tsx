@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { InvoiceDraftController } from "@/lib/use-invoice-drafts";
 import { serverErrorMessage } from "@/lib/errors";
+import { useDirectoryCustomer } from "./customer-directory-picker";
+import { draftAmount, draftOptionLabel, draftTime } from "@/lib/draft-summary";
 
 export function InvoiceDraftControls({
   controller,
@@ -17,6 +19,11 @@ export function InvoiceDraftControls({
   const { state, session, catalogue, recoveries, select, id } = controller;
   const [error, setError] = useState("");
   const remote = catalogue.data?.pages.flatMap((page) => page.items) ?? [];
+  const customer = useDirectoryCustomer(state.draft.buyerPartyId);
+  const accountCopy = remote.find((draft) => draft.id === id);
+  const deviceCopy = recoveries.find(
+    (copy) => copy.id === id && copy.writerId === session.writerId,
+  );
   const status =
     state.status === "saved"
       ? "Saved to your account for 7 days"
@@ -52,13 +59,13 @@ export function InvoiceDraftControls({
             onChange={(event) => select(event.target.value)}
           >
             <option value={`server:${id}`}>
-              {state.draft.invoiceNumber || "Untitled invoice"} (current)
+              {draftOptionLabel(state.draft)} (current)
             </option>
             {remote
               .filter((draft) => draft.id !== id)
               .map((draft) => (
                 <option key={draft.id} value={`server:${draft.id}`}>
-                  {draft.draft.invoiceNumber || "Untitled invoice"} - account
+                  {draftOptionLabel(draft.draft, draft.updatedAt)} - account
                 </option>
               ))}
             {recoveries
@@ -76,8 +83,7 @@ export function InvoiceDraftControls({
                   key={`${copy.id}:${copy.writerId}`}
                   value={`local:${copy.id}:${copy.writerId}`}
                 >
-                  {copy.draft.invoiceNumber || "Untitled invoice"} - device
-                  recovery {new Date(copy.savedAt).toLocaleString()}
+                  {draftOptionLabel(copy.draft, copy.savedAt)} - device recovery
                 </option>
               ))}
           </select>
@@ -110,6 +116,45 @@ export function InvoiceDraftControls({
       >
         {status}
       </p>
+      <dl
+        className="grid min-w-0 gap-x-6 gap-y-2 text-sm sm:grid-cols-2"
+        aria-label="Selected draft details"
+      >
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">Customer</dt>
+          <dd className="break-words font-medium">
+            {!state.draft.buyerPartyId
+              ? "Not selected"
+              : customer.isError
+                ? "Customer unavailable"
+                : (customer.data?.legalName ?? "Loading customer...")}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Draft total</dt>
+          <dd>{draftAmount(state.draft)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">
+            Last account save (Lagos time)
+          </dt>
+          <dd>{draftTime(accountCopy?.updatedAt)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">
+            Account draft expires (Lagos time)
+          </dt>
+          <dd>{draftTime(accountCopy?.expiresAt)}</dd>
+        </div>
+        {state.localSaved && state.status !== "saved" && deviceCopy && (
+          <div>
+            <dt className="text-muted-foreground">
+              Device recovery saved (Lagos time)
+            </dt>
+            <dd>{draftTime(deviceCopy.savedAt)}</dd>
+          </div>
+        )}
+      </dl>
       {controller.legacy?.restored && (
         <Button
           type="button"
@@ -145,7 +190,9 @@ export function InvoiceDraftControls({
           type="button"
           variant="outline"
           disabled={disabled}
-          onClick={() => void (state.dirty ? session.save() : session.load())}
+          onClick={() =>
+            void action(() => (state.dirty ? session.save() : session.load()))
+          }
         >
           Retry saving
         </Button>

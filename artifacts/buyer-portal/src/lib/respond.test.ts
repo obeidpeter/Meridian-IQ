@@ -62,7 +62,10 @@ describe("RESPONSE_DESCRIPTIONS and SUBMIT_LABELS", () => {
 
   test("descriptions name their consequence — notified supplier, financeable confirm, reissue on reject", () => {
     expect(RESPONSE_DESCRIPTIONS.confirmed).toContain("financeable");
-    expect(RESPONSE_DESCRIPTIONS.queried).toContain("nothing is finalised");
+    expect(RESPONSE_DESCRIPTIONS.queried).toContain(
+      "cannot change this response",
+    );
+    expect(RESPONSE_DESCRIPTIONS.queried).toContain("new confirmation request");
     expect(RESPONSE_DESCRIPTIONS.rejected).toContain("reissue");
   });
 
@@ -78,7 +81,13 @@ describe("responseRecordedCopy", () => {
     expect(responseRecordedCopy("confirmed").title).toBe("Invoice confirmed");
     expect(responseRecordedCopy("queried").title).toBe("Query sent");
     expect(responseRecordedCopy("rejected").title).toBe("Invoice rejected");
-    for (const s of STATES) {
+    expect(responseRecordedCopy("queried").description).toContain(
+      "new confirmation request",
+    );
+    expect(responseRecordedCopy("queried").description).toContain(
+      "cannot be changed",
+    );
+    for (const s of ["confirmed", "rejected"] as const) {
       expect(responseRecordedCopy(s).description).toContain("notified");
     }
   });
@@ -108,4 +117,3 @@ describe("RESPONSE_FINALITY", () => {
     expect(RESPONSE_FINALITY).toContain("cannot be changed");
   });
 });
-

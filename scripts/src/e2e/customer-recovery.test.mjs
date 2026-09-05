@@ -266,8 +266,47 @@ for (const journey of [
         );
         assert.equal(
           await page.getByRole("option").first().textContent(),
-          "Untitled invoice (current)",
+          "Untitled invoice - Amount incomplete (current)",
         );
+        await customers.first().click();
+        const details = page.getByLabel("Selected draft details", {
+          exact: true,
+        });
+        await details
+          .getByText("Local fixture buyer", { exact: true })
+          .waitFor();
+        await page.locator("#line-0-description").fill("Quarterly support");
+        await page.locator("#line-0-unit-price").fill("1000");
+        await page
+          .getByText("Saved to your account for 7 days", { exact: true })
+          .waitFor();
+        assert.match(
+          await page
+            .locator("#invoice-draft-slot option")
+            .first()
+            .textContent(),
+          /Quarterly support.*1,075/,
+        );
+        for (const label of [
+          "Last account save (Lagos time)",
+          "Account draft expires (Lagos time)",
+        ]) {
+          const value = details
+            .locator("div")
+            .filter({ has: page.getByText(label, { exact: true }) })
+            .locator("dd");
+          await page.waitForFunction(() => {
+            const values = [
+              ...document.querySelectorAll(
+                '[aria-label="Selected draft details"] dd',
+              ),
+            ];
+            return values.every(
+              (element) => element.textContent !== "Not available",
+            );
+          });
+          assert.notEqual(await value.textContent(), "Not available");
+        }
       }
       t.diagnostic(
         `${browser.version()}; ${checks.length} journey assertions; evidence: ${evidence}`,
