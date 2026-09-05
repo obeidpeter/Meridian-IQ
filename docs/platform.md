@@ -498,6 +498,15 @@ piece of state that was process-local, the login throttle, is now in
 Postgres (`login_attempts`), so its caps hold cluster-wide. On Autoscale
 (scales to zero), the in-process timers freeze while idle; an external
 scheduler pings `GET /api/internal/sweep` to run one full pass on demand.
+Since #203 the route reports the pass honestly: 200 `ok` when the sweeps,
+the drain and the reconcile all ran clean; 202 `busy` (Retry-After 5) when
+another owner holds a pass, without clearing the last failure heartbeat;
+503 `partial_failure` (Retry-After 60, aggregate failure counts, no tenant
+data or raw errors) when any of them failed — a failed claim fails the pass
+instead of looking like an empty queue, and timed-out work keeps its lock
+until it settles. HTTP-triggered passes run the same short explicit
+database contexts as the timer (breaker reads, reminder candidates and
+preferences), never a transaction around rail or provider I/O.
 
 ## Messaging, inbound rails & the notification inbox
 

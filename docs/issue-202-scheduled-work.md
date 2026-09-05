@@ -1,6 +1,6 @@
 # Issue 202: HTTP Scheduled Work
 
-Status: implemented and locally verified. See the pull request for current PostgreSQL-backed CI and publication status. No production configuration, credentials, or data were changed.
+Status: merged in PR #203 (main `b4a0d12e`, 5 September 2026). CI run 33983239174 on the PR head ran the PostgreSQL-backed suites and the 424-check E2E journey green. No production configuration, credentials, or data were changed; production remains on the HOLD release path until a separately approved RUN activation.
 
 ## Cause
 
@@ -33,4 +33,4 @@ pnpm --filter @workspace/api-server test
 pnpm --filter @workspace/scripts e2e
 ```
 
-The focused pure regressions are included in `@workspace/api-server test:pure`; the scheduler and journey helper tests are picked up by the existing CI script-test globs. The full CI run must pass before merging or closing issue 202. Local PostgreSQL lifetime/deadline tests could not execute because no test database service is installed.
+The focused pure regressions are included in `@workspace/api-server test:pure`; the scheduler and journey helper tests are picked up by the existing CI script-test globs. The full CI run passed before merge (run 33983239174). The local PostgreSQL lifetime/deadline tests could not execute in the authoring environment because no test database service was installed there; CI executed them.

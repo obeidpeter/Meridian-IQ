@@ -2,7 +2,8 @@
 
 This document is the operating contract for Meridian Today, universal search,
 collaborative work, Invoice Room, the R3 credit evidence perimeter, and the
-production provider relays available with API contract `0.98.0`.
+production provider relays (first available in API contract `0.98.0`; the
+current contract is `info.version` in `lib/api-spec/openapi.yaml`).
 
 ## User-facing workspace
 
@@ -272,8 +273,9 @@ funding, repayment and marketplace behavior have no route or user interface.
 
 ## Rollout checklist
 
-1. Build contract `0.98.0` and all web artifacts from the same revision.
-2. Apply the database schema, then run guardrail migrations through `0049`.
+1. Build the current contract and all web artifacts from the same revision.
+2. Apply the reviewed versioned migrations through the latest entry in
+   `lib/db/src/migrations/index.ts` (`0054` at this revision).
 3. Confirm `/api/readyz` and the operator release-readiness panel are healthy.
 4. Add provider URL/token pairs in Replit Secrets. Never paste the server token
    into a client connection form.
