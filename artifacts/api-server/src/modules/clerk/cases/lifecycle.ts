@@ -1,12 +1,4 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  isNull,
-  notInArray,
-  or,
-} from "drizzle-orm";
+import { and, asc, desc, eq, isNull, notInArray, or } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -132,7 +124,7 @@ export async function retryExtraction(
   gateway: ClerkGateway,
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
-  const existing = await getCase(id);
+  const existing = await runInBypassContext(() => getCase(id));
   if (
     (existing.kind !== "extraction" && existing.kind !== "notice") ||
     existing.status !== "failed"
@@ -194,9 +186,7 @@ export async function retryExtraction(
         await creatorClientParty(existing.createdBy),
       );
   // The retry route runs OUTSIDE the request transaction (app.ts
-  // NO_CONTEXT_ROUTE_PATTERNS) — with no ambient context, appendAudit's
-  // getDb() is the raw pool and the event commits in its own transaction, so
-  // this write is durable on that path too.
+  // NO_CONTEXT_ROUTE_PATTERNS); appendAudit opens its own short context.
   await appendAudit({
     actorId,
     action: "clerk.case.retry",

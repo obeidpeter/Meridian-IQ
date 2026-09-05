@@ -3,6 +3,8 @@
 // proposed-actions + standing-approval (automation) round-trip, the Notice
 // Desk obligations spine, the Filing Desk register walk, and the WHT Desk
 // (category → remittance schedule → credit-note walk).
+import assert from "node:assert/strict";
+import { seedIncomingWhtBill } from "./wht-fixture.mjs";
 import {
   CSRF,
   DEMO_CLIENT_PARTY_ID,
@@ -77,9 +79,18 @@ async function journeyGovernance(page, BASE, check) {
 
     // A DIFFERENT human approves — evidence row, 201.
     await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+    const reviewResponse = await page.request.get(
+      BASE + `/api/invoices/${invoiceId}`,
+    );
+    if (reviewResponse.status() !== 200)
+      throw new Error("Cannot load invoice content for approval fixture");
+    const reviewed = await reviewResponse.json();
     const approveRes = await page.request.post(
       BASE + `/api/invoices/${invoiceId}/approve`,
-      { headers: CSRF },
+      {
+        headers: CSRF,
+        data: { expectedRevision: reviewed.invoice.contentRevision },
+      },
     );
     check(
       "a colleague records a submission approval (201)",
@@ -173,7 +184,10 @@ async function journeyCollections(page, BASE, check, hookKey) {
   // 401, proving the rail is LIT but guarded (an unset env would 404).
   const badToken = await fetch(BASE + "/api/collections/inbound", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-op-token": "wrong-token" },
+    headers: {
+      "content-type": "application/json",
+      "x-op-token": "wrong-token",
+    },
     body: JSON.stringify({
       accountReference: account?.accountReference ?? "CA-MISSING",
       amount: "1.00",
@@ -257,7 +271,10 @@ async function journeyCollections(page, BASE, check, hookKey) {
   // schedule. 202 either way by design (the settled invoice no longer binds).
   const legacyPath = await fetch(BASE + "/api/collections/inbound", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-op-token": hookKey.secret },
+    headers: {
+      "content-type": "application/json",
+      "x-op-token": hookKey.secret,
+    },
     body: settlementBody,
   });
   check(
@@ -350,7 +367,8 @@ async function journeyAutomation(page, BASE, check) {
     });
     const invoiceId = created.invoiceId;
     const propRes = await page.request.get(
-      BASE + `/api/clerk/action-proposals?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+      BASE +
+        `/api/clerk/action-proposals?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     const proposals = propRes.status() === 200 ? await propRes.json() : null;
     const overdue = (proposals?.actions ?? []).find(
@@ -549,7 +567,8 @@ async function journeyObligations(page, BASE, check) {
     );
 
     const list = await page.request.get(
-      BASE + `/api/obligations?clientPartyId=${DEMO_CLIENT_PARTY_ID}&status=open`,
+      BASE +
+        `/api/obligations?clientPartyId=${DEMO_CLIENT_PARTY_ID}&status=open`,
     );
     const listBody = list.ok() ? await list.json() : { obligations: [] };
     check(
@@ -675,9 +694,7 @@ async function journeyFilings(page, BASE, check) {
       BASE + `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     const rows = list.ok() ? (await list.json()).filings : [];
-    const vatRow = rows.find(
-      (f) => f.taxType === "vat" && f.period === period,
-    );
+    const vatRow = rows.find((f) => f.taxType === "vat" && f.period === period);
     const payeRow = rows.find(
       (f) => f.taxType === "paye" && f.period === period,
     );
@@ -691,8 +708,7 @@ async function journeyFilings(page, BASE, check) {
     // rows are unfiled, so open_filings flags them for attention. Against a
     // kept database an earlier run may already have filed both demo rows —
     // the item then honestly reads clear (the skip-or-pass posture).
-    const bothFiled =
-      vatRow?.status === "filed" && payeRow?.status === "filed";
+    const bothFiled = vatRow?.status === "filed" && payeRow?.status === "filed";
     const close = await page.request.get(
       BASE + `/api/month-end-close?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
@@ -751,7 +767,10 @@ async function journeyFilings(page, BASE, check) {
         BASE + `/api/filings/${target.id}/status`,
         { data: { status: "prepared" }, headers: CSRF },
       );
-      prepared = { status: res.status(), body: res.ok() ? await res.json() : {} };
+      prepared = {
+        status: res.status(),
+        body: res.ok() ? await res.json() : {},
+      };
     }
     check(
       "the return marks prepared",
@@ -819,7 +838,7 @@ async function journeyFilings(page, BASE, check) {
 // the bill on the remittance schedule; a WHT-categorised RECEIVABLE takes a
 // recorded deduction that opens an awaiting_note credit, which the credit
 // note's reference + date walk to note_received; and month-end close carries
-// the wht_credits chase item. Every probe document uses a Date.now() number
+// the wht_credits chase item. Every probe document uses a fresh unique number
 // (WHT-*/WHT-R-*, outside every pinned namespace), so the idempotent
 // POST /api/wht/credits can never hand back an earlier run's already-noted
 // row — the walk is deterministic per run, no kept-DB skip needed. Both
@@ -838,37 +857,75 @@ async function journeyWht(page, BASE, check) {
   try {
     await apiLogin(page, BASE, "demo.staff@meridianiq.example");
 
-    // A NEW previous-period bill with a human-picked category. The seeded
-    // vendor party is discovered from the existing bills ledger rather than
-    // pinned — the seed owns that id.
+    // An incoming bill from the unengaged vendor is a scratch-DB fixture,
+    // not an outgoing invoice created on that vendor's behalf. Category
+    // assignment still exercises the authorized, revision-checked API.
     const billsRes = await page.request.get(
       BASE + `/api/bills?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     const bills = billsRes.ok() ? await billsRes.json() : [];
-    const vendorPartyId = bills[0]?.supplierPartyId ?? null;
-    const billNumber = `WHT-${Date.now()}`;
-    const createdBill = vendorPartyId
-      ? await createDraftInvoice(page, BASE, {
-          supplierPartyId: vendorPartyId,
-          buyerPartyId: DEMO_CLIENT_PARTY_ID,
-          invoiceNumber: billNumber,
-          issueDate: `${period}-15`,
-          description: "WHT probe professional services",
-          unitPrice: "200000",
+    assert.equal(
+      billsRes.status(),
+      200,
+      "incoming bill fixture discovery must succeed",
+    );
+    const sourceBill = bills.find((bill) => bill.invoiceNumber === "BILL-2001");
+    assert.ok(sourceBill, "seeded BILL-2001 must exist");
+    const { invoiceId: billId, invoiceNumber: billNumber } =
+      seedIncomingWhtBill({
+        sourceBillId: sourceBill.invoiceId,
+        clientPartyId: DEMO_CLIENT_PARTY_ID,
+        period,
+      });
+    const denied = await createDraftInvoice(page, BASE, {
+      supplierPartyId: sourceBill.supplierPartyId,
+      buyerPartyId: DEMO_CLIENT_PARTY_ID,
+      invoiceNumber: `${billNumber}-DENIED`,
+      issueDate: `${period}-15`,
+      description: "Unengaged vendor create must be denied",
+      unitPrice: "200000",
+    });
+    check(
+      "outgoing invoice creation for an unengaged vendor stays forbidden",
+      denied.status === 403,
+      `status ${denied.status}`,
+    );
+    const initialBillRes = await page.request.get(
+      BASE + `/api/invoices/${billId}`,
+    );
+    assert.equal(
+      initialBillRes.status(),
+      200,
+      "seeded incoming bill must be readable",
+    );
+    const initialBill = await initialBillRes.json();
+    assert.equal(
+      initialBill.invoice.whtCategory,
+      null,
+      "fixture must not preassign WHT",
+    );
+    const categoryRes = await page.request.patch(
+      BASE + `/api/invoices/${billId}`,
+      {
+        headers: CSRF,
+        data: {
+          expectedRevision: initialBill.invoice.contentRevision,
           whtCategory: "services_5",
-        })
-      : { status: 0, invoiceId: null };
-    const billDetailRes = createdBill.invoiceId
-      ? await page.request.get(BASE + `/api/invoices/${createdBill.invoiceId}`)
-      : null;
-    const billDetail = billDetailRes?.ok() ? await billDetailRes.json() : null;
+        },
+      },
+    );
+    const billDetailRes = await page.request.get(
+      BASE + `/api/invoices/${billId}`,
+    );
+    const billDetail = billDetailRes.ok() ? await billDetailRes.json() : null;
     check(
       "a bill carries its WHT category",
-      createdBill.status === 201 &&
-        billDetail?.invoice?.whtCategory === "services_5",
-      vendorPartyId
-        ? `create ${createdBill.status}, whtCategory ${billDetail?.invoice?.whtCategory ?? "-"}`
-        : "no seeded bill to discover the vendor from",
+      categoryRes.status() === 200 &&
+        billDetailRes.status() === 200 &&
+        billDetail?.invoice?.whtCategory === "services_5" &&
+        billDetail.invoice.contentRevision ===
+          initialBill.invoice.contentRevision + 1,
+      `patch ${categoryRes.status()}, whtCategory ${billDetail?.invoice?.whtCategory ?? "-"}`,
     );
 
     // Sync now that the period holds a WHT-categorised bill: the register
@@ -884,9 +941,7 @@ async function journeyWht(page, BASE, check) {
     const whtRow = whtRows.find((f) => f.period === period);
     check(
       "filings sync mints the WHT remittance row",
-      sync.status() === 200 &&
-        whtList.status() === 200 &&
-        whtRow !== undefined,
+      sync.status() === 200 && whtList.status() === 200 && whtRow !== undefined,
       `sync ${sync.status()}, list ${whtList.status()}, ${whtRows.length} wht rows, period ${period}`,
     );
 

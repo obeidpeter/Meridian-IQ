@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.98.0
+ * OpenAPI spec version: 0.99.0
  */
 export interface HealthStatus {
   status: string;
@@ -1358,6 +1358,8 @@ export interface Invoice {
   legalHold: boolean;
   /** @nullable */
   retentionUntil?: string | null;
+  /** @minimum 1 */
+  contentRevision: number;
   schemaVersion?: number;
   createdAt: string;
   updatedAt: string;
@@ -1451,6 +1453,11 @@ export const InvoiceUpdateInputWhtCategory = {
 } as const;
 
 export interface InvoiceUpdateInput {
+  /**
+     * Content revision the editor opened; stale writes are rejected.
+     * @minimum 1
+     */
+  expectedRevision: number;
   /** @minLength 1 */
   invoiceNumber?: string;
   issueDate?: string;
@@ -1924,6 +1931,8 @@ export interface InvoiceApproval {
   /** @nullable */
   approvedByName: string | null;
   /** @nullable */
+  contentRevision: number | null;
+  /** @nullable */
   note: string | null;
   /** @nullable */
   revokedAt: string | null;
@@ -1931,6 +1940,8 @@ export interface InvoiceApproval {
 }
 
 export interface ApproveInvoiceInput {
+  /** @minimum 1 */
+  expectedRevision: number;
   /** @maxLength 1000 */
   note?: string;
 }
@@ -8533,6 +8544,297 @@ export interface BankDataRoomAccessLogEntry {
   createdAt: string;
 }
 
+export type OperationCommand = typeof OperationCommand[keyof typeof OperationCommand];
+
+
+export const OperationCommand = {
+  invoicecreate: 'invoice.create',
+  invoiceimport: 'invoice.import',
+} as const;
+
+/**
+ * @minLength 1
+ * @maxLength 128
+ * @pattern ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$
+ */
+export type OperationIdempotencyKey = string;
+
+export type OperationState = typeof OperationState[keyof typeof OperationState];
+
+
+export const OperationState = {
+  succeeded: 'succeeded',
+  partial: 'partial',
+  failed: 'failed',
+} as const;
+
+export interface OperationSummary {
+  id: string;
+  command: OperationCommand;
+  idempotencyKey: OperationIdempotencyKey;
+  status: OperationState;
+  title: string;
+  /**
+     * Server-authorized navigation destination. A committed resumable chunk links to /import?run=<UUID> from its owned chunk/run reference; legacy imports link to /import.
+     * @maxLength 48
+     * @pattern ^/(invoices|import(\?run=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)$
+     */
+  route: string;
+  summary: string;
+  startedAt: string;
+  updatedAt: string;
+}
+
+export interface ImportRunChunkResponse {
+  runId: string;
+  /**
+     * @minimum 0
+     * @maximum 4999
+     */
+  chunkIndex: number;
+  /**
+     * @minimum 1
+     * @maximum 5000
+     */
+  nextChunkIndex: number;
+  result: InvoiceImportResult;
+}
+
+export interface OperationResult {
+  /**
+     * @minimum 200
+     * @maximum 299
+     */
+  statusCode: number;
+  /** Original saved JSON response. invoice.create returns InvoiceDetail; invoice.import returns InvoiceImportResult for a legacy import or ImportRunChunkResponse for a resumable chunk. */
+  body: InvoiceDetail | InvoiceImportResult | ImportRunChunkResponse;
+}
+
+export type OperationDetail = OperationSummary & {
+  result: OperationResult;
+};
+
+export interface OperationList {
+  /** @maxItems 100 */
+  operations: OperationSummary[];
+  /**
+     * @maxLength 256
+     * @nullable
+     */
+  nextCursor: string | null;
+}
+
+export interface ImportRunManifest {
+  /** Random client intent UUID, persisted before dispatch. Never derive only from file content. */
+  id: string;
+  clientPartyId: string;
+  /**
+     * @minimum 1
+     * @maximum 5000
+     */
+  totalRows: number;
+  /**
+     * @minimum 1
+     * @maximum 250
+     */
+  chunkSize: number;
+  /**
+     * Exactly ceil(totalRows/chunkSize) ordered hashes. Hash the JSON rows array using recursively sorted object keys, preserved array order, omitted undefined properties, and UTF-8 SHA-256 lowercase hex. Rows are not trimmed or coerced.
+     * @minItems 1
+     * @maxItems 5000
+     * @items.pattern ^[0-9a-f]{64}$
+     */
+  chunkHashes: string[];
+}
+
+export interface ImportRunChunkInput {
+  /**
+     * Exact manifest range, with consecutive rowNumber values starting at chunkIndex*chunkSize+1. First data row is 1, excluding the spreadsheet header. Extra row fields are rejected. Expected length is min(chunkSize,totalRows-chunkIndex*chunkSize).
+     * @minItems 1
+     * @maxItems 250
+     */
+  rows: InvoiceImportRow[];
+}
+
+export interface ImportRunCommittedChunk {
+  /**
+     * @minimum 0
+     * @maximum 4999
+     */
+  chunkIndex: number;
+  operationId: string;
+  /**
+     * @minimum 1
+     * @maximum 250
+     */
+  rowCount: number;
+  result: InvoiceImportResult;
+}
+
+/**
+ * ready means every chunk is committed but finalize has not yet been recorded.
+ */
+export type ImportRunDetailStatus = typeof ImportRunDetailStatus[keyof typeof ImportRunDetailStatus];
+
+
+export const ImportRunDetailStatus = {
+  open: 'open',
+  ready: 'ready',
+  completed: 'completed',
+} as const;
+
+export interface ImportRunDetail {
+  id: string;
+  clientPartyId: string;
+  /** @pattern ^[0-9a-f]{64}$ */
+  manifestHash: string;
+  /**
+     * @minimum 1
+     * @maximum 5000
+     */
+  totalRows: number;
+  /**
+     * @minimum 1
+     * @maximum 250
+     */
+  chunkSize: number;
+  /**
+     * @minItems 1
+     * @maxItems 5000
+     * @items.pattern ^[0-9a-f]{64}$
+     */
+  chunkHashes: string[];
+  /**
+     * @minimum 0
+     * @maximum 5000
+     */
+  nextChunkIndex: number;
+  /** ready means every chunk is committed but finalize has not yet been recorded. */
+  status: ImportRunDetailStatus;
+  /**
+     * Processed rows, including invalid rows with durable outcomes.
+     * @minimum 0
+     * @maximum 5000
+     */
+  committedRows: number;
+  /**
+     * @minimum 0
+     * @maximum 5000
+     */
+  createdCount: number;
+  /**
+     * @minimum 0
+     * @maximum 5000
+     */
+  invalidCount: number;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  finalizedAt: string | null;
+  /** @maxItems 5000 */
+  chunks: ImportRunCommittedChunk[];
+  /** Non-null only after finalization. Rows are sorted by original rowNumber. */
+  result: InvoiceImportResult | null;
+}
+
+export interface UnfinishedInvoiceDraftLine {
+  /** @maxLength 10000 */
+  description: string;
+  /** @maxLength 128 */
+  quantity: string;
+  /** @maxLength 128 */
+  unitPrice: string;
+  /** @maxLength 128 */
+  vatRate: string;
+}
+
+export interface InvoiceDraftContent {
+  /** @maxLength 10000 */
+  invoiceNumber: string;
+  /**
+     * UUID of a selected buyer, or an empty string while unfinished
+     * @pattern ^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+     */
+  buyerPartyId: string;
+  /** @maxLength 32 */
+  issueDate: string;
+  /** @maxLength 32 */
+  dueDate: string;
+  /** @maxLength 16 */
+  currency: string;
+  /** @maxLength 128 */
+  fxRateToNgn: string;
+  /** @maxLength 128 */
+  whtCategory: string;
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
+  lines: UnfinishedInvoiceDraftLine[];
+}
+
+export interface InvoiceDraftWriteInput {
+  clientPartyId: string;
+  /** @minimum 0 */
+  expectedRevision: number;
+  writeId: string;
+  draft: InvoiceDraftContent;
+}
+
+export interface ServerInvoiceDraft {
+  id: string;
+  /** @minimum 1 */
+  revision: number;
+  writeId: string;
+  draft: InvoiceDraftContent;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export interface ClerkReservation {
+  id: string;
+  firmId: string;
+  /**
+     * Positive bigint encoded as a decimal string.
+     * @pattern ^[1-9][0-9]*$
+     */
+  reservedTokens: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ClerkReservationPage {
+  /** @maxItems 100 */
+  reservations: ClerkReservation[];
+  /**
+     * Last UUID when the page is full; null otherwise. A following page may be empty.
+     * @nullable
+     */
+  nextAfterId: string | null;
+}
+
+export interface ClerkReservationReconcileInput {
+  /**
+     * Trimmed operator explanation or provider evidence reference recorded in the audit chain.
+     * @minLength 10
+     * @maxLength 1000
+     */
+  reason: string;
+  /** Operator confirms the failed provider execution has stopped. */
+  confirmedStopped: true;
+  /**
+     * Optional conservative charge, at least reservedTokens. Omission charges reservedTokens.
+     * @minimum 1
+     * @maximum 2147483647
+     */
+  chargedTokens?: number;
+}
+
+export interface ClerkReservationReconcileResult {
+  inferenceCallId: string;
+  replayed: boolean;
+}
+
 /**
  * Bad request
  */
@@ -8562,6 +8864,40 @@ export type ConflictResponse = Error;
  * The request is valid JSON but cannot be accepted
  */
 export type UnprocessableEntityResponse = Error;
+
+/**
+ * Invalid query, manifest, row indexes, row count or request key. Error body uses the existing error message shape, not internal domain codes.
+ */
+export type RecoveryBadRequestResponse = Error;
+
+/**
+ * Authentication is required.
+ */
+export type RecoveryUnauthorizedResponse = Error;
+
+/**
+ * Current capability or tenant/client authorization is missing.
+ */
+export type RecoveryForbiddenResponse = Error;
+
+/**
+ * Unknown, unfinished, or inaccessible record. No cross-client ownership information is disclosed.
+ */
+export type RecoveryNotFoundResponse = Error;
+
+/**
+ * Existing intent key has a different payload, manifest/chunk hash changed, chunk is out of order, or run is incomplete. Preserve the original key when retrying an uncertain outcome.
+ */
+export type RecoveryConflictResponse = Error;
+
+/**
+ * Authorized run state and committed results.
+ */
+export type ImportRunSuccessResponse = ImportRunDetail;
+
+export type OperationRequestKeyParameter = OperationIdempotencyKey;
+
+export type InvoiceDraftClientParameter = string;
 
 export type ListBankDataRoomAccessParams = {
 /**
@@ -8676,6 +9012,60 @@ offset?: number;
  * @maxLength 120
  */
 q?: string;
+};
+
+export type ListInvoicesPagedParams = {
+status?: string;
+/**
+ * @maxLength 120
+ */
+q?: string;
+statusGroup?: ListInvoicesPagedStatusGroup;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+fromDate?: string;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+toDate?: string;
+/**
+ * @pattern ^\d{1,22}(\.\d{1,2})?$
+ */
+minAmount?: string;
+/**
+ * @pattern ^\d{1,22}(\.\d{1,2})?$
+ */
+maxAmount?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @maxLength 1024
+ */
+cursor?: string;
+};
+
+export type ListInvoicesPagedStatusGroup = typeof ListInvoicesPagedStatusGroup[keyof typeof ListInvoicesPagedStatusGroup];
+
+
+export const ListInvoicesPagedStatusGroup = {
+  all: 'all',
+  draft: 'draft',
+  pending: 'pending',
+  stamped: 'stamped',
+  settled: 'settled',
+  failed: 'failed',
+  closed: 'closed',
+} as const;
+
+export type ListInvoicesPaged200 = {
+  items: Invoice[];
+  /** @nullable */
+  nextCursor: string | null;
+  total: number;
 };
 
 export type ExportInvoicesCsvParams = {
@@ -9242,5 +9632,58 @@ clientPartyId: string;
  * @pattern ^\d{4}-\d{2}$
  */
 period?: string;
+};
+
+export type ListOperationsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * Opaque nextCursor from the preceding page.
+ * @minLength 1
+ * @maxLength 256
+ */
+cursor?: string;
+};
+
+export type LookupOperationParams = {
+command: OperationCommand;
+idempotencyKey: OperationIdempotencyKey;
+};
+
+export type FinalizeInvoiceImportRunBody = { [key: string]: unknown };
+
+export type ListInvoiceDraftsParams = {
+clientPartyId: InvoiceDraftClientParameter;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type ListInvoiceDrafts200 = {
+  items: ServerInvoiceDraft[];
+  nextOffset: number | null;
+};
+
+export type GetInvoiceDraftParams = {
+clientPartyId: InvoiceDraftClientParameter;
+};
+
+export type DeleteInvoiceDraftBody = {
+  clientPartyId: string;
+  /** @minimum 0 */
+  expectedRevision: number;
+};
+
+export type ListClerkReservationsParams = {
+afterId?: string;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
 };
 

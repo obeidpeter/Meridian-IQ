@@ -1,6 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import {
   getDb,
+  withTransaction,
   invoicesTable,
   invoiceLinesTable,
   invoiceLifecycleEventsTable,
@@ -25,12 +26,19 @@ import {
 import {
   assertPlausibleVatRates,
   computeLineFinancials,
+  FinancialDecimal,
   money,
   type LineInput,
 } from "./lines";
 import { computeLinesWithTotals, type ComputedLine } from "./line-totals";
 import { assertSubmitApproved, revokeLiveApprovals } from "./approvals";
 import { assertReceivableOriented } from "./orientation";
+import { withInvoiceLock } from "./revision";
+import {
+  assertInvoiceDates,
+  assertLineInputs,
+  decimalInputError,
+} from "./input-validation";
 
 export { computeLineFinancials, type LineInput };
 export { assertReceivableOriented } from "./orientation";
@@ -63,7 +71,7 @@ export interface CreateInvoiceInput {
 // insert turns it into an opaque DB error; zero/negative rates would silently
 // zero out or flip naira reporting.
 function assertValidFxRate(rate: string): void {
-  if (!/^\d+(\.\d{1,6})?$/.test(rate) || Number(rate) <= 0) {
+  if (decimalInputError(rate, "FX rate", 12, 6, true)) {
     throw new DomainError(
       "FX_RATE_INVALID",
       `fxRateToNgn must be a positive decimal with at most 6 decimal places, got "${rate}"`,
@@ -169,12 +177,25 @@ export async function createDraft(
   input: CreateInvoiceInput,
   actorId?: string,
 ): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
+  return withTransaction(() => createDraftInTransaction(input, actorId));
+}
+
+async function createDraftInTransaction(
+  input: CreateInvoiceInput,
+  actorId?: string,
+): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
   if (input.lines.length === 0) {
-    throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
+    throw new DomainError(
+      "NO_LINES",
+      "An invoice needs at least one line",
+      400,
+    );
   }
   // Reject percent-style VAT rates before any row is written: a "7.5" that
   // should have been "0.075" would otherwise create a 100x-inflated draft.
   assertPlausibleVatRates(input.lines);
+  assertInvoiceDates(input);
+  assertLineInputs(input.lines);
   if (input.fxRateToNgn !== undefined) {
     assertValidFxRate(input.fxRateToNgn);
     // An NGN document carries no rate by definition (currency defaults NGN).
@@ -263,12 +284,14 @@ export async function bulkCreateDrafts(
   // producing 100x-inflated drafts. Import routes pre-validate per-row, so a
   // failure here indicates a caller bug, not user data.
   assertPlausibleVatRates(rows.map((r) => r.line));
+  assertLineInputs(rows.map((r) => r.line));
+  rows.forEach(assertInvoiceDates);
   for (let i = 0; i < rows.length; i += BULK_CHUNK) {
     const chunk = rows.slice(i, i + BULK_CHUNK);
     const computed = chunk.map((r) => {
       const fin = computeLineFinancials(r.line);
-      const subtotal = Number(fin.lineExtension);
-      const vatTotal = Number(fin.vatAmount);
+      const subtotal = fin.lineExtension;
+      const vatTotal = fin.vatAmount;
       return { r, fin, subtotal, vatTotal };
     });
     const inserted = await getDb()
@@ -284,7 +307,7 @@ export async function bulkCreateDrafts(
           dueDate: r.dueDate ?? null,
           subtotal: money(subtotal),
           vatTotal: money(vatTotal),
-          grandTotal: money(subtotal + vatTotal),
+          grandTotal: money(new FinancialDecimal(subtotal).plus(vatTotal)),
         })),
       )
       .returning({
@@ -337,6 +360,7 @@ export async function bulkCreateDrafts(
 }
 
 export interface UpdateInvoiceInput {
+  expectedRevision?: number;
   invoiceNumber?: string;
   issueDate?: string;
   dueDate?: string | null;
@@ -359,14 +383,34 @@ export async function updateInvoiceContent(
   patch: UpdateInvoiceInput,
   actorId?: string,
 ): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
+  return withInvoiceLock(
+    invoiceId,
+    () => updateInvoiceContentLocked(invoiceId, patch, actorId),
+    patch.expectedRevision,
+  );
+}
+
+async function updateInvoiceContentLocked(
+  invoiceId: string,
+  patch: UpdateInvoiceInput,
+  actorId?: string,
+): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
   const bundle = await getInvoiceWithLines(invoiceId);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertMutableContent(bundle.invoice);
+  assertInvoiceDates(patch);
+  if (patch.lines) assertLineInputs(patch.lines);
   if (patch.lines && patch.lines.length === 0) {
-    throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
+    throw new DomainError(
+      "NO_LINES",
+      "An invoice needs at least one line",
+      400,
+    );
   }
 
-  const invoicePatch: Partial<typeof invoicesTable.$inferInsert> = {};
+  const invoicePatch: Partial<typeof invoicesTable.$inferInsert> = {
+    contentRevision: bundle.invoice.contentRevision + 1,
+  };
   if (patch.invoiceNumber !== undefined) {
     invoicePatch.invoiceNumber = patch.invoiceNumber;
   }
@@ -524,6 +568,15 @@ export async function validateInvoice(
   invoiceId: string,
   actorId?: string,
 ): Promise<{ ok: boolean; errors: FieldError[] }> {
+  return withInvoiceLock(invoiceId, () =>
+    validateInvoiceLocked(invoiceId, actorId),
+  );
+}
+
+async function validateInvoiceLocked(
+  invoiceId: string,
+  actorId?: string,
+): Promise<{ ok: boolean; errors: FieldError[] }> {
   const bundle = await getInvoiceWithLines(invoiceId);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   // A supplier bill (or any non-receivable document) never enters the
@@ -561,6 +614,15 @@ export async function validateInvoice(
 // Move a validated invoice to `submitted` and enqueue it on the async pipeline.
 // Requires layer-one compliance consent for the supplier (CORE-03).
 export async function submitInvoice(
+  invoiceId: string,
+  actorId?: string,
+): Promise<Invoice> {
+  return withInvoiceLock(invoiceId, () =>
+    submitInvoiceLocked(invoiceId, actorId),
+  );
+}
+
+async function submitInvoiceLocked(
   invoiceId: string,
   actorId?: string,
 ): Promise<Invoice> {

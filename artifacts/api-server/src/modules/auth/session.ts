@@ -6,7 +6,7 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
-import { getDb, appSecretsTable, usersTable } from "@workspace/db";
+import { getDb, getSystemDb, appSecretsTable, usersTable } from "@workspace/db";
 
 // Cookie-session authentication (SEC-02).
 //
@@ -239,7 +239,7 @@ async function getSessionSigningKeys(): Promise<SessionSigningKey[]> {
 
 async function getDevelopmentSessionSecret(): Promise<string> {
   if (cachedDevelopmentSecret) return cachedDevelopmentSecret;
-  const [row] = await getDb()
+  const [row] = await getSystemDb("authentication")
     .select({ value: appSecretsTable.value })
     .from(appSecretsTable)
     .where(eq(appSecretsTable.key, SECRET_KEY))
@@ -250,11 +250,11 @@ async function getDevelopmentSessionSecret(): Promise<string> {
   }
   const secret = randomBytes(32).toString("hex");
   // Concurrent boots: first insert wins; re-read on conflict.
-  await getDb()
+  await getSystemDb("authentication")
     .insert(appSecretsTable)
     .values({ key: SECRET_KEY, value: secret })
     .onConflictDoNothing({ target: appSecretsTable.key });
-  const [after] = await getDb()
+  const [after] = await getSystemDb("authentication")
     .select({ value: appSecretsTable.value })
     .from(appSecretsTable)
     .where(eq(appSecretsTable.key, SECRET_KEY))
@@ -401,7 +401,7 @@ export async function authenticate(
 export async function currentSessionEpoch(
   userId: string,
 ): Promise<number | null> {
-  const [row] = await getDb()
+  const [row] = await getSystemDb("authentication")
     .select({ epoch: usersTable.sessionEpoch })
     .from(usersTable)
     .where(eq(usersTable.id, userId))

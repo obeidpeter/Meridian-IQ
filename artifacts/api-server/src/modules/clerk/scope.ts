@@ -1,4 +1,4 @@
-import { runRequestContext } from "@workspace/db";
+import { runRequestContext, withDatabaseContext } from "@workspace/db";
 
 // Short, explicit DB scope for the model-calling Clerk paths.
 //
@@ -17,4 +17,13 @@ export async function inClerkScope<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   return runRequestContext({ bypass: !firmId, firmId: firmId ?? null }, fn);
+}
+
+// Database-only stages shared by request handlers and external sweeps retain
+// an existing caller transaction; otherwise they open a short firm scope.
+export async function withClerkDb<T>(
+  firmId: string | null,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withDatabaseContext({ bypass: !firmId, firmId }, fn);
 }

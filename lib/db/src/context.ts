@@ -1,6 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { sql } from "drizzle-orm";
-import { db, type Database } from "./client.ts";
+import { db, pool, type Database } from "./client.ts";
+import {
+  ScopedTransaction,
+  assertDatabaseLifetime,
+  transactionLifetime,
+  type DatabaseLifetime,
+} from "./scoped-transaction.ts";
 
 // Request/worker DB context (CON-01, SEC-02/03).
 //
@@ -16,19 +22,52 @@ import { db, type Database } from "./client.ts";
 // GUCs. All query call sites read the ambient transaction via getDb() so the
 // policies apply at the data layer, not merely in handler guards.
 //
-// Outside any context, getDb() falls back to the raw pool, which runs as the
-// superuser owner and is NOT tenant-isolated. That fallback is used only for
-// pre-context, non-tenant lookups (e.g. resolving a principal from users /
-// memberships, neither of which carries RLS); every tenant-scoped table is only
-// ever touched from inside one of the contexts below.
+// HTTP getDb() fails closed without a live context, including exempt routes
+// and async descendants. Only credential/membership resolution can explicitly
+// use getSystemDb before authentication ends. Non-HTTP boot/test/worker callers
+// retain a documented transitional raw fallback; they are not tenant-isolated.
 
-interface DbContext {
+interface DbContext extends DatabaseLifetime {
   db: Database;
-  active: boolean;
 }
 
 const storage = new AsyncLocalStorage<DbContext>();
 const correlationStorage = new AsyncLocalStorage<string | null>();
+const httpStorage = new AsyncLocalStorage<{ authenticating: boolean }>();
+
+/** HTTP must opt into tenant/system transactions; async descendants retain this marker. */
+export function runHttpDatabaseBoundary<T>(fn: () => T): T {
+  return storage.exit(() => httpStorage.run({ authenticating: true }, fn));
+}
+
+/** Close raw pre-auth access before rate limiting and route dispatch. */
+export function finishHttpAuthentication(): void {
+  const request = httpStorage.getStore();
+  if (request) request.authenticating = false;
+}
+
+export function hasDatabaseContext(): boolean {
+  const context = storage.getStore();
+  assertContextActive(context);
+  return !!context;
+}
+
+const assertContextActive = assertDatabaseLifetime;
+
+/** Credential/membership resolution only. Never a route-handler bypass. */
+export function getSystemDb(purpose: "authentication"): Database {
+  if (purpose !== "authentication")
+    throw new Error("Unknown system database purpose");
+  const context = storage.getStore();
+  if (context) return getDb();
+  const request = httpStorage.getStore();
+  if (request && !request.authenticating) {
+    throw new Error(
+      "System authentication database access is forbidden in HTTP handlers",
+    );
+  }
+  return db;
+}
 
 // Bind an inbound request reference independently of the database transaction.
 // Routes that deliberately own short transactions can then preserve the same
@@ -44,14 +83,41 @@ export function currentCorrelationId(): string | null {
   return correlationStorage.getStore() ?? null;
 }
 
-// The ambient tenant-scoped transaction, or the raw pool when none is active.
+// HTTP is fail-closed. The non-HTTP fallback is transitional for boot, workers
+// and test fixtures, not an implicit privilege granted to route handlers.
 export function getDb(): Database {
   const context = storage.getStore();
-  if (!context) return db;
-  if (!context.active) {
-    throw new Error("Database context is no longer active");
+  if (!context) {
+    if (httpStorage.getStore())
+      throw new Error(
+        "HTTP database access requires an explicit database context",
+      );
+    return db;
   }
+  assertContextActive(context);
   return context.db;
+}
+
+// Bind a nested transaction/savepoint as the ambient handle. Merely calling
+// getDb().transaction() is insufficient when downstream services call getDb().
+// The child shares the execution guard's lifetime, protecting cached handles too.
+export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  const parent = storage.getStore();
+  if (!parent) {
+    getDb(); // Missing HTTP context must fail before opening a system transaction.
+    return runInBypassContext(fn);
+  }
+  return getDb().transaction(async (tx) => {
+    assertContextActive(parent);
+    const context = Object.assign(transactionLifetime(tx), {
+      db: tx as unknown as Database,
+    });
+    try {
+      return await storage.run(context, fn);
+    } finally {
+      context.active = false;
+    }
+  });
 }
 
 async function setGucs(
@@ -90,23 +156,54 @@ export async function runRequestContext<T>(
   },
   fn: () => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    const scoped = tx as unknown as Database;
+  hasDatabaseContext(); // Reject a stale async continuation before it can reopen a context.
+  const parent = storage.getStore();
+  const client = await pool.connect();
+  const lifetime: DatabaseLifetime = { active: true, parent };
+  const scoped = new ScopedTransaction(client, lifetime) as unknown as Database;
+  const context = Object.assign(lifetime, { db: scoped });
+  let began = false;
+  let reusable = false;
+  let connectionFailed = false;
+  const onError = () => {
+    connectionFailed = true;
+    context.active = false;
+  };
+  client.on("error", onError);
+  try {
+    assertContextActive(parent);
+    await client.query("BEGIN");
+    began = true;
     const correlationId =
       opts.correlationId === undefined
         ? currentCorrelationId()
         : opts.correlationId;
     await setGucs(scoped, { ...opts, correlationId });
-    const context: DbContext = { db: scoped, active: true };
-    try {
-      return await storage.run(context, fn);
-    } finally {
-      // A timed-out Express handler may continue its async chain after the
-      // transaction has rolled back. Keep that stale chain from issuing work
-      // through a client that has already returned to the pool.
-      context.active = false;
+    assertContextActive(context);
+    const result = await storage.run(context, fn);
+    assertContextActive(context);
+    context.active = false;
+    // Revoke application dispatch BEFORE cleanup. node-postgres queues commands
+    // on one client, so already-issued work drains before this terminal command.
+    await client.query("COMMIT");
+    reusable = true;
+    return result;
+  } catch (error) {
+    context.active = false;
+    if (began && !connectionFailed) {
+      try {
+        await client.query("ROLLBACK");
+        reusable = true;
+      } catch {
+        // An uncertain transaction is never returned to the shared pool.
+      }
     }
-  });
+    throw error;
+  } finally {
+    context.active = false;
+    client.removeListener("error", onError);
+    client.release(!reusable || connectionFailed);
+  }
 }
 
 // Run `fn` inside a transaction that bypasses tenant RLS (cross-tenant staff and
@@ -119,4 +216,12 @@ export async function runInBypassContext<T>(
     { bypass: true, firmId: null, correlationId: opts.correlationId },
     fn,
   );
+}
+
+/** A database-only stage: retain caller atomicity/RLS or open the explicit scope. */
+export async function withDatabaseContext<T>(
+  opts: Parameters<typeof runRequestContext>[0],
+  fn: () => Promise<T>,
+): Promise<T> {
+  return hasDatabaseContext() ? fn() : runRequestContext(opts, fn);
 }

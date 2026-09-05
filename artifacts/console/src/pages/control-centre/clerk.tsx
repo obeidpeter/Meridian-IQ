@@ -124,7 +124,12 @@ export function ClerkAssuranceWorkspace() {
               status={guardrail.status}
               statusLabel={humanize(guardrail.status)}
               action={
-                <Button asChild size="sm" variant="ghost">
+                <Button
+                  asChild
+                  size="sm"
+                  variant="ghost"
+                  className="text-slate-900 hover:bg-slate-100 hover:text-slate-950 dark:focus-visible:ring-teal-700"
+                >
                   <Link href={guardrail.actionHref}>Open</Link>
                 </Button>
               }
@@ -132,9 +137,9 @@ export function ClerkAssuranceWorkspace() {
           ))}
         </section>
 
-        <aside className="space-y-4">
+        <aside className="space-y-4" aria-label="Clerk assurance results">
           <section className="rounded-lg border border-slate-200 bg-white p-5">
-            <p className="text-xs font-bold uppercase text-slate-400">
+            <p className="text-xs font-bold uppercase text-slate-600">
               Assurance posture
             </p>
             <div className="mt-4 flex items-end gap-2">
@@ -150,19 +155,19 @@ export function ClerkAssuranceWorkspace() {
                 <p className="text-xl font-extrabold tabular-nums text-amber-700">
                   {watch}
                 </p>
-                <p className="text-[11px] font-bold text-slate-400">Watch</p>
+                <p className="text-[11px] font-bold text-slate-600">Watch</p>
               </div>
               <div>
                 <p className="text-xl font-extrabold tabular-nums text-emerald-700">
                   {data.guardrails.length - critical - watch}
                 </p>
-                <p className="text-[11px] font-bold text-slate-400">Healthy</p>
+                <p className="text-[11px] font-bold text-slate-600">Healthy</p>
               </div>
             </div>
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-5">
-            <p className="text-xs font-bold uppercase text-slate-400">
+            <p className="text-xs font-bold uppercase text-slate-600">
               Latest eval
             </p>
             <dl className="mt-4 space-y-4">

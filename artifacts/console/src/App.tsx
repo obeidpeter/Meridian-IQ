@@ -1,52 +1,182 @@
+import {
+  webSession,
+  lazyRoute,
+  SessionBoundary,
+  RouteLoading,
+} from "@workspace/web-ui";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { useGetMe } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
+const NotFound = lazyRoute(() => import("@/pages/not-found"));
 import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
 import { CapabilityGate, RoleGate } from "@/components/capability-gate";
-import { Portfolio, PortfolioSkeleton } from "@/pages/portfolio";
-import { ClientDetail } from "@/pages/client-detail";
-import { ClientImport } from "@/pages/client-import";
-import { Pipeline } from "@/pages/pipeline";
-import { UnearnedIncomePage } from "@/pages/unearned-income";
-import { Billing } from "@/pages/billing";
-import { OperatorQueue } from "@/pages/operator-queue";
-import { PlatformOps } from "@/pages/platform-ops";
-import { FeatureFlags } from "@/pages/feature-flags";
-import { Statements } from "@/pages/statements";
-import { WhiteLabel } from "@/pages/whitelabel";
-import { Certification } from "@/pages/certification";
-import { Advisory } from "@/pages/advisory";
-import { Integrations } from "@/pages/integrations";
-import { ApiAccess } from "@/pages/api-access";
-import { Catalogue } from "@/pages/catalogue";
-import { AuditEvidence } from "@/pages/audit-evidence";
-import { ControlCentre } from "@/pages/control-centre";
-import { Parties } from "@/pages/parties";
-import { Invitations } from "@/pages/invitations";
-import { AccessReview } from "@/pages/access-review";
-import { ClerkClaims } from "@/pages/clerk-claims";
-import { ClerkWorkspace } from "@/pages/clerk";
-import { ClerkAskPage } from "@/pages/clerk-ask";
-import { ClerkHealthPage } from "@/pages/clerk-health";
-import { Notifications } from "@/pages/notifications";
-import { Help } from "@/pages/help";
-import { FilingDesk } from "@/pages/filing-desk";
-import { CollectionsDesk } from "@/pages/collections-desk";
-import { PracticeAnalytics } from "@/pages/analytics";
-import { ActivityPage } from "@/pages/activity";
-import { Today, WorkPage } from "@/pages/today";
+const Portfolio = lazyRoute(() =>
+  import("@/pages/portfolio").then((module) => ({ default: module.Portfolio })),
+);
+const ClientDetail = lazyRoute(() =>
+  import("@/pages/client-detail").then((module) => ({
+    default: module.ClientDetail,
+  })),
+);
+const ClientImport = lazyRoute(() =>
+  import("@/pages/client-import").then((module) => ({
+    default: module.ClientImport,
+  })),
+);
+const Pipeline = lazyRoute(() =>
+  import("@/pages/pipeline").then((module) => ({ default: module.Pipeline })),
+);
+const UnearnedIncomePage = lazyRoute(() =>
+  import("@/pages/unearned-income").then((module) => ({
+    default: module.UnearnedIncomePage,
+  })),
+);
+const Billing = lazyRoute(() =>
+  import("@/pages/billing").then((module) => ({ default: module.Billing })),
+);
+const OperatorQueue = lazyRoute(() =>
+  import("@/pages/operator-queue").then((module) => ({
+    default: module.OperatorQueue,
+  })),
+);
+const PlatformOps = lazyRoute(() =>
+  import("@/pages/platform-ops").then((module) => ({
+    default: module.PlatformOps,
+  })),
+);
+const FeatureFlags = lazyRoute(() =>
+  import("@/pages/feature-flags").then((module) => ({
+    default: module.FeatureFlags,
+  })),
+);
+const Statements = lazyRoute(() =>
+  import("@/pages/statements").then((module) => ({
+    default: module.Statements,
+  })),
+);
+const WhiteLabel = lazyRoute(() =>
+  import("@/pages/whitelabel").then((module) => ({
+    default: module.WhiteLabel,
+  })),
+);
+const Certification = lazyRoute(() =>
+  import("@/pages/certification").then((module) => ({
+    default: module.Certification,
+  })),
+);
+const Advisory = lazyRoute(() =>
+  import("@/pages/advisory").then((module) => ({ default: module.Advisory })),
+);
+const Integrations = lazyRoute(() =>
+  import("@/pages/integrations").then((module) => ({
+    default: module.Integrations,
+  })),
+);
+const ApiAccess = lazyRoute(() =>
+  import("@/pages/api-access").then((module) => ({
+    default: module.ApiAccess,
+  })),
+);
+const Catalogue = lazyRoute(() =>
+  import("@/pages/catalogue").then((module) => ({ default: module.Catalogue })),
+);
+const AuditEvidence = lazyRoute(() =>
+  import("@/pages/audit-evidence").then((module) => ({
+    default: module.AuditEvidence,
+  })),
+);
+const ControlCentre = lazyRoute(() =>
+  import("@/pages/control-centre").then((module) => ({
+    default: module.ControlCentre,
+  })),
+);
+const Parties = lazyRoute(() =>
+  import("@/pages/parties").then((module) => ({ default: module.Parties })),
+);
+const Invitations = lazyRoute(() =>
+  import("@/pages/invitations").then((module) => ({
+    default: module.Invitations,
+  })),
+);
+const AccessReview = lazyRoute(() =>
+  import("@/pages/access-review").then((module) => ({
+    default: module.AccessReview,
+  })),
+);
+const ClerkClaims = lazyRoute(() =>
+  import("@/pages/clerk-claims").then((module) => ({
+    default: module.ClerkClaims,
+  })),
+);
+const ClerkWorkspace = lazyRoute(() =>
+  import("@/pages/clerk").then((module) => ({
+    default: module.ClerkWorkspace,
+  })),
+);
+const ClerkAskPage = lazyRoute(() =>
+  import("@/pages/clerk-ask").then((module) => ({
+    default: module.ClerkAskPage,
+  })),
+);
+const ClerkHealthPage = lazyRoute(() =>
+  import("@/pages/clerk-health").then((module) => ({
+    default: module.ClerkHealthPage,
+  })),
+);
+const Notifications = lazyRoute(() =>
+  import("@/pages/notifications").then((module) => ({
+    default: module.Notifications,
+  })),
+);
+const Help = lazyRoute(() =>
+  import("@/pages/help").then((module) => ({ default: module.Help })),
+);
+const FilingDesk = lazyRoute(() =>
+  import("@/pages/filing-desk").then((module) => ({
+    default: module.FilingDesk,
+  })),
+);
+const CollectionsDesk = lazyRoute(() =>
+  import("@/pages/collections-desk").then((module) => ({
+    default: module.CollectionsDesk,
+  })),
+);
+const PracticeAnalytics = lazyRoute(() =>
+  import("@/pages/analytics").then((module) => ({
+    default: module.PracticeAnalytics,
+  })),
+);
+const ActivityPage = lazyRoute(() =>
+  import("@/pages/activity").then((module) => ({
+    default: module.ActivityPage,
+  })),
+);
+const Today = lazyRoute(() =>
+  import("@/pages/today").then((module) => ({ default: module.Today })),
+);
+const WorkPage = lazyRoute(() =>
+  import("@/pages/today").then((module) => ({ default: module.WorkPage })),
+);
 import { ClerkShell } from "@/components/clerk-shell";
-import { BankDataRoom } from "@/pages/bank-data-room";
+const BankDataRoom = lazyRoute(() =>
+  import("@/pages/bank-data-room").then((module) => ({
+    default: module.BankDataRoom,
+  })),
+);
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache(webSession.mutationCacheOptions),
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
@@ -65,7 +195,7 @@ function Home() {
   const { data: me } = useGetMe();
   // While /me resolves, reuse the established portfolio skeleton instead of
   // flashing a blank pane before the role redirect resolves.
-  if (!me) return <PortfolioSkeleton />;
+  if (!me) return <RouteLoading />;
   if (me.role === "operator") {
     return <Redirect to="/control-centre/activation" replace />;
   }
@@ -318,22 +448,24 @@ function ConsoleRoutes() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <RequireSession
-          allowedRoles={[
-            "firm_admin",
-            "operator",
-            "firm_staff",
-            "auditor",
-            "bank_user",
-          ]}
-        >
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-        </RequireSession>
-        <Toaster />
-      </TooltipProvider>
+      <SessionBoundary client={queryClient}>
+        <TooltipProvider>
+          <RequireSession
+            allowedRoles={[
+              "firm_admin",
+              "operator",
+              "firm_staff",
+              "auditor",
+              "bank_user",
+            ]}
+          >
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+          </RequireSession>
+          <Toaster />
+        </TooltipProvider>
+      </SessionBoundary>
     </QueryClientProvider>
   );
 }

@@ -5,10 +5,17 @@ import {
   Clock3,
   ExternalLink,
   Loader2,
+  RefreshCw,
+  ListChecks,
   X,
   XCircle,
 } from "lucide-react";
-import type { OperationRecord, OperationState } from "./operation-journal";
+import { useState } from "react";
+import type {
+  OperationRecord,
+  OperationState,
+  OperationSyncState,
+} from "./operation-journal";
 
 const STATUS_COPY: Record<
   OperationState,
@@ -36,12 +43,20 @@ export function OperationStatusPanel({
   detail,
   savedSummary,
   updatedAt,
+  verification,
+  verifiedAt,
 }: Pick<OperationRecord, "title" | "status" | "updatedAt"> &
-  Partial<Pick<OperationRecord, "detail" | "savedSummary">>) {
+  Partial<
+    Pick<
+      OperationRecord,
+      "detail" | "savedSummary" | "verification" | "verifiedAt"
+    >
+  >) {
   const statusCopy = STATUS_COPY[status];
   const Icon = statusCopy.icon;
   return (
-    <section
+    <div
+      role="group"
       className="mi-operation-status"
       data-state={status}
       aria-live={status === "failed" ? "assertive" : "polite"}
@@ -61,8 +76,15 @@ export function OperationStatusPanel({
           <p className="mi-operation-status__saved">{savedSummary}</p>
         ) : null}
         <time dateTime={updatedAt}>Updated {statusTime(updatedAt)}</time>
+        <p>
+          {verification === "server" && verifiedAt
+            ? `Server verified ${statusTime(verifiedAt)}`
+            : verification === "unconfirmed"
+              ? "Not yet verified by the server"
+              : "Recorded on this device"}
+        </p>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -71,24 +93,20 @@ export function ActivityCenter({
   onOpen,
   onDismiss,
   onClearCompleted,
+  syncState = "local",
+  onRefresh,
+  onRecover,
 }: {
   operations: OperationRecord[];
   onOpen: (route: string) => void;
   onDismiss: (id: string) => void;
   onClearCompleted: () => void;
+  syncState?: OperationSyncState;
+  onRefresh?: () => void;
+  onRecover?: (id: string) => Promise<void>;
 }) {
-  if (operations.length === 0) {
-    return (
-      <section className="mi-activity-empty">
-        <CircleDashed aria-hidden="true" />
-        <h2>No recorded operations</h2>
-        <p>
-          Imports, exports, submissions, onboarding, and Clerk work will appear
-          here.
-        </p>
-      </section>
-    );
-  }
+  const [inspecting, setInspecting] = useState<string | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
   const hasCompleted = operations.some(
     (operation) => operation.status === "succeeded",
   );
@@ -96,15 +114,46 @@ export function ActivityCenter({
     <section className="mi-activity" aria-label="Recent operations">
       <div className="mi-activity__toolbar">
         <p>
-          {operations.length} operation{operations.length === 1 ? "" : "s"} on
-          this device
+          {operations.length} recent operation
+          {operations.length === 1 ? "" : "s"}
         </p>
+        {onRefresh ? (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={syncState === "syncing"}
+            aria-label="Refresh operation history"
+            title="Refresh operation history"
+          >
+            <RefreshCw aria-hidden="true" />
+          </button>
+        ) : null}
         {hasCompleted ? (
           <button type="button" onClick={onClearCompleted}>
             Clear completed
           </button>
         ) : null}
       </div>
+      <p role="status">
+        {syncState === "syncing"
+          ? "Checking server records..."
+          : syncState === "synced"
+            ? "Server history checked"
+            : syncState === "offline"
+              ? "Offline. Showing last available records."
+              : syncState === "unavailable"
+                ? "Server history is unavailable. Showing last available records."
+                : syncState === "forbidden"
+                  ? "Server history is not authorized for this session."
+                  : "Device history"}
+      </p>
+      {resultError ? <p role="alert">{resultError}</p> : null}
+      {operations.length === 0 ? (
+        <div className="mi-activity-empty">
+          <CircleDashed aria-hidden="true" />
+          <h2>No recorded operations</h2>
+        </div>
+      ) : null}
       <ol className="mi-activity__list">
         {operations.map((operation) => (
           <li key={operation.id} className="mi-activity__item">
@@ -112,8 +161,34 @@ export function ActivityCenter({
             <div className="mi-activity__actions">
               <button type="button" onClick={() => onOpen(operation.route)}>
                 <ExternalLink aria-hidden="true" />
-                Open source
+                <span className="mi-activity__action-label">Open source</span>
               </button>
+              {operation.serverId && onRecover ? (
+                <button
+                  type="button"
+                  disabled={inspecting === operation.id}
+                  onClick={async () => {
+                    setInspecting(operation.id);
+                    setResultError(null);
+                    try {
+                      await onRecover(operation.id);
+                    } catch {
+                      setResultError(
+                        "The operation result could not be verified. Refresh and try again.",
+                      );
+                    } finally {
+                      setInspecting(null);
+                    }
+                  }}
+                >
+                  <ListChecks aria-hidden="true" />
+                  <span className="mi-activity__action-label">
+                    {inspecting === operation.id
+                      ? "Checking result..."
+                      : "Verify result"}
+                  </span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="mi-activity__dismiss"
@@ -124,6 +199,26 @@ export function ActivityCenter({
                 <X aria-hidden="true" />
               </button>
             </div>
+            {operation.serverResult ? (
+              <details>
+                <summary>
+                  Saved result (HTTP {operation.serverResult.statusCode})
+                </summary>
+                <pre
+                  role="region"
+                  tabIndex={0}
+                  aria-label="Saved operation result"
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    maxHeight: 320,
+                    overflowY: "auto",
+                  }}
+                >
+                  {JSON.stringify(operation.serverResult.body, null, 2)}
+                </pre>
+              </details>
+            ) : null}
           </li>
         ))}
       </ol>

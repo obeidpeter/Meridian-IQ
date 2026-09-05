@@ -273,10 +273,15 @@ test("policy on: submit without any approval 409s APPROVAL_REQUIRED", async () =
 
 test("a self-approval never satisfies the submitter's own policy", async () => {
   const base = await listen(appFor(makerOn, invoicesRouter));
-  // The maker approves its own invoice — recorded (it is valid evidence for
-  // any OTHER submitter), body-less request included.
+  // A body-less approval cannot claim which revision was reviewed.
+  const missingRevision = await fetch(`${base}/invoices/${invPairId}/approve`, { method: "POST" });
+  assert.equal(missingRevision.status, 400);
+  await missingRevision.text();
+  // The maker's revision-bound approval is evidence for any OTHER submitter.
   const approve = await fetch(`${base}/invoices/${invPairId}/approve`, {
     method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ expectedRevision: (await loadInvoice(invPairId)).contentRevision }),
   });
   assert.equal(approve.status, 201);
   const approval = (await approve.json()) as {
@@ -300,7 +305,7 @@ test("a colleague's approval clears the submit; the list is newest first", async
   const approve = await fetch(`${checkerBase}/invoices/${invPairId}/approve`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ note: "totals verified against the engagement" }),
+    body: JSON.stringify({ note: "totals verified against the engagement", expectedRevision: (await loadInvoice(invPairId)).contentRevision }),
   });
   assert.equal(approve.status, 201);
   const view = (await approve.json()) as {
@@ -346,7 +351,7 @@ test("a content edit revokes live approvals and the submit closes again", async 
   const patch = await fetch(`${base}/invoices/${invEditId}`, {
     method: "PATCH",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ notes: "quantity corrected after approval" }),
+    body: JSON.stringify({ notes: "quantity corrected after approval", expectedRevision: (await loadInvoice(invEditId)).contentRevision }),
   });
   assert.equal(patch.status, 200);
 
@@ -384,7 +389,7 @@ test("approving a bill is the submit guard's own 409 NOT_SUBMITTABLE", async () 
   const res = await fetch(`${base}/invoices/${billId}/approve`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({}),
+    body: JSON.stringify({ expectedRevision: (await loadInvoice(billId)).contentRevision }),
   });
   assert.equal(res.status, 409);
   assert.match(
@@ -401,6 +406,8 @@ test("approving post-submission paper is APPROVAL_BAD_STATE", async () => {
   const base = await listen(appFor(checkerOn, invoicesRouter));
   const res = await fetch(`${base}/invoices/${stampedId}/approve`, {
     method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ expectedRevision: (await loadInvoice(stampedId)).contentRevision }),
   });
   assert.equal(res.status, 409);
   assert.match(((await res.json()) as { error: string }).error, /stamped/);

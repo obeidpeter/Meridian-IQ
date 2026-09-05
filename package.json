@@ -19,7 +19,7 @@
   },
   "engines": {
     "node": ">=22 <25",
-    "pnpm": ">=10 <12"
+    "pnpm": ">=10.26 <12"
   },
   "private": true,
   "dependencies": {

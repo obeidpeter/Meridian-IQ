@@ -19,8 +19,9 @@ localPort = 18115
 run = "pnpm --filter @workspace/mobile run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/mobile", "run", "build" ]
-run = [ "pnpm", "--filter", "@workspace/mobile", "run", "serve" ]
+# Promote the CI-packaged native exports and server without rebuilding.
+build = [ "node", "scripts/src/ops/replit-promote.mjs", "build", "mobile" ]
+run = [ "node", "scripts/src/ops/replit-promote.mjs", "start", "mobile" ]
 
 [services.env]
 PORT = "18115"

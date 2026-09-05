@@ -1,8 +1,67 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema/index.ts";
+import {
+  connectionConfig,
+  workerConnectionConfig,
+} from "./connection-config.ts";
+export type { PoolClient } from "pg";
 
 const { Pool } = pg;
+
+type ConnectCallback = (
+  error: Error | undefined,
+  client: pg.PoolClient | undefined,
+  release: (error?: Error | boolean) => void,
+) => void;
+class MeasuredPool extends Pool {
+  private pending = new Map<symbol, number>();
+  acquisitionCount = 0;
+  acquisitionFailures = 0;
+  acquisitionSeconds = 0;
+
+  get oldestAcquisitionSeconds(): number {
+    const now = performance.now();
+    let oldest = now;
+    for (const started of this.pending.values())
+      oldest = Math.min(oldest, started);
+    return (now - oldest) / 1_000;
+  }
+
+  override connect(): Promise<pg.PoolClient>;
+  override connect(callback: ConnectCallback): void;
+  override connect(callback?: ConnectCallback): Promise<pg.PoolClient> | void {
+    const key = Symbol();
+    const started = performance.now();
+    this.pending.set(key, started);
+    const finish = () => {
+      this.pending.delete(key);
+      this.acquisitionCount += 1;
+      this.acquisitionSeconds += (performance.now() - started) / 1_000;
+    };
+    const acquire = (done: ConnectCallback) => {
+      try {
+        super.connect((error, client, release) => {
+          finish();
+          if (error) this.acquisitionFailures += 1;
+          done(error, client, release);
+        });
+      } catch (error) {
+        finish();
+        this.acquisitionFailures += 1;
+        throw error;
+      }
+    };
+    if (callback) return acquire(callback);
+    return new Promise((resolve, reject) =>
+      acquire((error, client) => {
+        if (error) reject(error);
+        else if (client) resolve(client);
+        else reject(new Error("PostgreSQL acquisition returned no client"));
+      }),
+    );
+  }
+}
 
 // Boot-time guard, called by server/migration entrypoints so a missing
 // DATABASE_URL still fails fast where it matters. Importing this module must
@@ -30,13 +89,51 @@ export function requireDatabaseUrl(): string {
 // the caller forever: pg has no default connect timeout, so without this a
 // boot-time DB reach problem would silently block startup. keepAlive avoids idle
 // NAT/proxy drops on long-lived pooled connections in the deployed environment.
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: Number(process.env.PGPOOL_MAX ?? 20),
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
-  keepAlive: true,
-});
+export const pool = new MeasuredPool(connectionConfig());
+export const workerLockPool = new MeasuredPool(workerConnectionConfig());
+
+const idleErrors = { application: 0, worker: 0 };
+for (const [name, target] of [
+  ["application", pool],
+  ["worker", workerLockPool],
+] as const) {
+  target.on("error", (error: Error & { code?: string }) => {
+    idleErrors[name] += 1;
+    // Never log connection strings, SQL, or server-provided detail fields.
+    console.error(
+      JSON.stringify({
+        event: "postgres_idle_client_error",
+        pool: name,
+        code: /^[A-Z0-9]{5}$/.test(error.code ?? "") ? error.code : "unknown",
+      }),
+    );
+  });
+}
+
+export function databasePoolMetrics() {
+  return (
+    [
+      ["application", pool],
+      ["worker", workerLockPool],
+    ] as const
+  ).map(([name, target]) => ({
+    name,
+    total: target.totalCount,
+    idle: target.idleCount,
+    active: target.totalCount - target.idleCount,
+    waiting: target.waitingCount,
+    max: target.options.max ?? 0,
+    idleErrors: idleErrors[name],
+    oldestAcquisitionSeconds: target.oldestAcquisitionSeconds,
+    acquisitionCount: target.acquisitionCount,
+    acquisitionFailures: target.acquisitionFailures,
+    acquisitionSeconds: target.acquisitionSeconds,
+  }));
+}
+
+export async function closeDatabasePools(): Promise<void> {
+  await Promise.all([pool.end(), workerLockPool.end()]);
+}
 export const db = drizzle(pool, { schema });
 
 export type Database = typeof db;

@@ -50,7 +50,7 @@ const dateTime = (value: string | null | undefined): string =>
 
 function LoadingState() {
   return (
-    <div className="space-y-6" aria-label="Loading bank Data Room">
+    <div className="space-y-6" role="status" aria-label="Loading bank Data Room">
       <div className="grid gap-px overflow-hidden rounded-lg border bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <Skeleton key={index} className="h-28 rounded-none bg-white" />

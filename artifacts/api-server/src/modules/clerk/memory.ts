@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   getDb,
+  hasDatabaseContext,
   runInBypassContext,
   clerkMemoryEmbeddingsTable,
   EMBEDDING_DIMS,
@@ -449,6 +450,7 @@ export async function memoryCorpusPopulated(
 // the 0038 migration downgraded its failure to a warning for exactly this
 // check to pick up).
 export async function memoryRailReady(): Promise<boolean> {
+  if (!hasDatabaseContext()) return runInBypassContext(memoryRailReady);
   if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
   if (!(await isFeatureEnabled(MEMORY_FLAG_KEY))) return false;
   const ext = (
@@ -488,4 +490,7 @@ async function sweepMemoryIndex(): Promise<void> {
   }
 }
 
-registerSweep("clerk.memory_index", atMostHourly(() => sweepMemoryIndex()));
+registerSweep(
+  "clerk.memory_index",
+  atMostHourly(() => sweepMemoryIndex()),
+);

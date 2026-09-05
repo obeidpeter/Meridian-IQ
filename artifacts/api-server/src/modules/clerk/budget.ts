@@ -1,15 +1,18 @@
 import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   getDb,
+  hasDatabaseContext,
+  runRequestContext,
   pool,
-  type Database,
+  type PoolClient,
   billingTiersTable,
   clerkInferenceCallsTable,
   firmSubscriptionsTable,
 } from "@workspace/db";
-import * as dbSchema from "@workspace/db/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { DomainError } from "../errors";
+import { clerkAdmissionRejected } from "../../lib/metrics";
 
 // Per-firm Clerk budget (Clerk expansion A). Client capture and firm Ask Clerk
 // spend real model tokens, so each firm gets a monthly token allowance:
@@ -79,6 +82,10 @@ export interface FirmClerkUsage {
 }
 
 export async function firmClerkUsage(firmId: string): Promise<FirmClerkUsage> {
+  if (!hasDatabaseContext())
+    return runRequestContext({ bypass: false, firmId }, () =>
+      firmClerkUsage(firmId),
+    );
   const monthStart = utcMonthStart();
 
   const [tier] = await getDb()
@@ -173,10 +180,9 @@ export function budgetPace(
 }
 
 // Gate for firm-attributed Clerk work. Called BEFORE the gateway/provider is
-// touched, so an exhausted firm gets a clean 429 without any model call. The
-// This route-level check gives a clean early 429. The gateway separately takes
-// a database advisory-lock permit across provider call + ledger append, which
-// is the race-proof enforcement boundary for concurrent requests.
+// touched, so an exhausted firm gets a clean early 429. The gateway separately
+// acquires a durable reservation under a short advisory transaction lock; no
+// budget connection or transaction remains open across the provider call.
 export async function assertFirmClerkBudget(firmId: string): Promise<void> {
   const usage = await firmClerkUsage(firmId);
   if (usage.usedTokens >= usage.budgetTokens) {
@@ -189,99 +195,190 @@ export async function assertFirmClerkBudget(firmId: string): Promise<void> {
 }
 
 export interface FirmClerkBudgetPermit {
-  ledgerDb: Database;
+  append(row: typeof clerkInferenceCallsTable.$inferInsert): Promise<void>;
   release(): Promise<void>;
+}
+
+const admittedFirms = new Set<string>();
+export function clerkFirmHasActivePermit(firmId: string): boolean {
+  return admittedFirms.has(firmId);
+}
+// Pre-pool admission is fail-fast, not an unbounded queue of checked-out clients.
+export function clerkAdmissionLimit(): number {
+  return Math.max(1, Math.min(4, Math.floor((pool.options.max ?? 20) / 4)));
+}
+
+function busy(reason: "concurrency" | "unsettled" | "lock"): never {
+  clerkAdmissionRejected.inc({ reason });
+  throw new DomainError(
+    "CLERK_BUSY",
+    "Clerk is busy or awaiting spend reconciliation. Retry later; manual workflows are unaffected.",
+    429,
+  );
+}
+
+async function budgetTransaction<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  let releaseError: Error | undefined;
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL ROLE meridian_app");
+    await client.query("SELECT set_config('app.bypass', 'on', true)");
+    // These independent transactions must not wait behind provider work or an
+    // ambient request. Server deadlines also bound COMMIT/ROLLBACK sequencing.
+    await client.query("SET LOCAL lock_timeout = '500ms'");
+    await client.query("SET LOCAL statement_timeout = '3000ms'");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      releaseError =
+        rollbackError instanceof Error
+          ? rollbackError
+          : new Error("Clerk rollback failed");
+    }
+    throw error;
+  } finally {
+    client.release(releaseError);
+  }
 }
 
 export async function acquireFirmClerkBudgetPermit(
   firmId: string,
   reserveTokens: number,
 ): Promise<FirmClerkBudgetPermit | null> {
-  const client = await pool.connect();
-  let locked = false;
+  if (!Number.isSafeInteger(reserveTokens) || reserveTokens < 1) {
+    throw new Error("Clerk reservation must be a positive safe integer");
+  }
+  if (admittedFirms.has(firmId) || admittedFirms.size >= clerkAdmissionLimit())
+    busy("concurrency");
+  admittedFirms.add(firmId);
+  const reservationId = randomUUID();
   try {
-    await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [
-      `clerk-budget:${firmId}`,
-    ]);
-    locked = true;
-    const tier = await client.query<{ clerk_monthly_tokens: number | null }>(
-      `SELECT bt.clerk_monthly_tokens
+    const admitted = await budgetTransaction(async (client) => {
+      const lock = await client.query<{ acquired: boolean }>(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0)) AS acquired",
+        [`clerk-budget:${firmId}`],
+      );
+      if (!lock.rows[0]?.acquired) busy("lock");
+      const pending = await client.query(
+        "SELECT id FROM clerk_reservations WHERE firm_id = $1 AND settled_at IS NULL LIMIT 1",
+        [firmId],
+      );
+      // An expired reservation is uncertain spend, not free allowance. Keep the
+      // firm serialized across instances and restarts until it is reconciled.
+      if (pending.rowCount) busy("unsettled");
+      const tier = await client.query<{ clerk_monthly_tokens: number | null }>(
+        `SELECT bt.clerk_monthly_tokens
          FROM firm_subscriptions fs
          JOIN billing_tiers bt ON bt.id = fs.tier_id
         WHERE fs.firm_id = $1
         LIMIT 1`,
-      [firmId],
-    );
-    const used = await client.query<{ tokens: string }>(
-      `SELECT COALESCE(sum(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::text AS tokens
+        [firmId],
+      );
+      const used = await client.query<{ tokens: string }>(
+        `SELECT COALESCE(sum(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::text AS tokens
          FROM clerk_inference_calls
         WHERE firm_id = $1
           AND created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`,
-      [firmId],
-    );
-    const budget = Number(
-      tier.rows[0]?.clerk_monthly_tokens ?? DEFAULT_MONTHLY_TOKENS,
-    );
-    const spent = Number(used.rows[0]?.tokens ?? 0);
-    if (budget <= 0 || spent + Math.max(1, reserveTokens) > budget) {
-      const unlocked = await client.query<{ unlocked: boolean }>(
-        "SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked",
-        [`clerk-budget:${firmId}`],
+        [firmId],
       );
-      if (unlocked.rows[0]?.unlocked !== true) {
-        throw new Error("Clerk budget advisory lock was not held at release");
+      const budget = Number(
+        tier.rows[0]?.clerk_monthly_tokens ?? DEFAULT_MONTHLY_TOKENS,
+      );
+      const spent = Number(used.rows[0]?.tokens ?? 0);
+      if (budget <= 0 || spent + reserveTokens > budget) {
+        clerkAdmissionRejected.inc({ reason: "budget" });
+        return false;
       }
-      locked = false;
-      client.release();
+      await client.query(
+        `INSERT INTO clerk_reservations (id, firm_id, reserved_tokens, month_start, expires_at)
+      VALUES ($1, $2, $3, date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC', now() + interval '5 minutes')`,
+        [reservationId, firmId, reserveTokens],
+      );
+      return true;
+    });
+    if (!admitted) {
+      admittedFirms.delete(firmId);
       return null;
     }
     let released = false;
+    let settlement: Promise<void> | undefined;
     return {
-      ledgerDb: drizzle(client, { schema: dbSchema }) as unknown as Database,
+      append(row): Promise<void> {
+        if (released)
+          return Promise.reject(new Error("Clerk permit already released"));
+        if (row.firmId !== firmId)
+          return Promise.reject(new Error("Clerk permit firm mismatch"));
+        for (const value of [
+          row.promptTokens ?? 0,
+          row.completionTokens ?? 0,
+        ]) {
+          if (!Number.isSafeInteger(value) || value < 0)
+            return Promise.reject(
+              new Error("Invalid Clerk provider token usage"),
+            );
+        }
+        // A second settlement (including an embedding catch after a DB error)
+        // must not append another row or replace uncertain spend with a refund.
+        settlement ??= budgetTransaction(async (client) => {
+          const existing = await client.query<{
+            inference_call_id: string | null;
+            provider_call_id: string | null;
+          }>(
+            "SELECT inference_call_id, provider_call_id FROM clerk_reservations WHERE id = $1 FOR UPDATE",
+            [reservationId],
+          );
+          if (!existing.rows[0]) throw new Error("Clerk reservation missing");
+          if (existing.rows[0].provider_call_id) return;
+          let charge = row;
+          if (existing.rows[0].inference_call_id) {
+            const previous = await client.query<{ tokens: string }>(
+              "SELECT CASE WHEN created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') THEN (COALESCE(prompt_tokens, 0)::bigint + COALESCE(completion_tokens, 0)) ELSE 0 END::text AS tokens FROM clerk_inference_calls WHERE id = $1",
+              [existing.rows[0].inference_call_id],
+            );
+            const actual =
+              (row.promptTokens ?? 0) + (row.completionTokens ?? 0);
+            // An operator has already charged the uncertain reservation. A late
+            // provider result adds only an excess, never refunds or double-charges.
+            charge = {
+              ...row,
+              promptTokens: Math.max(
+                0,
+                actual - Number(previous.rows[0]?.tokens ?? 0),
+              ),
+              completionTokens: 0,
+              errorText:
+                `Late provider usage after reservation recovery: prompt=${row.promptTokens ?? 0}, completion=${row.completionTokens ?? 0}. ${row.errorText ?? ""}`.slice(
+                  0,
+                  2_000,
+                ),
+            };
+          }
+          const [call] = await drizzle(client)
+            .insert(clerkInferenceCallsTable)
+            .values(charge)
+            .returning({ id: clerkInferenceCallsTable.id });
+          await client.query(
+            "UPDATE clerk_reservations SET settled_at = COALESCE(settled_at, now()), inference_call_id = COALESCE(inference_call_id, $2), provider_call_id = $2 WHERE id = $1",
+            [reservationId, call.id],
+          );
+        });
+        return settlement;
+      },
       async release(): Promise<void> {
         if (released) return;
         released = true;
-        let releaseError: Error | undefined;
-        try {
-          const unlocked = await client.query<{ unlocked: boolean }>(
-            "SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked",
-            [`clerk-budget:${firmId}`],
-          );
-          if (unlocked.rows[0]?.unlocked !== true) {
-            throw new Error(
-              "Clerk budget advisory lock was not held at release",
-            );
-          }
-        } catch (error) {
-          releaseError =
-            error instanceof Error ? error : new Error(String(error));
-          throw releaseError;
-        } finally {
-          // Destroy the session if unlock failed; returning it to the pool
-          // could strand the session-level lock across unrelated requests.
-          client.release(releaseError);
-        }
+        admittedFirms.delete(firmId);
       },
     };
   } catch (err) {
-    let releaseError: Error | undefined;
-    if (locked) {
-      const unlocked = await client
-        .query<{
-          unlocked: boolean;
-        }>("SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked", [`clerk-budget:${firmId}`])
-        .catch((error: unknown) => {
-          releaseError =
-            error instanceof Error ? error : new Error(String(error));
-          return null;
-        });
-      if (unlocked && unlocked.rows[0]?.unlocked !== true) {
-        releaseError = new Error(
-          "Clerk budget advisory lock was not held at release",
-        );
-      }
-    }
-    client.release(releaseError);
+    admittedFirms.delete(firmId);
     throw err;
   }
 }

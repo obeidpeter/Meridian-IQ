@@ -1,5 +1,10 @@
 import { sql } from "drizzle-orm";
-import { getDb, clerkBatchesTable } from "@workspace/db";
+import {
+  getDb,
+  clerkBatchesTable,
+  hasDatabaseContext,
+  runInBypassContext,
+} from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 
 // Content retention sweep (OPEN-8 minimisation posture). Raw uploaded invoice
@@ -22,6 +27,7 @@ import { appendAudit } from "../audit/audit";
 // persisted); this extends it to the rest of the lifecycle.
 
 export async function sweepExpiredCaseContent(): Promise<number> {
+  if (!hasDatabaseContext()) return runInBypassContext(sweepExpiredCaseContent);
   const days = Number(process.env.CLERK_CONTENT_RETENTION_DAYS ?? 30);
   if (!Number.isFinite(days) || days < 1) return 0;
 

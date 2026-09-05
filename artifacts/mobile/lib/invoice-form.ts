@@ -4,6 +4,18 @@
  */
 
 import type { InvoiceLineInput } from "@workspace/api-client-react";
+import Decimal from "decimal.js";
+const FinancialDecimal = Decimal.clone({
+  precision: 48,
+  rounding: Decimal.ROUND_HALF_UP,
+});
+
+function exactDecimal(value: string): Decimal | null {
+  const normalized = value.trim().replace(",", ".");
+  if (normalized.length > 128 || !/^-?\d+(?:\.\d+)?$/.test(normalized))
+    return null;
+  return new FinancialDecimal(normalized);
+}
 
 export interface LineDraft {
   key: string;
@@ -16,7 +28,7 @@ export interface LineDraft {
 // Per-line inline numeric errors, keyed by line.key.
 export type LineErrors = Record<
   string,
-  { quantity?: string; unitPrice?: string }
+  { quantity?: string; unitPrice?: string; vatRate?: string }
 >;
 
 // A fresh, empty draft line at the default Nigerian VAT rate. Key generation
@@ -49,6 +61,7 @@ export function parseNumeric(value: string): number | null {
 // user gets immediate feedback instead of a server round-trip.
 export function isValidISODate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (Number(value.slice(0, 4)) < 1) return false;
   const d = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return false;
   return d.toISOString().slice(0, 10) === value;
@@ -60,14 +73,25 @@ export function computeTotals(lines: LineDraft[]): {
   vat: number;
   grand: number;
 } {
-  let subtotal = 0;
-  let vat = 0;
+  let subtotal = new FinancialDecimal(0);
+  let vat = new FinancialDecimal(0);
   for (const line of lines) {
-    const ext = num(line.quantity) * num(line.unitPrice);
-    subtotal += ext;
-    vat += (ext * num(line.vatRate)) / 100;
+    const ext = (exactDecimal(line.quantity) ?? new FinancialDecimal(0)).mul(
+      exactDecimal(line.unitPrice) ?? 0,
+    );
+    subtotal = subtotal.plus(ext.toDecimalPlaces(2));
+    vat = vat.plus(
+      ext
+        .mul(exactDecimal(line.vatRate) ?? 0)
+        .div(100)
+        .toDecimalPlaces(2),
+    );
   }
-  return { subtotal, vat, grand: subtotal + vat };
+  return {
+    subtotal: subtotal.toNumber(),
+    vat: vat.toNumber(),
+    grand: subtotal.plus(vat).toNumber(),
+  };
 }
 
 // Build the API line payload from normalized numerics and collect per-line
@@ -83,22 +107,37 @@ export function normalizeLines(lines: LineDraft[]): {
   const payloadLines: InvoiceLineInput[] = [];
   for (const l of lines) {
     if (!l.description.trim()) continue;
-    const qty = parseNumeric(l.quantity);
-    const price = parseNumeric(l.unitPrice);
-    const rate = parseNumeric(l.vatRate) ?? 0;
-    const errs: { quantity?: string; unitPrice?: string } = {};
-    if (qty === null || qty <= 0) {
+    const qty = exactDecimal(l.quantity);
+    const price = exactDecimal(l.unitPrice);
+    const rate = exactDecimal(l.vatRate || "0");
+    const errs: LineErrors[string] = {};
+    if (qty === null || qty.lte(0)) {
       errs.quantity = "Enter a quantity greater than 0.";
+    } else if (qty.gte("100000000000000") || qty.decimalPlaces() > 4) {
+      errs.quantity =
+        "Quantity supports up to 14 integer digits and 4 decimal places.";
     }
-    if (price === null || price < 0) {
+    if (price === null || price.lt(0)) {
       errs.unitPrice = "Enter a valid unit price.";
+    } else if (price.gte("10000000000000000") || price.decimalPlaces() > 2) {
+      errs.unitPrice =
+        "Price supports up to 16 integer digits and 2 decimal places.";
     }
-    if (errs.quantity || errs.unitPrice) lineErrs[l.key] = errs;
+    if (
+      rate === null ||
+      rate.lt(0) ||
+      rate.gt(100) ||
+      rate.decimalPlaces() > 2
+    ) {
+      errs.vatRate =
+        "Enter a VAT percentage between 0 and 100, with up to 2 decimal places.";
+    }
+    if (Object.keys(errs).length) lineErrs[l.key] = errs;
     payloadLines.push({
       description: l.description.trim(),
-      quantity: String(qty ?? 0),
-      unitPrice: String(price ?? 0),
-      vatRate: String(rate / 100),
+      quantity: qty?.toFixed() ?? "0",
+      unitPrice: price?.toFixed() ?? "0",
+      vatRate: rate?.div(100).toFixed() ?? "0",
     });
   }
   return { payloadLines, lineErrs };

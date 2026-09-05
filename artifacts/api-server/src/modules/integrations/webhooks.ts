@@ -14,6 +14,7 @@ import {
 import { registerSweep } from "../pipeline/pipeline";
 import { DomainError } from "../errors";
 import { logger } from "../../lib/logger";
+import { webhookFanoutOldestAge } from "../../lib/metrics";
 
 // Outbound firm webhooks (contract 0.41.0): a firm_admin registers an
 // endpoint + event subscription; the platform fans domain events out into
@@ -44,11 +45,9 @@ export const WEBHOOK_EVENTS = [
 
 const WEBHOOK_EVENT_SET: ReadonlySet<string> = new Set(WEBHOOK_EVENTS);
 
-// How far back the fan-out scans its source ledgers. The unique
-// (webhook_id, event_key) index makes re-scans idempotent; the window merely
-// bounds the scan (and every insert additionally requires the event to be
-// newer than the webhook, so a new registration never receives history).
-const FAN_OUT_WINDOW = "24 hours";
+// Delivery keys are the durable progress ledger. Scan all missing eligible
+// keys, oldest first; never use a timestamp watermark that can skip late commits.
+export const FAN_OUT_BATCH_SIZE = 250;
 
 // Dispatch: outbox semantics (pipeline.ts precedent) — exponential backoff,
 // dead after MAX_ATTEMPTS. The backoff is PRE-CHARGED at claim time (the
@@ -459,13 +458,17 @@ export async function retryDelivery(
 
 // Fan domain events out into delivery rows. Set-based INSERT..SELECT per
 // source ledger; the unique (webhook_id, event_key) index + ON CONFLICT DO
-// NOTHING makes concurrent sweep instances (and every re-scan of the
-// trailing window) idempotent. Each insert requires the event to be newer
+// NOTHING makes concurrent sweep instances and backlog re-scans idempotent.
+// The missing delivery keys form the durable cursor, with bounded ordered
+// batches and no OFFSET or retention cutoff. Each insert requires the event to be newer
 // than the webhook (`created_at >= w.created_at`) so a fresh registration
 // starts from "now", never from history. Early-exits before touching the
 // ledgers when no firm has an active webhook — the common case must cost one
 // cheap probe.
-export async function fanOutWebhookEvents(): Promise<number> {
+export async function fanOutWebhookEvents(batchSize = FAN_OUT_BATCH_SIZE): Promise<number> {
+  if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 1_000) {
+    throw new Error("Webhook fanout batch size must be an integer between 1 and 1000");
+  }
   return runInBypassContext(async () => {
     const active = rowsOf<{ n: number }>(
       await getDb().execute(
@@ -478,58 +481,75 @@ export async function fanOutWebhookEvents(): Promise<number> {
 
     // invoice.stamped / invoice.settled from the lifecycle ledger. Payload is
     // pointer-only (SEC-12): entity type + id, nothing else.
-    const invoiceRes = rowsOf<{ id: string }>(
+    const invoiceRes = rowsOf<{ inserted: number; oldest_age: number }>(
       await getDb().execute(sql`
-        INSERT INTO firm_webhook_deliveries
-          (webhook_id, firm_id, event_type, event_key, payload, status)
+        WITH candidates AS MATERIALIZED (
         SELECT
-          w.id,
+          w.id AS webhook_id,
           w.firm_id,
-          CASE e.to_status WHEN 'stamped' THEN 'invoice.stamped' ELSE 'invoice.settled' END,
-          'lce:' || e.id,
-          jsonb_build_object('entityType', 'invoice', 'entityId', e.invoice_id),
-          'pending'
+          CASE e.to_status WHEN 'stamped' THEN 'invoice.stamped' ELSE 'invoice.settled' END AS event_type,
+          'lce:' || e.id AS event_key,
+          jsonb_build_object('entityType', 'invoice', 'entityId', e.invoice_id) AS payload,
+          e.created_at
         FROM invoice_lifecycle_events e
         JOIN firm_webhooks w
           ON w.firm_id = e.firm_id
          AND w.active
          AND w.events ? (CASE e.to_status WHEN 'stamped' THEN 'invoice.stamped' ELSE 'invoice.settled' END)
         WHERE e.to_status IN ('stamped', 'settled')
-          AND e.created_at >= now() - interval '${sql.raw(FAN_OUT_WINDOW)}'
           AND e.created_at >= w.created_at
+          AND NOT EXISTS (SELECT 1 FROM firm_webhook_deliveries d
+            WHERE d.webhook_id = w.id AND d.event_key = 'lce:' || e.id)
+        ORDER BY e.created_at, e.id, w.id
+        LIMIT ${batchSize}
+        ), inserted AS (
+        INSERT INTO firm_webhook_deliveries
+          (webhook_id, firm_id, event_type, event_key, payload, status)
+        SELECT webhook_id, firm_id, event_type, event_key, payload, 'pending' FROM candidates
         ON CONFLICT (webhook_id, event_key) DO NOTHING
         RETURNING id
+        ) SELECT (SELECT count(*)::int FROM inserted) AS inserted,
+          coalesce(extract(epoch FROM now() - min(created_at)), 0)::float AS oldest_age FROM candidates
       `),
     );
-    inserted += invoiceRes.length;
+    inserted += Number(invoiceRes[0]?.inserted ?? 0);
+    webhookFanoutOldestAge.set({ source: "lifecycle" }, Math.max(0, Number(invoiceRes[0]?.oldest_age ?? 0)));
 
     // statement.reconciled from the audit ledger (audit_events.firm_id is
     // text; compare on the webhook side cast so a malformed historical value
     // can never abort the sweep).
-    const statementRes = rowsOf<{ id: string }>(
+    const statementRes = rowsOf<{ inserted: number; oldest_age: number }>(
       await getDb().execute(sql`
-        INSERT INTO firm_webhook_deliveries
-          (webhook_id, firm_id, event_type, event_key, payload, status)
+        WITH candidates AS MATERIALIZED (
         SELECT
-          w.id,
+          w.id AS webhook_id,
           w.firm_id,
-          'statement.reconciled',
-          'aud:' || a.seq,
-          jsonb_build_object('entityType', 'bank_statement', 'entityId', a.entity_id),
-          'pending'
+          'aud:' || a.seq AS event_key,
+          jsonb_build_object('entityType', 'bank_statement', 'entityId', a.entity_id) AS payload,
+          a.created_at
         FROM audit_events a
         JOIN firm_webhooks w
           ON w.firm_id::text = a.firm_id
          AND w.active
          AND w.events ? 'statement.reconciled'
         WHERE a.action = 'statement.reconciled'
-          AND a.created_at >= now() - interval '${sql.raw(FAN_OUT_WINDOW)}'
           AND a.created_at >= w.created_at
+          AND NOT EXISTS (SELECT 1 FROM firm_webhook_deliveries d
+            WHERE d.webhook_id = w.id AND d.event_key = 'aud:' || a.seq)
+        ORDER BY a.created_at, a.seq, w.id
+        LIMIT ${batchSize}
+        ), inserted AS (
+        INSERT INTO firm_webhook_deliveries
+          (webhook_id, firm_id, event_type, event_key, payload, status)
+        SELECT webhook_id, firm_id, 'statement.reconciled', event_key, payload, 'pending' FROM candidates
         ON CONFLICT (webhook_id, event_key) DO NOTHING
         RETURNING id
+        ) SELECT (SELECT count(*)::int FROM inserted) AS inserted,
+          coalesce(extract(epoch FROM now() - min(created_at)), 0)::float AS oldest_age FROM candidates
       `),
     );
-    inserted += statementRes.length;
+    inserted += Number(statementRes[0]?.inserted ?? 0);
+    webhookFanoutOldestAge.set({ source: "audit" }, Math.max(0, Number(statementRes[0]?.oldest_age ?? 0)));
 
     return inserted;
   });

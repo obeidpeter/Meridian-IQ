@@ -1,7 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { asc, eq } from "drizzle-orm";
-import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
+import {
+  getSystemDb,
+  usersTable,
+  membershipsTable,
+  type Role,
+} from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
 import {
   SESSION_COOKIE,
@@ -107,15 +112,14 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 // The dev-header auth shim (x-mock-*) is a full identity bypass, so it is
 // enabled ONLY when explicitly opted in, and never in production (SEC-M7).
-// NODE_ENV "development"/"test" opt in by default (local dev and the CI e2e
-// harness, which boots with NODE_ENV=development); anything else — including an
-// UNSET or misspelled NODE_ENV — fails closed, so a misconfigured staging or
-// production deployment never honours client-supplied identity headers.
-const DEV_AUTH_ENABLED =
-  !IS_PRODUCTION &&
-  (process.env.ENABLE_DEV_AUTH === "true" ||
-    process.env.NODE_ENV === "development" ||
-    process.env.NODE_ENV === "test");
+// Only explicitly opted-in local development/test processes may impersonate.
+export function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (
+    (env.NODE_ENV === "development" || env.NODE_ENV === "test") &&
+    env.ENABLE_DEV_AUTH === "true"
+  );
+}
+const DEV_AUTH_ENABLED = devAuthEnabled();
 
 if (DEV_AUTH_ENABLED) {
   logger.warn(
@@ -175,7 +179,7 @@ async function principalFromMembership(
   req: Request,
   userId: string,
 ): Promise<Principal | null> {
-  const memberships = await getDb()
+  const memberships = await getSystemDb("authentication")
     .select({
       firmId: membershipsTable.firmId,
       role: membershipsTable.role,
@@ -212,7 +216,7 @@ async function resolveClerkPrincipal(req: Request): Promise<Principal | null> {
   const clerkUserId = auth?.userId;
   if (!clerkUserId) return null;
 
-  const [user] = await getDb()
+  const [user] = await getSystemDb("authentication")
     .select({ id: usersTable.id })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, clerkUserId))

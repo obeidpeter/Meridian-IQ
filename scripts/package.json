@@ -10,6 +10,10 @@
     "ops:sweep": "node src/ops/sweep-ping.mjs",
     "ops:restore-drill": "node src/ops/restore-drill.mjs",
     "ops:release": "node src/ops/release.mjs",
+    "ops:manifest": "node src/ops/build-manifest.mjs",
+    "ops:postdeploy": "node src/ops/postdeploy.mjs",
+    "test:reliability": "node --test src/ops/*.test.mjs src/load-smoke.test.mjs src/e2e/service-worker.test.mjs",
+    "test:accessibility": "node --test src/e2e/accessibility.test.mjs",
     "quality:architecture": "node src/quality/architecture.mjs",
     "quality:secrets": "node src/quality/secrets.mjs",
     "quality:metrics": "node src/quality/maintainability.mjs",
@@ -17,6 +21,7 @@
     "quality:docs": "node src/quality/docs.mjs"
   },
   "devDependencies": {
+    "axe-core": "^4.10.3",
     "playwright": "^1.49.0"
   }
 }

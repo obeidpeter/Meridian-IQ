@@ -48,6 +48,11 @@ import { migration0046 } from "./0046_operational_readiness_guardrails.ts";
 import { migration0047 } from "./0047_work_collaboration_guardrails.ts";
 import { migration0048 } from "./0048_invoice_room_guardrails.ts";
 import { migration0049 } from "./0049_credit_data_room_guardrails.ts";
+import { migration0050 } from "./0050_invoice_revisions.ts";
+import { migration0051 } from "./0051_operation_recovery.ts";
+import { migration0052 } from "./0052_invoice_drafts.ts";
+import { migration0053 } from "./0053_clerk_reservations.ts";
+import { migration0054 } from "./0054_import_runs.ts";
 
 export interface Migration {
   version: number;
@@ -109,6 +114,11 @@ export const migrations: Migration[] = [
   migration0047,
   migration0048,
   migration0049,
+  migration0050,
+  migration0051,
+  migration0052,
+  migration0053,
+  migration0054,
 ];
 
 type Executor = Pick<pg.Pool, "query">;

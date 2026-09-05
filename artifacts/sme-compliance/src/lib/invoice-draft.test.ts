@@ -5,6 +5,8 @@ import {
   draftStorageKey,
   loadInvoiceDraft,
   saveInvoiceDraft,
+  saveDraftRecovery,
+  listDraftRecoveries,
   type DraftState,
 } from "./invoice-draft";
 
@@ -38,6 +40,35 @@ afterEach(() => {
 });
 
 describe("invoice draft retention", () => {
+  test("namespaces recovery by firm, user, client, draft and writer", () => {
+    const scope = draftStorageKey("user", "firm", "client");
+    const recovery = {
+      version: 2 as const,
+      id: "one",
+      writerId: "tab-a",
+      revision: 0,
+      draft: draft(),
+      savedAt: NOW.toISOString(),
+      expiresAt: new Date(NOW.getTime() + INVOICE_DRAFT_TTL_MS).toISOString(),
+    };
+    expect(saveDraftRecovery(scope, recovery)).toBe(true);
+    expect(saveDraftRecovery(scope, { ...recovery, writerId: "tab-b" })).toBe(
+      true,
+    );
+    expect(listDraftRecoveries(scope, NOW)).toHaveLength(2);
+    expect(
+      listDraftRecoveries(draftStorageKey("other", "firm", "client"), NOW),
+    ).toHaveLength(0);
+    expect(
+      listDraftRecoveries(draftStorageKey("user", "firm", "other"), NOW),
+    ).toHaveLength(0);
+    expect(
+      listDraftRecoveries(
+        scope,
+        new Date(NOW.getTime() + INVOICE_DRAFT_TTL_MS + 1),
+      ),
+    ).toHaveLength(0);
+  });
   test("writes a versioned seven-day envelope", () => {
     expect(saveInvoiceDraft(KEY, draft(), NOW)).toEqual(NOW);
     const stored = JSON.parse(localStorage.getItem(KEY) ?? "{}") as {

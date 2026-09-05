@@ -6,7 +6,9 @@ import {
   timestamp,
   index,
   unique,
+  integer,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { firmsTable } from "./organizations.ts";
 import { invoicesTable } from "./invoices.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -16,22 +18,26 @@ import { createdAt, id, updatedAt } from "./columns.ts";
 // default. Kept as a table (not columns on firms) so future policies land as
 // columns here without touching the org spine. Firm-keyed RLS via migration
 // 0024.
-export const firmPoliciesTable = pgTable("firm_policies", {
-  id: id(),
-  firmId: uuid("firm_id")
-    .notNull()
-    .references(() => firmsTable.id),
-  // Maker-checker: when true, submitInvoice refuses unless a live approval
-  // by a principal OTHER than the submitter exists (409 APPROVAL_REQUIRED).
-  // Defaults false so existing firms and every existing test/journey keep
-  // their single-actor submit flow until a firm opts in.
-  submitApprovalRequired: boolean("submit_approval_required")
-    .notNull()
-    .default(false),
-  updatedByUserId: text("updated_by_user_id"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (t) => [unique().on(t.firmId)]);
+export const firmPoliciesTable = pgTable(
+  "firm_policies",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    // Maker-checker: when true, submitInvoice refuses unless a live approval
+    // by a principal OTHER than the submitter exists (409 APPROVAL_REQUIRED).
+    // Defaults false so existing firms and every existing test/journey keep
+    // their single-actor submit flow until a firm opts in.
+    submitApprovalRequired: boolean("submit_approval_required")
+      .notNull()
+      .default(false),
+    updatedByUserId: text("updated_by_user_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [unique().on(t.firmId)],
+);
 
 // Submission approvals (maker-checker). Approval rows are evidence: they are
 // never deleted, only revoked — updateInvoiceContent stamps revokedAt on live
@@ -53,6 +59,7 @@ export const invoiceApprovalsTable = pgTable(
     // dev shim and out-of-band actors record the same way the audit trail
     // does.
     approvedByUserId: text("approved_by_user_id").notNull(),
+    contentRevision: integer("content_revision"),
     note: text("note"),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -62,6 +69,9 @@ export const invoiceApprovalsTable = pgTable(
     // the approvals list reads newest-first per invoice.
     index("invoice_approvals_invoice_idx").on(t.invoiceId, t.createdAt),
     index("invoice_approvals_firm_idx").on(t.firmId),
+    index("invoice_approvals_live_revision_idx")
+      .on(t.invoiceId, t.contentRevision)
+      .where(sql`${t.revokedAt} IS NULL`),
   ],
 );
 

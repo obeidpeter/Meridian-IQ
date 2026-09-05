@@ -4,9 +4,6 @@ import {
   useGetInvoice,
   useGetParty,
   getGetPartyQueryKey,
-  useApproveInvoice,
-  useListInvoiceApprovals,
-  getListInvoiceApprovalsQueryKey,
   useListSubmissionAttempts,
   useGetInvoiceStamp,
   useListEscalations,
@@ -44,7 +41,6 @@ import type {
   Escalation,
   FieldError as ApiFieldError,
   Invoice,
-  InvoiceApproval,
   SettlementEvent,
   StatusLight,
   StatusLightLight,
@@ -94,6 +90,12 @@ import {
 import { LineItemRow } from "@/components/line-item-row";
 import { FieldError } from "@/components/field-error";
 import { InvoiceRoomCard } from "@/components/invoice-room-card";
+import { InvoiceConflict } from "@/components/invoice-conflict";
+import { ApprovalsCard } from "@/components/invoice-approvals";
+export {
+  ApprovalsCard,
+  canApproveInvoice,
+} from "@/components/invoice-approvals";
 import {
   emptyLine,
   lineTotals,
@@ -107,6 +109,7 @@ import { invoicePdfFilename, triggerDownload } from "@/lib/download";
 import {
   beginOperation,
   updateOperation,
+  operationSessionKey,
   usePinnedItems,
   useRecordRecentItem,
 } from "@workspace/web-ui";
@@ -127,7 +130,6 @@ import {
   FileQuestion,
   FilePlus,
   Sparkles,
-  UserCheck,
   Wrench,
   Plus,
   Pin,
@@ -719,14 +721,6 @@ export function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
 // retry) — the server stays the authority (its 409 carries the real reason,
 // e.g. the approver matching the eventual submitter).
 
-export function canApproveInvoice(
-  role: string | undefined,
-  status: string,
-): boolean {
-  const firmRole = role === "firm_admin" || role === "firm_staff";
-  return firmRole && ["draft", "validated", "failed"].includes(status);
-}
-
 /**
  * Status-keyed toast title for a failed submit (the billing paymentErrorCopy
  * pattern): a 409 is the server refusing on purpose — an orientation guard
@@ -811,115 +805,6 @@ export function ValidationErrorsCard({
             <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Fix invoice
             details
           </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-export function ApprovalsCard({
-  invoiceId,
-  role,
-  status,
-}: {
-  invoiceId: string;
-  role: string | undefined;
-  status: string;
-}) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const approvalsQuery = useListInvoiceApprovals(invoiceId, {
-    query: {
-      enabled: !!invoiceId,
-      queryKey: getListInvoiceApprovalsQueryKey(invoiceId),
-      retry: false,
-    },
-  });
-  const approve = useApproveInvoice();
-  const canApprove = canApproveInvoice(role, status);
-  const approvals = approvalsQuery.data;
-
-  // Render-on-success: an older server build (404) or a scope refusal simply
-  // means no card. An empty ledger is only worth a card to someone who can
-  // add to it.
-  if (!approvalsQuery.isSuccess || !approvals) return null;
-  if (approvals.length === 0 && !canApprove) return null;
-
-  const handleApprove = async () => {
-    try {
-      await approve.mutateAsync({ id: invoiceId });
-      queryClient.invalidateQueries({
-        queryKey: getListInvoiceApprovalsQueryKey(invoiceId),
-      });
-      toast({
-        title: "Approval recorded",
-        description:
-          "This invoice now carries your submission approval — the submitter must be someone else.",
-      });
-    } catch (e) {
-      toast({
-        title: "Could not record approval",
-        description: serverErrorMessage(e),
-        variant: "destructive",
-      });
-    }
-  };
-
-  return (
-    <Card data-testid="card-approvals">
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <UserCheck className="w-4 h-4" aria-hidden="true" /> Approvals
-        </CardTitle>
-        {canApprove && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void handleApprove()}
-            disabled={approve.isPending}
-            data-testid="button-approve-invoice"
-          >
-            {approve.isPending ? "Approving…" : "Approve for submission"}
-          </Button>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {approvals.length === 0 ? (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="text-no-approvals"
-          >
-            No approvals recorded yet. If your firm requires a second approver
-            before submission, record yours here.
-          </p>
-        ) : (
-          approvals.map((a: InvoiceApproval) => (
-            <div
-              key={a.id}
-              className="text-sm border rounded-md px-3 py-2"
-              data-testid={`row-approval-${a.id}`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">
-                  {a.approvedByName ?? a.approvedByUserId}
-                </span>
-                <span className="flex items-center gap-2">
-                  {a.revokedAt && (
-                    <span
-                      className={pillClasses("red")}
-                      data-testid={`pill-approval-revoked-${a.id}`}
-                    >
-                      Revoked
-                    </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateTime(a.createdAt)}
-                  </span>
-                </span>
-              </div>
-              {a.note && <p className="text-muted-foreground mt-1">{a.note}</p>}
-            </div>
-          ))
         )}
       </CardContent>
     </Card>
@@ -1051,7 +936,7 @@ export function InvoiceDetail() {
   const pinnedInvoices = usePinnedItems(
     me ? `meridianiq:pinned-invoices:${me.userId}` : null,
   );
-  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const operationKey = operationSessionKey(me);
 
   // Recognition over recall: the command menu offers the last few invoices
   // this user opened; record this one once it resolves.
@@ -1071,11 +956,13 @@ export function InvoiceDetail() {
   // "Fix & resubmit" (fix-and-retry): an editable copy of the failed
   // invoice's content, seeded when the form opens. Null = form closed.
   const [fix, setFix] = useState<{
+    expectedRevision: number;
     invoiceNumber: string;
     issueDate: string;
     dueDate: string;
     lines: LineDraft[];
   } | null>(null);
+  const [fixConflict, setFixConflict] = useState(false);
   const [showFixErrors, setShowFixErrors] = useState(false);
   // Held validation failures from the last submit attempt: the full list
   // survives the toast. Cleared on the next submit and on a successful
@@ -1185,7 +1072,9 @@ export function InvoiceDetail() {
   // select recognises the stored value.
   const openFix = () => {
     if (!invoice) return;
+    setFixConflict(false);
     setFix({
+      expectedRevision: invoice.contentRevision,
       invoiceNumber: invoice.invoiceNumber,
       issueDate: invoice.issueDate,
       dueDate: invoice.dueDate ?? "",
@@ -1215,22 +1104,37 @@ export function InvoiceDetail() {
   }
 
   const handleFixResubmit = async () => {
-    if (!fix) return;
+    if (
+      !fix ||
+      fixConflict ||
+      updateInvoice.isPending ||
+      validate.isPending ||
+      submit.isPending
+    )
+      return;
     setShowFixErrors(true);
     if (Object.keys(fixErrors).length > 0) return;
     // Same staleness rule as handleSubmit: the explanation belonged to the
     // failure being fixed, not to whatever this resubmission produces.
     explainFailure.reset();
+    let contentSaved = false;
     try {
       const updated = await updateInvoice.mutateAsync({
         id,
         data: {
+          expectedRevision: fix.expectedRevision,
           invoiceNumber: fix.invoiceNumber.trim(),
           issueDate: fix.issueDate,
           dueDate: fix.dueDate || null,
           lines: toInvoiceLineInputs(fix.lines),
         },
       });
+      setFix((current) =>
+        current
+          ? { ...current, expectedRevision: updated.invoice.contentRevision }
+          : null,
+      );
+      contentSaved = true;
       // A failed invoice retries the transmission directly (failed → submitted
       // is the legal transition); an edited draft — a validated invoice reverts
       // to draft on edit — must re-validate first, because draft → submitted is
@@ -1263,8 +1167,14 @@ export function InvoiceDetail() {
       // The PATCH may have landed even when the resubmit failed — refresh so
       // the page shows whatever state the server actually reached.
       refreshInvoiceState();
+      if (!contentSaved && errorStatus(e) === 409) {
+        await refetch();
+        setFixConflict(true);
+      }
       toast({
-        title: tone === "failed" ? "Could not resubmit" : "Could not submit",
+        title: contentSaved
+          ? "Changes saved; submission incomplete"
+          : "Could not save changes",
         description: serverErrorMessage(e),
         variant: "destructive",
       });
@@ -1540,6 +1450,22 @@ export function InvoiceDetail() {
           ? "Correct the flagged details, then resubmit"
           : "Correct the details, then submit"}
       </p>
+      {fixConflict && (
+        <InvoiceConflict
+          draft={fix}
+          saved={invoice}
+          lines={data?.lines ?? []}
+          onReload={openFix}
+          onKeep={() => {
+            setFix((current) =>
+              current
+                ? { ...current, expectedRevision: invoice.contentRevision }
+                : null,
+            );
+            setFixConflict(false);
+          }}
+        />
+      )}
       {focus.includes("parties") && (
         <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
           The rail rejected a TIN. TINs live on the business and customer
@@ -1672,7 +1598,10 @@ export function InvoiceDetail() {
           size="sm"
           onClick={handleFixResubmit}
           disabled={
-            updateInvoice.isPending || validate.isPending || submit.isPending
+            fixConflict ||
+            updateInvoice.isPending ||
+            validate.isPending ||
+            submit.isPending
           }
           data-testid="button-fix-resubmit"
         >
@@ -1934,7 +1863,12 @@ export function InvoiceDetail() {
 
       {/* Maker-checker ledger: informational for client users, actionable
           for firm roles while the invoice is still submittable. */}
-      <ApprovalsCard invoiceId={id} role={me?.role} status={invoice.status} />
+      <ApprovalsCard
+        invoiceId={id}
+        role={me?.role}
+        status={invoice.status}
+        contentRevision={invoice.contentRevision}
+      />
 
       {/* Advisory only, gated on the same still-editable statuses as the
           query so a cached report never outlives a submission. */}

@@ -88,6 +88,7 @@ import {
   MetricStrip,
   beginOperation,
   SegmentedControl,
+  operationSessionKey,
   updateOperation,
   WorkQueue,
   WorkspaceHeader,
@@ -585,7 +586,7 @@ export function ClientDetail() {
   usePageTitle(data?.client.legalName ?? "Client detail");
 
   const { data: me } = useGetMe();
-  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const operationKey = operationSessionKey(me);
   const pinnedClients = usePinnedItems(
     me ? `meridianiq:pinned-clients:${me.userId}` : null,
   );
@@ -1004,7 +1005,9 @@ export function ClientDetail() {
                               )}
                             </td>
                             <td className="px-3 py-2.5">
-                              <p className="max-w-56 truncate">{inv.buyerName}</p>
+                              <p className="max-w-56 truncate">
+                                {inv.buyerName}
+                              </p>
                               <p className="text-xs text-muted-foreground">
                                 {inv.category} · {formatDate(inv.issueDate)}
                               </p>

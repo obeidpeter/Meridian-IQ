@@ -44,7 +44,11 @@ const FEED_PARAMS: ListNotificationsParams = { limit: NOTIFICATION_FEED_LIMIT };
  * Escape, outside click — come from the library instead of hand-rolled
  * document listeners; a wouter navigation also closes it.
  */
-export function NotificationBell() {
+export function NotificationBell({
+  triggerClassName = "",
+}: {
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
   const queryClient = useQueryClient();
@@ -87,7 +91,7 @@ export function NotificationBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
+          className={`relative ${triggerClassName}`}
           aria-label={
             unread > 0 ? `Notifications — ${unread} unread` : "Notifications"
           }
@@ -119,9 +123,7 @@ export function NotificationBell() {
               size="sm"
               className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
               disabled={markRead.isPending}
-              onClick={() =>
-                markRead.mutate({ data: { upToCreatedAt } })
-              }
+              onClick={() => markRead.mutate({ data: { upToCreatedAt } })}
               data-testid="button-mark-all-read"
             >
               {markRead.isPending ? "Marking…" : "Mark all read"}

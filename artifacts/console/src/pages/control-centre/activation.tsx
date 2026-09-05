@@ -210,6 +210,8 @@ export function ActivationWorkspace() {
               </div>
               {gate.progress !== null ? (
                 <Progress
+                  aria-label={gate.label}
+                  aria-valuetext={`${gate.value}; target: ${gate.target}`}
                   className="mt-3 h-1.5"
                   value={Math.min(100, gate.progress)}
                 />

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeLinesWithTotals } from "./line-totals.ts";
-import { money } from "./lines.ts";
+import { money, FinancialDecimal, computeLineFinancials } from "./lines.ts";
 
 // The invariant this module exists for: invoice totals accumulate from the
 // ROUNDED per-line strings (what gets persisted and shown), never from raw
@@ -10,7 +10,12 @@ import { money } from "./lines.ts";
 
 test("plain line: extension, VAT, lineNo and grand total", () => {
   const { computed, subtotal, vatTotal, grandTotal } = computeLinesWithTotals([
-    { description: "Goods", quantity: "2", unitPrice: "1500", vatRate: "0.075" },
+    {
+      description: "Goods",
+      quantity: "2",
+      unitPrice: "1500",
+      vatRate: "0.075",
+    },
   ]);
   assert.equal(computed.length, 1);
   assert.equal(computed[0].lineNo, 1);
@@ -19,9 +24,9 @@ test("plain line: extension, VAT, lineNo and grand total", () => {
   // Input fields ride along untouched for the insert-row mapping.
   assert.equal(computed[0].description, "Goods");
   assert.equal(computed[0].vatRate, "0.075");
-  assert.equal(subtotal, 3000);
-  assert.equal(vatTotal, 225);
-  assert.equal(grandTotal, 3225);
+  assert.equal(subtotal, "3000.00");
+  assert.equal(vatTotal, "225.00");
+  assert.equal(grandTotal, "3225.00");
 });
 
 test("subtotal sums the rounded line extensions, not the raw products", () => {
@@ -71,13 +76,37 @@ test("grand total is exactly subtotal plus VAT; empty input is all zeros", () =>
     { description: "X", quantity: "3", unitPrice: "9.99", vatRate: "0.075" },
     { description: "Y", quantity: "1", unitPrice: "0.01", vatRate: "0" },
   ]);
-  assert.equal(some.grandTotal, some.subtotal + some.vatTotal);
+  assert.equal(
+    some.grandTotal,
+    money(new FinancialDecimal(some.subtotal).plus(some.vatTotal)),
+  );
 
   const none = computeLinesWithTotals([]);
   assert.deepEqual(none, {
     computed: [],
-    subtotal: 0,
-    vatTotal: 0,
-    grandTotal: 0,
+    subtotal: "0.00",
+    vatTotal: "0.00",
+    grandTotal: "0.00",
   });
+});
+
+test("half-cent boundaries use decimal half-up, not binary floating-point", () => {
+  assert.equal(
+    computeLineFinancials({
+      description: "Fraction",
+      quantity: "0.5",
+      unitPrice: "2.01",
+      vatRate: "0",
+    }).lineExtension,
+    "1.01",
+  );
+  assert.equal(
+    computeLineFinancials({
+      description: "Large",
+      quantity: "1",
+      unitPrice: "9007199254740991.01",
+      vatRate: "0",
+    }).lineExtension,
+    "9007199254740991.01",
+  );
 });

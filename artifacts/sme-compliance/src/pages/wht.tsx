@@ -124,8 +124,16 @@ function WhtContent() {
             </p>
           )}
           <Card>
-            <CardContent className="p-4 overflow-x-auto">
+            <CardContent
+              role="group"
+              aria-labelledby="wht-credits-caption"
+              tabIndex={0}
+              className="p-4 overflow-x-auto rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <table className="w-full text-sm" data-testid="table-wht-credits">
+                <caption id="wht-credits-caption" className="sr-only">
+                  WHT credits
+                </caption>
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                     <th className="py-2 pr-3 font-medium">Invoice</th>

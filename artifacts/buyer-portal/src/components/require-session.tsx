@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { expireSession } from "@workspace/web-ui";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Building2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { roleLabel } from "@workspace/format";
 function goToPortal() {
   window.location.href = "/login";
 }
-
 
 function BrandSplash({
   title,
@@ -82,7 +81,7 @@ export function RequireSession({
 
   const unauthenticated = errorStatus(error) === 401;
   useEffect(() => {
-    if (unauthenticated) goToPortal();
+    if (unauthenticated) void expireSession();
   }, [unauthenticated]);
 
   if (isLoading) {

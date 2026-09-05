@@ -1,6 +1,8 @@
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import {
   getDb,
+  hasDatabaseContext,
+  runInBypassContext,
   clerkIntentEvalRunsTable,
   clerkIntentFixturesTable,
   clerkCasesTable,
@@ -129,7 +131,8 @@ export function scrubIntentQuestion(
   const scrubber = createScrubber(
     { names: surfaceForms, tins: identities.tins },
     {
-      nameKey: (name) => canonical.get(name.toLowerCase()) ?? name.toLowerCase(),
+      nameKey: (name) =>
+        canonical.get(name.toLowerCase()) ?? name.toLowerCase(),
       nameLabel: (index) => directory[index] ?? DIRECTORY_OVERFLOW,
     },
   );
@@ -269,6 +272,7 @@ export async function mintIntentFixture(
 }
 
 export async function loadGrownIntentFixtures(): Promise<IntentFixture[]> {
+  if (!hasDatabaseContext()) return runInBypassContext(loadGrownIntentFixtures);
   const rows = await getDb()
     .select()
     .from(clerkIntentFixturesTable)
@@ -384,7 +388,10 @@ async function classifyCorpus(
       caseId: null,
       promptVersion: INTENT_PROMPT_VERSION,
       system,
-      user: buildIntentUser({ ...INTENT_EVAL_CONTEXT, question: fixture.question }),
+      user: buildIntentUser({
+        ...INTENT_EVAL_CONTEXT,
+        question: fixture.question,
+      }),
       schemaName: "intent_classification",
       jsonSchema: planJsonSchema(keys, monthKeys, clientKeys),
       validator: planValidator(keys, monthKeys, clientKeys) as never,
@@ -477,20 +484,22 @@ export async function runIntentEval(
   const startedAt = Date.now();
   const fixtures = await loadIntentCorpus(opts);
   const report = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
-  const [run] = await getDb()
-    .insert(clerkIntentEvalRunsTable)
-    .values({
-      startedBy: actorId,
-      model: gateway.model,
-      promptVersion: INTENT_PROMPT_VERSION,
-      fixtureCount: report.fixtureCount,
-      correctCount: report.correctCount,
-      injectionFixtures: report.injectionFixtures,
-      injectionResisted: report.injectionResisted,
-      results: report.results,
-      durationMs: Date.now() - startedAt,
-    })
-    .returning();
+  const [run] = await runInBypassContext(() =>
+    getDb()
+      .insert(clerkIntentEvalRunsTable)
+      .values({
+        startedBy: actorId,
+        model: gateway.model,
+        promptVersion: INTENT_PROMPT_VERSION,
+        fixtureCount: report.fixtureCount,
+        correctCount: report.correctCount,
+        injectionFixtures: report.injectionFixtures,
+        injectionResisted: report.injectionResisted,
+        results: report.results,
+        durationMs: Date.now() - startedAt,
+      })
+      .returning(),
+  );
   await appendAudit({
     actorId,
     action: "clerk.intent-eval.run",

@@ -90,7 +90,7 @@ export function ClerkShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Mobile: compact top bar with horizontal nav. */}
-      <div className="bg-[#0e4c45] md:hidden">
+      <header className="bg-[#0e4c45] md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <Brand />
           <Link
@@ -104,7 +104,7 @@ export function ClerkShell({ children }: { children: ReactNode }) {
         <div className="border-t border-white/10 px-3 py-2">
           <NavLinks orientation="row" />
         </div>
-      </div>
+      </header>
 
       {/* Desktop rail. */}
       <aside className="sticky top-0 hidden h-screen min-h-screen flex-col bg-[#0e4c45] px-3 py-5 md:flex">

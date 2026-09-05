@@ -1,0 +1,142 @@
+paths:
+  /invoice-drafts:
+    get:
+      operationId: listInvoiceDrafts
+      tags: [invoices]
+      summary: List the current user's unfinished drafts for an authorized client
+      parameters:
+        - $ref: '#/components/parameters/InvoiceDraftClient'
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Up to 50 current drafts; private and no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextOffset]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ServerInvoiceDraft' }
+                  nextOffset: { type: integer, nullable: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Invoice write permission and an active client engagement are required }
+  /invoice-drafts/{id}:
+    get:
+      operationId: getInvoiceDraft
+      tags: [invoices]
+      summary: Recover a draft owned by the current firm, user and client
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - $ref: '#/components/parameters/InvoiceDraftClient'
+      responses:
+        '200':
+          description: Current draft; private and no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerInvoiceDraft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Draft scope is not authorized }
+        '404': { description: 'Draft absent, inaccessible, expired or discarded' }
+    put:
+      operationId: saveInvoiceDraft
+      tags: [invoices]
+      summary: Save an unfinished form with a revision check and retry-safe write ID
+      description: Revision zero inserts only. An identical latest writeId and payload replays without incrementing revision. Stale revisions and changed payloads under the same writeId conflict. Retention is seven days from save.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceDraftWriteInput' }
+      responses:
+        '200':
+          description: Saved draft or replay of the latest write
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerInvoiceDraft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Draft scope is not authorized }
+        '409': { description: DRAFT_CONFLICT; reload or save edits under a new draft ID }
+    delete:
+      operationId: deleteInvoiceDraft
+      tags: [invoices]
+      summary: Discard a draft without allowing late autosaves to resurrect it
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [clientPartyId, expectedRevision]
+              properties:
+                clientPartyId: { type: string, format: uuid }
+                expectedRevision: { type: integer, minimum: 0 }
+      responses:
+        '204': { description: 'Discarded, including an already discarded draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Draft scope is not authorized }
+        '409': { description: DRAFT_CONFLICT; the active draft has a different revision }
+components:
+  parameters:
+    InvoiceDraftClient:
+      name: clientPartyId
+      in: query
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    UnfinishedInvoiceDraftLine:
+      type: object
+      additionalProperties: false
+      required: [description, quantity, unitPrice, vatRate]
+      properties:
+        description: { type: string, maxLength: 10000 }
+        quantity: { type: string, maxLength: 128 }
+        unitPrice: { type: string, maxLength: 128 }
+        vatRate: { type: string, maxLength: 128 }
+    InvoiceDraftContent:
+      type: object
+      additionalProperties: false
+      required: [invoiceNumber, buyerPartyId, issueDate, dueDate, currency, fxRateToNgn, whtCategory, lines]
+      properties:
+        invoiceNumber: { type: string, maxLength: 10000 }
+        buyerPartyId:
+          type: string
+          description: UUID of a selected buyer, or an empty string while unfinished
+          pattern: '^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        issueDate: { type: string, maxLength: 32 }
+        dueDate: { type: string, maxLength: 32 }
+        currency: { type: string, maxLength: 16 }
+        fxRateToNgn: { type: string, maxLength: 128 }
+        whtCategory: { type: string, maxLength: 128 }
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: '#/components/schemas/UnfinishedInvoiceDraftLine' }
+    InvoiceDraftWriteInput:
+      type: object
+      additionalProperties: false
+      required: [clientPartyId, expectedRevision, writeId, draft]
+      properties:
+        clientPartyId: { type: string, format: uuid }
+        expectedRevision: { type: integer, minimum: 0 }
+        writeId: { type: string, format: uuid }
+        draft: { $ref: '#/components/schemas/InvoiceDraftContent' }
+    ServerInvoiceDraft:
+      type: object
+      required: [id, revision, writeId, draft, updatedAt, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        writeId: { type: string, format: uuid }
+        draft: { $ref: '#/components/schemas/InvoiceDraftContent' }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }

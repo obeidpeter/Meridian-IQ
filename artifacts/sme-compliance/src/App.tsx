@@ -1,42 +1,121 @@
+import { webSession, lazyRoute, SessionBoundary } from "@workspace/web-ui";
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
+const NotFound = lazyRoute(() => import("@/pages/not-found"));
 import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
 import { RequireConsentCapture } from "@/components/require-consent-capture";
-import { Dashboard } from "@/pages/dashboard";
-import { Invoices } from "@/pages/invoices";
-import { InvoiceNew } from "@/pages/invoice-new";
-import { InvoiceDetail } from "@/pages/invoice-detail";
-import { Bills } from "@/pages/bills";
-import { Vat } from "@/pages/vat";
-import { Recurring } from "@/pages/recurring";
-import { Import } from "@/pages/import";
-import { Reconciliation } from "@/pages/reconciliation";
-import { B2cReports } from "@/pages/b2c";
-import { Obligations } from "@/pages/obligations";
-import { Filings } from "@/pages/filings";
-import { Wht } from "@/pages/wht";
-import { Calendar } from "@/pages/calendar";
-import { Alerts } from "@/pages/alerts";
-import { Consent } from "@/pages/consent";
-import { ClerkCapture } from "@/pages/clerk-capture";
-import { ClerkAsk } from "@/pages/clerk-ask";
-import { MonthEnd } from "@/pages/month-end";
-import { Collections } from "@/pages/collections";
-import { Analytics } from "@/pages/analytics";
-import { Notifications } from "@/pages/notifications";
-import { Help } from "@/pages/help";
-import { ActivityPage } from "@/pages/activity";
-import { Today, WorkPage } from "@/pages/today";
-import { InvoiceRooms } from "@/pages/invoice-rooms";
+const Dashboard = lazyRoute(() =>
+  import("@/pages/dashboard").then((module) => ({ default: module.Dashboard })),
+);
+const Invoices = lazyRoute(() =>
+  import("@/pages/invoices").then((module) => ({ default: module.Invoices })),
+);
+const InvoiceNew = lazyRoute(() =>
+  import("@/pages/invoice-new").then((module) => ({
+    default: module.InvoiceNew,
+  })),
+);
+const InvoiceDetail = lazyRoute(() =>
+  import("@/pages/invoice-detail").then((module) => ({
+    default: module.InvoiceDetail,
+  })),
+);
+const Bills = lazyRoute(() =>
+  import("@/pages/bills").then((module) => ({ default: module.Bills })),
+);
+const Vat = lazyRoute(() =>
+  import("@/pages/vat").then((module) => ({ default: module.Vat })),
+);
+const Recurring = lazyRoute(() =>
+  import("@/pages/recurring").then((module) => ({ default: module.Recurring })),
+);
+const Import = lazyRoute(() =>
+  import("@/pages/import").then((module) => ({ default: module.Import })),
+);
+const Reconciliation = lazyRoute(() =>
+  import("@/pages/reconciliation").then((module) => ({
+    default: module.Reconciliation,
+  })),
+);
+const B2cReports = lazyRoute(() =>
+  import("@/pages/b2c").then((module) => ({ default: module.B2cReports })),
+);
+const Obligations = lazyRoute(() =>
+  import("@/pages/obligations").then((module) => ({
+    default: module.Obligations,
+  })),
+);
+const Filings = lazyRoute(() =>
+  import("@/pages/filings").then((module) => ({ default: module.Filings })),
+);
+const Wht = lazyRoute(() =>
+  import("@/pages/wht").then((module) => ({ default: module.Wht })),
+);
+const Calendar = lazyRoute(() =>
+  import("@/pages/calendar").then((module) => ({ default: module.Calendar })),
+);
+const Alerts = lazyRoute(() =>
+  import("@/pages/alerts").then((module) => ({ default: module.Alerts })),
+);
+const Consent = lazyRoute(() =>
+  import("@/pages/consent").then((module) => ({ default: module.Consent })),
+);
+const ClerkCapture = lazyRoute(() =>
+  import("@/pages/clerk-capture").then((module) => ({
+    default: module.ClerkCapture,
+  })),
+);
+const ClerkAsk = lazyRoute(() =>
+  import("@/pages/clerk-ask").then((module) => ({ default: module.ClerkAsk })),
+);
+const MonthEnd = lazyRoute(() =>
+  import("@/pages/month-end").then((module) => ({ default: module.MonthEnd })),
+);
+const Collections = lazyRoute(() =>
+  import("@/pages/collections").then((module) => ({
+    default: module.Collections,
+  })),
+);
+const Analytics = lazyRoute(() =>
+  import("@/pages/analytics").then((module) => ({ default: module.Analytics })),
+);
+const Notifications = lazyRoute(() =>
+  import("@/pages/notifications").then((module) => ({
+    default: module.Notifications,
+  })),
+);
+const Help = lazyRoute(() =>
+  import("@/pages/help").then((module) => ({ default: module.Help })),
+);
+const ActivityPage = lazyRoute(() =>
+  import("@/pages/activity").then((module) => ({
+    default: module.ActivityPage,
+  })),
+);
+const Today = lazyRoute(() =>
+  import("@/pages/today").then((module) => ({ default: module.Today })),
+);
+const WorkPage = lazyRoute(() =>
+  import("@/pages/today").then((module) => ({ default: module.WorkPage })),
+);
+const InvoiceRooms = lazyRoute(() =>
+  import("@/pages/invoice-rooms").then((module) => ({
+    default: module.InvoiceRooms,
+  })),
+);
 
 // A 401 must not retry-spin — the session guard redirects to the portal instead.
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache(webSession.mutationCacheOptions),
   defaultOptions: {
     queries: {
       retry: (count, err: unknown) => {
@@ -91,18 +170,20 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <RequireSession>
-            {/* CORE-03 first landing (D15): a business decides on its
+      <SessionBoundary client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <RequireSession>
+              {/* CORE-03 first landing (D15): a business decides on its
                 consent layers once, before the workspace ever renders. */}
-            <RequireConsentCapture>
-              <Router />
-            </RequireConsentCapture>
-          </RequireSession>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+              <RequireConsentCapture>
+                <Router />
+              </RequireConsentCapture>
+            </RequireSession>
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </SessionBoundary>
     </QueryClientProvider>
   );
 }

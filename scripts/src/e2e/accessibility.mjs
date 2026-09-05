@@ -1,9 +1,32 @@
-/* global CSS, document, getComputedStyle */
+/* global document, getComputedStyle */
+import axe from "axe-core";
+import { assertDialogClosedAndFocusRestored } from "./state-catalogue/dialog-focus.mjs";
+
+export async function collectAxeResults(page) {
+  await page.evaluate(axe.source);
+  return page.evaluate(async () =>
+    globalThis.axe.run(document, {
+      runOnly: {
+        type: "tag",
+        values: [
+          "wcag2a",
+          "wcag2aa",
+          "wcag21a",
+          "wcag21aa",
+          "wcag22aa",
+          "best-practice",
+        ],
+      },
+    }),
+  );
+}
 
 // Collect the full issue list for the current page (also used standalone by
 // ux-snapshot.mjs for before/after measurement, where the complete list —
 // not the check()'s 8-issue summary — is the datum).
-export async function collectAccessibilityIssues(page) {
+export async function collectAccessibilityIssues(page, { reportAxe } = {}) {
+  const axeResults = await collectAxeResults(page);
+  reportAxe?.(axeResults);
   const issues = await page.evaluate(() => {
     const findings = [];
     const visible = (element) => {
@@ -19,33 +42,6 @@ export async function collectAccessibilityIssues(page) {
       );
     };
     const text = (element) => (element.textContent ?? "").trim();
-    const accessibleName = (element) => {
-      const ariaLabel = element.getAttribute("aria-label")?.trim();
-      if (ariaLabel) return ariaLabel;
-      const labelledBy = element.getAttribute("aria-labelledby");
-      if (labelledBy) {
-        const value = labelledBy
-          .split(/\s+/)
-          .map((id) => document.getElementById(id))
-          .filter(Boolean)
-          .map(text)
-          .join(" ")
-          .trim();
-        if (value) return value;
-      }
-      if (element.id) {
-        const escaped = CSS.escape(element.id);
-        const label = document.querySelector(`label[for="${escaped}"]`);
-        if (label && text(label)) return text(label);
-      }
-      const wrappingLabel = element.closest("label");
-      if (wrappingLabel && text(wrappingLabel)) return text(wrappingLabel);
-      return (
-        element.getAttribute("alt")?.trim() ||
-        element.getAttribute("title")?.trim() ||
-        text(element)
-      );
-    };
 
     const ids = new Map();
     for (const element of document.querySelectorAll("[id]")) {
@@ -55,15 +51,8 @@ export async function collectAccessibilityIssues(page) {
       if (count > 1) findings.push(`duplicate id #${id} (${count})`);
     }
 
-    for (const element of document.querySelectorAll(
-      'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [role="tab"], [role="checkbox"], [role="combobox"], [role="switch"], [role="menuitem"]',
-    )) {
-      if (visible(element) && !accessibleName(element)) {
-        findings.push(
-          `unnamed ${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`,
-        );
-      }
-    }
+    // Accessible names (including nested SVG and native semantics) are axe's
+    // responsibility; textContent is not an accessible-name implementation.
 
     for (const element of document.querySelectorAll(
       "[aria-labelledby], [aria-describedby], [aria-errormessage]",
@@ -87,7 +76,6 @@ export async function collectAccessibilityIssues(page) {
       '[role="dialog"], [role="alertdialog"]',
     )) {
       if (!visible(dialog)) continue;
-      if (!accessibleName(dialog)) findings.push("visible dialog has no name");
       if (!dialog.contains(document.activeElement)) {
         findings.push("visible dialog does not contain keyboard focus");
       }
@@ -199,20 +187,65 @@ export async function collectAccessibilityIssues(page) {
   const viewport = page.viewportSize();
   if (viewport && viewport.width >= 640) {
     await page.setViewportSize({
-      width: Math.max(320, Math.floor(viewport.width / 2)),
+      width: 320,
       height: viewport.height,
     });
     await page.waitForTimeout(50);
     const reflowIssue = await page.evaluate(() =>
       document.documentElement.scrollWidth >
       document.documentElement.clientWidth + 1
-        ? "page has horizontal overflow at 200% reflow"
+        ? "page has horizontal overflow at 320 CSS pixels (not a browser zoom test)"
         : null,
     );
     if (reflowIssue) issues.push(reflowIssue);
     await page.setViewportSize(viewport);
   }
-  return issues;
+  return [
+    ...axeResults.violations.map(
+      (rule) =>
+        `axe ${rule.id} (${rule.impact}): ${rule.nodes.map((node) => node.target.join(" ")).join(", ")} - ${rule.helpUrl}`,
+    ),
+    ...issues,
+  ];
+}
+
+// Keyboard reachability rather than programmatic focus is part of the assertion.
+export async function tabTo(page, target, limit = 80) {
+  for (let i = 0; i < limit; i++) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((element) => element === document.activeElement))
+      return;
+  }
+  throw new Error(
+    `Control was not keyboard reachable after ${limit} Tab presses`,
+  );
+}
+
+export async function checkDialogKeyboard(page, trigger, dialog, check, label) {
+  await tabTo(page, trigger);
+  await page.keyboard.press("Enter");
+  await dialog.waitFor({ state: "visible" });
+  for (const key of ["Tab", "Shift+Tab"]) {
+    // More than one complete cycle in each direction, including the wrap boundary.
+    const count = await dialog
+      .locator('button, input, select, textarea, a[href], [tabindex="0"]')
+      .count();
+    for (let i = 0; i < count + 2; i++) {
+      await page.keyboard.press(key);
+      check(
+        `${label}: ${key} focus stays inside dialog`,
+        await dialog.evaluate((element) =>
+          element.contains(document.activeElement),
+        ),
+      );
+    }
+  }
+  await page.keyboard.press("Escape");
+  await assertDialogClosedAndFocusRestored(page, trigger);
+  check(
+    `${label}: Escape restores trigger focus`,
+    await trigger.evaluate((element) => element === document.activeElement),
+  );
 }
 
 export async function checkPageAccessibility(page, check, label) {

@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { asc, desc, eq, gt, sql } from "drizzle-orm";
-import { getDb, auditEventsTable, type AuditEvent } from "@workspace/db";
+import {
+  getDb,
+  hasDatabaseContext,
+  runInBypassContext,
+  auditEventsTable,
+  type AuditEvent,
+} from "@workspace/db";
 import { canonicalJson } from "../../lib/canonical-json";
+import { auditLockWaitSeconds, auditLockFailures } from "../../lib/metrics";
 
 const GENESIS = "0".repeat(64);
 // Arbitrary stable lock id for serializing audit appends.
@@ -18,7 +25,10 @@ export interface AuditInput {
   after?: Record<string, unknown> | null;
 }
 
-function computeHash(prevHash: string, payload: Record<string, unknown>): string {
+function computeHash(
+  prevHash: string,
+  payload: Record<string, unknown>,
+): string {
   return createHash("sha256")
     .update(prevHash + canonicalJson(payload))
     .digest("hex");
@@ -27,8 +37,18 @@ function computeHash(prevHash: string, payload: Record<string, unknown>): string
 // Append a tamper-evident audit event. Serialized with a transaction-scoped
 // advisory lock so concurrent appends cannot fork the chain (CORE-05).
 export async function appendAudit(input: AuditInput): Promise<AuditEvent> {
+  if (!hasDatabaseContext())
+    return runInBypassContext(() => appendAudit(input));
   return getDb().transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(${AUDIT_LOCK_ID})`);
+    const stopWaiting = auditLockWaitSeconds.startTimer();
+    try {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${AUDIT_LOCK_ID})`);
+    } catch (error) {
+      auditLockFailures.inc();
+      throw error;
+    } finally {
+      stopWaiting();
+    }
     const [last] = await tx
       .select({ hash: auditEventsTable.hash })
       .from(auditEventsTable)
@@ -132,7 +152,12 @@ async function hasEventsAfter(seq: number): Promise<boolean> {
 function verifyRows(
   events: AuditEvent[],
   prevHash: string,
-): { checked: number; brokenAtSeq: number | null; lastHash: string; lastSeq: number | null } {
+): {
+  checked: number;
+  brokenAtSeq: number | null;
+  lastHash: string;
+  lastSeq: number | null;
+} {
   let checked = 0;
   let lastSeq: number | null = null;
   for (const e of events) {
@@ -156,7 +181,13 @@ export async function verifyChain(
   const afterSeq = window.afterSeq ?? 0;
   let prevHash = await anchorHash(afterSeq);
   if (prevHash === null) {
-    return { valid: false, count: 0, brokenAtSeq: afterSeq, lastSeq: null, complete: false };
+    return {
+      valid: false,
+      count: 0,
+      brokenAtSeq: afterSeq,
+      lastSeq: null,
+      complete: false,
+    };
   }
   let remaining = window.limit ?? Number.POSITIVE_INFINITY;
   let cursor = afterSeq;
@@ -175,7 +206,13 @@ export async function verifyChain(
     count += result.checked;
     if (result.lastSeq !== null) lastSeq = result.lastSeq;
     if (result.brokenAtSeq !== null) {
-      return { valid: false, count, brokenAtSeq: result.brokenAtSeq, lastSeq, complete: false };
+      return {
+        valid: false,
+        count,
+        brokenAtSeq: result.brokenAtSeq,
+        lastSeq,
+        complete: false,
+      };
     }
     prevHash = result.lastHash;
     cursor = batch[batch.length - 1]!.seq;
@@ -201,7 +238,10 @@ export async function exportAuditBundle(
   window: ChainWindow = {},
 ): Promise<AuditBundle> {
   const afterSeq = window.afterSeq ?? 0;
-  const limit = Math.min(window.limit ?? EXPORT_DEFAULT_LIMIT, EXPORT_MAX_LIMIT);
+  const limit = Math.min(
+    window.limit ?? EXPORT_DEFAULT_LIMIT,
+    EXPORT_MAX_LIMIT,
+  );
   const events = await getDb()
     .select()
     .from(auditEventsTable)
@@ -214,7 +254,13 @@ export async function exportAuditBundle(
   const anchor = await anchorHash(afterSeq);
   const verification: ChainVerification =
     anchor === null
-      ? { valid: false, count: 0, brokenAtSeq: afterSeq, lastSeq: null, complete: false }
+      ? {
+          valid: false,
+          count: 0,
+          brokenAtSeq: afterSeq,
+          lastSeq: null,
+          complete: false,
+        }
       : (() => {
           const r = verifyRows(events, anchor);
           return {
@@ -225,7 +271,13 @@ export async function exportAuditBundle(
             complete: r.brokenAtSeq === null && complete,
           };
         })();
-  return { events, verification, exportedAt: new Date().toISOString(), lastSeq, complete };
+  return {
+    events,
+    verification,
+    exportedAt: new Date().toISOString(),
+    lastSeq,
+    complete,
+  };
 }
 
 export interface LedgerRow {
@@ -269,7 +321,8 @@ export async function exportAuditLedger(afterSeq = 0): Promise<{
     .limit(LEDGER_CSV_CAP);
   const lastSeq = rows.length ? rows[rows.length - 1]!.seq : null;
   const complete =
-    rows.length < LEDGER_CSV_CAP || !(await hasEventsAfter(lastSeq ?? afterSeq));
+    rows.length < LEDGER_CSV_CAP ||
+    !(await hasEventsAfter(lastSeq ?? afterSeq));
   const verification = await verifyChain({ afterSeq, limit: LEDGER_CSV_CAP });
   return { rows, verification, lastSeq, complete };
 }

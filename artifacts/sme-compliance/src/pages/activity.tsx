@@ -1,6 +1,11 @@
 import { useLocation } from "wouter";
-import { useGetMe } from "@workspace/api-client-react";
-import { ActivityCenter, useOperationJournal } from "@workspace/web-ui";
+import { customFetch, useGetMe } from "@workspace/api-client-react";
+import {
+  ActivityCenter,
+  operationSessionKey,
+  useSessionOperations,
+  useOperationNavigation,
+} from "@workspace/web-ui";
 import { PageHeader } from "@/components/page-header";
 import { usePageTitle } from "@/hooks/use-page-title";
 
@@ -8,9 +13,8 @@ export function ActivityPage() {
   usePageTitle("Activity");
   const { data: me } = useGetMe();
   const [, navigate] = useLocation();
-  const journal = useOperationJournal(
-    me ? `meridianiq:operations:${me.userId}` : null,
-  );
+  const openOperation = useOperationNavigation("app", navigate);
+  const journal = useSessionOperations(me, customFetch);
 
   return (
     <div className="space-y-6">
@@ -19,8 +23,12 @@ export function ActivityPage() {
         description="Track recent imports, submissions, and Clerk work on this device. Open an item to verify or continue it."
       />
       <ActivityCenter
+        key={operationSessionKey(me)}
         operations={journal.operations}
-        onOpen={navigate}
+        syncState={journal.syncState}
+        onRefresh={journal.refresh}
+        onRecover={journal.recover}
+        onOpen={openOperation}
         onDismiss={journal.dismiss}
         onClearCompleted={journal.clearCompleted}
       />

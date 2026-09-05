@@ -3,7 +3,7 @@ import { db, clerkInferenceCallsTable } from "@workspace/db";
 import type { z } from "zod/v4";
 import { DomainError } from "../errors";
 import { CLERK_RUNTIME_FLAG_KEY, isFeatureEnabled } from "../flags/flags";
-import { acquireFirmClerkBudgetPermit } from "./budget";
+import { acquireFirmClerkBudgetPermit, type FirmClerkBudgetPermit } from "./budget";
 import type { Database } from "@workspace/db";
 
 // Inference gateway (Task #40). EVERY model call flows through here:
@@ -249,9 +249,9 @@ export async function recordExternalCall(
     promptTokens?: number | null;
     completionTokens?: number | null;
   },
-  ledgerDb: Database = db,
+  ledgerDb: Database | FirmClerkBudgetPermit = db,
 ): Promise<void> {
-  await ledgerDb.insert(clerkInferenceCallsTable).values({
+  const row = {
     caseId: input.caseId ?? null,
     firmId: input.firmId ?? null,
     purpose: input.purpose,
@@ -266,7 +266,9 @@ export async function recordExternalCall(
     latencyMs: input.latencyMs,
     promptTokens: input.promptTokens ?? null,
     completionTokens: input.completionTokens ?? null,
-  });
+  } satisfies typeof clerkInferenceCallsTable.$inferInsert;
+  if ("append" in ledgerDb) await ledgerDb.append(row);
+  else await ledgerDb.insert(clerkInferenceCallsTable).values(row);
 }
 
 // Budget backstop shared by the two firm-attributed lanes (infer/embed,
@@ -303,10 +305,13 @@ interface LedgerBase {
 // Append one ledger row: the call's identity (base) plus the outcome
 // fields, which stay explicit at each call site. Writes on the raw `db` by
 // design — spend accounting must survive any ambient rollback.
-function ledgerAppender(base: LedgerBase, ledgerDb: Database = db) {
-  return (
+function ledgerAppender(base: LedgerBase, permit?: FirmClerkBudgetPermit | null) {
+  return async (
     row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof LedgerBase>,
-  ) => ledgerDb.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+  ): Promise<void> => {
+    if (permit) await permit.append({ ...base, ...row });
+    else await db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+  };
 }
 
 // Throws CLERK_DISABLED (503) when the kill switch is off. Routes call this
@@ -363,7 +368,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           promptVersion: params.promptVersion,
           inputRef: sha256(params.inputForHash),
         };
-        const ledger = ledgerAppender(base, permit?.ledgerDb ?? db);
+        const ledger = ledgerAppender(base, permit);
 
         let raw: string;
         let promptTokens: number | null = estimatedPromptTokens;
@@ -563,7 +568,7 @@ export async function embedWithLedger(
       // JSON-encoded so batch boundaries hash distinctly.
       inputRef: sha256(JSON.stringify(params.texts)),
     };
-    const ledger = ledgerAppender(base, permit?.ledgerDb ?? db);
+    const ledger = ledgerAppender(base, permit);
     try {
       const { vectors, promptTokens: providerPromptTokens } =
         await embedder.embed(params.texts);

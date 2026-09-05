@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { expireSession } from "@workspace/web-ui";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Landmark, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,10 @@ export function RequireSession({
     query: { retry: false, queryKey: getGetMeQueryKey() },
   });
 
+  useEffect(() => {
+    if (isError && errorStatus(error) === 401) void expireSession();
+  }, [isError, error]);
+
   if (isLoading) {
     return (
       <BrandSplash
@@ -108,12 +113,6 @@ export function RequireSession({
   }
 
   if (isError || !me) {
-    // Send the portal the page this session died on so sign-in can land
-    // back here instead of the workspace root.
-    const returnTo = encodeURIComponent(
-      window.location.pathname + window.location.search,
-    );
-    window.location.href = `${PORTAL_URL}?returnTo=${returnTo}&reason=expired`;
     return null;
   }
 

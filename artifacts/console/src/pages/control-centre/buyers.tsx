@@ -78,10 +78,10 @@ export function BuyerPilotsWorkspace() {
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-extrabold text-slate-950">
+            <h2 className="text-base font-extrabold text-[var(--mi-ink)]">
               Pilot portfolio
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs text-[var(--mi-muted)]">
               Readiness scores combine identity, supplier breadth, stamped flow,
               responses and payment signals.
             </p>
@@ -118,7 +118,7 @@ export function BuyerPilotsWorkspace() {
         </div>
 
         {data.pilotsTruncated && (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--mi-muted)]">
             Showing the {data.pilots.length} most recently active of{" "}
             {data.anchorBuyers} anchor buyers — the counts above cover
             everything.
@@ -156,14 +156,18 @@ export function BuyerPilotsWorkspace() {
                     <p className="text-2xl font-extrabold tabular-nums text-slate-950">
                       {pilot.readinessScore}
                     </p>
-                    <p className="text-[11px] font-bold uppercase text-slate-400">
+                    <p className="text-[11px] font-bold uppercase text-slate-600">
                       Readiness
                     </p>
                   </div>
                 </div>
 
                 <div className="px-5 py-4">
-                  <Progress value={pilot.readinessScore} className="h-1.5" />
+                  <Progress
+                    aria-label={`${pilot.buyerName} readiness`}
+                    value={pilot.readinessScore}
+                    className="h-1.5"
+                  />
                   <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
                     {[
                       ["Suppliers", pilot.supplierCount],
@@ -172,7 +176,7 @@ export function BuyerPilotsWorkspace() {
                       ["Paid signals", pilot.paidSignals],
                     ].map(([label, value]) => (
                       <div key={String(label)}>
-                        <dt className="text-[11px] font-bold uppercase text-slate-400">
+                        <dt className="text-[11px] font-bold uppercase text-slate-600">
                           {label}
                         </dt>
                         <dd className="mt-1 text-lg font-extrabold tabular-nums text-slate-900">

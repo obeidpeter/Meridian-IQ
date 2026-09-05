@@ -56,6 +56,11 @@ part of the clean web/API build:
 pnpm run build:mobile
 ```
 
+CI additionally packages that native export, its server and reviewed production
+configuration for immutable promotion with `node scripts/src/ops/mobile-artifact.mjs build`,
+then checks the packaged server using the same script's `check` command. This
+release package binds the production domain and is not a local development URL.
+
 ## Validation Levels
 
 Fast, database-free validation:
@@ -72,12 +77,25 @@ pnpm --filter @workspace/api-server run test
 pnpm --filter @workspace/db run test
 ```
 
+Use only a disposable database: the main-app HTTP integration and E2E failure
+fixtures require `E2E_DATABASE_DISPOSABLE=1`. The main-app test explicitly sets
+`ENABLE_DEV_AUTH=true` before importing the server; production auth remains
+unchanged. SQL trigger fault injection is always removed during teardown.
+
 Disaster-recovery and browser validation:
 
 ```bash
 DRILL_DATABASE_URL=postgresql://.../meridian_drill \
   pnpm --filter @workspace/scripts run ops:restore-drill
 pnpm --filter @workspace/scripts run e2e
+```
+
+Database-free release, worker, CSRF and real axe-engine regressions:
+
+```bash
+pnpm --filter @workspace/scripts run test:reliability
+pnpm --filter @workspace/scripts exec playwright install chromium
+pnpm --filter @workspace/scripts run test:accessibility
 ```
 
 The full suite is the merge authority. A local environment without PostgreSQL

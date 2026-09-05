@@ -1,14 +1,14 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import {
   getGetDashboardSummaryQueryKey,
   getGetReceivablesSummaryQueryKey,
   getListInvoicesQueryKey,
   InvoiceInputCategory,
   InvoiceInputKind,
-  PartyType,
   useCreateInvoice,
   useDraftInvoiceWithClerk,
-  useListParties,
   useSubmitInvoice,
   useValidateInvoice,
 } from "@workspace/api-client-react";
@@ -19,16 +19,14 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import { File } from "expo-file-system";
-import type {
-  FieldError,
-  Party,
-} from "@workspace/api-client-react";
+import type { FieldError } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import React, { useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LineItemCard, TotalsCard } from "@/components/invoice-line-editor";
+import { BuyerPicker } from "@/components/buyer-picker";
 import { ScrollHost } from "@/components/KeyboardAwareScrollViewCompat";
 import type { Scrollable } from "@/components/KeyboardAwareScrollViewCompat";
 import {
@@ -42,6 +40,7 @@ import {
   TextField,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { useBuyerPicker } from "@/hooks/useBuyerPicker";
 import { hasStatus, serverMessage } from "@/lib/api-error";
 import { applyDraftProposal } from "@/lib/draft-voice";
 import {
@@ -53,11 +52,21 @@ import {
 } from "@/lib/invoice-form";
 import type { LineDraft, LineErrors } from "@/lib/invoice-form";
 import { useSession } from "@/lib/session";
+import { getAuthGeneration } from "@/lib/query";
+import {
+  newInvoiceIntent,
+  prepareInvoiceIntent,
+  confirmInvoiceIntent,
+  readInvoiceIntent,
+  saveInvoiceIntent,
+  type InvoiceIntent,
+  type InvoiceIntentForm,
+} from "@/lib/invoice-intent";
 
 let lineCounter = 0;
 function newLine(): LineDraft {
   lineCounter += 1;
-  return blankLine(`line-${lineCounter}`);
+  return blankLine(`line-${Date.now()}-${lineCounter}`);
 }
 
 function todayISO(): string {
@@ -94,14 +103,35 @@ function humanizeFieldPath(path: string): string {
 }
 
 export default function InvoiceScreen() {
+  const { me, clientPartyId } = useSession();
+  return (
+    <InvoiceForm
+      key={JSON.stringify([
+        me?.userId,
+        me?.firmId,
+        clientPartyId,
+        getAuthGeneration(),
+      ])}
+    />
+  );
+}
+
+function InvoiceForm() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { clientPartyId, me } = useSession();
+  const { clientPartyId, me, verified } = useSession();
+  const scope = useMemo(
+    () => ({
+      userId: me?.userId ?? "",
+      firmId: me?.firmId ?? null,
+      clientPartyId: clientPartyId ?? "",
+    }),
+    [me?.userId, me?.firmId, clientPartyId],
+  );
+  const epoch = useRef(getAuthGeneration());
+  const isCurrent = () => epoch.current === getAuthGeneration();
 
-  // Bounded reads (R98): buyers only, at the reference-list ceiling.
-  const parties = useListParties({ type: PartyType.buyer, limit: 500 });
-  const createInvoice = useCreateInvoice();
   const validateInvoice = useValidateInvoice();
   const submitInvoice = useSubmitInvoice();
   const voiceDraft = useDraftInvoiceWithClerk();
@@ -114,25 +144,109 @@ export default function InvoiceScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldError[]>([]);
   const [lineErrors, setLineErrors] = useState<LineErrors>({});
   const [dateError, setDateError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<
-    { tone: "error" | "success"; message: string } | null
-  >(null);
+  const [banner, setBanner] = useState<{
+    tone: "error" | "success";
+    message: string;
+  } | null>(null);
 
   // Remembers the draft created on a prior (failed) attempt so a retry resumes
   // at validate→submit instead of creating a DUPLICATE invoice.
   const draftIdRef = useRef<string | null>(null);
+  const intentRef = useRef<InvoiceIntent | null>(null);
+  const [intent, setIntent] = useState<InvoiceIntent | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const buyerPicker = useBuyerPicker(
+    { ...scope, generation: epoch.current },
+    buyerPartyId,
+    hydrated && verified,
+  );
+  const createInvoice = useCreateInvoice({
+    request: { headers: { "X-Idempotency-Key": intent?.key ?? "" } },
+  });
+  const form = useMemo<InvoiceIntentForm>(
+    () => ({ buyerPartyId, invoiceNumber, issueDate, notes, lines }),
+    [buyerPartyId, invoiceNumber, issueDate, notes, lines],
+  );
+  const applyForm = (next: InvoiceIntentForm) => {
+    setBuyerPartyId(next.buyerPartyId);
+    setInvoiceNumber(next.invoiceNumber);
+    setIssueDate(next.issueDate);
+    setNotes(next.notes);
+    setLines(next.lines);
+  };
+  useEffect(() => {
+    let active = true;
+    setHydrated(false);
+    const current = getAuthGeneration();
+    void readInvoiceIntent(AsyncStorage, scope)
+      .then((stored) => {
+        if (!active || current !== getAuthGeneration()) return;
+        const next =
+          stored ??
+          newInvoiceIntent(scope, {
+            buyerPartyId: null,
+            invoiceNumber: "",
+            issueDate: todayISO(),
+            notes: "",
+            lines: [newLine()],
+          });
+        intentRef.current = next;
+        draftIdRef.current = next.invoiceId;
+        setIntent(next);
+        setBuyerPartyId(next.form.buyerPartyId);
+        setInvoiceNumber(next.form.invoiceNumber);
+        setIssueDate(next.form.issueDate);
+        setNotes(next.form.notes);
+        setLines(next.form.lines);
+        setHydrated(true);
+      })
+      .catch(() => {
+        if (active && current === getAuthGeneration())
+          setBanner({
+            tone: "error",
+            message:
+              "The saved invoice draft could not be loaded. Retry before creating an invoice, or explicitly reset the form.",
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, [scope, restoreAttempt]);
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      !intentRef.current ||
+      intentRef.current.payload ||
+      intentRef.current.invoiceId
+    )
+      return;
+    const current = getAuthGeneration();
+    const next = { ...intentRef.current, form };
+    intentRef.current = next;
+    void saveInvoiceIntent(
+      AsyncStorage,
+      next,
+      () => current === getAuthGeneration(),
+    ).catch(() => {
+      if (current === getAuthGeneration())
+        setBanner({
+          tone: "error",
+          message:
+            "The invoice draft could not be saved on this device. Submission will retry storage before contacting the server.",
+        });
+    });
+  }, [form, hydrated]);
   // Synchronous re-entrancy guard: a double-tap in the same frame can fire
   // before React commits the disabled prop, so guard here too.
   const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   const scrollRef = useRef<Scrollable | null>(null);
 
   const scrollToTop = () => {
     scrollRef.current?.scrollTo?.({ y: 0, animated: true });
   };
-
-  const buyers: Party[] = (parties.data ?? []).filter(
-    (p) => p.type === PartyType.buyer,
-  );
 
   // "Speak it" (idea #7): record a short voice note, let the server
   // transcribe it and propose a draft, then prefill THIS form — the user
@@ -141,6 +255,7 @@ export default function InvoiceScreen() {
   const canSpeak = !!me?.capabilities?.includes("clerk.capture");
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recording, setRecording] = useState(false);
+  const [voiceApplying, setVoiceApplying] = useState(false);
   // Synchronous re-entrancy guard, same hazard submittingRef covers below: a
   // double-tap can fire before React commits the disabled prop, and two
   // stop-and-draft runs would mean two paid transcriptions.
@@ -178,7 +293,7 @@ export default function InvoiceScreen() {
   };
 
   const stopAndDraft = async () => {
-    if (voiceBusyRef.current) return;
+    if (voiceBusyRef.current || voiceDraft.isPending || voiceApplying) return;
     voiceBusyRef.current = true;
     let audioBase64: string;
     try {
@@ -205,31 +320,51 @@ export default function InvoiceScreen() {
       setAudioModeAsync({ allowsRecording: false }).catch(() => {});
       voiceBusyRef.current = false;
     }
+    if (!buyerPicker.isCurrent()) return;
     voiceDraft.mutate(
       { data: { audioBase64 } },
       {
-        onSuccess: (res) => {
-          lineCounter += 1;
-          const applied = applyDraftProposal(
-            res,
-            buyers.map((b) => b.id),
-            `voice-${lineCounter}-`,
-          );
-          if (applied.invoiceNumber) setInvoiceNumber(applied.invoiceNumber);
-          if (applied.issueDate) setIssueDate(applied.issueDate);
-          if (applied.buyerPartyId) setBuyerPartyId(applied.buyerPartyId);
-          if (applied.lines) setLines(applied.lines);
-          const heard = res.transcript ? `Heard: “${res.transcript}”. ` : "";
-          setBanner({
-            tone: "success",
-            message:
-              !applied.buyerPartyId && applied.buyerNameRead
-                ? `${heard}Pick the buyer (“${applied.buyerNameRead}” is not in your list), then check every field before saving.`
-                : `${heard}Check every field before saving.`,
-          });
-          scrollToTop();
+        onSuccess: async (res) => {
+          if (!buyerPicker.isCurrent()) return;
+          setVoiceApplying(true);
+          try {
+            const authorizedIds: string[] = [];
+            const suggestedId = res.buyerSuggestions[0]?.partyId;
+            if (suggestedId) {
+              try {
+                const buyer = await buyerPicker.resolveBuyer(suggestedId);
+                authorizedIds.push(buyer.id);
+              } catch {
+                // A suggestion is not authorization, including one outside
+                // the current search page. Never fall back to cached IDs.
+              }
+            }
+            if (!buyerPicker.isCurrent()) return;
+            lineCounter += 1;
+            const applied = applyDraftProposal(
+              res,
+              authorizedIds,
+              `voice-${lineCounter}-`,
+            );
+            if (applied.invoiceNumber) setInvoiceNumber(applied.invoiceNumber);
+            if (applied.issueDate) setIssueDate(applied.issueDate);
+            if (applied.buyerPartyId) setBuyerPartyId(applied.buyerPartyId);
+            if (applied.lines) setLines(applied.lines);
+            const heard = res.transcript ? `Heard: “${res.transcript}”. ` : "";
+            setBanner({
+              tone: "success",
+              message:
+                !applied.buyerPartyId && (suggestedId || applied.buyerNameRead)
+                  ? `${heard}The suggested buyer could not be verified. Choose an available buyer, then check every field before saving.`
+                  : `${heard}Check every field before saving.`,
+            });
+            scrollToTop();
+          } finally {
+            setVoiceApplying(false);
+          }
         },
         onError: (e) => {
+          if (!buyerPicker.isCurrent()) return;
           setBanner({
             tone: "error",
             message: hasStatus(e, 503)
@@ -248,6 +383,8 @@ export default function InvoiceScreen() {
   const totals = useMemo(() => computeTotals(lines), [lines]);
 
   const busy =
+    submitting ||
+    !hydrated ||
     createInvoice.isPending ||
     validateInvoice.isPending ||
     submitInvoice.isPending;
@@ -271,17 +408,54 @@ export default function InvoiceScreen() {
       prev.length === 1 ? prev : prev.filter((l) => l.key !== key),
     );
 
-  const resetForm = () => {
+  const resetForm = async () => {
+    const nextForm = {
+      buyerPartyId: null,
+      invoiceNumber: "",
+      issueDate: todayISO(),
+      notes: "",
+      lines: [newLine()],
+    };
+    const next = newInvoiceIntent(scope, nextForm);
+    try {
+      await saveInvoiceIntent(AsyncStorage, next, isCurrent);
+    } catch {
+      if (isCurrent())
+        setBanner({
+          tone: "error",
+          message:
+            "The new invoice draft could not be saved. The previous intent has been retained.",
+        });
+      return;
+    }
+    if (!isCurrent()) return;
+    intentRef.current = next;
+    setIntent(next);
+    setHydrated(true);
     setBuyerPartyId(null);
     setInvoiceNumber("");
     setIssueDate(todayISO());
     setNotes("");
-    setLines([newLine()]);
+    setLines(nextForm.lines);
     setFieldErrors([]);
     setLineErrors({});
     setDateError(null);
     // A fresh form means a fresh invoice.
     draftIdRef.current = null;
+  };
+
+  const requestReset = () => {
+    if (submittingRef.current) return;
+    if (intentRef.current?.payload || !hydrated) {
+      Alert.alert(
+        "Start a new invoice?",
+        "A previous attempt may already have created an invoice. Check your invoices before starting a separate intent.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Start new invoice", onPress: () => void resetForm() },
+        ],
+      );
+    } else void resetForm();
   };
 
   const errorFor = (field: string): string | undefined =>
@@ -291,6 +465,8 @@ export default function InvoiceScreen() {
   const validateLocal = (): string | null => {
     if (!clientPartyId) return "No client selected.";
     if (!buyerPartyId) return "Choose a buyer for this invoice.";
+    if (!buyerPicker.selected)
+      return "Verify the selected buyer or choose an available buyer.";
     if (!invoiceNumber.trim()) return "Enter an invoice number.";
     if (!issueDate.trim()) return "Enter an issue date.";
     const hasValidLine = lines.some((l) => {
@@ -323,8 +499,17 @@ export default function InvoiceScreen() {
 
   const handleSubmit = async () => {
     // Synchronous re-entrancy guard (see submittingRef above).
-    if (submittingRef.current) return;
+    if (
+      submittingRef.current ||
+      !hydrated ||
+      !verified ||
+      !isCurrent() ||
+      voiceApplying ||
+      voiceDraft.isPending
+    )
+      return;
     submittingRef.current = true;
+    setSubmitting(true);
     try {
       setBanner(null);
       setFieldErrors([]);
@@ -359,27 +544,54 @@ export default function InvoiceScreen() {
       }
 
       try {
+        const payload = {
+          supplierPartyId: clientPartyId!,
+          buyerPartyId: buyerPartyId!,
+          invoiceNumber: invoiceNumber.trim(),
+          issueDate: issueDate.trim(),
+          kind: InvoiceInputKind.invoice,
+          category: InvoiceInputCategory.b2b,
+          notes: notes.trim() || undefined,
+          lines: payloadLines,
+        };
+        const current = intentRef.current;
+        if (!current) throw new Error("Invoice intent is not ready.");
+        let prepared: InvoiceIntent;
+        try {
+          prepared = prepareInvoiceIntent(current, form, payload);
+        } catch (error) {
+          setBanner({
+            tone: "error",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Restore the original draft before retrying.",
+          });
+          scrollToTop();
+          return;
+        }
+        // Persist both key and exact command before the first network attempt.
+        intentRef.current = prepared;
+        setIntent(prepared);
+        await saveInvoiceIntent(AsyncStorage, prepared, isCurrent);
+        if (!isCurrent()) return;
         // Resume an existing draft if we created one on a prior attempt;
         // otherwise create it now. This is what keeps a retry idempotent.
-        let invoiceId = draftIdRef.current;
+        let invoiceId = current.invoiceId ?? draftIdRef.current;
         let invoiceNumberForMessage = invoiceNumber.trim();
         if (!invoiceId) {
           const created = await createInvoice.mutateAsync({
-            data: {
-              supplierPartyId: clientPartyId!,
-              buyerPartyId: buyerPartyId!,
-              invoiceNumber: invoiceNumber.trim(),
-              issueDate: issueDate.trim(),
-              kind: InvoiceInputKind.invoice,
-              category: InvoiceInputCategory.b2b,
-              notes: notes.trim() || undefined,
-              lines: payloadLines,
-            },
+            data: payload,
           });
           invoiceId = created.invoice.id;
           invoiceNumberForMessage = created.invoice.invoiceNumber;
           draftIdRef.current = invoiceId;
+          const createdIntent = confirmInvoiceIntent(prepared, invoiceId);
+          intentRef.current = createdIntent;
+          setIntent(createdIntent);
+          await saveInvoiceIntent(AsyncStorage, createdIntent, isCurrent);
         }
+        if (!isCurrent()) return;
 
         const validation = await validateInvoice.mutateAsync({ id: invoiceId });
         if (!validation.ok) {
@@ -403,9 +615,9 @@ export default function InvoiceScreen() {
           message: `Invoice ${invoiceNumberForMessage} submitted for fiscalisation.`,
         });
         // Only now is the draft fully consumed — safe to forget it.
-        draftIdRef.current = null;
-        resetForm();
+        await resetForm();
       } catch (error) {
+        if (!isCurrent()) return;
         const data =
           error && typeof error === "object"
             ? (error as { data?: unknown }).data
@@ -428,6 +640,7 @@ export default function InvoiceScreen() {
       }
     } finally {
       submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -446,6 +659,37 @@ export default function InvoiceScreen() {
           <Banner tone={banner.tone} message={banner.message} />
         </View>
       ) : null}
+      {!hydrated && (
+        <AppButton
+          label="Retry loading draft"
+          icon="refresh-cw"
+          variant="ghost"
+          onPress={() => setRestoreAttempt((value) => value + 1)}
+        />
+      )}
+      {intent?.payload && (
+        <AppButton
+          label="Restore original draft"
+          icon="rotate-ccw"
+          variant="ghost"
+          disabled={busy}
+          onPress={() => applyForm(intentRef.current!.form)}
+        />
+      )}
+      {intent?.invoiceId && (
+        <AppButton
+          label="Review saved invoice"
+          icon="edit"
+          variant="ghost"
+          disabled={busy}
+          onPress={() =>
+            router.push({
+              pathname: "/invoices/edit/[id]",
+              params: { id: intent.invoiceId! },
+            })
+          }
+        />
+      )}
 
       <View style={{ gap: 16 }}>
         {canSpeak ? (
@@ -460,7 +704,7 @@ export default function InvoiceScreen() {
             </AppText>
             <AppButton
               label={
-                voiceDraft.isPending
+                voiceDraft.isPending || voiceApplying
                   ? "Drafting…"
                   : recording
                     ? "Stop & draft"
@@ -469,80 +713,21 @@ export default function InvoiceScreen() {
               variant="ghost"
               icon={recording ? "square" : "mic"}
               onPress={recording ? stopAndDraft : startRecording}
-              loading={voiceDraft.isPending}
-              // parties.isLoading: the buyer list must be loaded before a
-              // draft applies, or a valid suggestion gets discarded as
-              // "not in your list".
-              disabled={voiceDraft.isPending || busy || parties.isLoading}
+              loading={voiceDraft.isPending || voiceApplying}
+              disabled={
+                voiceDraft.isPending || voiceApplying || busy || !verified
+              }
             />
           </Card>
         ) : null}
 
-        <View style={{ gap: 8 }}>
-          <AppText variant="heading">Buyer</AppText>
-          {parties.isLoading ? (
-            <AppText variant="body" color={colors.mutedForeground}>
-              Loading buyers…
-            </AppText>
-          ) : buyers.length === 0 ? (
-            <Card>
-              <AppText variant="body" color={colors.mutedForeground}>
-                No buyers found. Add a buyer in the console before invoicing.
-              </AppText>
-            </Card>
-          ) : (
-            <View
-              style={{ gap: 8 }}
-              accessibilityRole="radiogroup"
-              accessibilityLabel="Buyer"
-            >
-              {buyers.map((buyer) => {
-                const selected = buyer.id === buyerPartyId;
-                return (
-                  <Pressable
-                    key={buyer.id}
-                    onPress={() => setBuyerPartyId(buyer.id)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={
-                      buyer.tin
-                        ? `${buyer.legalName}, TIN ${buyer.tin}`
-                        : buyer.legalName
-                    }
-                  >
-                    <Card
-                      style={{
-                        borderColor: selected ? colors.primary : colors.border,
-                        borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
-                      }}
-                    >
-                      <View style={rowBetween}>
-                        <View style={{ flex: 1 }}>
-                          <AppText variant="label">{buyer.legalName}</AppText>
-                          {buyer.tin ? (
-                            <AppText variant="caption" color={colors.mutedForeground}>
-                              TIN {buyer.tin}
-                            </AppText>
-                          ) : null}
-                        </View>
-                        {selected ? (
-                          <Feather name="check-circle" size={20} color={colors.primary} />
-                        ) : (
-                          <Feather name="circle" size={20} color={colors.mutedForeground} />
-                        )}
-                      </View>
-                    </Card>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-          {errorFor("buyerPartyId") ? (
-            <AppText variant="caption" color={colors.destructiveText}>
-              {errorFor("buyerPartyId")}
-            </AppText>
-          ) : null}
-        </View>
+        <BuyerPicker
+          picker={buyerPicker}
+          selectedId={buyerPartyId}
+          onSelect={setBuyerPartyId}
+          disabled={busy || voiceDraft.isPending || voiceApplying}
+          error={errorFor("buyerPartyId")}
+        />
 
         <TextField
           label="Invoice number"
@@ -602,7 +787,10 @@ export default function InvoiceScreen() {
         {fieldErrors.length > 0 ? (
           <View style={{ gap: 4 }}>
             {fieldErrors.map((e, i) => (
-              <View key={`${e.field}-${i}`} style={{ flexDirection: "row", gap: 6 }}>
+              <View
+                key={`${e.field}-${i}`}
+                style={{ flexDirection: "row", gap: 6 }}
+              >
                 <Badge label={humanizeFieldPath(e.field)} tone="critical" />
                 <AppText
                   variant="caption"
@@ -621,14 +809,26 @@ export default function InvoiceScreen() {
           icon="send"
           onPress={handleSubmit}
           loading={busy}
-          disabled={busy}
+          disabled={
+            busy ||
+            !verified ||
+            voiceDraft.isPending ||
+            voiceApplying ||
+            (!!buyerPartyId && !buyerPicker.selected)
+          }
         />
         <AppButton
           label="Reset form"
           variant="ghost"
           icon="rotate-ccw"
-          onPress={resetForm}
-          disabled={busy}
+          onPress={requestReset}
+          disabled={
+            createInvoice.isPending ||
+            validateInvoice.isPending ||
+            submitInvoice.isPending ||
+            voiceDraft.isPending ||
+            voiceApplying
+          }
         />
       </View>
     </ScrollHost>

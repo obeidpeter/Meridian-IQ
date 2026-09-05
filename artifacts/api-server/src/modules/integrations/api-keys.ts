@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import {
   getDb,
+  getSystemDb,
   pool,
   firmApiKeysTable,
   type FirmApiKeyRow,
@@ -37,7 +38,9 @@ export const MACHINE_CAPABILITIES = [
   "statement.write",
 ] as const satisfies readonly Capability[];
 
-const MACHINE_CAPABILITY_SET: ReadonlySet<string> = new Set(MACHINE_CAPABILITIES);
+const MACHINE_CAPABILITY_SET: ReadonlySet<string> = new Set(
+  MACHINE_CAPABILITIES,
+);
 
 // Key format: `mk_<6 hex chars>_<32 base64url chars>` (42 chars total).
 // key_prefix ("mk_" + 6 hex) is the displayable identifier and the auth-time
@@ -126,7 +129,9 @@ export async function mintFirmApiKey(
   return { row, secret };
 }
 
-export async function listFirmApiKeys(firmId: string): Promise<FirmApiKeyRow[]> {
+export async function listFirmApiKeys(
+  firmId: string,
+): Promise<FirmApiKeyRow[]> {
   return getDb()
     .select()
     .from(firmApiKeysTable)
@@ -207,7 +212,7 @@ export async function resolveApiKeyPrincipal(
   // Prefix is a locator, not an identity: compare the presented hash against
   // every candidate (collisions are vanishingly rare; the bound keeps a
   // pathological table from turning auth into a scan).
-  const candidates = await getDb()
+  const candidates = await getSystemDb("authentication")
     .select()
     .from(firmApiKeysTable)
     .where(eq(firmApiKeysTable.keyPrefix, keyPrefix))

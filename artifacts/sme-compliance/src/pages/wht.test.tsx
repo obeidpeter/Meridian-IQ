@@ -123,6 +123,18 @@ describe("display vocabulary", () => {
 });
 
 describe("WHT credits list", () => {
+  test("the read-only table can be keyboard-scrolled without adding row actions", () => {
+    harness.data = list([credit()]);
+    renderPage();
+    const table = screen.getByRole("table", { name: "WHT credits" });
+    const scroller = screen.getByRole("group", { name: "WHT credits" });
+    expect(table.parentElement).toBe(scroller);
+    expect(scroller.tabIndex).toBe(0);
+    expect(scroller.classList.contains("overflow-x-auto")).toBe(true);
+    expect(scroller.classList.contains("focus-visible:ring-2")).toBe(true);
+    expect(table.querySelector("button, a, input")).toBeNull();
+  });
+
   test("rows show invoice, category label, amount, date and status pill", () => {
     harness.data = list(
       [
@@ -157,9 +169,7 @@ describe("WHT credits list", () => {
     expect(screen.getByTestId("pill-wht-whc-2").textContent).toBe(
       "Credit note received",
     );
-    expect(screen.getByTestId("pill-wht-whc-2").className).toContain(
-      "emerald",
-    );
+    expect(screen.getByTestId("pill-wht-whc-2").className).toContain("emerald");
   });
 
   test("the totals strip counts awaiting (with the amount) and received", () => {

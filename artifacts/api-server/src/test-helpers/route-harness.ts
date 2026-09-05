@@ -1,4 +1,5 @@
 import type { AddressInfo } from "node:net";
+import { randomUUID } from "node:crypto";
 import express from "express";
 import { jsonBodyParser } from "../lib/body.ts";
 import { errorHandler } from "../middleware/error.ts";
@@ -10,6 +11,16 @@ import type { Principal } from "../modules/auth/rbac.ts";
 // state is per-file because node:test runs one process per file.
 
 export const JSON_HEADERS = { "content-type": "application/json" };
+
+// Allocate once per logical command; replay tests explicitly reuse the returned
+// headers (or pass the original key), rather than deriving keys from payloads.
+export function jsonCommandHeaders(idempotencyKey = randomUUID()) {
+  return {
+    ...JSON_HEADERS,
+    "x-meridian-csrf": "1",
+    "x-idempotency-key": idempotencyKey,
+  };
+}
 
 export function appFor(principal: Principal, router: express.Router) {
   const app = express();

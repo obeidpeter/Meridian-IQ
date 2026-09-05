@@ -24,6 +24,7 @@ import type {
 } from "@workspace/api-client-react";
 import {
   beginOperation,
+  operationSessionKey,
   updateOperation,
   useActionPolicyControls,
   useClerkActionsDialog,
@@ -90,7 +91,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   // but no buttons that could only ever 403.
   const { data: me } = useGetMe();
   const canAct = !!me?.capabilities.includes("invoice.submit");
-  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const operationKey = operationSessionKey(me);
   const execute = useExecuteAction();
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },

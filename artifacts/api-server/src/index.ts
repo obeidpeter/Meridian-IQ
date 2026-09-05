@@ -1,6 +1,7 @@
 import app from "./app";
 import {
   pool,
+  closeDatabasePools,
   applyMigrations,
   applyGuardrailMigrations,
   requireDatabaseUrl,
@@ -277,7 +278,7 @@ async function main(): Promise<void> {
     markUnready,
     stopWorker,
     awaitWorkerIdle,
-    closePool: () => pool.end(),
+    closePool: closeDatabasePools,
     exit: (code) => process.exit(code),
     log: logger,
   });

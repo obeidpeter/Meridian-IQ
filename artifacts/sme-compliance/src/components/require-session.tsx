@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { expireSession } from "@workspace/web-ui";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { FileCheck2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,6 @@ import { roleLabel, roleHomeHref } from "@workspace/format";
 // This app serves SME client and firm users.
 const ALLOWED = ["firm_admin", "firm_staff", "client_user"];
 const PORTAL = "/login";
-
 
 function BrandSplash({
   title,
@@ -71,6 +71,10 @@ export function RequireSession({ children }: { children: ReactNode }) {
     query: { queryKey: getGetMeQueryKey(), retry: false },
   });
 
+  useEffect(() => {
+    if (isError && errorStatus(error) === 401) void expireSession();
+  }, [isError, error]);
+
   if (isLoading) {
     return (
       <BrandSplash
@@ -105,12 +109,6 @@ export function RequireSession({ children }: { children: ReactNode }) {
   }
 
   if (isError || !me) {
-    // Send the portal the page this session died on so sign-in can land
-    // back here instead of the workspace root.
-    const returnTo = encodeURIComponent(
-      window.location.pathname + window.location.search,
-    );
-    window.location.href = `${PORTAL}?returnTo=${returnTo}&reason=expired`;
     return null;
   }
 

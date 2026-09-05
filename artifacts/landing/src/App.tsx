@@ -8,13 +8,14 @@ import {
 } from "react";
 import {
   QueryClient,
+  MutationCache,
   QueryClientProvider,
   useQueryClient,
 } from "@tanstack/react-query";
 import {
   useGetMe,
   useLogin,
-  useLogout,
+  logout,
   useRevokeSessions,
   useChangePassword,
   useTotpChallenge,
@@ -27,8 +28,13 @@ import {
 } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
 import { pillClasses } from "@workspace/format";
-import { trackUsabilityEvent } from "@workspace/web-ui";
-import QRCode from "qrcode";
+import {
+  trackUsabilityEvent,
+  lazyRoute,
+  SessionBoundary,
+  signOutAndRedirect,
+  webSession,
+} from "@workspace/web-ui";
 import {
   FileCheck2,
   Building2,
@@ -69,12 +75,19 @@ import {
   resolveReturnTo,
   sanitizeReturnTo,
 } from "@/lib/return-to";
-import LandingPage from "@/LandingPage";
-import { AcceptInvite } from "@/AcceptInvite";
-import { ResetPassword } from "@/ResetPassword";
-import InvoiceRoom from "@/InvoiceRoom";
+const LandingPage = lazyRoute(() => import("@/LandingPage"));
+const AcceptInvite = lazyRoute(() =>
+  import("@/AcceptInvite").then((module) => ({ default: module.AcceptInvite })),
+);
+const ResetPassword = lazyRoute(() =>
+  import("@/ResetPassword").then((module) => ({
+    default: module.ResetPassword,
+  })),
+);
+const InvoiceRoom = lazyRoute(() => import("@/InvoiceRoom"));
 
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache(webSession.mutationCacheOptions),
   defaultOptions: {
     queries: {
       retry: (count, err: unknown) => {
@@ -321,6 +334,7 @@ function RedirectingPanel({
 
 function SignInPanel() {
   const qc = useQueryClient();
+  const authGeneration = useRef(webSession.getGeneration());
   const login = useLogin();
   const totpChallenge = useTotpChallenge();
   const [email, setEmail] = useState("");
@@ -360,8 +374,12 @@ function SignInPanel() {
   // the default workspace for the membership. A full navigation, so the app
   // boots against the fresh session cookie.
   const completeSignIn = async (me: Me): Promise<boolean> => {
+    if (authGeneration.current !== webSession.getGeneration()) return true;
+    if (!(await webSession.startSession())) return true;
+    authGeneration.current = webSession.getGeneration();
     trackUsabilityEvent("login_success", "login");
     await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    if (authGeneration.current !== webSession.getGeneration()) return true;
     const target =
       resolveReturnTo(arrival.returnTo, me.role, APPS) ??
       defaultWorkspaceFor(me);
@@ -519,7 +537,7 @@ function SignInPanel() {
               className="h-12 border-slate-300 bg-white px-4 font-mono text-lg tracking-[0.25em] shadow-sm"
               data-testid="input-totp-code"
             />
-            <p id="totp-help" className="text-xs text-slate-500">
+            <p id="totp-help" className="text-xs text-slate-600">
               Your app shows a new code every 30 seconds. A recovery code also
               works here. For security this step expires five minutes after you
               entered your password (
@@ -696,7 +714,7 @@ function SignInPanel() {
         </Button>
       </form>
 
-      <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+      <div className="mt-4 flex items-center gap-2 text-xs text-slate-600">
         <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
         Your connection is secure. You only see what your account allows.
       </div>
@@ -974,12 +992,15 @@ function TotpSecurityCard() {
       return () => {
         active = false;
       };
-    void QRCode.toDataURL(material.otpauthUri, {
-      width: 192,
-      margin: 1,
-      errorCorrectionLevel: "M",
-      color: { dark: "#0e4c45", light: "#ffffff" },
-    })
+    void import("qrcode")
+      .then(({ default: QRCode }) =>
+        QRCode.toDataURL(material.otpauthUri, {
+          width: 192,
+          margin: 1,
+          errorCorrectionLevel: "M",
+          color: { dark: "#0e4c45", light: "#ffffff" },
+        }),
+      )
       .then((url) => {
         if (active) setQrDataUrl(url);
       })
@@ -1442,8 +1463,6 @@ function TotpSecurityCard() {
 }
 
 function SignedInPanel({ me }: { me: Me }) {
-  const qc = useQueryClient();
-  const logout = useLogout();
   const revokeSessions = useRevokeSessions();
   const [signingOut, setSigningOut] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
@@ -1452,28 +1471,7 @@ function SignedInPanel({ me }: { me: Me }) {
 
   const signOut = async () => {
     setSigningOut(true);
-    try {
-      await logout.mutateAsync();
-    } catch {
-      /* best effort — the cookie may already be gone */
-    }
-    for (const storage of [window.localStorage, window.sessionStorage]) {
-      for (let index = storage.length - 1; index >= 0; index--) {
-        const key = storage.key(index);
-        if (
-          key?.startsWith("meridianiq:invoice-draft") ||
-          key?.startsWith("meridianiq:recent-") ||
-          key?.startsWith("meridianiq:work-draft:")
-        ) {
-          storage.removeItem(key);
-        }
-      }
-    }
-    // Reset (not just invalidate) every cached query: data from the previous
-    // account is dropped immediately and active queries — /me here — refetch,
-    // flipping the panel back to the sign-in form.
-    await qc.resetQueries();
-    setSigningOut(false);
+    await signOutAndRedirect((signal) => logout({ signal }));
   };
 
   const signOutEverywhere = async () => {
@@ -1481,13 +1479,7 @@ function SignedInPanel({ me }: { me: Me }) {
     try {
       await revokeSessions.mutateAsync();
       trackUsabilityEvent("sessions_revoked", "account_security");
-      for (const storage of [window.localStorage, window.sessionStorage]) {
-        for (let index = storage.length - 1; index >= 0; index--) {
-          const key = storage.key(index);
-          if (key?.startsWith("meridianiq:")) storage.removeItem(key);
-        }
-      }
-      await qc.resetQueries();
+      await signOutAndRedirect(() => Promise.resolve());
     } catch (error) {
       setRevokeError(
         serverErrorFrom(error) ??
@@ -1676,7 +1668,10 @@ const ACCESS_PATHS = [
 
 function AccessStory() {
   return (
-    <section className="relative hidden min-h-screen overflow-hidden bg-[#0e4c45] text-white lg:flex lg:flex-col">
+    <aside
+      aria-labelledby="access-story-title"
+      className="relative hidden min-h-screen overflow-hidden bg-[#0e4c45] text-white lg:flex lg:flex-col"
+    >
       <div
         className="absolute inset-y-0 right-0 w-px bg-[#c9a227]/60"
         aria-hidden="true"
@@ -1694,7 +1689,7 @@ function AccessStory() {
             <span className="block text-lg font-extrabold leading-none">
               MeridianIQ
             </span>
-            <span className="mt-1 block text-[11px] font-semibold text-white/50">
+            <span className="mt-1 block text-[11px] font-semibold text-white/65">
               Invoicing, done right
             </span>
           </span>
@@ -1713,7 +1708,10 @@ function AccessStory() {
           <p className="text-xs font-extrabold uppercase text-[#e9cf78]">
             One sign-in for everything
           </p>
-          <h2 className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl">
+          <h2
+            id="access-story-title"
+            className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl"
+          >
             One account. The right workspace.
           </h2>
           <p className="mt-6 max-w-lg text-base leading-7 text-white/65">
@@ -1737,7 +1735,7 @@ function AccessStory() {
               </span>
               <span>
                 <span className="block text-sm font-extrabold">{title}</span>
-                <span className="mt-0.5 block text-xs text-white/50">
+                <span className="mt-0.5 block text-xs text-white/65">
                   {detail}
                 </span>
               </span>
@@ -1746,7 +1744,7 @@ function AccessStory() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/55">
+        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/65">
           <span className="inline-flex items-center gap-2">
             <ShieldCheck className="size-4 text-[#e9cf78]" aria-hidden="true" />
             Access by role
@@ -1765,11 +1763,11 @@ function AccessStory() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/35 xl:px-14">
+      <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/65 xl:px-14">
         <span>Lagos, Nigeria</span>
         <span>Made for Nigerian invoicing</span>
       </div>
-    </section>
+    </aside>
   );
 }
 
@@ -1792,7 +1790,7 @@ function AccessPortal({
       </a>
       <AccessStory />
 
-      <section className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
           <a
             href="/"
@@ -1842,7 +1840,7 @@ function AccessPortal({
           </div>
         </main>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-500 sm:px-10 xl:px-16">
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-600 sm:px-10 xl:px-16">
           <span>Sign-in protected. Access by role.</span>
           <a
             className="inline-flex min-h-6 items-center font-bold hover:text-slate-900"
@@ -1851,12 +1849,18 @@ function AccessPortal({
             Penalty calculator
           </a>
         </footer>
-      </section>
+      </div>
     </div>
   );
 }
 
 function Portal() {
+  const reason = new URLSearchParams(window.location.search).get("reason");
+  const signedOut = reason === "local-signout" || reason === "signed-out";
+  const [revoking, setRevoking] = useState(false);
+  const [revocationConfirmed, setRevocationConfirmed] = useState(
+    reason === "signed-out",
+  );
   const {
     data: me,
     isLoading,
@@ -1864,7 +1868,7 @@ function Portal() {
     error,
     refetch,
   } = useGetMe({
-    query: { queryKey: getGetMeQueryKey(), retry: false },
+    query: { queryKey: getGetMeQueryKey(), retry: false, enabled: !signedOut },
   });
   const hasValidSession =
     typeof me?.role === "string" && me.role.trim().length > 0;
@@ -1876,7 +1880,38 @@ function Portal() {
   if (!hasValidSession) {
     return (
       <AccessPortal outage={isOutage} onRetry={() => void refetch()}>
-        {isLoading ? <SessionSkeleton /> : <SignInPanel />}
+        {signedOut && (
+          <div
+            role="status"
+            className="mb-4 rounded-md border border-border bg-muted p-3 text-sm"
+          >
+            {revocationConfirmed
+              ? "You are signed out."
+              : "Signed out locally. Server sign-out could not be confirmed; the session may still be active."}
+            {!revocationConfirmed && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3"
+                disabled={revoking}
+                onClick={async () => {
+                  setRevoking(true);
+                  try {
+                    await logout();
+                    setRevocationConfirmed(true);
+                  } catch {
+                    /* Keep the unconfirmed state visible. */
+                  } finally {
+                    setRevoking(false);
+                  }
+                }}
+              >
+                Retry server sign-out
+              </Button>
+            )}
+          </div>
+        )}
+        {!signedOut && isLoading ? <SessionSkeleton /> : <SignInPanel />}
       </AccessPortal>
     );
   }
@@ -2011,7 +2046,9 @@ export default function App() {
   if (pathname === "/accept-invite") {
     return (
       <QueryClientProvider client={queryClient}>
-        <AcceptInvite />
+        <SessionBoundary client={queryClient}>
+          <AcceptInvite />
+        </SessionBoundary>
       </QueryClientProvider>
     );
   }
@@ -2019,7 +2056,9 @@ export default function App() {
   if (pathname === "/reset-password") {
     return (
       <QueryClientProvider client={queryClient}>
-        <ResetPassword />
+        <SessionBoundary client={queryClient}>
+          <ResetPassword />
+        </SessionBoundary>
       </QueryClientProvider>
     );
   }
@@ -2027,7 +2066,9 @@ export default function App() {
   if (pathname === "/invoice-room") {
     return (
       <QueryClientProvider client={queryClient}>
-        <InvoiceRoom />
+        <SessionBoundary client={queryClient}>
+          <InvoiceRoom />
+        </SessionBoundary>
       </QueryClientProvider>
     );
   }
@@ -2038,7 +2079,9 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Portal />
+      <SessionBoundary client={queryClient}>
+        <Portal />
+      </SessionBoundary>
     </QueryClientProvider>
   );
 }

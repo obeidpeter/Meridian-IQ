@@ -288,7 +288,7 @@ export async function transcribeAndLedger(
           promptTokens,
           completionTokens: 0,
         },
-        permit?.ledgerDb,
+        permit ?? undefined,
       );
       throw new DomainError(
         "VOICE_UNREADABLE",
@@ -309,7 +309,7 @@ export async function transcribeAndLedger(
         promptTokens,
         completionTokens: Math.max(1, Math.ceil(transcript.length / 4)),
       },
-      permit?.ledgerDb,
+      permit ?? undefined,
     );
     return transcript;
   } finally {

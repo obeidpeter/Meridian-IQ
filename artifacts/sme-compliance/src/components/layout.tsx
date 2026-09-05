@@ -1,3 +1,9 @@
+import { customFetch } from "@workspace/api-client-react";
+import {
+  signOutAndRedirect,
+  SessionOperationRecovery,
+  useOperationNavigation,
+} from "@workspace/web-ui";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -36,11 +42,7 @@ import {
   PanelsTopLeft,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
-import {
-  searchWorkspace,
-  useGetMe,
-  useLogout,
-} from "@workspace/api-client-react";
+import { searchWorkspace, useGetMe, logout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -506,11 +508,12 @@ function AccountMenu({
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
+  const openOperation = useOperationNavigation("app", navigate);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { data: me } = useGetMe();
-  const logout = useLogout();
+  const [signingOut, setSigningOut] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const didMount = useRef(false);
 
@@ -524,27 +527,8 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [location]);
 
   const signOut = async () => {
-    try {
-      await logout.mutateAsync();
-    } catch {
-      // Cookie clearing is best effort; leave the workspace regardless.
-    }
-    for (const storage of [window.localStorage, window.sessionStorage]) {
-      for (let index = storage.length - 1; index >= 0; index--) {
-        const key = storage.key(index);
-        if (
-          key?.startsWith("meridianiq:invoice-draft") ||
-          key?.startsWith("meridianiq:recent-") ||
-          key?.startsWith("meridianiq:pinned-") ||
-          key?.startsWith("meridianiq:saved-view-") ||
-          key?.startsWith("meridianiq:operations:") ||
-          key?.startsWith("meridianiq:work-draft:")
-        ) {
-          storage.removeItem(key);
-        }
-      }
-    }
-    window.location.href = "/login";
+    setSigningOut(true);
+    await signOutAndRedirect((signal) => logout({ signal }));
   };
 
   const capabilities = new Set(me?.capabilities ?? []);
@@ -724,7 +708,7 @@ export function Layout({ children }: { children: ReactNode }) {
     me,
     roleContext,
     onSignOut: signOut,
-    signingOut: logout.isPending,
+    signingOut: signingOut,
   };
 
   return (
@@ -749,7 +733,7 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <div className="mi-mobilebar">
+      <header className="mi-mobilebar">
         <BrandMark />
         <div className="mi-mobilebar__actions">
           <Button
@@ -761,7 +745,7 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <Search aria-hidden="true" />
           </Button>
-          <NotificationBell />
+          <NotificationBell triggerClassName="text-white hover:bg-white/10 hover:text-white focus-visible:text-white focus-visible:ring-white focus-visible:ring-offset-0" />
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button
@@ -783,11 +767,11 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
         </div>
-      </div>
-      <div className="mi-mobilebar__context">
+      </header>
+      <section className="mi-mobilebar__context" aria-label="Current workspace">
         <p>{workspaceName}</p>
         <p>{pageTitle}</p>
-      </div>
+      </section>
 
       <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
         <NavLinks {...navProps} />
@@ -822,13 +806,18 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
             <NotificationBell />
             <span className="mi-topbar__divider" aria-hidden="true" />
+            <SessionOperationRecovery
+              me={me}
+              request={customFetch}
+              onOpen={openOperation}
+            />
             <ReleaseBadge tag={me?.releaseTag} />
             <AccountMenu
               me={me}
               roleContext={roleContext}
               onOpenShortcuts={() => setShortcutsOpen(true)}
               onSignOut={signOut}
-              signingOut={logout.isPending}
+              signingOut={signingOut}
             />
           </div>
         </header>

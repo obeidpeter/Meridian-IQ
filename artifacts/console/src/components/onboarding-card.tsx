@@ -39,7 +39,11 @@ import { pillClasses, type BadgeTone } from "@/lib/format";
 import { ClipboardCheck, Download, RefreshCw } from "lucide-react";
 import { onboardingStepLabel as sharedOnboardingStepLabel } from "@workspace/format/onboarding-copy";
 import { triggerDownload } from "@/lib/download";
-import { beginOperation, updateOperation } from "@workspace/web-ui";
+import {
+  beginOperation,
+  operationSessionKey,
+  updateOperation,
+} from "@workspace/web-ui";
 
 // Client onboarding checklist (Onboard with Clerk Phase 1): the run the firm
 // opens when it takes on a new client. Every step's state is DETECTED
@@ -200,7 +204,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
 
   const { data: me } = useGetMe();
   const canWrite = !!me?.capabilities.includes("engagement.write");
-  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const operationKey = operationSessionKey(me);
 
   const [skipPanelKey, setSkipPanelKey] = useState<string | null>(null);
   const [skipReason, setSkipReason] = useState("");

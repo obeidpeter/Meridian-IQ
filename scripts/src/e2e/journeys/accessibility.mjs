@@ -1,10 +1,18 @@
 import { collectAccessibilityIssues } from "../accessibility.mjs";
 import { apiLogin, apiLogout } from "./shared.mjs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 const ROUTE_GROUPS = [
   {
     identity: null,
-    routes: ["/", "/login", "/reset-password", "/penalty-calculator/"],
+    routes: [
+      "/",
+      "/login",
+      "/reset-password",
+      "/invoice-room",
+      "/penalty-calculator/",
+    ],
   },
   {
     identity: "owner@adaezefoods.example",
@@ -55,6 +63,7 @@ const ROUTE_GROUPS = [
       "/console/access-review",
       "/console/integrations",
       "/console/api-access",
+      "/console/data-room",
       "/console/statements",
       "/console/clerk/claims",
     ],
@@ -91,6 +100,7 @@ const ROUTE_GROUPS = [
 ];
 
 const VIEWPORTS = [
+  ["reflow", { width: 320, height: 900 }],
   ["mobile", { width: 390, height: 844 }],
   ["desktop", { width: 1360, height: 900 }],
 ];
@@ -113,7 +123,17 @@ export async function journeyAccessibilityMatrix(page, BASE, check) {
             .catch(() => {});
           await page.waitForSelector("h1", { timeout: 8_000 }).catch(() => {});
           await page.waitForTimeout(300);
-          const issues = await collectAccessibilityIssues(page);
+          const issues = await collectAccessibilityIssues(page, {
+            reportAxe: (results) => {
+              const dir = path.resolve("test-results/accessibility");
+              mkdirSync(dir, { recursive: true });
+              const name = `${route.replace(/[^a-z0-9]/gi, "_")}-${viewportName}`;
+              writeFileSync(
+                path.join(dir, `${name}.json`),
+                JSON.stringify(results, null, 2),
+              );
+            },
+          });
           check(
             `accessibility matrix: ${route} (${viewportName})`,
             issues.length === 0,

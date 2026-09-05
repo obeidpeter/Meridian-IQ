@@ -1,3 +1,9 @@
+import { customFetch } from "@workspace/api-client-react";
+import {
+  signOutAndRedirect,
+  SessionOperationRecovery,
+  useOperationNavigation,
+} from "@workspace/web-ui";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -15,11 +21,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import type { Me } from "@workspace/api-client-react";
-import {
-  searchWorkspace,
-  useGetMe,
-  useLogout,
-} from "@workspace/api-client-react";
+import { searchWorkspace, useGetMe, logout } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -188,10 +190,11 @@ function NavLinks({
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
+  const openOperation = useOperationNavigation("buyer", navigate);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const { data: me } = useGetMe();
-  const logout = useLogout();
+  const [signingOut, setSigningOut] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const isFirstRender = useRef(true);
 
@@ -205,12 +208,8 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [location]);
 
   const signOut = async () => {
-    try {
-      await logout.mutateAsync();
-    } catch {
-      // Cookie clearing is best effort; leave the workspace regardless.
-    }
-    window.location.href = "/login";
+    setSigningOut(true);
+    await signOutAndRedirect((signal) => logout({ signal }));
   };
 
   const activeLink = [...LINKS]
@@ -232,7 +231,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const remoteSearch = useCallback(
     async (query: string, signal: AbortSignal): Promise<CommandItem[]> => {
       trackUsabilityEvent("global_search_started", "global_search");
-      const results = await searchWorkspace({ q: query, limit: 14 }, { signal });
+      const results = await searchWorkspace(
+        { q: query, limit: 14 },
+        { signal },
+      );
       if (results.length === 0) {
         trackUsabilityEvent("zero_result_search", "global_search");
       }
@@ -254,11 +256,11 @@ export function Layout({ children }: { children: ReactNode }) {
     location,
     me,
     onSignOut: signOut,
-    signingOut: logout.isPending,
+    signingOut: signingOut,
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f6f7] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen bg-[#f3f6f7] dark:bg-background md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -274,7 +276,7 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <div className="sticky top-0 z-30 flex items-center justify-between bg-[#0b2030] px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between bg-[#0b2030] px-4 py-3 md:hidden">
         <BrandMark />
         <div className="flex items-center gap-1">
           <Button
@@ -286,7 +288,7 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <Search aria-hidden="true" />
           </Button>
-          <NotificationBell />
+          <NotificationBell triggerClassName="text-white hover:bg-white/10 hover:text-white focus-visible:text-white focus-visible:ring-white focus-visible:ring-offset-0" />
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button
@@ -308,22 +310,25 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
         </div>
-      </div>
-      <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+      </header>
+      <section
+        className="border-b border-slate-200 bg-white px-4 py-3 md:hidden"
+        aria-label="Current workspace"
+      >
         <p className="text-[11px] font-bold text-sky-700">
           Buyer finance workspace
         </p>
         <p className="mt-0.5 truncate text-sm font-extrabold text-slate-950">
           {pageTitle}
         </p>
-      </div>
+      </section>
 
       <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
         <NavLinks {...navProps} />
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white/95 px-8 backdrop-blur md:flex lg:px-10">
+        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white/95 px-8 backdrop-blur dark:bg-white dark:text-slate-900 dark:[&_button:hover]:bg-slate-100 dark:[&_button:hover]:text-slate-900 md:flex lg:px-10">
           <div className="min-w-0">
             <p className="text-[11px] font-bold text-sky-700">
               Buyer finance workspace
@@ -349,6 +354,11 @@ export function Layout({ children }: { children: ReactNode }) {
                 Ctrl K
               </kbd>
             </Button>
+            <SessionOperationRecovery
+              me={me}
+              request={customFetch}
+              onOpen={openOperation}
+            />
             <NotificationBell />
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
               <LockKeyhole

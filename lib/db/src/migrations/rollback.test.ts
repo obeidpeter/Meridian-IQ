@@ -2,6 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
 import {
+  RELIABILITY_LADDER,
+  reliabilityRollbackFixtures,
+} from "./rollback-reliability.ts";
+import {
   applyMigrations,
   rollbackLast,
   appliedVersions,
@@ -548,6 +552,8 @@ const LADDER: LadderStep[] = [
   },
 ];
 
+LADDER.push(...RELIABILITY_LADDER);
+
 // Markers that hold in the fully-migrated state: every step's atTop except
 // those a later migration supersedes.
 const FULLY_APPLIED = LADDER.filter(
@@ -593,6 +599,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     await applyMigrations(pool);
     await assertProbes(pool, FULLY_APPLIED, "after apply");
+    const verifyRetainedData = await reliabilityRollbackFixtures(pool);
     const versions = await appliedVersions(pool);
     for (const m of migrations) {
       assert.ok(
@@ -602,7 +609,8 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     }
 
     // Roll back newest first; after each step the rolled-back migration's
-    // markers must be gone and the next-older migration's markers must survive.
+    // down-contract probes must hold and the next-older markers must survive.
+    // Additive rollback steps deliberately retain data and security boundaries.
     for (let i = LADDER.length - 1; i >= 0; i--) {
       const step = LADDER[i];
       const rolled = await rollbackLast(pool);
@@ -616,6 +624,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
         step.afterRollback,
         `after rolling back ${step.version}`,
       );
+      await verifyRetainedData.afterRollback(step.version);
       if (i > 0) {
         await assertProbes(
           pool,
@@ -634,6 +643,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     // Leave the database in the fully-migrated state for the running app.
     await applyMigrations(pool);
     await assertProbes(pool, FULLY_APPLIED, "after re-apply");
+    await verifyRetainedData.afterReapply();
   } finally {
     await pool.end();
   }

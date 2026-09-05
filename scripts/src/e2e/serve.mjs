@@ -28,6 +28,9 @@ const MIME = {
 };
 
 const APPS = [
+  // The packaged native server's dynamic manifests are checked separately by
+  // mobile-artifact check; these exact public bytes also participate in parity.
+  { prefix: "/mobile", dir: "artifacts/mobile/dist/static-build", spa: false },
   { prefix: "/console", dir: "artifacts/console/dist/public" },
   { prefix: "/app", dir: "artifacts/sme-compliance/dist/public" },
   { prefix: "/buyer", dir: "artifacts/buyer-portal/dist/public" },
@@ -38,7 +41,7 @@ const APPS = [
   { prefix: "", dir: "artifacts/landing/dist/public" }, // catch-all: portal at "/"
 ];
 
-export function startStaticServer({ port, apiPort }) {
+export function startStaticServer({ port, apiPort, root = ROOT }) {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
 
@@ -72,7 +75,7 @@ export function startStaticServer({ port, apiPort }) {
         url.pathname.startsWith(a.prefix + "/"),
     );
     const rel = url.pathname.slice(app.prefix.length) || "/";
-    const baseDir = path.join(ROOT, app.dir);
+    const baseDir = path.join(root, app.dir);
     let filePath = path.normalize(path.join(baseDir, rel));
     if (!filePath.startsWith(baseDir)) {
       res.writeHead(403);
@@ -80,7 +83,10 @@ export function startStaticServer({ port, apiPort }) {
       return;
     }
     // SPA fallback: anything without a file extension serves index.html
-    if (!existsSync(filePath) || path.extname(filePath) === "") {
+    if (
+      app.spa !== false &&
+      (!existsSync(filePath) || path.extname(filePath) === "")
+    ) {
       filePath = path.join(baseDir, "index.html");
     }
     try {

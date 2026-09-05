@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.98.0
+ * OpenAPI spec version: 0.99.0
  */
 import {
   useMutation,
@@ -102,6 +102,9 @@ import type {
   ClerkMetrics,
   ClerkPartySuggestions,
   ClerkPlanPolicy,
+  ClerkReservationPage,
+  ClerkReservationReconcileInput,
+  ClerkReservationReconcileResult,
   ClerkTierReport,
   ClerkUsage,
   ClientAssignments,
@@ -155,6 +158,7 @@ import type {
   CreditKybCheck,
   CreditNoteInput,
   DashboardSummary,
+  DeleteInvoiceDraftBody,
   DigestImpactReport,
   DoublePaymentCheck,
   DraftCatalogueEntryInput,
@@ -204,6 +208,7 @@ import type {
   Filing,
   FilingList,
   FilingMatrix,
+  FinalizeInvoiceImportRunBody,
   Firm,
   FirmApiKey,
   FirmApiKeyCreated,
@@ -239,6 +244,7 @@ import type {
   GetDashboardSummaryParams,
   GetDoublePaymentCheckParams,
   GetFirmVatPositionsParams,
+  GetInvoiceDraftParams,
   GetMergeImpactParams,
   GetMonthEndCloseParams,
   GetNetCashPositionParams,
@@ -262,6 +268,10 @@ import type {
   HealthStatus,
   IdempotentRoomAction,
   IdentifierCheck,
+  ImportRunChunkInput,
+  ImportRunChunkResponse,
+  ImportRunManifest,
+  ImportRunSuccessResponse,
   IntegrationReadiness,
   IntegrationReliabilityWorkspace,
   IntentEvalOutcome,
@@ -275,6 +285,7 @@ import type {
   InvoiceApproval,
   InvoiceDetail,
   InvoiceDraftResult,
+  InvoiceDraftWriteInput,
   InvoiceImportInput,
   InvoiceImportResult,
   InvoiceInput,
@@ -302,18 +313,24 @@ import type {
   ListClaimsParams,
   ListClerkCasesParams,
   ListClerkEvalRunsParams,
+  ListClerkReservationsParams,
   ListClientStatementsParams,
   ListCollectionAccountsParams,
   ListDeadLettersParams,
   ListEngagementsParams,
   ListErpConnectionsParams,
   ListFilingsParams,
+  ListInvoiceDrafts200,
+  ListInvoiceDraftsParams,
+  ListInvoicesPaged200,
+  ListInvoicesPagedParams,
   ListInvoicesParams,
   ListLineItemSuggestionsParams,
   ListMissingRecurringBillsParams,
   ListNotificationsParams,
   ListObligationsParams,
   ListOnboardingRunsParams,
+  ListOperationsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
   ListPaymentBehaviourParams,
@@ -324,6 +341,7 @@ import type {
   ListWhtCreditsParams,
   ListWorkItemsParams,
   LoginInput,
+  LookupOperationParams,
   MarkNotificationsReadInput,
   MatchAssist,
   MatchDecisionResult,
@@ -356,6 +374,8 @@ import type {
   OnboardingRun,
   OnboardingRunList,
   OpeningPosition,
+  OperationDetail,
+  OperationList,
   OperationalReadiness,
   OperatorBrief,
   OperatorCaseView,
@@ -395,6 +415,11 @@ import type {
   ReconcileResult,
   RecordBankDataRoomAccessInput,
   RecordCreditKybInput,
+  RecoveryBadRequestResponse,
+  RecoveryConflictResponse,
+  RecoveryForbiddenResponse,
+  RecoveryNotFoundResponse,
+  RecoveryUnauthorizedResponse,
   RecurringInvoiceTemplate,
   RecurringInvoiceTemplateInput,
   RecurringInvoiceTemplateUpdateInput,
@@ -417,6 +442,7 @@ import type {
   RunPromptCanaryInput,
   ScoreboardRow,
   SearchWorkspaceParams,
+  ServerInvoiceDraft,
   SettlementEvent,
   SettlementInput,
   SkipOnboardingStepInput,
@@ -5134,6 +5160,90 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getCreateInvoiceMutationOptions(options));
     }
+
+export const getListInvoicesPagedUrl = (params?: ListInvoicesPagedParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoices/page?${stringifiedParams}` : `/api/invoices/page`
+}
+
+/**
+ * @summary Stable cursor-paginated invoice list
+ */
+export const listInvoicesPaged = async (params?: ListInvoicesPagedParams, options?: RequestInit): Promise<ListInvoicesPaged200> => {
+
+  return customFetch<ListInvoicesPaged200>(getListInvoicesPagedUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoicesPagedQueryKey = (params?: ListInvoicesPagedParams,) => {
+    return [
+    `/api/invoices/page`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListInvoicesPagedQueryOptions = <TData = Awaited<ReturnType<typeof listInvoicesPaged>>, TError = ErrorType<BadRequestResponse>>(params?: ListInvoicesPagedParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoicesPaged>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoicesPagedQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoicesPaged>>> = ({ signal }) => listInvoicesPaged(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoicesPaged>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoicesPagedQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoicesPaged>>>
+export type ListInvoicesPagedQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Stable cursor-paginated invoice list
+ */
+
+export function useListInvoicesPaged<TData = Awaited<ReturnType<typeof listInvoicesPaged>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListInvoicesPagedParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoicesPaged>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoicesPagedQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getExportInvoicesCsvUrl = (params?: ExportInvoicesCsvParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -13563,7 +13673,7 @@ export const getApproveInvoiceUrl = (id: string,) => {
  * @summary Record a submission approval on a draft/validated invoice (maker-checker — the approver must differ from the eventual submitter)
  */
 export const approveInvoice = async (id: string,
-    approveInvoiceInput?: ApproveInvoiceInput, options?: RequestInit): Promise<InvoiceApproval> => {
+    approveInvoiceInput: ApproveInvoiceInput, options?: RequestInit): Promise<InvoiceApproval> => {
 
   return customFetch<InvoiceApproval>(getApproveInvoiceUrl(id),
   {
@@ -13579,8 +13689,8 @@ export const approveInvoice = async (id: string,
 
 
 export const getApproveInvoiceMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data?: BodyType<ApproveInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data?: BodyType<ApproveInvoiceInput>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data: BodyType<ApproveInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data: BodyType<ApproveInvoiceInput>}, TContext> => {
 
 const mutationKey = ['approveInvoice'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -13592,7 +13702,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveInvoice>>, {id: string;data?: BodyType<ApproveInvoiceInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveInvoice>>, {id: string;data: BodyType<ApproveInvoiceInput>}> = (props) => {
           const {id,data} = props ?? {};
 
           return  approveInvoice(id,data,requestOptions)
@@ -13606,18 +13716,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ApproveInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof approveInvoice>>>
-    export type ApproveInvoiceMutationBody = BodyType<ApproveInvoiceInput> | undefined
+    export type ApproveInvoiceMutationBody = BodyType<ApproveInvoiceInput>
     export type ApproveInvoiceMutationError = ErrorType<NotFoundResponse | ConflictResponse>
 
     /**
  * @summary Record a submission approval on a draft/validated invoice (maker-checker — the approver must differ from the eventual submitter)
  */
 export const useApproveInvoice = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data?: BodyType<ApproveInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data: BodyType<ApproveInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof approveInvoice>>,
         TError,
-        {id: string;data?: BodyType<ApproveInvoiceInput>},
+        {id: string;data: BodyType<ApproveInvoiceInput>},
         TContext
       > => {
       return useMutation(getApproveInvoiceMutationOptions(options));
@@ -29201,4 +29311,1017 @@ export function useGetWhtRemittance<TData = Awaited<ReturnType<typeof getWhtRemi
 
 
 
+
+export const getListOperationsUrl = (params?: ListOperationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/operations?${stringifiedParams}` : `/api/operations`
+}
+
+/**
+ * Own actor only; current tenant, client scope and non-archived engagement are rechecked. No running or client-asserted results are returned.
+ * @summary List the caller's authorized committed operations
+ */
+export const listOperations = async (params?: ListOperationsParams, options?: RequestInit): Promise<OperationList> => {
+
+  return customFetch<OperationList>(getListOperationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOperationsQueryKey = (params?: ListOperationsParams,) => {
+    return [
+    `/api/operations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListOperationsQueryOptions = <TData = Awaited<ReturnType<typeof listOperations>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse>>(params?: ListOperationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOperations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOperationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOperations>>> = ({ signal }) => listOperations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOperations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOperationsQueryResult = NonNullable<Awaited<ReturnType<typeof listOperations>>>
+export type ListOperationsQueryError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse>
+
+
+/**
+ * @summary List the caller's authorized committed operations
+ */
+
+export function useListOperations<TData = Awaited<ReturnType<typeof listOperations>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse>>(
+ params?: ListOperationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOperations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOperationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLookupOperationUrl = (params: LookupOperationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/operations/lookup?${stringifiedParams}` : `/api/operations/lookup`
+}
+
+/**
+ * A 404 means no authorized committed result is visible, not that the command failed. Retry the original mutation with its same key and payload.
+ * @summary Recover an authorized result by command and request key
+ */
+export const lookupOperation = async (params: LookupOperationParams, options?: RequestInit): Promise<OperationDetail> => {
+
+  return customFetch<OperationDetail>(getLookupOperationUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getLookupOperationQueryKey = (params?: LookupOperationParams,) => {
+    return [
+    `/api/operations/lookup`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getLookupOperationQueryOptions = <TData = Awaited<ReturnType<typeof lookupOperation>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>>(params: LookupOperationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof lookupOperation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getLookupOperationQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof lookupOperation>>> = ({ signal }) => lookupOperation(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof lookupOperation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type LookupOperationQueryResult = NonNullable<Awaited<ReturnType<typeof lookupOperation>>>
+export type LookupOperationQueryError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>
+
+
+/**
+ * @summary Recover an authorized result by command and request key
+ */
+
+export function useLookupOperation<TData = Awaited<ReturnType<typeof lookupOperation>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>>(
+ params: LookupOperationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof lookupOperation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getLookupOperationQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOperationUrl = (id: string,) => {
+
+
+
+
+  return `/api/operations/${id}`
+}
+
+/**
+ * @summary Recover the caller's authorized operation result
+ */
+export const getOperation = async (id: string, options?: RequestInit): Promise<OperationDetail> => {
+
+  return customFetch<OperationDetail>(getGetOperationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOperationQueryKey = (id: string,) => {
+    return [
+    `/api/operations/${id}`
+    ] as const;
+    }
+
+
+export const getGetOperationQueryOptions = <TData = Awaited<ReturnType<typeof getOperation>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOperationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOperation>>> = ({ signal }) => getOperation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOperation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOperationQueryResult = NonNullable<Awaited<ReturnType<typeof getOperation>>>
+export type GetOperationQueryError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>
+
+
+/**
+ * @summary Recover the caller's authorized operation result
+ */
+
+export function useGetOperation<TData = Awaited<ReturnType<typeof getOperation>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOperationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateInvoiceImportRunUrl = () => {
+
+
+
+
+  return `/api/invoice-import-runs`
+}
+
+/**
+ * Persist a random client-generated id before dispatch. Reusing it with the identical manifest returns the current run; a changed manifest conflicts. Maximum 5000 rows per run. Requires invoice.write and current supplier authorization.
+ * @summary Create or recover an immutable resumable import manifest
+ */
+export const createInvoiceImportRun = async (importRunManifest: ImportRunManifest, options?: RequestInit): Promise<ImportRunSuccessResponse> => {
+
+  return customFetch<ImportRunSuccessResponse>(getCreateInvoiceImportRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(importRunManifest)
+  }
+);}
+
+
+
+
+
+export const getCreateInvoiceImportRunMutationOptions = <TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvoiceImportRun>>, TError,{data: BodyType<ImportRunManifest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createInvoiceImportRun>>, TError,{data: BodyType<ImportRunManifest>}, TContext> => {
+
+const mutationKey = ['createInvoiceImportRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInvoiceImportRun>>, {data: BodyType<ImportRunManifest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createInvoiceImportRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateInvoiceImportRunMutationResult = NonNullable<Awaited<ReturnType<typeof createInvoiceImportRun>>>
+    export type CreateInvoiceImportRunMutationBody = BodyType<ImportRunManifest>
+    export type CreateInvoiceImportRunMutationError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>
+
+    /**
+ * @summary Create or recover an immutable resumable import manifest
+ */
+export const useCreateInvoiceImportRun = <TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvoiceImportRun>>, TError,{data: BodyType<ImportRunManifest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createInvoiceImportRun>>,
+        TError,
+        {data: BodyType<ImportRunManifest>},
+        TContext
+      > => {
+      return useMutation(getCreateInvoiceImportRunMutationOptions(options));
+    }
+
+export const getGetInvoiceImportRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoice-import-runs/${id}`
+}
+
+/**
+ * Use after a timeout or refresh to resume from nextChunkIndex. Only the authenticated actor's currently authorized run is visible. Checkpoint and chunks are read consistently.
+ * @summary Read the authorized import checkpoint and committed chunk results
+ */
+export const getInvoiceImportRun = async (id: string, options?: RequestInit): Promise<ImportRunSuccessResponse> => {
+
+  return customFetch<ImportRunSuccessResponse>(getGetInvoiceImportRunUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceImportRunQueryKey = (id: string,) => {
+    return [
+    `/api/invoice-import-runs/${id}`
+    ] as const;
+    }
+
+
+export const getGetInvoiceImportRunQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceImportRun>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceImportRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceImportRunQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceImportRun>>> = ({ signal }) => getInvoiceImportRun(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceImportRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceImportRunQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceImportRun>>>
+export type GetInvoiceImportRunQueryError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>
+
+
+/**
+ * @summary Read the authorized import checkpoint and committed chunk results
+ */
+
+export function useGetInvoiceImportRun<TData = Awaited<ReturnType<typeof getInvoiceImportRun>>, TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceImportRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceImportRunQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCommitInvoiceImportChunkUrl = (id: string,
+    chunkIndex: number,) => {
+
+
+
+
+  return `/api/invoice-import-runs/${id}/chunks/${chunkIndex}`
+}
+
+/**
+ * The server derives the invoice.import key as runId:chunkIndex. Future chunks are rejected until preceding chunks commit. Counts, row indexes and canonical payload hash must match the immutable manifest. A replay returns the exact original response including its original nextChunkIndex; GET the run for the latest checkpoint. Invalid rows are durable outcomes and advance the checkpoint. Chunks remain replayable after finalization.
+ * @summary Atomically commit or replay one manifest chunk
+ */
+export const commitInvoiceImportChunk = async (id: string,
+    chunkIndex: number,
+    importRunChunkInput: ImportRunChunkInput, options?: RequestInit): Promise<ImportRunChunkResponse> => {
+
+  return customFetch<ImportRunChunkResponse>(getCommitInvoiceImportChunkUrl(id,chunkIndex),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(importRunChunkInput)
+  }
+);}
+
+
+
+
+
+export const getCommitInvoiceImportChunkMutationOptions = <TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitInvoiceImportChunk>>, TError,{id: string;chunkIndex: number;data: BodyType<ImportRunChunkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof commitInvoiceImportChunk>>, TError,{id: string;chunkIndex: number;data: BodyType<ImportRunChunkInput>}, TContext> => {
+
+const mutationKey = ['commitInvoiceImportChunk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof commitInvoiceImportChunk>>, {id: string;chunkIndex: number;data: BodyType<ImportRunChunkInput>}> = (props) => {
+          const {id,chunkIndex,data} = props ?? {};
+
+          return  commitInvoiceImportChunk(id,chunkIndex,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CommitInvoiceImportChunkMutationResult = NonNullable<Awaited<ReturnType<typeof commitInvoiceImportChunk>>>
+    export type CommitInvoiceImportChunkMutationBody = BodyType<ImportRunChunkInput>
+    export type CommitInvoiceImportChunkMutationError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>
+
+    /**
+ * @summary Atomically commit or replay one manifest chunk
+ */
+export const useCommitInvoiceImportChunk = <TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitInvoiceImportChunk>>, TError,{id: string;chunkIndex: number;data: BodyType<ImportRunChunkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof commitInvoiceImportChunk>>,
+        TError,
+        {id: string;chunkIndex: number;data: BodyType<ImportRunChunkInput>},
+        TContext
+      > => {
+      return useMutation(getCommitInvoiceImportChunkMutationOptions(options));
+    }
+
+export const getFinalizeInvoiceImportRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoice-import-runs/${id}/finalize`
+}
+
+/**
+ * Requires every manifest chunk to be committed. Idempotent on repeat; never executes the invoice importer. Incomplete runs return 409.
+ * @summary Finalize a fully committed run and recover its aggregate result
+ */
+export const finalizeInvoiceImportRun = async (id: string,
+    finalizeInvoiceImportRunBody?: FinalizeInvoiceImportRunBody, options?: RequestInit): Promise<ImportRunSuccessResponse> => {
+
+  return customFetch<ImportRunSuccessResponse>(getFinalizeInvoiceImportRunUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(finalizeInvoiceImportRunBody)
+  }
+);}
+
+
+
+
+
+export const getFinalizeInvoiceImportRunMutationOptions = <TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof finalizeInvoiceImportRun>>, TError,{id: string;data?: BodyType<FinalizeInvoiceImportRunBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof finalizeInvoiceImportRun>>, TError,{id: string;data?: BodyType<FinalizeInvoiceImportRunBody>}, TContext> => {
+
+const mutationKey = ['finalizeInvoiceImportRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof finalizeInvoiceImportRun>>, {id: string;data?: BodyType<FinalizeInvoiceImportRunBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  finalizeInvoiceImportRun(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FinalizeInvoiceImportRunMutationResult = NonNullable<Awaited<ReturnType<typeof finalizeInvoiceImportRun>>>
+    export type FinalizeInvoiceImportRunMutationBody = BodyType<FinalizeInvoiceImportRunBody> | undefined
+    export type FinalizeInvoiceImportRunMutationError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>
+
+    /**
+ * @summary Finalize a fully committed run and recover its aggregate result
+ */
+export const useFinalizeInvoiceImportRun = <TError = ErrorType<RecoveryBadRequestResponse | RecoveryUnauthorizedResponse | RecoveryForbiddenResponse | RecoveryNotFoundResponse | RecoveryConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof finalizeInvoiceImportRun>>, TError,{id: string;data?: BodyType<FinalizeInvoiceImportRunBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof finalizeInvoiceImportRun>>,
+        TError,
+        {id: string;data?: BodyType<FinalizeInvoiceImportRunBody>},
+        TContext
+      > => {
+      return useMutation(getFinalizeInvoiceImportRunMutationOptions(options));
+    }
+
+export const getListInvoiceDraftsUrl = (params: ListInvoiceDraftsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoice-drafts?${stringifiedParams}` : `/api/invoice-drafts`
+}
+
+/**
+ * @summary List the current user's unfinished drafts for an authorized client
+ */
+export const listInvoiceDrafts = async (params: ListInvoiceDraftsParams, options?: RequestInit): Promise<ListInvoiceDrafts200> => {
+
+  return customFetch<ListInvoiceDrafts200>(getListInvoiceDraftsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoiceDraftsQueryKey = (params?: ListInvoiceDraftsParams,) => {
+    return [
+    `/api/invoice-drafts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListInvoiceDraftsQueryOptions = <TData = Awaited<ReturnType<typeof listInvoiceDrafts>>, TError = ErrorType<BadRequestResponse | void>>(params: ListInvoiceDraftsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDrafts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoiceDraftsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoiceDrafts>>> = ({ signal }) => listInvoiceDrafts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDrafts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoiceDraftsQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoiceDrafts>>>
+export type ListInvoiceDraftsQueryError = ErrorType<BadRequestResponse | void>
+
+
+/**
+ * @summary List the current user's unfinished drafts for an authorized client
+ */
+
+export function useListInvoiceDrafts<TData = Awaited<ReturnType<typeof listInvoiceDrafts>>, TError = ErrorType<BadRequestResponse | void>>(
+ params: ListInvoiceDraftsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceDrafts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoiceDraftsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetInvoiceDraftUrl = (id: string,
+    params: GetInvoiceDraftParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoice-drafts/${id}?${stringifiedParams}` : `/api/invoice-drafts/${id}`
+}
+
+/**
+ * @summary Recover a draft owned by the current firm, user and client
+ */
+export const getInvoiceDraft = async (id: string,
+    params: GetInvoiceDraftParams, options?: RequestInit): Promise<ServerInvoiceDraft> => {
+
+  return customFetch<ServerInvoiceDraft>(getGetInvoiceDraftUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceDraftQueryKey = (id: string,
+    params?: GetInvoiceDraftParams,) => {
+    return [
+    `/api/invoice-drafts/${id}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetInvoiceDraftQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceDraft>>, TError = ErrorType<BadRequestResponse | void>>(id: string,
+    params: GetInvoiceDraftParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceDraft>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceDraftQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceDraft>>> = ({ signal }) => getInvoiceDraft(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceDraft>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceDraftQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceDraft>>>
+export type GetInvoiceDraftQueryError = ErrorType<BadRequestResponse | void>
+
+
+/**
+ * @summary Recover a draft owned by the current firm, user and client
+ */
+
+export function useGetInvoiceDraft<TData = Awaited<ReturnType<typeof getInvoiceDraft>>, TError = ErrorType<BadRequestResponse | void>>(
+ id: string,
+    params: GetInvoiceDraftParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceDraft>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceDraftQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveInvoiceDraftUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoice-drafts/${id}`
+}
+
+/**
+ * Revision zero inserts only. An identical latest writeId and payload replays without incrementing revision. Stale revisions and changed payloads under the same writeId conflict. Retention is seven days from save.
+ * @summary Save an unfinished form with a revision check and retry-safe write ID
+ */
+export const saveInvoiceDraft = async (id: string,
+    invoiceDraftWriteInput: InvoiceDraftWriteInput, options?: RequestInit): Promise<ServerInvoiceDraft> => {
+
+  return customFetch<ServerInvoiceDraft>(getSaveInvoiceDraftUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceDraftWriteInput)
+  }
+);}
+
+
+
+
+
+export const getSaveInvoiceDraftMutationOptions = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveInvoiceDraft>>, TError,{id: string;data: BodyType<InvoiceDraftWriteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveInvoiceDraft>>, TError,{id: string;data: BodyType<InvoiceDraftWriteInput>}, TContext> => {
+
+const mutationKey = ['saveInvoiceDraft'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveInvoiceDraft>>, {id: string;data: BodyType<InvoiceDraftWriteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  saveInvoiceDraft(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveInvoiceDraftMutationResult = NonNullable<Awaited<ReturnType<typeof saveInvoiceDraft>>>
+    export type SaveInvoiceDraftMutationBody = BodyType<InvoiceDraftWriteInput>
+    export type SaveInvoiceDraftMutationError = ErrorType<BadRequestResponse | void>
+
+    /**
+ * @summary Save an unfinished form with a revision check and retry-safe write ID
+ */
+export const useSaveInvoiceDraft = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveInvoiceDraft>>, TError,{id: string;data: BodyType<InvoiceDraftWriteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveInvoiceDraft>>,
+        TError,
+        {id: string;data: BodyType<InvoiceDraftWriteInput>},
+        TContext
+      > => {
+      return useMutation(getSaveInvoiceDraftMutationOptions(options));
+    }
+
+export const getDeleteInvoiceDraftUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoice-drafts/${id}`
+}
+
+/**
+ * @summary Discard a draft without allowing late autosaves to resurrect it
+ */
+export const deleteInvoiceDraft = async (id: string,
+    deleteInvoiceDraftBody: DeleteInvoiceDraftBody, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteInvoiceDraftUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(deleteInvoiceDraftBody)
+  }
+);}
+
+
+
+
+
+export const getDeleteInvoiceDraftMutationOptions = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInvoiceDraft>>, TError,{id: string;data: BodyType<DeleteInvoiceDraftBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteInvoiceDraft>>, TError,{id: string;data: BodyType<DeleteInvoiceDraftBody>}, TContext> => {
+
+const mutationKey = ['deleteInvoiceDraft'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteInvoiceDraft>>, {id: string;data: BodyType<DeleteInvoiceDraftBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteInvoiceDraft(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteInvoiceDraftMutationResult = NonNullable<Awaited<ReturnType<typeof deleteInvoiceDraft>>>
+    export type DeleteInvoiceDraftMutationBody = BodyType<DeleteInvoiceDraftBody>
+    export type DeleteInvoiceDraftMutationError = ErrorType<BadRequestResponse | void>
+
+    /**
+ * @summary Discard a draft without allowing late autosaves to resurrect it
+ */
+export const useDeleteInvoiceDraft = <TError = ErrorType<BadRequestResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteInvoiceDraft>>, TError,{id: string;data: BodyType<DeleteInvoiceDraftBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteInvoiceDraft>>,
+        TError,
+        {id: string;data: BodyType<DeleteInvoiceDraftBody>},
+        TContext
+      > => {
+      return useMutation(getDeleteInvoiceDraftMutationOptions(options));
+    }
+
+export const getListClerkReservationsUrl = (params?: ListClerkReservationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/operator/clerk-reservations?${stringifiedParams}` : `/api/operator/clerk-reservations`
+}
+
+/**
+ * Requires an authenticated operator with operator.queue.read. Lists only expired, unsettled reservations. Ordered by UUID with bounded keyset pagination. Start a fresh listing to discover newly expired rows below an earlier cursor. Does not release or refund uncertain provider spend.
+ */
+export const listClerkReservations = async (params?: ListClerkReservationsParams, options?: RequestInit): Promise<ClerkReservationPage> => {
+
+  return customFetch<ClerkReservationPage>(getListClerkReservationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClerkReservationsQueryKey = (params?: ListClerkReservationsParams,) => {
+    return [
+    `/api/operator/clerk-reservations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListClerkReservationsQueryOptions = <TData = Awaited<ReturnType<typeof listClerkReservations>>, TError = ErrorType<void>>(params?: ListClerkReservationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkReservations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClerkReservationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClerkReservations>>> = ({ signal }) => listClerkReservations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClerkReservations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClerkReservationsQueryResult = NonNullable<Awaited<ReturnType<typeof listClerkReservations>>>
+export type ListClerkReservationsQueryError = ErrorType<void>
+
+
+
+export function useListClerkReservations<TData = Awaited<ReturnType<typeof listClerkReservations>>, TError = ErrorType<void>>(
+ params?: ListClerkReservationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkReservations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClerkReservationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReconcileClerkReservationUrl = (id: string,) => {
+
+
+
+
+  return `/api/operator/clerk-reservations/${id}/reconcile`
+}
+
+/**
+ * Requires an authenticated operator with operator.queue.act and the normal x-meridian-csrf header. The operator must confirm provider execution has stopped and supply an audit reason. Charges at least the reserved amount, appends audit evidence and settles atomically. Never refunds uncertain spend. Repeated reconciliation returns the existing inferenceCallId with replayed=true; subsequent input cannot change the recorded charge. A later provider result charges only excess usage not already charged in the same UTC budget month.
+ */
+export const reconcileClerkReservation = async (id: string,
+    clerkReservationReconcileInput: ClerkReservationReconcileInput, options?: RequestInit): Promise<ClerkReservationReconcileResult> => {
+
+  return customFetch<ClerkReservationReconcileResult>(getReconcileClerkReservationUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clerkReservationReconcileInput)
+  }
+);}
+
+
+
+
+
+export const getReconcileClerkReservationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconcileClerkReservation>>, TError,{id: string;data: BodyType<ClerkReservationReconcileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reconcileClerkReservation>>, TError,{id: string;data: BodyType<ClerkReservationReconcileInput>}, TContext> => {
+
+const mutationKey = ['reconcileClerkReservation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reconcileClerkReservation>>, {id: string;data: BodyType<ClerkReservationReconcileInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reconcileClerkReservation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReconcileClerkReservationMutationResult = NonNullable<Awaited<ReturnType<typeof reconcileClerkReservation>>>
+    export type ReconcileClerkReservationMutationBody = BodyType<ClerkReservationReconcileInput>
+    export type ReconcileClerkReservationMutationError = ErrorType<void>
+
+    export const useReconcileClerkReservation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconcileClerkReservation>>, TError,{id: string;data: BodyType<ClerkReservationReconcileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reconcileClerkReservation>>,
+        TError,
+        {id: string;data: BodyType<ClerkReservationReconcileInput>},
+        TContext
+      > => {
+      return useMutation(getReconcileClerkReservationMutationOptions(options));
+    }
 

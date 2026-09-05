@@ -29,7 +29,7 @@ function AccessDenied({ me, needs }: { me: Me; needs: ReactNode }) {
             <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
             <div className="space-y-3">
               <div>
-                <p className="font-medium">Not available for your account</p>
+                <h1 className="font-medium">Not available for your account</h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   You're signed in as{" "}
                   <span className="font-medium text-foreground">

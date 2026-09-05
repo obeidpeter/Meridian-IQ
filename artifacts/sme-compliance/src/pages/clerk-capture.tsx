@@ -54,7 +54,11 @@ import {
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { ClerkUsageBreakdown } from "@/components/clerk-usage-breakdown";
 import { SkeletonList } from "@/components/skeleton-list";
-import { beginOperation, updateOperation } from "@workspace/web-ui";
+import {
+  beginOperation,
+  operationSessionKey,
+  updateOperation,
+} from "@workspace/web-ui";
 import {
   AlertTriangle,
   ChevronDown,
@@ -253,7 +257,7 @@ function CaptureContent() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: me } = useGetMe();
-  const operationKey = me ? `meridianiq:operations:${me.userId}` : null;
+  const operationKey = operationSessionKey(me);
 
   const [captureText, setCaptureText] = useState("");
   const [captureFile, setCaptureFile] = useState<File | null>(null);

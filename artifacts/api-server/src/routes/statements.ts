@@ -78,233 +78,260 @@ const router: IRouter = Router();
 // NOTE (middleware/request-policy.ts NO_CONTEXT_ROUTES): POST /api/statements runs OUTSIDE the
 // per-request transaction — the PDF branch's model call is multi-second work
 // that must not pin a pooled connection under the 30s request-tx cap. The
-// gates below (requireFlag, assertCan, assertPartyAccess, the consent/budget
-// pre-checks) all read req.principal and run their lookups on the raw pool,
-// which is correct for them: none touch a tenant-RLS-dependent read that the
-// explicit firm filters do not already pin. Atomicity for the WRITES is
+// gates below read req.principal and use short explicit database scopes.
+// Provider calls never hold those scopes open. Atomicity for the WRITES is
 // re-established explicitly: ingestStatement runs inside its own short bypass
 // transaction below, so statement + lines + reconcile outbox still commit
 // all-or-nothing.
-router.post("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "statement.write");
-  const firmId = requireFirmScope(req.principal);
-  const parsed = parseOrThrow(ImportBankStatementBody, req.body);
-  // Exactly one source: a CSV export (parsed deterministically) or a PDF
-  // statement (lines PROPOSED by one model call, then re-parsed). The
-  // contract marks both optional, so the exclusive-or is server-enforced.
-  const hasCsv = parsed.csv !== undefined;
-  const hasPdf = parsed.pdfBase64 !== undefined;
-  if (hasCsv === hasPdf) {
-    throw new DomainError(
-      "VALIDATION",
-      "Provide exactly one of csv or pdfBase64",
-      400,
-    );
-  }
-  // Commit-from-preview (contract 0.40.0): a PDF may only ever PREVIEW. The
-  // preview response carries `proposedCsv` — the deterministic rendering of
-  // the model's proposal — and committing means POSTing that text back as
-  // `csv` with commit:true, so the rows the user checked are exactly the rows
-  // that commit and extraction never silently re-runs (or re-bills) on the
-  // commit leg.
-  if (hasPdf && parsed.commit) {
-    throw new DomainError(
-      "PDF_COMMIT_FROM_PREVIEW",
-      "A PDF statement can only be previewed. Review the preview, then commit by posting its proposedCsv back as csv with commit:true.",
-      400,
-    );
-  }
-  await assertPartyAccess(req.principal, parsed.clientPartyId);
-
-  let csv: string;
-  let proposedCsv: string | null = null;
-  let formatKey = parsed.formatKey ?? null;
-  if (hasCsv) {
-    if (parsed.csv!.length > MAX_STATEMENT_CSV_CHARS) {
-      res.status(413).json({
-        error: "Statement file is too large to process",
-      });
-      return;
-    }
-    csv = parsed.csv!;
-  } else {
-    // PDF branch — the one model call on this route, running with NO ambient
-    // transaction (see the NO_CONTEXT note above): everything before the call
-    // is reads only, the call is bounded (text capped at 150k chars / scans
-    // capped at 4 rendered pages), and the provider's multi-second latency
-    // holds no pooled connection.
-    //
-    // CORE-03 pre-check (token thrift only — ingestStatement remains the
-    // enforcing gate): without layer-1 consent the ingest below would 403
-    // AFTER the tokens were spent.
-    if (!(await isPurposePermitted(parsed.clientPartyId, "reconciliation"))) {
+router.post(
+  "/statements",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.write");
+    const firmId = requireFirmScope(req.principal);
+    const parsed = parseOrThrow(ImportBankStatementBody, req.body);
+    // Exactly one source: a CSV export (parsed deterministically) or a PDF
+    // statement (lines PROPOSED by one model call, then re-parsed). The
+    // contract marks both optional, so the exclusive-or is server-enforced.
+    const hasCsv = parsed.csv !== undefined;
+    const hasPdf = parsed.pdfBase64 !== undefined;
+    if (hasCsv === hasPdf) {
       throw new DomainError(
-        "CONSENT_REQUIRED",
-        "Client has not granted compliance (layer 1) consent",
-        403,
+        "VALIDATION",
+        "Provide exactly one of csv or pdfBase64",
+        400,
       );
     }
-    // Budget gate BEFORE the provider is touched (the capture-route idiom):
-    // an exhausted firm gets a clean 429 without any model call. statement.write
-    // holders are always firm-scoped, so this call is always firm-funded.
-    await assertFirmClerkBudget(firmId);
-    const proposal = await proposeStatementLinesFromPdf(
-      parsed.pdfBase64!,
-      firmId,
-      req.principal.userId,
+    // Commit-from-preview (contract 0.40.0): a PDF may only ever PREVIEW. The
+    // preview response carries `proposedCsv` — the deterministic rendering of
+    // the model's proposal — and committing means POSTing that text back as
+    // `csv` with commit:true, so the rows the user checked are exactly the rows
+    // that commit and extraction never silently re-runs (or re-bills) on the
+    // commit leg.
+    if (hasPdf && parsed.commit) {
+      throw new DomainError(
+        "PDF_COMMIT_FROM_PREVIEW",
+        "A PDF statement can only be previewed. Review the preview, then commit by posting its proposedCsv back as csv with commit:true.",
+        400,
+      );
+    }
+    await runRequestContext({ bypass: false, firmId }, () =>
+      assertPartyAccess(req.principal, parsed.clientPartyId),
     );
-    csv = proposal.csv;
-    proposedCsv = proposal.csv;
-    // Pin the parser: proposed lines are rendered to the generic shape, so
-    // detection must never drift to a bank-specific parser.
-    formatKey = SCAN_PROPOSAL_FORMAT_KEY;
-  }
 
-  // The ingest (BOTH branches — preview and commit, CSV and PDF) runs in its
-  // own short bypass transaction: the route is NO_CONTEXT, so this is what
-  // preserves ingestStatement's statement+lines+outbox atomicity. Bypass with
-  // firmId forced from the principal above is the same effective posture the
-  // request transaction gave this firm-scoped write (every query in
-  // ingestStatement filters by that firmId explicitly).
-  const result = await runRequestContext({ bypass: true, firmId: null }, () =>
-    ingestStatement({
-      firmId,
-      clientPartyId: parsed.clientPartyId,
-      csv,
-      formatKey,
-      filename: parsed.filename ?? null,
-      commit: parsed.commit,
-      actorId: req.principal.userId,
-    }),
-  );
-  res.json(ImportBankStatementResponse.parse({ ...result, proposedCsv }));
-});
+    let csv: string;
+    let proposedCsv: string | null = null;
+    let formatKey = parsed.formatKey ?? null;
+    if (hasCsv) {
+      if (parsed.csv!.length > MAX_STATEMENT_CSV_CHARS) {
+        res.status(413).json({
+          error: "Statement file is too large to process",
+        });
+        return;
+      }
+      csv = parsed.csv!;
+    } else {
+      // PDF branch — the one model call on this route, running with NO ambient
+      // transaction (see the NO_CONTEXT note above): everything before the call
+      // is reads only, the call is bounded (text capped at 150k chars / scans
+      // capped at 4 rendered pages), and the provider's multi-second latency
+      // holds no pooled connection.
+      //
+      // CORE-03 pre-check (token thrift only — ingestStatement remains the
+      // enforcing gate): without layer-1 consent the ingest below would 403
+      // AFTER the tokens were spent.
+      if (
+        !(await runRequestContext({ bypass: false, firmId }, () =>
+          isPurposePermitted(parsed.clientPartyId, "reconciliation"),
+        ))
+      ) {
+        throw new DomainError(
+          "CONSENT_REQUIRED",
+          "Client has not granted compliance (layer 1) consent",
+          403,
+        );
+      }
+      // Budget gate BEFORE the provider is touched (the capture-route idiom):
+      // an exhausted firm gets a clean 429 without any model call. statement.write
+      // holders are always firm-scoped, so this call is always firm-funded.
+      await assertFirmClerkBudget(firmId);
+      const proposal = await proposeStatementLinesFromPdf(
+        parsed.pdfBase64!,
+        firmId,
+        req.principal.userId,
+      );
+      csv = proposal.csv;
+      proposedCsv = proposal.csv;
+      // Pin the parser: proposed lines are rendered to the generic shape, so
+      // detection must never drift to a bank-specific parser.
+      formatKey = SCAN_PROPOSAL_FORMAT_KEY;
+    }
 
-router.get("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "statement.read");
-  const query = ListBankStatementsQueryParams.safeParse(req.query);
-  const clientPartyId = narrowToClientPartyScope(
-    req.principal,
-    query.success ? query.data.clientPartyId : undefined,
-  );
-  const tenant = tenantFirmId(req.principal);
-  const conditions = [];
-  if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
-  if (clientPartyId)
-    conditions.push(eq(bankStatementsTable.clientPartyId, clientPartyId));
-  const rows = await getDb()
-    .select()
-    .from(bankStatementsTable)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(bankStatementsTable.createdAt));
-  res.json(ListBankStatementsResponse.parse(rows));
-});
+    // The ingest (BOTH branches — preview and commit, CSV and PDF) runs in its
+    // own short bypass transaction: the route is NO_CONTEXT, so this is what
+    // preserves ingestStatement's statement+lines+outbox atomicity. Bypass with
+    // firmId forced from the principal above is the same effective posture the
+    // request transaction gave this firm-scoped write (every query in
+    // ingestStatement filters by that firmId explicitly).
+    const result = await runRequestContext({ bypass: true, firmId: null }, () =>
+      ingestStatement({
+        firmId,
+        clientPartyId: parsed.clientPartyId,
+        csv,
+        formatKey,
+        filename: parsed.filename ?? null,
+        commit: parsed.commit,
+        actorId: req.principal.userId,
+      }),
+    );
+    res.json(ImportBankStatementResponse.parse({ ...result, proposedCsv }));
+  },
+);
+
+router.get(
+  "/statements",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.read");
+    const query = ListBankStatementsQueryParams.safeParse(req.query);
+    const clientPartyId = narrowToClientPartyScope(
+      req.principal,
+      query.success ? query.data.clientPartyId : undefined,
+    );
+    const tenant = tenantFirmId(req.principal);
+    const conditions = [];
+    if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
+    if (clientPartyId)
+      conditions.push(eq(bankStatementsTable.clientPartyId, clientPartyId));
+    const rows = await getDb()
+      .select()
+      .from(bankStatementsTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(bankStatementsTable.createdAt));
+    res.json(ListBankStatementsResponse.parse(rows));
+  },
+);
 
 // Statement detail loads ride loadStatementScoped (statements/load-scoped.ts)
 // — NOT_FOUND, firm match, then the SEC-03 client narrowing — the ONE home
 // shared with the clerk reconciliation lanes.
 
-router.get("/statements/:id", requireFlag("reconciliation"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "statement.read");
-  const params = parseOrThrow(GetBankStatementParams, req.params);
-  const statement = await loadStatementScoped(req.principal, params.id);
-  res.json(GetBankStatementResponse.parse(statement));
-});
+router.get(
+  "/statements/:id",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.read");
+    const params = parseOrThrow(GetBankStatementParams, req.params);
+    const statement = await loadStatementScoped(req.principal, params.id);
+    res.json(GetBankStatementResponse.parse(statement));
+  },
+);
 
-router.get("/statements/:id/lines", requireFlag("reconciliation"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "statement.read");
-  const params = parseOrThrow(ListBankStatementLinesParams, req.params);
-  await loadStatementScoped(req.principal, params.id);
-  const rows = await getDb()
-    .select()
-    .from(bankStatementLinesTable)
-    .where(eq(bankStatementLinesTable.statementId, params.id))
-    .orderBy(asc(bankStatementLinesTable.lineNo));
-  res.json(ListBankStatementLinesResponse.parse(rows));
-});
+router.get(
+  "/statements/:id/lines",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.read");
+    const params = parseOrThrow(ListBankStatementLinesParams, req.params);
+    await loadStatementScoped(req.principal, params.id);
+    const rows = await getDb()
+      .select()
+      .from(bankStatementLinesTable)
+      .where(eq(bankStatementLinesTable.statementId, params.id))
+      .orderBy(asc(bankStatementLinesTable.lineNo));
+    res.json(ListBankStatementLinesResponse.parse(rows));
+  },
+);
 
-router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "reconciliation.read");
-  const params = parseOrThrow(ListBankStatementProposalsParams, req.params);
-  const statement = await loadStatementScoped(req.principal, params.id);
-  const lines = await getDb()
-    .select({
-      id: bankStatementLinesTable.id,
-      lineNo: bankStatementLinesTable.lineNo,
-      valueDate: bankStatementLinesTable.valueDate,
-      amount: bankStatementLinesTable.amount,
-      narration: bankStatementLinesTable.narration,
-    })
-    .from(bankStatementLinesTable)
-    .where(eq(bankStatementLinesTable.statementId, params.id));
-  const lineById = new Map(lines.map((l) => [l.id, l]));
-  if (lines.length === 0) {
-    res.json(ListBankStatementProposalsResponse.parse([]));
-    return;
-  }
-  // Both parties are joined so the display name can follow the proposal's
-  // orientation: for a RECEIVABLE the narration counterparty is the buyer;
-  // for a BILL (this client is the invoice's buyer) it is the SUPPLIER. The
-  // response field keeps its contract name (buyerName) — it has always meant
-  // "the name to show against the bank line".
-  const supplierParties = alias(partiesTable, "supplier_parties");
-  const proposals = await getDb()
-    .select({
-      id: matchProposalsTable.id,
-      statementLineId: matchProposalsTable.statementLineId,
-      invoiceId: matchProposalsTable.invoiceId,
-      confidence: matchProposalsTable.confidence,
-      features: matchProposalsTable.features,
-      status: matchProposalsTable.status,
-      createdAt: matchProposalsTable.createdAt,
-      invoiceNumber: invoicesTable.invoiceNumber,
-      invoiceStatus: invoicesTable.status,
-      invoiceTotal: invoicesTable.grandTotal,
-      invoiceSupplierPartyId: invoicesTable.supplierPartyId,
-      invoiceBuyerPartyId: invoicesTable.buyerPartyId,
-      buyerName: partiesTable.legalName,
-      supplierName: supplierParties.legalName,
-    })
-    .from(matchProposalsTable)
-    .innerJoin(invoicesTable, eq(invoicesTable.id, matchProposalsTable.invoiceId))
-    .innerJoin(partiesTable, eq(partiesTable.id, invoicesTable.buyerPartyId))
-    .innerJoin(
-      supplierParties,
-      eq(supplierParties.id, invoicesTable.supplierPartyId),
-    )
-    .where(
-      inArray(
-        matchProposalsTable.statementLineId,
-        lines.map((l) => l.id),
-      ),
-    )
-    .orderBy(desc(matchProposalsTable.confidence));
-  const view = proposals.map((p) => {
-    const line = lineById.get(p.statementLineId);
-    const isBill =
-      p.invoiceBuyerPartyId === statement.clientPartyId &&
-      p.invoiceSupplierPartyId !== statement.clientPartyId;
-    return {
-      id: p.id,
-      statementId: params.id,
-      statementLineId: p.statementLineId,
-      invoiceId: p.invoiceId,
-      invoiceNumber: p.invoiceNumber,
-      invoiceStatus: p.invoiceStatus,
-      invoiceTotal: p.invoiceTotal,
-      buyerName: isBill ? p.supplierName : p.buyerName,
-      lineNo: line?.lineNo,
-      lineAmount: line?.amount ?? null,
-      lineDate: line?.valueDate ?? null,
-      narration: line?.narration ?? null,
-      confidence: p.confidence,
-      features: p.features,
-      status: p.status,
-      createdAt: p.createdAt,
-    };
-  });
-  res.json(ListBankStatementProposalsResponse.parse(view));
-});
+router.get(
+  "/statements/:id/proposals",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "reconciliation.read");
+    const params = parseOrThrow(ListBankStatementProposalsParams, req.params);
+    const statement = await loadStatementScoped(req.principal, params.id);
+    const lines = await getDb()
+      .select({
+        id: bankStatementLinesTable.id,
+        lineNo: bankStatementLinesTable.lineNo,
+        valueDate: bankStatementLinesTable.valueDate,
+        amount: bankStatementLinesTable.amount,
+        narration: bankStatementLinesTable.narration,
+      })
+      .from(bankStatementLinesTable)
+      .where(eq(bankStatementLinesTable.statementId, params.id));
+    const lineById = new Map(lines.map((l) => [l.id, l]));
+    if (lines.length === 0) {
+      res.json(ListBankStatementProposalsResponse.parse([]));
+      return;
+    }
+    // Both parties are joined so the display name can follow the proposal's
+    // orientation: for a RECEIVABLE the narration counterparty is the buyer;
+    // for a BILL (this client is the invoice's buyer) it is the SUPPLIER. The
+    // response field keeps its contract name (buyerName) — it has always meant
+    // "the name to show against the bank line".
+    const supplierParties = alias(partiesTable, "supplier_parties");
+    const proposals = await getDb()
+      .select({
+        id: matchProposalsTable.id,
+        statementLineId: matchProposalsTable.statementLineId,
+        invoiceId: matchProposalsTable.invoiceId,
+        confidence: matchProposalsTable.confidence,
+        features: matchProposalsTable.features,
+        status: matchProposalsTable.status,
+        createdAt: matchProposalsTable.createdAt,
+        invoiceNumber: invoicesTable.invoiceNumber,
+        invoiceStatus: invoicesTable.status,
+        invoiceTotal: invoicesTable.grandTotal,
+        invoiceSupplierPartyId: invoicesTable.supplierPartyId,
+        invoiceBuyerPartyId: invoicesTable.buyerPartyId,
+        buyerName: partiesTable.legalName,
+        supplierName: supplierParties.legalName,
+      })
+      .from(matchProposalsTable)
+      .innerJoin(
+        invoicesTable,
+        eq(invoicesTable.id, matchProposalsTable.invoiceId),
+      )
+      .innerJoin(partiesTable, eq(partiesTable.id, invoicesTable.buyerPartyId))
+      .innerJoin(
+        supplierParties,
+        eq(supplierParties.id, invoicesTable.supplierPartyId),
+      )
+      .where(
+        inArray(
+          matchProposalsTable.statementLineId,
+          lines.map((l) => l.id),
+        ),
+      )
+      .orderBy(desc(matchProposalsTable.confidence));
+    const view = proposals.map((p) => {
+      const line = lineById.get(p.statementLineId);
+      const isBill =
+        p.invoiceBuyerPartyId === statement.clientPartyId &&
+        p.invoiceSupplierPartyId !== statement.clientPartyId;
+      return {
+        id: p.id,
+        statementId: params.id,
+        statementLineId: p.statementLineId,
+        invoiceId: p.invoiceId,
+        invoiceNumber: p.invoiceNumber,
+        invoiceStatus: p.invoiceStatus,
+        invoiceTotal: p.invoiceTotal,
+        buyerName: isBill ? p.supplierName : p.buyerName,
+        lineNo: line?.lineNo,
+        lineAmount: line?.amount ?? null,
+        lineDate: line?.valueDate ?? null,
+        narration: line?.narration ?? null,
+        confidence: p.confidence,
+        features: p.features,
+        status: p.status,
+        createdAt: p.createdAt,
+      };
+    });
+    res.json(ListBankStatementProposalsResponse.parse(view));
+  },
+);
 
 // ---- custom statement formats (Clerk idea #9) ----
 // Operator-managed platform reference data, like the error catalogue — hence

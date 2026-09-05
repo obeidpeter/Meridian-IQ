@@ -286,7 +286,8 @@ describe("FilingMatrixCard", () => {
     expect(nullCell.className).toContain("text-muted-foreground");
     const filedCell = screen.getByTestId("cell-filing-paye-cp-done");
     expect(filedCell.textContent).toBe("Filed");
-    expect(filedCell.className).toContain("emerald");
+    expect(filedCell.className).toContain("text-emerald-700");
+    expect(filedCell.className).toContain("dark:text-emerald-400");
 
     // The WHT column: null is the honest no-duty case (muted italic like
     // the other nulls, but its own words), and a filed remittance reads
@@ -297,7 +298,7 @@ describe("FilingMatrixCard", () => {
     expect(noDutyCell.className).toContain("text-muted-foreground");
     const whtFiledCell = screen.getByTestId("cell-filing-wht-cp-done");
     expect(whtFiledCell.textContent).toBe("Filed");
-    expect(whtFiledCell.className).toContain("emerald");
+    expect(whtFiledCell.className).toContain("text-emerald-700");
 
     // Totals line, with the non-zero overdue chunk painted red.
     const totals = screen.getByTestId("text-filing-matrix-totals");

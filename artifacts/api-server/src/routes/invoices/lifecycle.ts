@@ -151,7 +151,12 @@ router.post("/invoices/:id/approve", async (req, res): Promise<void> => {
   const params = parseOrThrow(ApproveInvoiceParams, req.params);
   const { invoice } = await loadForTenant(req, params.id);
   const body = parseOrThrow(ApproveInvoiceBody, req.body ?? {});
-  const row = await recordApproval(invoice, req.principal.userId, body.note);
+  const row = await recordApproval(
+    invoice,
+    req.principal.userId,
+    body.note,
+    body.expectedRevision,
+  );
   const [view] = await approvalViews([row]);
   res.status(201).json(ApproveInvoiceResponse.parse(view));
 });
@@ -197,12 +202,14 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
   // A post-stamp cancellation propagates: reconciliation proposals close and the
   // verification cache is staled so the invoice can never present as eligible.
   if (invoice.status !== "draft" && invoice.status !== "validated") {
-    await getDb().insert(outboxTable).values({
-      aggregateType: "invoice",
-      aggregateId: invoice.id,
-      type: "invoice.lifecycle_changed",
-      payload: { invoiceId: invoice.id, toStatus: "cancelled" },
-    });
+    await getDb()
+      .insert(outboxTable)
+      .values({
+        aggregateType: "invoice",
+        aggregateId: invoice.id,
+        type: "invoice.lifecycle_changed",
+        payload: { invoiceId: invoice.id, toStatus: "cancelled" },
+      });
   }
   res.json(CancelInvoiceResponse.parse(row));
 });
@@ -233,8 +240,7 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
       firmId: original.firmId,
       supplierPartyId: original.supplierPartyId,
       buyerPartyId: original.buyerPartyId,
-      invoiceNumber:
-        body.creditNoteNumber ?? `CN-${original.invoiceNumber}`,
+      invoiceNumber: body.creditNoteNumber ?? `CN-${original.invoiceNumber}`,
       currency: original.currency,
       issueDate: new Date().toISOString().slice(0, 10),
       kind: "credit_note",
@@ -250,7 +256,10 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
     },
     req.principal.userId,
   );
-  const validation = await validateInvoice(bundle.invoice.id, req.principal.userId);
+  const validation = await validateInvoice(
+    bundle.invoice.id,
+    req.principal.userId,
+  );
   if (!validation.ok) {
     // Name the failing field — the fix is usually completing the client's
     // party record, and an opaque 422 hides that.
@@ -261,7 +270,10 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
       422,
     );
   }
-  const submitted = await submitInvoice(bundle.invoice.id, req.principal.userId);
+  const submitted = await submitInvoice(
+    bundle.invoice.id,
+    req.principal.userId,
+  );
   await appendAudit({
     actorId: req.principal.userId,
     firmId: original.firmId,

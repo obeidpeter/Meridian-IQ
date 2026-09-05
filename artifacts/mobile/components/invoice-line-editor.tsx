@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { AppText, Card, Divider, rowBetween, TextField } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { formatCurrency } from "@/lib/format";
-import { num } from "@/lib/invoice-form";
+import { computeTotals } from "@/lib/invoice-form";
 import type { LineDraft } from "@/lib/invoice-form";
 
 /**
@@ -25,13 +25,13 @@ export function LineItemCard({
   line: LineDraft;
   index: number;
   canRemove: boolean;
-  errors?: { quantity?: string; unitPrice?: string };
+  errors?: { quantity?: string; unitPrice?: string; vatRate?: string };
   onChange: (patch: Partial<LineDraft>) => void;
   onRemove: () => void;
   highlighted?: boolean;
 }) {
   const colors = useColors();
-  const ext = num(line.quantity) * num(line.unitPrice);
+  const ext = computeTotals([line]).subtotal;
   return (
     <Card
       style={{
@@ -93,6 +93,7 @@ export function LineItemCard({
             onChangeText={(t) => onChange({ vatRate: t })}
             keyboardType="decimal-pad"
             placeholder="7.5"
+            error={errors?.vatRate}
           />
         </View>
       </View>

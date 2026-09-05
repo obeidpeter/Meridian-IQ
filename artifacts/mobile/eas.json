@@ -32,7 +32,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "meridian-iq.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "meridian-iq.replit.app",
+        "EXPO_PUBLIC_REPL_ID": "d096574a-b3d8-4990-8bf5-4be1e6646e06"
       }
     }
   },

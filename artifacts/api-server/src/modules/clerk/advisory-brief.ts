@@ -1,5 +1,6 @@
 import { desc, eq, and, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import { withClerkDb } from "./scope";
 import {
   getDb,
   runInBypassContext,
@@ -21,10 +22,7 @@ import { type ClerkGateway } from "./gateway";
 import { phraseGroundedDraft } from "./phrase-grounded";
 import { lagosMonthStart } from "./client-statement";
 import { plural } from "./text";
-import {
-  countOpenFilings,
-  openFilingSamples,
-} from "../filings/filings";
+import { countOpenFilings, openFilingSamples } from "../filings/filings";
 import { countOpenObligations } from "../obligations/obligations";
 import {
   filingDueDate,
@@ -153,22 +151,49 @@ export async function computeAdvisoryBriefSections(
         "count",
         String(filings.dueSoon + obligations.dueSoon),
       ),
-      fact("unfiled", "Returns not yet filed", "count", String(filings.unfiled)),
-      fact("filings_due_soon", "Returns due within 7 days", "count", String(filings.dueSoon)),
-      fact("filings_overdue", "Returns overdue", "count", String(filings.overdue)),
+      fact(
+        "unfiled",
+        "Returns not yet filed",
+        "count",
+        String(filings.unfiled),
+      ),
+      fact(
+        "filings_due_soon",
+        "Returns due within 7 days",
+        "count",
+        String(filings.dueSoon),
+      ),
+      fact(
+        "filings_overdue",
+        "Returns overdue",
+        "count",
+        String(filings.overdue),
+      ),
       ...(filings.nextDueDate
         ? [fact("next_due", "Next return due", "date", filings.nextDueDate)]
         : []),
-      fact("obligations_open", "Open authority notices", "count", String(obligations.open)),
-      fact("obligations_overdue", "Notices past response deadline", "count", String(obligations.overdue)),
-      ...filingSamples.slice(0, 3).map((s, i) =>
-        fact(
-          `open_filing_${i + 1}`,
-          `${s.taxType.toUpperCase()} ${s.period}`,
-          "text",
-          `due ${s.dueDate} (${s.status})`,
-        ),
+      fact(
+        "obligations_open",
+        "Open authority notices",
+        "count",
+        String(obligations.open),
       ),
+      fact(
+        "obligations_overdue",
+        "Notices past response deadline",
+        "count",
+        String(obligations.overdue),
+      ),
+      ...filingSamples
+        .slice(0, 3)
+        .map((s, i) =>
+          fact(
+            `open_filing_${i + 1}`,
+            `${s.taxType.toUpperCase()} ${s.period}`,
+            "text",
+            `due ${s.dueDate} (${s.status})`,
+          ),
+        ),
     ],
     sourceReport: "Filings register & compliance calendar",
   });
@@ -185,8 +210,19 @@ export async function computeAdvisoryBriefSections(
           } past the statutory submission window — submitting them stops the exposure growing.`
         : "No invoices are past the statutory submission window.",
     facts: [
-      fact("overdue_invoices", "Invoices past the window", "count", String(penalties.overdueCount)),
-      fact("exposure_floor", "Exposure floor (small band)", "amount", penalties.exposure.small, "NGN"),
+      fact(
+        "overdue_invoices",
+        "Invoices past the window",
+        "count",
+        String(penalties.overdueCount),
+      ),
+      fact(
+        "exposure_floor",
+        "Exposure floor (small band)",
+        "amount",
+        penalties.exposure.small,
+        "NGN",
+      ),
     ],
     sourceReport: "Penalty exposure report",
   });
@@ -207,7 +243,13 @@ export async function computeAdvisoryBriefSections(
     facts: [
       fact("output_vat", "Output VAT", "amount", vat.outputVat, "NGN"),
       fact("input_vat", "Input VAT", "amount", vat.inputVat, "NGN"),
-      fact("input_vat_verified", "Input VAT (verified bills)", "amount", vat.inputVatVerified, "NGN"),
+      fact(
+        "input_vat_verified",
+        "Input VAT (verified bills)",
+        "amount",
+        vat.inputVatVerified,
+        "NGN",
+      ),
       fact("net_vat", "Net VAT position", "amount", vat.netVat, "NGN"),
       fact("vat_due", "Return due", "date", vatDue),
     ],
@@ -234,10 +276,32 @@ export async function computeAdvisoryBriefSections(
       : "No outstanding receivables.",
     facts: group
       ? [
-          fact("expected_total", "Expected inflows outstanding", "amount", group.total.amount, group.currency),
-          fact("overdue_expected", "Past expected date", "amount", group.overdueExpected.amount, group.currency),
-          fact("overdue_expected_count", "Invoices past expected date", "count", String(group.overdueExpected.count)),
-          fact("chase_count", "Worth chasing now", "count", String(chase.length)),
+          fact(
+            "expected_total",
+            "Expected inflows outstanding",
+            "amount",
+            group.total.amount,
+            group.currency,
+          ),
+          fact(
+            "overdue_expected",
+            "Past expected date",
+            "amount",
+            group.overdueExpected.amount,
+            group.currency,
+          ),
+          fact(
+            "overdue_expected_count",
+            "Invoices past expected date",
+            "count",
+            String(group.overdueExpected.count),
+          ),
+          fact(
+            "chase_count",
+            "Worth chasing now",
+            "count",
+            String(chase.length),
+          ),
         ]
       : [fact("expected_total", "Expected inflows outstanding", "count", "0")],
     sourceReport: "Cash-flow outlook & chase list",
@@ -245,14 +309,21 @@ export async function computeAdvisoryBriefSections(
 
   // --- Books hygiene -----------------------------------------------------
   const unbilled = await listUnbilledIncome(firmId, clientPartyId, now);
-  const missingBills = await listMissingRecurringBills(firmId, clientPartyId, now);
+  const missingBills = await listMissingRecurringBills(
+    firmId,
+    clientPartyId,
+    now,
+  );
   const credits = await listUnmatchedCredits(firmId, clientPartyId, now);
   const unmatchedCollections = await countClientUnmatchedCollections(
     firmId,
     clientPartyId,
   );
   const hygieneAttention =
-    unbilled.length + missingBills.length + credits.count + unmatchedCollections;
+    unbilled.length +
+    missingBills.length +
+    credits.count +
+    unmatchedCollections;
   sections.push({
     key: "hygiene",
     title: "Books hygiene",
@@ -265,14 +336,47 @@ export async function computeAdvisoryBriefSections(
     facts: [
       // The derived total leads for the same grounding reason as the
       // statutory sums (review R49-2).
-      fact("hygiene_attention_total", "Books items needing attention", "count", String(hygieneAttention)),
-      fact("unbilled_patterns", "Expected-but-unbilled income patterns", "count", String(unbilled.length)),
-      fact("missing_bills", "Recurring bills not yet received", "count", String(missingBills.length)),
-      fact("unmatched_credits", "Bank credits with no matching invoice", "count", String(credits.count)),
+      fact(
+        "hygiene_attention_total",
+        "Books items needing attention",
+        "count",
+        String(hygieneAttention),
+      ),
+      fact(
+        "unbilled_patterns",
+        "Expected-but-unbilled income patterns",
+        "count",
+        String(unbilled.length),
+      ),
+      fact(
+        "missing_bills",
+        "Recurring bills not yet received",
+        "count",
+        String(missingBills.length),
+      ),
+      fact(
+        "unmatched_credits",
+        "Bank credits with no matching invoice",
+        "count",
+        String(credits.count),
+      ),
       ...(credits.count > 0
-        ? [fact("unmatched_credits_total", "Unmatched credits total", "amount", credits.totalAmount, "NGN")]
+        ? [
+            fact(
+              "unmatched_credits_total",
+              "Unmatched credits total",
+              "amount",
+              credits.totalAmount,
+              "NGN",
+            ),
+          ]
         : []),
-      fact("unmatched_collections", "Collection-rail payments unmatched", "count", String(unmatchedCollections)),
+      fact(
+        "unmatched_collections",
+        "Collection-rail payments unmatched",
+        "count",
+        String(unmatchedCollections),
+      ),
     ],
     sourceReport: "Month-end close advisories",
   });
@@ -290,11 +394,23 @@ const TRACKED_DELTAS: {
   fact: string;
   label: string;
 }[] = [
-  { section: "statutory", fact: "statutory_overdue_total", label: "Statutory items overdue" },
+  {
+    section: "statutory",
+    fact: "statutory_overdue_total",
+    label: "Statutory items overdue",
+  },
   { section: "statutory", fact: "unfiled", label: "Returns not yet filed" },
-  { section: "penalties", fact: "overdue_invoices", label: "Invoices past the window" },
+  {
+    section: "penalties",
+    fact: "overdue_invoices",
+    label: "Invoices past the window",
+  },
   { section: "money", fact: "chase_count", label: "Invoices worth chasing" },
-  { section: "hygiene", fact: "hygiene_attention_total", label: "Books items needing attention" },
+  {
+    section: "hygiene",
+    fact: "hygiene_attention_total",
+    label: "Books items needing attention",
+  },
 ];
 
 // The month-over-month delta section, or null when there is nothing worth
@@ -332,12 +448,24 @@ export function computeChangesSection(
     if (prev === 0 && cur === 0) continue;
     if (cur < prev) improved += 1;
     else if (cur > prev) worsened += 1;
-    deltas.push(fact(`delta_${t.fact}`, t.label, "text", `${cur} now (was ${prev})`));
+    deltas.push(
+      fact(`delta_${t.fact}`, t.label, "text", `${cur} now (was ${prev})`),
+    );
   }
   if (deltas.length === 0) return null;
   const facts: ProtectedFact[] = [
-    fact("improved_count", "Tracked positions improved", "count", String(improved)),
-    fact("worsened_count", "Tracked positions worsened", "count", String(worsened)),
+    fact(
+      "improved_count",
+      "Tracked positions improved",
+      "count",
+      String(improved),
+    ),
+    fact(
+      "worsened_count",
+      "Tracked positions worsened",
+      "count",
+      String(worsened),
+    ),
     ...deltas,
   ];
   const text =
@@ -458,7 +586,7 @@ export async function generateAdvisoryBrief(
   // (the statement sweep's onConflictDoNothing + read-winner shape).
   opts: { conflictMode?: "refresh" | "yield" } = {},
 ): Promise<ClerkAdvisoryBriefRow> {
-  await assertEngagedClient(firmId, clientPartyId);
+  await withClerkDb(firmId, () => assertEngagedClient(firmId, clientPartyId));
   const monthStart = lagosMonthStart(0, now);
   // Closed months are IMMUTABLE BY CONSTRUCTION — the advisory memory
   // corpus indexes every month before the live one on exactly that
@@ -474,27 +602,27 @@ export async function generateAdvisoryBrief(
       400,
     );
   }
-  const sections = await computeAdvisoryBriefSections(
-    firmId,
-    clientPartyId,
-    now,
+  const sections = await withClerkDb(firmId, () =>
+    computeAdvisoryBriefSections(firmId, clientPartyId, now),
   );
   // Continuity + acted-on (Phase 3): the previous month's STORED brief —
   // last month's frozen truth, never a recompute — yields a deterministic
   // delta section. A first brief simply has no comparison (the
   // month-end-close omission rule), and an unreadable old blob degrades
   // to the same silence.
-  const [previousBrief] = await getDb()
-    .select({ sections: clerkAdvisoryBriefsTable.sections })
-    .from(clerkAdvisoryBriefsTable)
-    .where(
-      and(
-        eq(clerkAdvisoryBriefsTable.firmId, firmId),
-        eq(clerkAdvisoryBriefsTable.clientPartyId, clientPartyId),
-        eq(clerkAdvisoryBriefsTable.monthStart, lagosMonthStart(1, now)),
-      ),
-    )
-    .limit(1);
+  const [previousBrief] = await withClerkDb(firmId, () =>
+    getDb()
+      .select({ sections: clerkAdvisoryBriefsTable.sections })
+      .from(clerkAdvisoryBriefsTable)
+      .where(
+        and(
+          eq(clerkAdvisoryBriefsTable.firmId, firmId),
+          eq(clerkAdvisoryBriefsTable.clientPartyId, clientPartyId),
+          eq(clerkAdvisoryBriefsTable.monthStart, lagosMonthStart(1, now)),
+        ),
+      )
+      .limit(1),
+  );
   if (previousBrief && Array.isArray(previousBrief.sections)) {
     try {
       const changes = computeChangesSection(
@@ -551,62 +679,64 @@ export async function generateAdvisoryBrief(
     source,
     generatedBy,
   };
-  let row: ClerkAdvisoryBriefRow;
-  if (opts.conflictMode === "yield") {
-    const inserted = await getDb()
-      .insert(clerkAdvisoryBriefsTable)
-      .values(values)
-      .onConflictDoNothing()
-      .returning();
-    if (inserted.length === 0) {
-      // Another writer won the (firm, client, month) row since our caller
-      // looked — return the winner's row, append no audit (nothing of ours
-      // was stored; the winner's own generate audited itself).
-      const [winner] = await getDb()
-        .select()
-        .from(clerkAdvisoryBriefsTable)
-        .where(
-          and(
-            eq(clerkAdvisoryBriefsTable.firmId, firmId),
-            eq(clerkAdvisoryBriefsTable.clientPartyId, clientPartyId),
-            eq(clerkAdvisoryBriefsTable.monthStart, monthStart),
-          ),
-        )
-        .limit(1);
-      return winner;
+  return withClerkDb(firmId, async () => {
+    let row: ClerkAdvisoryBriefRow;
+    if (opts.conflictMode === "yield") {
+      const inserted = await getDb()
+        .insert(clerkAdvisoryBriefsTable)
+        .values(values)
+        .onConflictDoNothing()
+        .returning();
+      if (inserted.length === 0) {
+        // Another writer won the (firm, client, month) row since our caller
+        // looked — return the winner's row, append no audit (nothing of ours
+        // was stored; the winner's own generate audited itself).
+        const [winner] = await getDb()
+          .select()
+          .from(clerkAdvisoryBriefsTable)
+          .where(
+            and(
+              eq(clerkAdvisoryBriefsTable.firmId, firmId),
+              eq(clerkAdvisoryBriefsTable.clientPartyId, clientPartyId),
+              eq(clerkAdvisoryBriefsTable.monthStart, monthStart),
+            ),
+          )
+          .limit(1);
+        return winner;
+      }
+      row = inserted[0];
+    } else {
+      const [upserted] = await getDb()
+        .insert(clerkAdvisoryBriefsTable)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [
+            clerkAdvisoryBriefsTable.firmId,
+            clerkAdvisoryBriefsTable.clientPartyId,
+            clerkAdvisoryBriefsTable.monthStart,
+          ],
+          set: {
+            sections: sections as unknown as Record<string, unknown>[],
+            headline,
+            note,
+            source,
+            generatedBy,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      row = upserted;
     }
-    row = inserted[0];
-  } else {
-    const [upserted] = await getDb()
-      .insert(clerkAdvisoryBriefsTable)
-      .values(values)
-      .onConflictDoUpdate({
-        target: [
-          clerkAdvisoryBriefsTable.firmId,
-          clerkAdvisoryBriefsTable.clientPartyId,
-          clerkAdvisoryBriefsTable.monthStart,
-        ],
-        set: {
-          sections: sections as unknown as Record<string, unknown>[],
-          headline,
-          note,
-          source,
-          generatedBy,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    row = upserted;
-  }
-  await appendAudit({
-    actorId: generatedBy,
-    firmId,
-    action: "advisory.brief.generate",
-    entityType: "clerk_advisory_brief",
-    entityId: row.id,
-    after: { clientPartyId, monthStart, source },
+    await appendAudit({
+      actorId: generatedBy,
+      firmId,
+      action: "advisory.brief.generate",
+      entityType: "clerk_advisory_brief",
+      entityId: row.id,
+      after: { clientPartyId, monthStart, source },
+    });
+    return row;
   });
-  return row;
 }
 
 // Read path: newest first, the client's legal name joined for display.

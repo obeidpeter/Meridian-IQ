@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetMe,
-  useListParties,
   useListRecurringInvoices,
   useListRecurringSuggestions,
   useCreateRecurringInvoice,
@@ -10,7 +9,6 @@ import {
   getListRecurringInvoicesQueryKey,
   getListRecurringSuggestionsQueryKey,
   type InvoiceLineInput,
-  type Party,
   type RecurringInvoiceTemplate,
   type RecurringSuggestion,
 } from "@workspace/api-client-react";
@@ -39,17 +37,25 @@ import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
-import { BuyerSelectOptions } from "@/components/buyer-select-options";
+import {
+  CustomerDirectoryPicker,
+  CustomerName,
+  useDirectoryCustomer,
+} from "@/components/customer-directory-picker";
 import { LineItemRow } from "@/components/line-item-row";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import { idMap, scopedToSupplier } from "@/lib/rows";
-import { formatAmount, formatNaira, formatDate, pillClasses } from "@/lib/format";
+import { scopedToSupplier } from "@/lib/rows";
+import {
+  formatAmount,
+  formatNaira,
+  formatDate,
+  pillClasses,
+} from "@/lib/format";
 import {
   type LineDraft,
   emptyLine,
-  lineTotal,
   lineTotals,
   todayIsoDate,
   toInvoiceLineInputs,
@@ -78,7 +84,7 @@ const cadenceLabel = (cadence: string) =>
 
 // Standing amount per run, derived from the template's own lines.
 const templateTotal = (t: RecurringInvoiceTemplate) =>
-  t.lines.reduce((sum, l) => sum + lineTotal(l).total, 0);
+  lineTotals(t.lines).total;
 
 /** "New recurring invoice" dialog: owns its form state and the create
  * mutation; the parent only opens/closes it. Fields reset on close so a
@@ -86,13 +92,11 @@ const templateTotal = (t: RecurringInvoiceTemplate) =>
 function NewRecurringDialog({
   open,
   onOpenChange,
-  buyers,
   supplierPartyId,
   initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  buyers: Party[];
   supplierPartyId: string;
   /** Prefill from a suggestion; the parent re-keys the dialog per seed. */
   initial?: TemplateForm;
@@ -101,6 +105,7 @@ function NewRecurringDialog({
   const queryClient = useQueryClient();
   const create = useCreateRecurringInvoice();
   const [form, setForm] = useState<TemplateForm>(initial ?? emptyForm());
+  const { data: selectedBuyer } = useDirectoryCustomer(form.buyerPartyId);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) setForm(emptyForm());
@@ -114,18 +119,17 @@ function NewRecurringDialog({
 
   const isValid =
     !!form.name.trim() &&
-    // The buyer must be one the picker actually offers — a seed can carry a
-    // party the Select can't display (defence in depth with the server's own
-    // merged-away/type filter), and submitting it would create a template
-    // against a party the user never sees.
-    buyers.some((b) => b.id === form.buyerPartyId) &&
+    selectedBuyer?.type === "buyer" &&
+    selectedBuyer.id !== supplierPartyId &&
     !!form.startDate &&
     form.lines.length > 0 &&
     form.lines.every(
       (l) =>
         l.description.trim() &&
+        Number.isFinite(Number(l.quantity)) &&
         Number(l.quantity) > 0 &&
         l.unitPrice !== "" &&
+        Number.isFinite(Number(l.unitPrice)) &&
         Number(l.unitPrice) >= 0,
     );
 
@@ -191,38 +195,21 @@ function NewRecurringDialog({
           </div>
           <div>
             <Label htmlFor="buyer-select">Customer</Label>
-            {buyers.length === 0 ? (
-              <div
-                id="buyer-select"
-                className="border rounded-md px-3 py-2 mt-1"
-                data-testid="text-no-buyers"
-              >
-                <span className="text-sm text-muted-foreground">
-                  No customers yet — add your first customer from the{" "}
-                  <Link
-                    href="/invoices/new"
-                    className="text-primary hover:underline"
-                  >
-                    new invoice form
-                  </Link>
-                  .
-                </span>
-              </div>
-            ) : (
-              <Select
-                value={form.buyerPartyId || undefined}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, buyerPartyId: v }))
-                }
-              >
-                <SelectTrigger id="buyer-select">
-                  <SelectValue placeholder="Select a customer…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <BuyerSelectOptions buyers={buyers} />
-                </SelectContent>
-              </Select>
-            )}
+            <CustomerDirectoryPicker
+              id="buyer-select"
+              value={form.buyerPartyId}
+              excludeId={supplierPartyId}
+              disabled={create.isPending}
+              onChange={(buyerPartyId) =>
+                setForm((f) => ({ ...f, buyerPartyId }))
+              }
+            />
+            <Link
+              href="/invoices/new"
+              className="text-xs text-primary hover:underline"
+            >
+              Add a customer
+            </Link>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -302,9 +289,7 @@ function NewRecurringDialog({
             </div>
             <div className="flex justify-between font-semibold">
               <span>Total per run</span>
-              <span className="tabular-nums">
-                {formatNaira(totals.net + totals.vat)}
-              </span>
+              <span className="tabular-nums">{formatNaira(totals.total)}</span>
             </div>
           </div>
         </div>
@@ -334,9 +319,6 @@ export function Recurring() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
-  // Bounded reads (R98): buyers only (the template dialog's picker and the
-  // buyer-name map both want exactly that set), at the reference ceiling.
-  const { data: parties } = useListParties({ type: "buyer", limit: 500 });
   const {
     data: templates,
     isLoading,
@@ -389,19 +371,6 @@ export function Recurring() {
     setSeedKey((k) => k + 1);
     setDialogOpen(true);
   };
-
-  const buyers = useMemo(
-    () =>
-      (parties || []).filter(
-        (p) => p.type === "buyer" && p.id !== me?.clientPartyId,
-      ),
-    [parties, me?.clientPartyId],
-  );
-
-  const partyName = useMemo(
-    () => idMap(parties, (p) => p.id, (p) => p.legalName),
-    [parties],
-  );
 
   // The client's own templates, like the invoice vault scopes its rows.
   const rows = useMemo(
@@ -461,7 +430,6 @@ export function Recurring() {
               setDialogOpen(open);
               if (!open) setSeed(undefined);
             }}
-            buyers={buyers}
             supplierPartyId={me.clientPartyId}
             initial={seed}
           />
@@ -479,7 +447,9 @@ export function Recurring() {
               >
                 <CardContent className="flex flex-wrap items-center justify-between p-4 gap-3">
                   <div className="min-w-0">
-                    <span className="font-semibold truncate">{s.buyerName}</span>
+                    <span className="font-semibold truncate">
+                      {s.buyerName}
+                    </span>
                     <p className="text-sm text-muted-foreground mt-1">
                       {s.count} invoices in the last year · about{" "}
                       {formatAmount(s.medianAmount, s.currency)} each · last{" "}
@@ -539,7 +509,7 @@ export function Recurring() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1 truncate">
-                      {partyName.get(t.buyerPartyId) || "Unknown customer"} ·{" "}
+                      <CustomerName id={t.buyerPartyId} /> ·{" "}
                       {cadenceLabel(t.cadence)} · Next run{" "}
                       {formatDate(t.nextRunDate)}
                     </p>

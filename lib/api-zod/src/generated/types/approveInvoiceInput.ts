@@ -3,10 +3,12 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.98.0
+ * OpenAPI spec version: 0.99.0
  */
 
 export interface ApproveInvoiceInput {
+  /** @minimum 1 */
+  expectedRevision: number;
   /** @maxLength 1000 */
   note?: string;
 }

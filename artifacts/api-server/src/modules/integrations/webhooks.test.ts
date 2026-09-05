@@ -47,6 +47,12 @@ import { firmPrincipal } from "../../test-helpers/principals.ts";
 // deleted; only the integration tables themselves are cleaned.
 
 const SALT = makeRunSalt();
+
+test("fanout batch size rejects unbounded or malformed work", async () => {
+  for (const size of [0, -1, 1.5, Infinity, NaN, 1_001]) {
+    await assert.rejects(fanOutWebhookEvents(size), /batch size/);
+  }
+});
 const firmA = randomUUID();
 const firmB = randomUUID();
 const partyA = randomUUID();
@@ -92,15 +98,13 @@ before(async () => {
     { id: firmA, name: `Webhook Firm A ${SALT}` },
     { id: firmB, name: `Webhook Firm B ${SALT}` },
   ]);
-  await db
-    .insert(partiesTable)
-    .values([
-      {
-        id: partyA,
-        type: "client_business",
-        legalName: `Webhook Party ${SALT}`,
-      },
-    ]);
+  await db.insert(partiesTable).values([
+    {
+      id: partyA,
+      type: "client_business",
+      legalName: `Webhook Party ${SALT}`,
+    },
+  ]);
   await db.insert(invoicesTable).values([
     {
       id: invoiceA,
@@ -744,4 +748,133 @@ test("RLS: webhook and delivery rows are firm-isolated at the data layer", async
         });
     }),
   );
+});
+
+test("fanout recovers an outage older than 24 hours in bounded unique-key batches, including late commits", async () => {
+  const backlogFirm = randomUUID();
+  const backlogInvoice = randomUUID();
+  await getDb()
+    .insert(firmsTable)
+    .values({ id: backlogFirm, name: `Webhook backlog ${SALT}` });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id: backlogInvoice,
+      firmId: backlogFirm,
+      supplierPartyId: partyA,
+      buyerPartyId: partyA,
+      invoiceNumber: `WH-backlog-${SALT}`,
+      issueDate: "2026-07-01",
+    });
+  const hook = await createFirmWebhook(backlogFirm, `${receiverBase}/ok`, [
+    ...WEBHOOK_EVENTS,
+  ]);
+  const day = 86_400_000;
+  const cutoff = new Date(Date.now() - 4 * day);
+  const eventTime = new Date(cutoff.getTime() + day);
+  await getDb()
+    .update(firmWebhooksTable)
+    .set({ createdAt: cutoff })
+    .where(eq(firmWebhooksTable.id, hook.row.id));
+  const lifecycle = await getDb()
+    .insert(invoiceLifecycleEventsTable)
+    .values(
+      Array.from({ length: 3 }, () => ({
+        invoiceId: backlogInvoice,
+        firmId: backlogFirm,
+        fromStatus: "submitted" as const,
+        toStatus: "stamped" as const,
+        actorRole: "system",
+        createdAt: eventTime,
+      })),
+    )
+    .returning();
+  const audits = await getDb()
+    .insert(auditEventsTable)
+    .values(
+      Array.from({ length: 3 }, () => ({
+        firmId: backlogFirm,
+        action: "statement.reconciled",
+        entityType: "bank_statement",
+        entityId: statementId,
+        hash: `old-${SALT}`,
+        prevHash: `old-${SALT}`,
+        createdAt: eventTime,
+      })),
+    )
+    .returning();
+  const [beforeRegistration] = await getDb()
+    .insert(invoiceLifecycleEventsTable)
+    .values({
+      invoiceId: backlogInvoice,
+      firmId: backlogFirm,
+      fromStatus: "submitted",
+      toStatus: "stamped",
+      actorRole: "system",
+      createdAt: new Date(cutoff.getTime() - 1),
+    })
+    .returning();
+  const read = () =>
+    getDb()
+      .select()
+      .from(firmWebhookDeliveriesTable)
+      .where(eq(firmWebhookDeliveriesTable.webhookId, hook.row.id));
+  try {
+    assert.equal(
+      await fanOutWebhookEvents(2),
+      4,
+      "at most two per source, including old events",
+    );
+    const initial = await read();
+    assert.equal(initial.length, 4);
+    const retained = initial[0];
+    await getDb()
+      .update(firmWebhookDeliveriesTable)
+      .set({ status: "dead", attempts: 5, lastError: "retained" })
+      .where(eq(firmWebhookDeliveriesTable.id, retained.id));
+    const passes = await Promise.all([
+      fanOutWebhookEvents(2),
+      fanOutWebhookEvents(2),
+    ]);
+    assert.equal(
+      passes.reduce((a, b) => a + b, 0),
+      2,
+    );
+    const rows = await read();
+    assert.equal(rows.length, 6);
+    assert.deepEqual(
+      new Set(rows.map((r) => r.eventKey)),
+      new Set([
+        ...lifecycle.map((e) => `lce:${e.id}`),
+        ...audits.map((a) => `aud:${a.seq}`),
+      ]),
+    );
+    assert.ok(!rows.some((r) => r.eventKey === `lce:${beforeRegistration.id}`));
+    assert.equal(rows.find((r) => r.id === retained.id)?.attempts, 5);
+    assert.equal(rows.find((r) => r.id === retained.id)?.lastError, "retained");
+    assert.equal(rows.find((r) => r.id === retained.id)?.status, "dead");
+    assert.equal(await fanOutWebhookEvents(2), 0);
+    // A transaction that commits after earlier scans with an older timestamp
+    // must still be found; no timestamp or sequence watermark skips it.
+    const [late] = await getDb()
+      .insert(invoiceLifecycleEventsTable)
+      .values({
+        invoiceId: backlogInvoice,
+        firmId: backlogFirm,
+        fromStatus: "stamped",
+        toStatus: "settled",
+        actorRole: "system",
+        createdAt: new Date(eventTime.getTime() - 1),
+      })
+      .returning();
+    assert.equal(await fanOutWebhookEvents(2), 1);
+    assert.ok((await read()).some((row) => row.eventKey === `lce:${late.id}`));
+  } finally {
+    await getDb()
+      .delete(firmWebhookDeliveriesTable)
+      .where(eq(firmWebhookDeliveriesTable.webhookId, hook.row.id));
+    await getDb()
+      .delete(firmWebhooksTable)
+      .where(eq(firmWebhooksTable.id, hook.row.id));
+  }
 });

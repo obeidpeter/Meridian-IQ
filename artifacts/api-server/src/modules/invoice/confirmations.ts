@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import {
   getDb,
+  withTransaction,
   confirmationsTable,
   invoicesTable,
   partiesTable,
@@ -177,7 +178,7 @@ export async function recordConfirmation(
     // surrounding commit.
     try {
       if (await isFeatureEnabled("messaging_notifications", null)) {
-        await getDb().transaction(async () => {
+        await withTransaction(async () => {
           await sendMessage({
             channel: "email",
             recipientRef: pointerEntityRef("pty", currentInvoice.buyerPartyId),

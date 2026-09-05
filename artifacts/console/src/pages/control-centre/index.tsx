@@ -132,7 +132,7 @@ export function ControlCentre({ section }: { section: ControlCentreSection }) {
                 key={item.key}
                 href={`/control-centre/${item.key}`}
                 aria-current={selected ? "page" : undefined}
-                className={`flex min-h-14 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`flex min-h-14 items-center gap-2 rounded-md px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:focus-visible:ring-teal-700 ${
                   selected
                     ? "bg-[#082f31] text-white shadow-sm"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
@@ -144,7 +144,7 @@ export function ControlCentre({ section }: { section: ControlCentreSection }) {
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[10px] font-bold text-current opacity-55">
+                  <span className="block text-[10px] font-bold text-current">
                     0{index + 1}
                   </span>
                   <span className="block truncate">{item.label}</span>

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.98.0
+ * OpenAPI spec version: 0.99.0
  */
 
 export interface InvoiceApproval {
@@ -12,6 +12,8 @@ export interface InvoiceApproval {
   approvedByUserId: string;
   /** @nullable */
   approvedByName: string | null;
+  /** @nullable */
+  contentRevision: number | null;
   /** @nullable */
   note: string | null;
   /** @nullable */

@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   clerkEvalRunsTable,
   type ClerkEvalRun,
   type ClerkEvalFixtureResult,
@@ -75,7 +76,9 @@ export function scoreFixture(
   output: ExtractionOutput,
 ): ClerkEvalFixtureResult {
   const normalized = normalizeExtraction(output);
-  const actualByField = new Map(normalized.fields.map((f) => [f.field, f.value]));
+  const actualByField = new Map(
+    normalized.fields.map((f) => [f.field, f.value]),
+  );
   const mismatches: ClerkEvalFixtureResult["mismatches"] = [];
   let correct = 0;
   let compared = 0;
@@ -198,8 +201,8 @@ export async function runEvalCorpus(
       : [
           ...EVAL_FIXTURES,
           ...NOTICE_EVAL_FIXTURES,
-          ...(await loadGrownFixtures()),
-          ...(await loadRedTeamFixtures()),
+          ...(await runInBypassContext(() => loadGrownFixtures())),
+          ...(await runInBypassContext(() => loadRedTeamFixtures())),
           ...(await loadVisionFixtures()),
         ];
 
@@ -253,7 +256,9 @@ export async function runEvalCorpus(
       caseId: null,
       promptVersion: EXTRACT_PROMPT_VERSION,
       system: EXTRACT_SYSTEM,
-      user: vision ? scanUserContent(vision) : fenceDocument(fixture.sourceText),
+      user: vision
+        ? scanUserContent(vision)
+        : fenceDocument(fixture.sourceText),
       schemaName: "invoice_extraction",
       jsonSchema: EXTRACT_JSON_SCHEMA,
       validator: extractionOutputSchema,
@@ -275,25 +280,27 @@ export async function runEvalCorpus(
     (r) => r.injectionResisted === true,
   ).length;
 
-  const [run] = await getDb()
-    .insert(clerkEvalRunsTable)
-    .values({
-      startedBy: actorId,
-      model: gateway.model,
-      // The run-level version names the invoice lane's prompt (the corpus
-      // majority and the historical meaning of this column); the notice
-      // fixtures in the same run rode EXTRACT_NOTICE_PROMPT_VERSION, and the
-      // inference ledger records the true version per call.
-      promptVersion: EXTRACT_PROMPT_VERSION,
-      fixtureCount: results.length,
-      fieldsCompared,
-      fieldsCorrect,
-      injectionFixtures,
-      injectionResisted,
-      results,
-      durationMs: Date.now() - startedAt,
-    })
-    .returning();
+  const [run] = await runInBypassContext(() =>
+    getDb()
+      .insert(clerkEvalRunsTable)
+      .values({
+        startedBy: actorId,
+        model: gateway.model,
+        // The run-level version names the invoice lane's prompt (the corpus
+        // majority and the historical meaning of this column); the notice
+        // fixtures in the same run rode EXTRACT_NOTICE_PROMPT_VERSION, and the
+        // inference ledger records the true version per call.
+        promptVersion: EXTRACT_PROMPT_VERSION,
+        fixtureCount: results.length,
+        fieldsCompared,
+        fieldsCorrect,
+        injectionFixtures,
+        injectionResisted,
+        results,
+        durationMs: Date.now() - startedAt,
+      })
+      .returning(),
+  );
 
   await appendAudit({
     actorId,

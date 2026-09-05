@@ -447,7 +447,7 @@ function PreviewFrame({
         <span className="size-2.5 rounded-full bg-rose-400" />
         <span className="size-2.5 rounded-full bg-amber-400" />
         <span className="size-2.5 rounded-full bg-emerald-400" />
-        <span className="ml-3 truncate text-xs font-semibold text-slate-500">
+        <span className="ml-3 truncate text-xs font-semibold text-slate-600">
           app.meridianiq.com
         </span>
         <span className="ml-auto hidden items-center gap-1.5 text-xs font-semibold text-teal-700 sm:inline-flex">
@@ -511,7 +511,7 @@ function ClerkPreview() {
                 <p className="text-xs font-extrabold text-slate-900">
                   New intake
                 </p>
-                <span className="text-[10px] font-bold text-slate-400">
+                <span className="text-[10px] font-bold text-slate-600">
                   3 open
                 </span>
               </div>
@@ -545,7 +545,7 @@ function ClerkPreview() {
                         <Icon className="size-3.5" aria-hidden="true" />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-slate-400">
+                        <p className="text-[10px] font-bold text-slate-600">
                           {kind}
                         </p>
                         <p className="truncate text-xs font-bold text-slate-800">
@@ -564,7 +564,7 @@ function ClerkPreview() {
             <section className="rounded-md border border-slate-200 bg-white p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400">
+                  <p className="text-[10px] font-bold text-slate-600">
                     VOICE INTAKE
                   </p>
                   <p className="mt-1 text-sm font-extrabold text-slate-900">
@@ -582,7 +582,7 @@ function ClerkPreview() {
                     <Mic2 className="size-3.5" aria-hidden="true" />
                   </span>
                   00:18 voice note
-                  <span className="ml-auto text-slate-400">Today, 09:42</span>
+                  <span className="ml-auto text-slate-600">Today, 09:42</span>
                 </div>
                 <p className="mt-2 text-[11px] leading-5 text-slate-600">
                   Invoice Northstar Retail for the July delivery. Use the agreed
@@ -671,7 +671,7 @@ function FirmPreview() {
         <div className="min-w-0 overflow-hidden p-4 sm:p-5">
           <header className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">
+              <p className="text-[10px] font-bold uppercase text-slate-600">
                 Demo portfolio
               </p>
               <h3 className="mt-1 text-lg font-extrabold text-slate-950">
@@ -704,7 +704,7 @@ function FirmPreview() {
           </div>
 
           <section className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
-            <div className="grid grid-cols-[1.2fr_0.7fr_0.9fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-400 sm:grid-cols-[1.3fr_0.7fr_0.9fr_0.9fr]">
+            <div className="grid grid-cols-[1.2fr_0.7fr_0.9fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-600 sm:grid-cols-[1.3fr_0.7fr_0.9fr_0.9fr]">
               <span>Client</span>
               <span>Risk</span>
               <span>Receivables</span>
@@ -739,7 +739,7 @@ function FirmPreview() {
           </section>
 
           <div className="mt-3 flex items-center justify-between text-[10px]">
-            <span className="font-semibold text-slate-500">
+            <span className="font-semibold text-slate-600">
               12 drafts ready for review
             </span>
             <span className="font-extrabold text-teal-700">Open portfolio</span>
@@ -762,7 +762,7 @@ function BuyerPreview() {
             <h3 className="mt-1 text-lg font-extrabold text-slate-950">
               Supplier invoice queue
             </h3>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-slate-600">
               Verify the invoice before it enters the payment run.
             </p>
           </div>
@@ -773,7 +773,7 @@ function BuyerPreview() {
 
         <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_0.72fr]">
           <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-            <div className="grid grid-cols-[1.2fr_0.8fr_0.7fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-400">
+            <div className="grid grid-cols-[1.2fr_0.8fr_0.7fr] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-600">
               <span>Supplier</span>
               <span>Invoice</span>
               <span>Status</span>
@@ -809,7 +809,7 @@ function BuyerPreview() {
           </section>
 
           <section className="hidden rounded-md border border-slate-200 bg-white p-4 lg:block">
-            <p className="text-[10px] font-bold text-slate-400">
+            <p className="text-[10px] font-bold text-slate-600">
               SELECTED INVOICE
             </p>
             <p className="mt-1 text-sm font-extrabold text-slate-900">
@@ -1149,9 +1149,9 @@ function AccessRequest() {
   const [form, setForm] = useState<PlatformAccessRequestInput>(
     INITIAL_ACCESS_REQUEST,
   );
-  const [status, setStatus] = useState<
-    "idle" | "sending" | "sent" | "error"
-  >("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle",
+  );
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
 
@@ -1203,7 +1203,10 @@ function AccessRequest() {
             className="max-w-3xl border-l-4 border-emerald-600 pl-5 sm:pl-8"
             role="status"
           >
-            <CheckCircle2 className="size-8 text-emerald-700" aria-hidden="true" />
+            <CheckCircle2
+              className="size-8 text-emerald-700"
+              aria-hidden="true"
+            />
             <h2 className="landing-display mt-5 text-4xl font-bold leading-tight text-slate-950 sm:text-5xl">
               Your request is with us.
             </h2>
@@ -1246,9 +1249,7 @@ function AccessRequest() {
             right person will follow up about a workspace, pilot or partnership.
           </p>
           <div className="mt-8 border-t border-slate-300 pt-5">
-            <p className="text-sm font-bold text-slate-900">
-              Prefer email?
-            </p>
+            <p className="text-sm font-bold text-slate-900">Prefer email?</p>
             <a
               href={CONTACT_MAILTO}
               className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-extrabold text-teal-800 underline underline-offset-4 hover:text-teal-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
@@ -1265,7 +1266,10 @@ function AccessRequest() {
           aria-describedby={error ? "access-request-error" : undefined}
         >
           <div>
-            <label htmlFor="access-name" className="text-sm font-bold text-slate-800">
+            <label
+              htmlFor="access-name"
+              className="text-sm font-bold text-slate-800"
+            >
               Your name
             </label>
             <input
@@ -1280,7 +1284,10 @@ function AccessRequest() {
             />
           </div>
           <div>
-            <label htmlFor="access-email" className="text-sm font-bold text-slate-800">
+            <label
+              htmlFor="access-email"
+              className="text-sm font-bold text-slate-800"
+            >
               Work email
             </label>
             <input
@@ -1365,7 +1372,8 @@ function AccessRequest() {
               htmlFor="access-message"
               className="text-sm font-bold text-slate-800"
             >
-              What would you like to solve? <span className="font-normal text-slate-500">(optional)</span>
+              What would you like to solve?{" "}
+              <span className="font-normal text-slate-500">(optional)</span>
             </label>
             <textarea
               id="access-message"
@@ -1445,71 +1453,74 @@ export default function LandingPage() {
         Skip to content
       </a>
 
-      <section className="landing-hero text-white">
-        <LandingNav />
-        <div className="relative z-10 mx-auto flex min-h-[calc(100svh-10rem)] max-w-7xl flex-col justify-end gap-12 px-5 pb-12 pt-14 sm:px-8 sm:pb-16 sm:pt-20 lg:px-10 lg:pb-20">
-          <div className="max-w-4xl">
-            <div className="mb-6 inline-flex items-center gap-2 border-l-2 border-lime-300 pl-3 text-sm font-semibold text-lime-200">
-              <ShieldCheck className="size-4" aria-hidden="true" />
-              E-invoicing for Nigerian businesses
-            </div>
-            <h1 className="landing-display text-5xl font-extrabold leading-none text-white sm:text-7xl lg:text-8xl">
-              MeridianIQ
-            </h1>
-            <p className="landing-display mt-5 max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-5xl">
-              Send correct invoices. Keep the proof.
-            </p>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-white/80 sm:text-lg">
-              Create invoices, check them against FIRS rules and send them for
-              stamping. Everything you might need to show an auditor stays saved
-              in one place.
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                href="/login"
-                onClick={trackLandingCta}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-lime-300 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-lime-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
-                data-testid="link-hero-login"
-              >
-                Sign in to MeridianIQ
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </a>
-              <a
-                href="#product-tour"
-                className="inline-flex min-h-12 items-center justify-center rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
-              >
-                See the product
-              </a>
-              <a
-                href="#request-access"
-                onClick={trackLandingCta}
-                data-testid="link-hero-contact"
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
-              >
-                Request access
-                <Mail className="size-4" aria-hidden="true" />
-              </a>
-            </div>
-
-            <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/75">
-              {[
-                "You approve every important step",
-                "Each person sees only their own work",
-                "A full history for every invoice",
-              ].map((item) => (
-                <span key={item} className="inline-flex items-center gap-2">
-                  <Check className="size-4 text-lime-300" aria-hidden="true" />
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-          <HeroWorkspaceEvidence />
-        </div>
-      </section>
-
+      <LandingNav />
       <main id="landing-main" tabIndex={-1} className="focus:outline-none">
+        <section className="landing-hero text-white">
+          <div className="relative z-10 mx-auto flex min-h-[calc(100svh-10rem)] max-w-7xl flex-col justify-end gap-12 px-5 pb-12 pt-14 sm:px-8 sm:pb-16 sm:pt-20 lg:px-10 lg:pb-20">
+            <div className="max-w-4xl">
+              <div className="mb-6 inline-flex items-center gap-2 border-l-2 border-lime-300 pl-3 text-sm font-semibold text-lime-200">
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                E-invoicing for Nigerian businesses
+              </div>
+              <h1 className="landing-display text-5xl font-extrabold leading-none text-white sm:text-7xl lg:text-8xl">
+                MeridianIQ
+              </h1>
+              <p className="landing-display mt-5 max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-5xl">
+                Send correct invoices. Keep the proof.
+              </p>
+              <p className="mt-6 max-w-2xl text-base leading-7 text-white/80 sm:text-lg">
+                Create invoices, check them against FIRS rules and send them for
+                stamping. Everything you might need to show an auditor stays
+                saved in one place.
+              </p>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <a
+                  href="/login"
+                  onClick={trackLandingCta}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-lime-300 px-5 text-sm font-extrabold text-[#071a1c] transition-colors hover:bg-lime-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
+                  data-testid="link-hero-login"
+                >
+                  Sign in to MeridianIQ
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </a>
+                <a
+                  href="#product-tour"
+                  className="inline-flex min-h-12 items-center justify-center rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+                >
+                  See the product
+                </a>
+                <a
+                  href="#request-access"
+                  onClick={trackLandingCta}
+                  data-testid="link-hero-contact"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/35 bg-[#071a1c]/30 px-5 text-sm font-bold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+                >
+                  Request access
+                  <Mail className="size-4" aria-hidden="true" />
+                </a>
+              </div>
+
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-white/75">
+                {[
+                  "You approve every important step",
+                  "Each person sees only their own work",
+                  "A full history for every invoice",
+                ].map((item) => (
+                  <span key={item} className="inline-flex items-center gap-2">
+                    <Check
+                      className="size-4 text-lime-300"
+                      aria-hidden="true"
+                    />
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <HeroWorkspaceEvidence />
+          </div>
+        </section>
+
         <section className="bg-lime-300" aria-label="Platform facts">
           <dl className="mx-auto grid max-w-7xl grid-cols-2 px-5 sm:px-8 lg:grid-cols-4 lg:px-10">
             {PLATFORM_FACTS.map(([value, label]) => (
@@ -1753,7 +1764,7 @@ export default function LandingPage() {
                         {body}
                       </p>
                     </div>
-                    <time className="pt-1 text-[10px] font-bold text-white/40">
+                    <time className="pt-1 text-[10px] font-bold text-white/60">
                       {time}
                     </time>
                   </li>
@@ -1869,7 +1880,7 @@ export default function LandingPage() {
                       className={"mt-6 size-7 sm:mt-8 " + workspace.accent}
                       aria-hidden="true"
                     />
-                    <p className="mt-6 text-xs font-bold uppercase text-slate-400">
+                    <p className="mt-6 text-xs font-bold uppercase text-slate-600">
                       {workspace.audience}
                     </p>
                     <h3 className="mt-2 text-xl font-extrabold text-slate-950">
@@ -2002,7 +2013,7 @@ export default function LandingPage() {
             </a>
           </nav>
         </div>
-        <div className="mx-auto mt-9 flex max-w-7xl flex-col gap-2 border-t border-white/10 px-5 pt-6 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
+        <div className="mx-auto mt-9 flex max-w-7xl flex-col gap-2 border-t border-white/10 px-5 pt-6 text-xs text-white/60 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
           <span>MeridianIQ, Lagos, Nigeria.</span>
           <span>Correct invoices, from first draft to final payment.</span>
         </div>

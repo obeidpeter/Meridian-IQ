@@ -1,5 +1,6 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
+import { withClerkDb } from "./scope";
 import {
   getDb,
   runInBypassContext,
@@ -250,23 +251,23 @@ export async function generateClientStatement(
   monthStart: string,
   gateway: ClerkGateway | null,
 ): Promise<ClerkClientStatementRow> {
-  const [existing] = await getDb()
-    .select()
-    .from(clerkClientStatementsTable)
-    .where(
-      and(
-        eq(clerkClientStatementsTable.firmId, firmId),
-        eq(clerkClientStatementsTable.clientPartyId, clientPartyId),
-        eq(clerkClientStatementsTable.monthStart, monthStart),
-      ),
-    )
-    .limit(1);
+  const [existing] = await withClerkDb(firmId, () =>
+    getDb()
+      .select()
+      .from(clerkClientStatementsTable)
+      .where(
+        and(
+          eq(clerkClientStatementsTable.firmId, firmId),
+          eq(clerkClientStatementsTable.clientPartyId, clientPartyId),
+          eq(clerkClientStatementsTable.monthStart, monthStart),
+        ),
+      )
+      .limit(1),
+  );
   if (existing) return existing;
 
-  const facts = await computeClientStatementFacts(
-    firmId,
-    clientPartyId,
-    monthStart,
+  const facts = await withClerkDb(firmId, () =>
+    computeClientStatementFacts(firmId, clientPartyId, monthStart),
   );
   const template = buildTemplateStatement(facts, monthStart);
   let headline = template.headline;
@@ -286,22 +287,20 @@ export async function generateClientStatement(
   // text is assembled by the SAME joinOutput the phrasing eval scores, so
   // the eval grades exactly what production grounds.
   if (!statementIsQuiet(facts)) {
-    const data = await phraseGroundedDraft<z.infer<typeof headlineBulletsOutput>>(
-      gateway,
-      firmId,
-      {
-        purpose: "client_statement",
-        promptVersion: STATEMENT_PROMPT_VERSION,
-        system: STATEMENT_SYSTEM,
-        user: buildStatementUser(facts, monthStart),
-        schemaName: "client_statement",
-        jsonSchema: headlineBulletsJsonSchema,
-        validator: headlineBulletsOutput,
-        groundingSurface: "client_statement",
-        inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
-        text: STATEMENT_PHRASING.joinOutput,
-      },
-    );
+    const data = await phraseGroundedDraft<
+      z.infer<typeof headlineBulletsOutput>
+    >(gateway, firmId, {
+      purpose: "client_statement",
+      promptVersion: STATEMENT_PROMPT_VERSION,
+      system: STATEMENT_SYSTEM,
+      user: buildStatementUser(facts, monthStart),
+      schemaName: "client_statement",
+      jsonSchema: headlineBulletsJsonSchema,
+      validator: headlineBulletsOutput,
+      groundingSurface: "client_statement",
+      inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
+      text: STATEMENT_PHRASING.joinOutput,
+    });
     if (data) {
       headline = data.headline;
       bullets = data.bullets.length ? data.bullets : bullets;
@@ -311,24 +310,34 @@ export async function generateClientStatement(
 
   // Two instances racing resolve on the unique key: the loser reads the
   // winner's row.
-  const [inserted] = await getDb()
-    .insert(clerkClientStatementsTable)
-    .values({ firmId, clientPartyId, monthStart, facts, headline, bullets, source })
-    .onConflictDoNothing()
-    .returning();
-  if (inserted) return inserted;
-  const [winner] = await getDb()
-    .select()
-    .from(clerkClientStatementsTable)
-    .where(
-      and(
-        eq(clerkClientStatementsTable.firmId, firmId),
-        eq(clerkClientStatementsTable.clientPartyId, clientPartyId),
-        eq(clerkClientStatementsTable.monthStart, monthStart),
-      ),
-    )
-    .limit(1);
-  return winner;
+  return withClerkDb(firmId, async () => {
+    const [inserted] = await getDb()
+      .insert(clerkClientStatementsTable)
+      .values({
+        firmId,
+        clientPartyId,
+        monthStart,
+        facts,
+        headline,
+        bullets,
+        source,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (inserted) return inserted;
+    const [winner] = await getDb()
+      .select()
+      .from(clerkClientStatementsTable)
+      .where(
+        and(
+          eq(clerkClientStatementsTable.firmId, firmId),
+          eq(clerkClientStatementsTable.clientPartyId, clientPartyId),
+          eq(clerkClientStatementsTable.monthStart, monthStart),
+        ),
+      )
+      .limit(1);
+    return winner;
+  });
 }
 
 // The read path (RLS-scoped by 0015; the ROUTE must also narrow client_users

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import {
   getDb,
+  withDatabaseContext,
   messagesTable,
   type Message,
   type MessageChannel,
@@ -406,42 +407,49 @@ export async function sendMessage(input: SendInput): Promise<Message> {
       };
     }
     if (send.ok) {
-      const [row] = await getDb()
-        .insert(messagesTable)
-        .values({
-          channel,
-          recipientRef: input.recipientRef,
-          recipientUserId: input.recipientUserId ?? null,
-          recipientPartyId: input.recipientPartyId ?? null,
-          templateKey: input.templateKey,
-          entityType: input.entityType ?? null,
-          entityId: input.entityId ?? null,
-          status: "sent",
-          providerMessageId: send.providerMessageId,
-          failoverFrom,
-        })
-        .returning();
+      const sentChannel = channel;
+      const [row] = await withDatabaseContext(
+        { bypass: true, firmId: null },
+        () =>
+          getDb()
+            .insert(messagesTable)
+            .values({
+              channel: sentChannel,
+              recipientRef: input.recipientRef,
+              recipientUserId: input.recipientUserId ?? null,
+              recipientPartyId: input.recipientPartyId ?? null,
+              templateKey: input.templateKey,
+              entityType: input.entityType ?? null,
+              entityId: input.entityId ?? null,
+              status: "sent",
+              providerMessageId: send.providerMessageId,
+              failoverFrom,
+            })
+            .returning(),
+      );
       return row;
     }
     failoverFrom = channel;
     channel = FAILOVER[channel];
   }
 
-  const [row] = await getDb()
-    .insert(messagesTable)
-    .values({
-      channel: input.channel,
-      recipientRef: input.recipientRef,
-      recipientUserId: input.recipientUserId ?? null,
-      recipientPartyId: input.recipientPartyId ?? null,
-      templateKey: input.templateKey,
-      entityType: input.entityType ?? null,
-      entityId: input.entityId ?? null,
-      status: "failed",
-      error: "all channels failed",
-      failoverFrom,
-    })
-    .returning();
+  const [row] = await withDatabaseContext({ bypass: true, firmId: null }, () =>
+    getDb()
+      .insert(messagesTable)
+      .values({
+        channel: input.channel,
+        recipientRef: input.recipientRef,
+        recipientUserId: input.recipientUserId ?? null,
+        recipientPartyId: input.recipientPartyId ?? null,
+        templateKey: input.templateKey,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+        status: "failed",
+        error: "all channels failed",
+        failoverFrom,
+      })
+      .returning(),
+  );
   return row;
 }
 

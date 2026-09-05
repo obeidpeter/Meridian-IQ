@@ -1,14 +1,56 @@
 // Lifecycle journeys: the credit-note + workflow smoke, and the two
 // password journeys (self-service round trip, operator-issued reset) — both
 // restore the demo password so the suite reruns on the same seed.
+import assert from "node:assert/strict";
 import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
   DEMO_PASSWORD,
-  createDraftInvoice,
   pollUntil,
   signIn,
 } from "./shared.mjs";
+
+export async function waitForNewInvoiceDraft(
+  page,
+  BASE,
+  { timeout = 10000 } = {},
+) {
+  const origin = new URL(BASE).origin;
+  const isFormRoute = (url) =>
+    url.origin === origin && url.pathname === "/app/invoices/new";
+  const isDraftRoute = (url) =>
+    isFormRoute(url) &&
+    url.searchParams.getAll("draft").length === 1 &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      url.searchParams.get("draft"),
+    );
+  await page.waitForURL(isFormRoute, { timeout });
+  // The form's mount effect adds the durable draft identity by replaceState.
+  await page.waitForURL(isDraftRoute, { timeout });
+  assert.ok(
+    isDraftRoute(new URL(page.url())),
+    "new-invoice URL must contain one valid draft UUID",
+  );
+  for (const id of ["buyer-select", "invoice-number", "line-0-description"]) {
+    await page.waitForSelector(`#${id}:enabled:not([readonly])`, {
+      state: "visible",
+      timeout,
+    });
+  }
+  assert.ok(
+    isDraftRoute(new URL(page.url())),
+    "draft route must remain current when the form is ready",
+  );
+}
+
+export async function selectFirstInvoiceCustomer(page) {
+  await page.locator("#buyer-select").click();
+  await page
+    .getByRole("listbox", { name: "Customers", exact: true })
+    .getByRole("option")
+    .first()
+    .click();
+}
 
 // ---------- SME staff: credit note + workflow smoke ----------
 // Signs in as demo.staff and deliberately leaves that session signed in —
@@ -98,12 +140,8 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   );
   check("server-side search narrows the invoice list", narrowed);
 
-  // A draft can be created through the form — when the signed-in client can
-  // see buyer parties. Since the new-customer gap closed (firm staff see
-  // invoice-referenced buyers), the seeded world takes this branch; the
-  // no-customers fallback below stays for seeds without visible buyers —
-  // there, assert the empty state renders and create the draft via the same
-  // session's API instead, then verify it surfaces in the list UI.
+  // This is a UI completion test: missing buyer setup must fail, not fall back
+  // to an API-created invoice that would hide a broken customer picker.
   const draftNumber = `E2E-${Date.now()}`;
   await page.goto(BASE + "/app/invoices/new", { waitUntil: "networkidle" });
   await page.waitForSelector("#buyer-select", { timeout: 15000 });
@@ -111,8 +149,7 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
     (await page.locator('[data-testid="text-no-buyers"]').count()) === 0;
   if (buyersAvailable) {
     await page.getByLabel("Invoice number").fill(draftNumber);
-    await page.locator("#buyer-select").click();
-    await page.getByRole("option").first().click();
+    await selectFirstInvoiceCustomer(page);
     await page.locator("#line-0-description").fill("E2E smoke goods");
     await page.locator("#line-0-quantity").fill("2");
     await page.locator("#line-0-unit-price").fill("1500");
@@ -124,30 +161,9 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
     });
     check("invoice form creates a draft", true);
   } else {
-    check(
-      "invoice form shows the no-customers state for the seeded client",
-      true,
+    throw new Error(
+      "UI invoice fixture has no visible buyer; creation was not exercised",
     );
-    const parties = await (
-      await page.request.get(BASE + "/api/parties")
-    ).json();
-    const created = await createDraftInvoice(page, BASE, {
-      supplierPartyId: parties[0].id,
-      buyerPartyId: parties[0].id,
-      invoiceNumber: draftNumber,
-      issueDate: new Date().toISOString().slice(0, 10),
-      description: "E2E smoke goods",
-      unitPrice: "1500",
-      quantity: "2",
-    });
-    check("draft created via the session API", created.status === 201);
-    await page.goto(BASE + "/app/invoices", { waitUntil: "networkidle" });
-    await page.locator("#invoice-search").fill(draftNumber);
-    const found = await pollUntil(
-      async () => (await page.locator(`text=${draftNumber}`).count()) > 0,
-      { page },
-    );
-    check("fresh draft surfaces through list search", found);
   }
 
   // CSV exports ride the same session cookie.
@@ -215,7 +231,7 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   await page.locator("#invoice-search").fill("");
   await page.getByTestId("text-page-title").click();
   await page.keyboard.press("n");
-  await page.waitForURL("**/app/invoices/new", { timeout: 10000 });
+  await waitForNewInvoiceDraft(page, BASE);
   check("n jumps to the new-invoice form", true);
 
   // Recurring invoices page renders with its create entry point.

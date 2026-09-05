@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
-import { getDb, auditEventsTable } from "@workspace/db";
+import {
+  getDb,
+  auditEventsTable,
+  hasDatabaseContext,
+  runRequestContext,
+} from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { assertFirmClerkBudget } from "../clerk/budget";
@@ -49,9 +54,7 @@ export function normalizeContentType(contentType: string): string {
 
 // contentType → capture source. Anything unmapped is skipped (audited by the
 // caller), never an error back to the provider.
-function attachmentSource(
-  att: InboundAttachment,
-): CreateCaseInput | null {
+function attachmentSource(att: InboundAttachment): CreateCaseInput | null {
   const contentType = normalizeContentType(att.contentType);
   if (contentType === PDF_TYPE) {
     return {
@@ -129,6 +132,10 @@ async function inboundAttachmentsToday(
   action: string,
   firmId: string,
 ): Promise<number> {
+  if (!hasDatabaseContext())
+    return runRequestContext({ bypass: false, firmId }, () =>
+      inboundAttachmentsToday(action, firmId),
+    );
   const now = new Date();
   const dayStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),

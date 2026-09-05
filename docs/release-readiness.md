@@ -8,7 +8,7 @@ running deployment. A production release is not complete while any check is
 
 - **Deployment revision:** set `EXPECTED_BUILD_REVISION` to the Git SHA being
   deployed. Replit should expose the running revision through `REPLIT_GIT_SHA`.
-- **Database migrations:** schema push and every numbered guardrail migration
+- **Database migrations:** reviewed additive schema SQL and every numbered guardrail migration
   must match the repository registry. Migration `0047` protects Team work;
   migration `0048` must report Invoice Room RLS plus its append-only event
   trigger before `invoice_room` is enabled.
@@ -19,7 +19,7 @@ running deployment. A production release is not complete while any check is
 - **Backup:** run `ops:backup` outside the API deployment at least daily and
   copy the dump plus checksum off-box.
 - **Restore drill:** run `ops:restore-drill` against a disposable target at
-  least every 31 days and before a material production migration.
+  least every 30 days and before a material production migration.
 - **Security:** configure signed machine-key rings, keep
   `OP_LEGACY_TOKENS=off`, protect metrics, and require TOTP for `operator`,
   `firm_admin`, and every provisioned `bank_user`.

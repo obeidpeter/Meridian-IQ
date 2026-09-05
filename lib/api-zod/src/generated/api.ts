@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.98.0
+ * OpenAPI spec version: 0.99.0
  */
 import * as zod from 'zod';
 
@@ -1619,6 +1619,9 @@ export const ListInvoicesQueryParams = zod.object({
   "q": zod.coerce.string().max(listInvoicesQueryQMax).optional().describe('Matches the invoice number or either party\'s legal name.')
 })
 
+
+
+
 export const ListInvoicesResponseItem = zod.object({
   "id": zod.string(),
   "firmId": zod.string(),
@@ -1640,12 +1643,23 @@ export const ListInvoicesResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
 export const ListInvoicesResponse = zod.array(ListInvoicesResponseItem)
 
+
+export const createInvoiceHeaderXIdempotencyKeyMax = 128;
+
+
+export const createInvoiceHeaderXIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+
+
+export const CreateInvoiceHeader = zod.object({
+  "X-Idempotency-Key": zod.string().min(1).max(createInvoiceHeaderXIdempotencyKeyMax).regex(createInvoiceHeaderXIdempotencyKeyRegExp).describe('Persisted intent key, reused unchanged across retry\/refresh. Parent attaches to POST \/invoices; committed legacy imports require the same header, while previews do not.')
+})
 
 
 
@@ -1672,6 +1686,9 @@ export const CreateInvoiceBody = zod.object({
 }))
 })
 
+
+
+
 export const CreateInvoiceResponse = zod.object({
   "invoice": zod.object({
   "id": zod.string(),
@@ -1694,6 +1711,7 @@ export const CreateInvoiceResponse = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1709,6 +1727,69 @@ export const CreateInvoiceResponse = zod.object({
   "lineExtension": zod.string(),
   "vatAmount": zod.string()
 }))
+})
+
+
+/**
+ * @summary Stable cursor-paginated invoice list
+ */
+export const listInvoicesPagedQueryQMax = 120;
+
+export const listInvoicesPagedQueryFromDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const listInvoicesPagedQueryToDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const listInvoicesPagedQueryMinAmountRegExp = new RegExp('^\\d{1,22}(\\.\\d{1,2})?$');
+export const listInvoicesPagedQueryMaxAmountRegExp = new RegExp('^\\d{1,22}(\\.\\d{1,2})?$');
+export const listInvoicesPagedQueryLimitDefault = 100;
+export const listInvoicesPagedQueryLimitMax = 200;
+
+export const listInvoicesPagedQueryCursorMax = 1024;
+
+
+
+export const ListInvoicesPagedQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "q": zod.coerce.string().max(listInvoicesPagedQueryQMax).optional(),
+  "statusGroup": zod.enum(['all', 'draft', 'pending', 'stamped', 'settled', 'failed', 'closed']).optional(),
+  "fromDate": zod.coerce.string().regex(listInvoicesPagedQueryFromDateRegExp).optional(),
+  "toDate": zod.coerce.string().regex(listInvoicesPagedQueryToDateRegExp).optional(),
+  "minAmount": zod.coerce.string().regex(listInvoicesPagedQueryMinAmountRegExp).optional(),
+  "maxAmount": zod.coerce.string().regex(listInvoicesPagedQueryMaxAmountRegExp).optional(),
+  "limit": zod.coerce.number().min(1).max(listInvoicesPagedQueryLimitMax).default(listInvoicesPagedQueryLimitDefault),
+  "cursor": zod.coerce.string().max(listInvoicesPagedQueryCursorMax).optional()
+})
+
+
+
+
+export const ListInvoicesPagedResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "kind": zod.enum(['invoice', 'credit_note', 'correction']),
+  "category": zod.enum(['b2b', 'b2g', 'b2c']),
+  "relatedInvoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string(),
+  "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "legalHold": zod.boolean(),
+  "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
+  "schemaVersion": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "nextCursor": zod.string().nullable(),
+  "total": zod.number()
 })
 
 
@@ -2434,6 +2515,9 @@ export const GetInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+
+
+
 export const GetInvoiceResponse = zod.object({
   "invoice": zod.object({
   "id": zod.string(),
@@ -2456,6 +2540,7 @@ export const GetInvoiceResponse = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2483,7 +2568,9 @@ export const UpdateInvoiceParams = zod.object({
 
 
 
+
 export const UpdateInvoiceBody = zod.object({
+  "expectedRevision": zod.number().min(1).describe('Content revision the editor opened; stale writes are rejected.'),
   "invoiceNumber": zod.string().min(1).optional(),
   "issueDate": zod.string().optional(),
   "dueDate": zod.string().nullish(),
@@ -2497,6 +2584,9 @@ export const UpdateInvoiceBody = zod.object({
   "vatRate": zod.string()
 })).min(1).optional()
 })
+
+
+
 
 export const UpdateInvoiceResponse = zod.object({
   "invoice": zod.object({
@@ -2520,6 +2610,7 @@ export const UpdateInvoiceResponse = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2555,6 +2646,9 @@ export const SubmitInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+
+
+
 export const SubmitInvoiceResponse = zod.object({
   "id": zod.string(),
   "firmId": zod.string(),
@@ -2576,6 +2670,7 @@ export const SubmitInvoiceResponse = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2682,6 +2777,9 @@ export const CancelInvoiceBody = zod.object({
   "reason": zod.string().min(1)
 })
 
+
+
+
 export const CancelInvoiceResponse = zod.object({
   "id": zod.string(),
   "firmId": zod.string(),
@@ -2703,6 +2801,7 @@ export const CancelInvoiceResponse = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2723,6 +2822,9 @@ export const CreditNoteInvoiceBody = zod.object({
   "reason": zod.string().min(1),
   "creditNoteNumber": zod.string().optional()
 })
+
+
+
 
 export const CreditNoteInvoiceResponse = zod.object({
   "id": zod.string(),
@@ -2745,6 +2847,7 @@ export const CreditNoteInvoiceResponse = zod.object({
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4951,11 +5054,13 @@ export const ApproveInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+
 export const approveInvoiceBodyNoteMax = 1000;
 
 
 
 export const ApproveInvoiceBody = zod.object({
+  "expectedRevision": zod.number().min(1),
   "note": zod.string().max(approveInvoiceBodyNoteMax).optional()
 })
 
@@ -4964,6 +5069,7 @@ export const ApproveInvoiceResponse = zod.object({
   "invoiceId": zod.string(),
   "approvedByUserId": zod.string(),
   "approvedByName": zod.string().nullable(),
+  "contentRevision": zod.number().nullable(),
   "note": zod.string().nullable(),
   "revokedAt": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -4982,6 +5088,7 @@ export const ListInvoiceApprovalsResponseItem = zod.object({
   "invoiceId": zod.string(),
   "approvedByUserId": zod.string(),
   "approvedByName": zod.string().nullable(),
+  "contentRevision": zod.number().nullable(),
   "note": zod.string().nullable(),
   "revokedAt": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -5239,6 +5346,16 @@ export const GetChaseListResponse = zod.array(GetChaseListResponseItem)
 /**
  * @summary Bulk validate (and optionally commit) invoices from a spreadsheet
  */
+export const importInvoicesHeaderXIdempotencyKeyMax = 128;
+
+
+export const importInvoicesHeaderXIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+
+
+export const ImportInvoicesHeader = zod.object({
+  "X-Idempotency-Key": zod.string().min(1).max(importInvoicesHeaderXIdempotencyKeyMax).regex(importInvoicesHeaderXIdempotencyKeyRegExp).optional().describe('Required when commit is true; retain the same key and payload across retries. Not required for previews.')
+})
+
 export const ImportInvoicesBody = zod.object({
   "clientPartyId": zod.string(),
   "commit": zod.boolean().optional(),
@@ -12171,6 +12288,980 @@ export const GetWhtRemittanceResponse = zod.object({
   "bills": zod.number(),
   "whtAmount": zod.string()
 })
+})
+
+
+/**
+ * Own actor only; current tenant, client scope and non-archived engagement are rechecked. No running or client-asserted results are returned.
+ * @summary List the caller's authorized committed operations
+ */
+export const listOperationsQueryLimitDefault = 24;
+export const listOperationsQueryLimitMax = 100;
+
+export const listOperationsQueryCursorMax = 256;
+
+
+
+export const ListOperationsQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listOperationsQueryLimitMax).default(listOperationsQueryLimitDefault),
+  "cursor": zod.coerce.string().min(1).max(listOperationsQueryCursorMax).optional().describe('Opaque nextCursor from the preceding page.')
+})
+
+export const listOperationsResponseOperationsItemIdempotencyKeyMax = 128;
+
+
+export const listOperationsResponseOperationsItemIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+export const listOperationsResponseOperationsItemRouteMax = 48;
+
+
+export const listOperationsResponseOperationsItemRouteRegExp = new RegExp('^/(invoices|import(\\?run=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)$');
+export const listOperationsResponseOperationsMax = 100;
+
+export const listOperationsResponseNextCursorMax = 256;
+
+
+
+export const ListOperationsResponse = zod.object({
+  "operations": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "command": zod.enum(['invoice.create', 'invoice.import']),
+  "idempotencyKey": zod.string().min(1).max(listOperationsResponseOperationsItemIdempotencyKeyMax).regex(listOperationsResponseOperationsItemIdempotencyKeyRegExp),
+  "status": zod.enum(['succeeded', 'partial', 'failed']),
+  "title": zod.string(),
+  "route": zod.string().max(listOperationsResponseOperationsItemRouteMax).regex(listOperationsResponseOperationsItemRouteRegExp).describe('Server-authorized navigation destination. A committed resumable chunk links to \/import?run=<UUID> from its owned chunk\/run reference; legacy imports link to \/import.'),
+  "summary": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).max(listOperationsResponseOperationsMax),
+  "nextCursor": zod.string().max(listOperationsResponseNextCursorMax).nullable()
+})
+
+
+/**
+ * A 404 means no authorized committed result is visible, not that the command failed. Retry the original mutation with its same key and payload.
+ * @summary Recover an authorized result by command and request key
+ */
+export const lookupOperationQueryIdempotencyKeyMax = 128;
+
+
+export const lookupOperationQueryIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+
+
+export const LookupOperationQueryParams = zod.object({
+  "command": zod.enum(['invoice.create', 'invoice.import']),
+  "idempotencyKey": zod.coerce.string().min(1).max(lookupOperationQueryIdempotencyKeyMax).regex(lookupOperationQueryIdempotencyKeyRegExp)
+})
+
+export const lookupOperationResponseOneIdempotencyKeyMax = 128;
+
+
+export const lookupOperationResponseOneIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+export const lookupOperationResponseOneRouteMax = 48;
+
+
+export const lookupOperationResponseOneRouteRegExp = new RegExp('^/(invoices|import(\\?run=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)$');
+export const lookupOperationResponseTwoResultStatusCodeMin = 200;
+export const lookupOperationResponseTwoResultStatusCodeMax = 299;
+
+
+export const lookupOperationResponseTwoResultBodyThreeChunkIndexMin = 0;
+export const lookupOperationResponseTwoResultBodyThreeChunkIndexMax = 4999;
+
+export const lookupOperationResponseTwoResultBodyThreeNextChunkIndexMax = 5000;
+
+
+
+export const LookupOperationResponse = zod.object({
+  "id": zod.string().uuid(),
+  "command": zod.enum(['invoice.create', 'invoice.import']),
+  "idempotencyKey": zod.string().min(1).max(lookupOperationResponseOneIdempotencyKeyMax).regex(lookupOperationResponseOneIdempotencyKeyRegExp),
+  "status": zod.enum(['succeeded', 'partial', 'failed']),
+  "title": zod.string(),
+  "route": zod.string().max(lookupOperationResponseOneRouteMax).regex(lookupOperationResponseOneRouteRegExp).describe('Server-authorized navigation destination. A committed resumable chunk links to \/import?run=<UUID> from its owned chunk\/run reference; legacy imports link to \/import.'),
+  "summary": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "result": zod.object({
+  "statusCode": zod.number().min(lookupOperationResponseTwoResultStatusCodeMin).max(lookupOperationResponseTwoResultStatusCodeMax),
+  "body": zod.union([zod.object({
+  "invoice": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "kind": zod.enum(['invoice', 'credit_note', 'correction']),
+  "category": zod.enum(['b2b', 'b2g', 'b2c']),
+  "relatedInvoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string(),
+  "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "legalHold": zod.boolean(),
+  "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
+  "schemaVersion": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+}))
+}),zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+}),zod.object({
+  "runId": zod.string().uuid(),
+  "chunkIndex": zod.number().min(lookupOperationResponseTwoResultBodyThreeChunkIndexMin).max(lookupOperationResponseTwoResultBodyThreeChunkIndexMax),
+  "nextChunkIndex": zod.number().min(1).max(lookupOperationResponseTwoResultBodyThreeNextChunkIndexMax),
+  "result": zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+})]).describe('Original saved JSON response. invoice.create returns InvoiceDetail; invoice.import returns InvoiceImportResult for a legacy import or ImportRunChunkResponse for a resumable chunk.')
+})
+}))
+
+
+/**
+ * @summary Recover the caller's authorized operation result
+ */
+export const GetOperationParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const getOperationResponseOneIdempotencyKeyMax = 128;
+
+
+export const getOperationResponseOneIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+export const getOperationResponseOneRouteMax = 48;
+
+
+export const getOperationResponseOneRouteRegExp = new RegExp('^/(invoices|import(\\?run=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?)$');
+export const getOperationResponseTwoResultStatusCodeMin = 200;
+export const getOperationResponseTwoResultStatusCodeMax = 299;
+
+
+export const getOperationResponseTwoResultBodyThreeChunkIndexMin = 0;
+export const getOperationResponseTwoResultBodyThreeChunkIndexMax = 4999;
+
+export const getOperationResponseTwoResultBodyThreeNextChunkIndexMax = 5000;
+
+
+
+export const GetOperationResponse = zod.object({
+  "id": zod.string().uuid(),
+  "command": zod.enum(['invoice.create', 'invoice.import']),
+  "idempotencyKey": zod.string().min(1).max(getOperationResponseOneIdempotencyKeyMax).regex(getOperationResponseOneIdempotencyKeyRegExp),
+  "status": zod.enum(['succeeded', 'partial', 'failed']),
+  "title": zod.string(),
+  "route": zod.string().max(getOperationResponseOneRouteMax).regex(getOperationResponseOneRouteRegExp).describe('Server-authorized navigation destination. A committed resumable chunk links to \/import?run=<UUID> from its owned chunk\/run reference; legacy imports link to \/import.'),
+  "summary": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "result": zod.object({
+  "statusCode": zod.number().min(getOperationResponseTwoResultStatusCodeMin).max(getOperationResponseTwoResultStatusCodeMax),
+  "body": zod.union([zod.object({
+  "invoice": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "kind": zod.enum(['invoice', 'credit_note', 'correction']),
+  "category": zod.enum(['b2b', 'b2g', 'b2c']),
+  "relatedInvoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string(),
+  "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "legalHold": zod.boolean(),
+  "retentionUntil": zod.string().nullish(),
+  "contentRevision": zod.number().min(1),
+  "schemaVersion": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+}))
+}),zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+}),zod.object({
+  "runId": zod.string().uuid(),
+  "chunkIndex": zod.number().min(getOperationResponseTwoResultBodyThreeChunkIndexMin).max(getOperationResponseTwoResultBodyThreeChunkIndexMax),
+  "nextChunkIndex": zod.number().min(1).max(getOperationResponseTwoResultBodyThreeNextChunkIndexMax),
+  "result": zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+})]).describe('Original saved JSON response. invoice.create returns InvoiceDetail; invoice.import returns InvoiceImportResult for a legacy import or ImportRunChunkResponse for a resumable chunk.')
+})
+}))
+
+
+/**
+ * Persist a random client-generated id before dispatch. Reusing it with the identical manifest returns the current run; a changed manifest conflicts. Maximum 5000 rows per run. Requires invoice.write and current supplier authorization.
+ * @summary Create or recover an immutable resumable import manifest
+ */
+export const createInvoiceImportRunBodyTotalRowsMax = 5000;
+
+export const createInvoiceImportRunBodyChunkSizeMax = 250;
+
+export const createInvoiceImportRunBodyChunkHashesItemRegExp = new RegExp('^[0-9a-f]{64}$');
+export const createInvoiceImportRunBodyChunkHashesMax = 5000;
+
+
+
+export const CreateInvoiceImportRunBody = zod.object({
+  "id": zod.string().uuid().describe('Random client intent UUID, persisted before dispatch. Never derive only from file content.'),
+  "clientPartyId": zod.string().uuid(),
+  "totalRows": zod.number().min(1).max(createInvoiceImportRunBodyTotalRowsMax),
+  "chunkSize": zod.number().min(1).max(createInvoiceImportRunBodyChunkSizeMax),
+  "chunkHashes": zod.array(zod.string().regex(createInvoiceImportRunBodyChunkHashesItemRegExp)).min(1).max(createInvoiceImportRunBodyChunkHashesMax).describe('Exactly ceil(totalRows\/chunkSize) ordered hashes. Hash the JSON rows array using recursively sorted object keys, preserved array order, omitted undefined properties, and UTF-8 SHA-256 lowercase hex. Rows are not trimmed or coerced.')
+})
+
+export const createInvoiceImportRunResponseManifestHashRegExp = new RegExp('^[0-9a-f]{64}$');
+export const createInvoiceImportRunResponseTotalRowsMax = 5000;
+
+export const createInvoiceImportRunResponseChunkSizeMax = 250;
+
+export const createInvoiceImportRunResponseChunkHashesItemRegExp = new RegExp('^[0-9a-f]{64}$');
+export const createInvoiceImportRunResponseChunkHashesMax = 5000;
+
+export const createInvoiceImportRunResponseNextChunkIndexMin = 0;
+export const createInvoiceImportRunResponseNextChunkIndexMax = 5000;
+
+export const createInvoiceImportRunResponseCommittedRowsMin = 0;
+export const createInvoiceImportRunResponseCommittedRowsMax = 5000;
+
+export const createInvoiceImportRunResponseCreatedCountMin = 0;
+export const createInvoiceImportRunResponseCreatedCountMax = 5000;
+
+export const createInvoiceImportRunResponseInvalidCountMin = 0;
+export const createInvoiceImportRunResponseInvalidCountMax = 5000;
+
+export const createInvoiceImportRunResponseChunksItemChunkIndexMin = 0;
+export const createInvoiceImportRunResponseChunksItemChunkIndexMax = 4999;
+
+export const createInvoiceImportRunResponseChunksItemRowCountMax = 250;
+
+export const createInvoiceImportRunResponseChunksMax = 5000;
+
+
+
+export const CreateInvoiceImportRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "manifestHash": zod.string().regex(createInvoiceImportRunResponseManifestHashRegExp),
+  "totalRows": zod.number().min(1).max(createInvoiceImportRunResponseTotalRowsMax),
+  "chunkSize": zod.number().min(1).max(createInvoiceImportRunResponseChunkSizeMax),
+  "chunkHashes": zod.array(zod.string().regex(createInvoiceImportRunResponseChunkHashesItemRegExp)).min(1).max(createInvoiceImportRunResponseChunkHashesMax),
+  "nextChunkIndex": zod.number().min(createInvoiceImportRunResponseNextChunkIndexMin).max(createInvoiceImportRunResponseNextChunkIndexMax),
+  "status": zod.enum(['open', 'ready', 'completed']).describe('ready means every chunk is committed but finalize has not yet been recorded.'),
+  "committedRows": zod.number().min(createInvoiceImportRunResponseCommittedRowsMin).max(createInvoiceImportRunResponseCommittedRowsMax).describe('Processed rows, including invalid rows with durable outcomes.'),
+  "createdCount": zod.number().min(createInvoiceImportRunResponseCreatedCountMin).max(createInvoiceImportRunResponseCreatedCountMax),
+  "invalidCount": zod.number().min(createInvoiceImportRunResponseInvalidCountMin).max(createInvoiceImportRunResponseInvalidCountMax),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "finalizedAt": zod.coerce.date().nullable(),
+  "chunks": zod.array(zod.object({
+  "chunkIndex": zod.number().min(createInvoiceImportRunResponseChunksItemChunkIndexMin).max(createInvoiceImportRunResponseChunksItemChunkIndexMax),
+  "operationId": zod.string().uuid(),
+  "rowCount": zod.number().min(1).max(createInvoiceImportRunResponseChunksItemRowCountMax),
+  "result": zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+})).max(createInvoiceImportRunResponseChunksMax),
+  "result": zod.union([zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+}),zod.null()]).describe('Non-null only after finalization. Rows are sorted by original rowNumber.')
+})
+
+
+/**
+ * Use after a timeout or refresh to resume from nextChunkIndex. Only the authenticated actor's currently authorized run is visible. Checkpoint and chunks are read consistently.
+ * @summary Read the authorized import checkpoint and committed chunk results
+ */
+export const GetInvoiceImportRunParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const getInvoiceImportRunResponseManifestHashRegExp = new RegExp('^[0-9a-f]{64}$');
+export const getInvoiceImportRunResponseTotalRowsMax = 5000;
+
+export const getInvoiceImportRunResponseChunkSizeMax = 250;
+
+export const getInvoiceImportRunResponseChunkHashesItemRegExp = new RegExp('^[0-9a-f]{64}$');
+export const getInvoiceImportRunResponseChunkHashesMax = 5000;
+
+export const getInvoiceImportRunResponseNextChunkIndexMin = 0;
+export const getInvoiceImportRunResponseNextChunkIndexMax = 5000;
+
+export const getInvoiceImportRunResponseCommittedRowsMin = 0;
+export const getInvoiceImportRunResponseCommittedRowsMax = 5000;
+
+export const getInvoiceImportRunResponseCreatedCountMin = 0;
+export const getInvoiceImportRunResponseCreatedCountMax = 5000;
+
+export const getInvoiceImportRunResponseInvalidCountMin = 0;
+export const getInvoiceImportRunResponseInvalidCountMax = 5000;
+
+export const getInvoiceImportRunResponseChunksItemChunkIndexMin = 0;
+export const getInvoiceImportRunResponseChunksItemChunkIndexMax = 4999;
+
+export const getInvoiceImportRunResponseChunksItemRowCountMax = 250;
+
+export const getInvoiceImportRunResponseChunksMax = 5000;
+
+
+
+export const GetInvoiceImportRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "manifestHash": zod.string().regex(getInvoiceImportRunResponseManifestHashRegExp),
+  "totalRows": zod.number().min(1).max(getInvoiceImportRunResponseTotalRowsMax),
+  "chunkSize": zod.number().min(1).max(getInvoiceImportRunResponseChunkSizeMax),
+  "chunkHashes": zod.array(zod.string().regex(getInvoiceImportRunResponseChunkHashesItemRegExp)).min(1).max(getInvoiceImportRunResponseChunkHashesMax),
+  "nextChunkIndex": zod.number().min(getInvoiceImportRunResponseNextChunkIndexMin).max(getInvoiceImportRunResponseNextChunkIndexMax),
+  "status": zod.enum(['open', 'ready', 'completed']).describe('ready means every chunk is committed but finalize has not yet been recorded.'),
+  "committedRows": zod.number().min(getInvoiceImportRunResponseCommittedRowsMin).max(getInvoiceImportRunResponseCommittedRowsMax).describe('Processed rows, including invalid rows with durable outcomes.'),
+  "createdCount": zod.number().min(getInvoiceImportRunResponseCreatedCountMin).max(getInvoiceImportRunResponseCreatedCountMax),
+  "invalidCount": zod.number().min(getInvoiceImportRunResponseInvalidCountMin).max(getInvoiceImportRunResponseInvalidCountMax),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "finalizedAt": zod.coerce.date().nullable(),
+  "chunks": zod.array(zod.object({
+  "chunkIndex": zod.number().min(getInvoiceImportRunResponseChunksItemChunkIndexMin).max(getInvoiceImportRunResponseChunksItemChunkIndexMax),
+  "operationId": zod.string().uuid(),
+  "rowCount": zod.number().min(1).max(getInvoiceImportRunResponseChunksItemRowCountMax),
+  "result": zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+})).max(getInvoiceImportRunResponseChunksMax),
+  "result": zod.union([zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+}),zod.null()]).describe('Non-null only after finalization. Rows are sorted by original rowNumber.')
+})
+
+
+/**
+ * The server derives the invoice.import key as runId:chunkIndex. Future chunks are rejected until preceding chunks commit. Counts, row indexes and canonical payload hash must match the immutable manifest. A replay returns the exact original response including its original nextChunkIndex; GET the run for the latest checkpoint. Invalid rows are durable outcomes and advance the checkpoint. Chunks remain replayable after finalization.
+ * @summary Atomically commit or replay one manifest chunk
+ */
+export const commitInvoiceImportChunkPathChunkIndexMin = 0;
+export const commitInvoiceImportChunkPathChunkIndexMax = 4999;
+
+
+
+export const CommitInvoiceImportChunkParams = zod.object({
+  "id": zod.coerce.string().uuid(),
+  "chunkIndex": zod.coerce.number().min(commitInvoiceImportChunkPathChunkIndexMin).max(commitInvoiceImportChunkPathChunkIndexMax)
+})
+
+export const commitInvoiceImportChunkHeaderXIdempotencyKeyMax = 128;
+
+
+export const commitInvoiceImportChunkHeaderXIdempotencyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+
+
+export const CommitInvoiceImportChunkHeader = zod.object({
+  "X-Idempotency-Key": zod.string().min(1).max(commitInvoiceImportChunkHeaderXIdempotencyKeyMax).regex(commitInvoiceImportChunkHeaderXIdempotencyKeyRegExp).optional().describe('Optional; when supplied it must equal the lowercase run UUID followed by a colon and the zero-based chunk index. Never create a new key for a retry.')
+})
+
+export const commitInvoiceImportChunkBodyRowsMax = 250;
+
+
+
+export const CommitInvoiceImportChunkBody = zod.object({
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "invoiceNumber": zod.string().optional(),
+  "buyerName": zod.string().optional(),
+  "buyerTin": zod.string().optional(),
+  "issueDate": zod.string().optional(),
+  "dueDate": zod.string().optional(),
+  "description": zod.string().optional(),
+  "quantity": zod.string().optional(),
+  "unitPrice": zod.string().optional(),
+  "vatRate": zod.string().optional(),
+  "currency": zod.string().optional()
+})).min(1).max(commitInvoiceImportChunkBodyRowsMax).describe('Exact manifest range, with consecutive rowNumber values starting at chunkIndex\*chunkSize+1. First data row is 1, excluding the spreadsheet header. Extra row fields are rejected. Expected length is min(chunkSize,totalRows-chunkIndex\*chunkSize).')
+})
+
+export const commitInvoiceImportChunkResponseChunkIndexMin = 0;
+export const commitInvoiceImportChunkResponseChunkIndexMax = 4999;
+
+export const commitInvoiceImportChunkResponseNextChunkIndexMax = 5000;
+
+
+
+export const CommitInvoiceImportChunkResponse = zod.object({
+  "runId": zod.string().uuid(),
+  "chunkIndex": zod.number().min(commitInvoiceImportChunkResponseChunkIndexMin).max(commitInvoiceImportChunkResponseChunkIndexMax),
+  "nextChunkIndex": zod.number().min(1).max(commitInvoiceImportChunkResponseNextChunkIndexMax),
+  "result": zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+})
+
+
+/**
+ * Requires every manifest chunk to be committed. Idempotent on repeat; never executes the invoice importer. Incomplete runs return 409.
+ * @summary Finalize a fully committed run and recover its aggregate result
+ */
+export const FinalizeInvoiceImportRunParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const FinalizeInvoiceImportRunBody = zod.object({
+
+})
+
+export const finalizeInvoiceImportRunResponseManifestHashRegExp = new RegExp('^[0-9a-f]{64}$');
+export const finalizeInvoiceImportRunResponseTotalRowsMax = 5000;
+
+export const finalizeInvoiceImportRunResponseChunkSizeMax = 250;
+
+export const finalizeInvoiceImportRunResponseChunkHashesItemRegExp = new RegExp('^[0-9a-f]{64}$');
+export const finalizeInvoiceImportRunResponseChunkHashesMax = 5000;
+
+export const finalizeInvoiceImportRunResponseNextChunkIndexMin = 0;
+export const finalizeInvoiceImportRunResponseNextChunkIndexMax = 5000;
+
+export const finalizeInvoiceImportRunResponseCommittedRowsMin = 0;
+export const finalizeInvoiceImportRunResponseCommittedRowsMax = 5000;
+
+export const finalizeInvoiceImportRunResponseCreatedCountMin = 0;
+export const finalizeInvoiceImportRunResponseCreatedCountMax = 5000;
+
+export const finalizeInvoiceImportRunResponseInvalidCountMin = 0;
+export const finalizeInvoiceImportRunResponseInvalidCountMax = 5000;
+
+export const finalizeInvoiceImportRunResponseChunksItemChunkIndexMin = 0;
+export const finalizeInvoiceImportRunResponseChunksItemChunkIndexMax = 4999;
+
+export const finalizeInvoiceImportRunResponseChunksItemRowCountMax = 250;
+
+export const finalizeInvoiceImportRunResponseChunksMax = 5000;
+
+
+
+export const FinalizeInvoiceImportRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "manifestHash": zod.string().regex(finalizeInvoiceImportRunResponseManifestHashRegExp),
+  "totalRows": zod.number().min(1).max(finalizeInvoiceImportRunResponseTotalRowsMax),
+  "chunkSize": zod.number().min(1).max(finalizeInvoiceImportRunResponseChunkSizeMax),
+  "chunkHashes": zod.array(zod.string().regex(finalizeInvoiceImportRunResponseChunkHashesItemRegExp)).min(1).max(finalizeInvoiceImportRunResponseChunkHashesMax),
+  "nextChunkIndex": zod.number().min(finalizeInvoiceImportRunResponseNextChunkIndexMin).max(finalizeInvoiceImportRunResponseNextChunkIndexMax),
+  "status": zod.enum(['open', 'ready', 'completed']).describe('ready means every chunk is committed but finalize has not yet been recorded.'),
+  "committedRows": zod.number().min(finalizeInvoiceImportRunResponseCommittedRowsMin).max(finalizeInvoiceImportRunResponseCommittedRowsMax).describe('Processed rows, including invalid rows with durable outcomes.'),
+  "createdCount": zod.number().min(finalizeInvoiceImportRunResponseCreatedCountMin).max(finalizeInvoiceImportRunResponseCreatedCountMax),
+  "invalidCount": zod.number().min(finalizeInvoiceImportRunResponseInvalidCountMin).max(finalizeInvoiceImportRunResponseInvalidCountMax),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "finalizedAt": zod.coerce.date().nullable(),
+  "chunks": zod.array(zod.object({
+  "chunkIndex": zod.number().min(finalizeInvoiceImportRunResponseChunksItemChunkIndexMin).max(finalizeInvoiceImportRunResponseChunksItemChunkIndexMax),
+  "operationId": zod.string().uuid(),
+  "rowCount": zod.number().min(1).max(finalizeInvoiceImportRunResponseChunksItemRowCountMax),
+  "result": zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+})).max(finalizeInvoiceImportRunResponseChunksMax),
+  "result": zod.union([zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+}),zod.null()]).describe('Non-null only after finalization. Rows are sorted by original rowNumber.')
+})
+
+
+/**
+ * @summary List the current user's unfinished drafts for an authorized client
+ */
+export const listInvoiceDraftsQueryOffsetDefault = 0;
+export const listInvoiceDraftsQueryOffsetMin = 0;
+
+
+
+export const ListInvoiceDraftsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid(),
+  "offset": zod.coerce.number().min(listInvoiceDraftsQueryOffsetMin).default(listInvoiceDraftsQueryOffsetDefault)
+})
+
+
+export const listInvoiceDraftsResponseItemsItemDraftInvoiceNumberMax = 10000;
+
+export const listInvoiceDraftsResponseItemsItemDraftBuyerPartyIdRegExp = new RegExp('^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+export const listInvoiceDraftsResponseItemsItemDraftIssueDateMax = 32;
+
+export const listInvoiceDraftsResponseItemsItemDraftDueDateMax = 32;
+
+export const listInvoiceDraftsResponseItemsItemDraftCurrencyMax = 16;
+
+export const listInvoiceDraftsResponseItemsItemDraftFxRateToNgnMax = 128;
+
+export const listInvoiceDraftsResponseItemsItemDraftWhtCategoryMax = 128;
+
+export const listInvoiceDraftsResponseItemsItemDraftLinesItemDescriptionMax = 10000;
+
+export const listInvoiceDraftsResponseItemsItemDraftLinesItemQuantityMax = 128;
+
+export const listInvoiceDraftsResponseItemsItemDraftLinesItemUnitPriceMax = 128;
+
+export const listInvoiceDraftsResponseItemsItemDraftLinesItemVatRateMax = 128;
+
+export const listInvoiceDraftsResponseItemsItemDraftLinesMax = 500;
+
+
+
+export const ListInvoiceDraftsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "revision": zod.number().min(1),
+  "writeId": zod.string().uuid(),
+  "draft": zod.object({
+  "invoiceNumber": zod.string().max(listInvoiceDraftsResponseItemsItemDraftInvoiceNumberMax),
+  "buyerPartyId": zod.string().regex(listInvoiceDraftsResponseItemsItemDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
+  "issueDate": zod.string().max(listInvoiceDraftsResponseItemsItemDraftIssueDateMax),
+  "dueDate": zod.string().max(listInvoiceDraftsResponseItemsItemDraftDueDateMax),
+  "currency": zod.string().max(listInvoiceDraftsResponseItemsItemDraftCurrencyMax),
+  "fxRateToNgn": zod.string().max(listInvoiceDraftsResponseItemsItemDraftFxRateToNgnMax),
+  "whtCategory": zod.string().max(listInvoiceDraftsResponseItemsItemDraftWhtCategoryMax),
+  "lines": zod.array(zod.object({
+  "description": zod.string().max(listInvoiceDraftsResponseItemsItemDraftLinesItemDescriptionMax),
+  "quantity": zod.string().max(listInvoiceDraftsResponseItemsItemDraftLinesItemQuantityMax),
+  "unitPrice": zod.string().max(listInvoiceDraftsResponseItemsItemDraftLinesItemUnitPriceMax),
+  "vatRate": zod.string().max(listInvoiceDraftsResponseItemsItemDraftLinesItemVatRateMax)
+})).min(1).max(listInvoiceDraftsResponseItemsItemDraftLinesMax)
+}),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})),
+  "nextOffset": zod.number().nullable()
+})
+
+
+/**
+ * @summary Recover a draft owned by the current firm, user and client
+ */
+export const GetInvoiceDraftParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetInvoiceDraftQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid()
+})
+
+
+export const getInvoiceDraftResponseDraftInvoiceNumberMax = 10000;
+
+export const getInvoiceDraftResponseDraftBuyerPartyIdRegExp = new RegExp('^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+export const getInvoiceDraftResponseDraftIssueDateMax = 32;
+
+export const getInvoiceDraftResponseDraftDueDateMax = 32;
+
+export const getInvoiceDraftResponseDraftCurrencyMax = 16;
+
+export const getInvoiceDraftResponseDraftFxRateToNgnMax = 128;
+
+export const getInvoiceDraftResponseDraftWhtCategoryMax = 128;
+
+export const getInvoiceDraftResponseDraftLinesItemDescriptionMax = 10000;
+
+export const getInvoiceDraftResponseDraftLinesItemQuantityMax = 128;
+
+export const getInvoiceDraftResponseDraftLinesItemUnitPriceMax = 128;
+
+export const getInvoiceDraftResponseDraftLinesItemVatRateMax = 128;
+
+export const getInvoiceDraftResponseDraftLinesMax = 500;
+
+
+
+export const GetInvoiceDraftResponse = zod.object({
+  "id": zod.string().uuid(),
+  "revision": zod.number().min(1),
+  "writeId": zod.string().uuid(),
+  "draft": zod.object({
+  "invoiceNumber": zod.string().max(getInvoiceDraftResponseDraftInvoiceNumberMax),
+  "buyerPartyId": zod.string().regex(getInvoiceDraftResponseDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
+  "issueDate": zod.string().max(getInvoiceDraftResponseDraftIssueDateMax),
+  "dueDate": zod.string().max(getInvoiceDraftResponseDraftDueDateMax),
+  "currency": zod.string().max(getInvoiceDraftResponseDraftCurrencyMax),
+  "fxRateToNgn": zod.string().max(getInvoiceDraftResponseDraftFxRateToNgnMax),
+  "whtCategory": zod.string().max(getInvoiceDraftResponseDraftWhtCategoryMax),
+  "lines": zod.array(zod.object({
+  "description": zod.string().max(getInvoiceDraftResponseDraftLinesItemDescriptionMax),
+  "quantity": zod.string().max(getInvoiceDraftResponseDraftLinesItemQuantityMax),
+  "unitPrice": zod.string().max(getInvoiceDraftResponseDraftLinesItemUnitPriceMax),
+  "vatRate": zod.string().max(getInvoiceDraftResponseDraftLinesItemVatRateMax)
+})).min(1).max(getInvoiceDraftResponseDraftLinesMax)
+}),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * Revision zero inserts only. An identical latest writeId and payload replays without incrementing revision. Stale revisions and changed payloads under the same writeId conflict. Retention is seven days from save.
+ * @summary Save an unfinished form with a revision check and retry-safe write ID
+ */
+export const SaveInvoiceDraftParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const saveInvoiceDraftBodyExpectedRevisionMin = 0;
+
+export const saveInvoiceDraftBodyDraftInvoiceNumberMax = 10000;
+
+export const saveInvoiceDraftBodyDraftBuyerPartyIdRegExp = new RegExp('^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+export const saveInvoiceDraftBodyDraftIssueDateMax = 32;
+
+export const saveInvoiceDraftBodyDraftDueDateMax = 32;
+
+export const saveInvoiceDraftBodyDraftCurrencyMax = 16;
+
+export const saveInvoiceDraftBodyDraftFxRateToNgnMax = 128;
+
+export const saveInvoiceDraftBodyDraftWhtCategoryMax = 128;
+
+export const saveInvoiceDraftBodyDraftLinesItemDescriptionMax = 10000;
+
+export const saveInvoiceDraftBodyDraftLinesItemQuantityMax = 128;
+
+export const saveInvoiceDraftBodyDraftLinesItemUnitPriceMax = 128;
+
+export const saveInvoiceDraftBodyDraftLinesItemVatRateMax = 128;
+
+export const saveInvoiceDraftBodyDraftLinesMax = 500;
+
+
+
+export const SaveInvoiceDraftBody = zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "expectedRevision": zod.number().min(saveInvoiceDraftBodyExpectedRevisionMin),
+  "writeId": zod.string().uuid(),
+  "draft": zod.object({
+  "invoiceNumber": zod.string().max(saveInvoiceDraftBodyDraftInvoiceNumberMax),
+  "buyerPartyId": zod.string().regex(saveInvoiceDraftBodyDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
+  "issueDate": zod.string().max(saveInvoiceDraftBodyDraftIssueDateMax),
+  "dueDate": zod.string().max(saveInvoiceDraftBodyDraftDueDateMax),
+  "currency": zod.string().max(saveInvoiceDraftBodyDraftCurrencyMax),
+  "fxRateToNgn": zod.string().max(saveInvoiceDraftBodyDraftFxRateToNgnMax),
+  "whtCategory": zod.string().max(saveInvoiceDraftBodyDraftWhtCategoryMax),
+  "lines": zod.array(zod.object({
+  "description": zod.string().max(saveInvoiceDraftBodyDraftLinesItemDescriptionMax),
+  "quantity": zod.string().max(saveInvoiceDraftBodyDraftLinesItemQuantityMax),
+  "unitPrice": zod.string().max(saveInvoiceDraftBodyDraftLinesItemUnitPriceMax),
+  "vatRate": zod.string().max(saveInvoiceDraftBodyDraftLinesItemVatRateMax)
+})).min(1).max(saveInvoiceDraftBodyDraftLinesMax)
+})
+})
+
+
+export const saveInvoiceDraftResponseDraftInvoiceNumberMax = 10000;
+
+export const saveInvoiceDraftResponseDraftBuyerPartyIdRegExp = new RegExp('^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+export const saveInvoiceDraftResponseDraftIssueDateMax = 32;
+
+export const saveInvoiceDraftResponseDraftDueDateMax = 32;
+
+export const saveInvoiceDraftResponseDraftCurrencyMax = 16;
+
+export const saveInvoiceDraftResponseDraftFxRateToNgnMax = 128;
+
+export const saveInvoiceDraftResponseDraftWhtCategoryMax = 128;
+
+export const saveInvoiceDraftResponseDraftLinesItemDescriptionMax = 10000;
+
+export const saveInvoiceDraftResponseDraftLinesItemQuantityMax = 128;
+
+export const saveInvoiceDraftResponseDraftLinesItemUnitPriceMax = 128;
+
+export const saveInvoiceDraftResponseDraftLinesItemVatRateMax = 128;
+
+export const saveInvoiceDraftResponseDraftLinesMax = 500;
+
+
+
+export const SaveInvoiceDraftResponse = zod.object({
+  "id": zod.string().uuid(),
+  "revision": zod.number().min(1),
+  "writeId": zod.string().uuid(),
+  "draft": zod.object({
+  "invoiceNumber": zod.string().max(saveInvoiceDraftResponseDraftInvoiceNumberMax),
+  "buyerPartyId": zod.string().regex(saveInvoiceDraftResponseDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
+  "issueDate": zod.string().max(saveInvoiceDraftResponseDraftIssueDateMax),
+  "dueDate": zod.string().max(saveInvoiceDraftResponseDraftDueDateMax),
+  "currency": zod.string().max(saveInvoiceDraftResponseDraftCurrencyMax),
+  "fxRateToNgn": zod.string().max(saveInvoiceDraftResponseDraftFxRateToNgnMax),
+  "whtCategory": zod.string().max(saveInvoiceDraftResponseDraftWhtCategoryMax),
+  "lines": zod.array(zod.object({
+  "description": zod.string().max(saveInvoiceDraftResponseDraftLinesItemDescriptionMax),
+  "quantity": zod.string().max(saveInvoiceDraftResponseDraftLinesItemQuantityMax),
+  "unitPrice": zod.string().max(saveInvoiceDraftResponseDraftLinesItemUnitPriceMax),
+  "vatRate": zod.string().max(saveInvoiceDraftResponseDraftLinesItemVatRateMax)
+})).min(1).max(saveInvoiceDraftResponseDraftLinesMax)
+}),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Discard a draft without allowing late autosaves to resurrect it
+ */
+export const DeleteInvoiceDraftParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const deleteInvoiceDraftBodyExpectedRevisionMin = 0;
+
+
+
+export const DeleteInvoiceDraftBody = zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "expectedRevision": zod.number().min(deleteInvoiceDraftBodyExpectedRevisionMin)
+})
+
+export const DeleteInvoiceDraftResponse = zod.void()
+
+
+/**
+ * Requires an authenticated operator with operator.queue.read. Lists only expired, unsettled reservations. Ordered by UUID with bounded keyset pagination. Start a fresh listing to discover newly expired rows below an earlier cursor. Does not release or refund uncertain provider spend.
+ */
+export const listClerkReservationsQueryLimitDefault = 100;
+export const listClerkReservationsQueryLimitMax = 100;
+
+
+
+export const ListClerkReservationsQueryParams = zod.object({
+  "afterId": zod.coerce.string().uuid().optional(),
+  "limit": zod.coerce.number().min(1).max(listClerkReservationsQueryLimitMax).default(listClerkReservationsQueryLimitDefault)
+})
+
+export const listClerkReservationsResponseReservationsItemReservedTokensRegExp = new RegExp('^[1-9][0-9]*$');
+export const listClerkReservationsResponseReservationsMax = 100;
+
+
+
+export const ListClerkReservationsResponse = zod.object({
+  "reservations": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "reservedTokens": zod.string().regex(listClerkReservationsResponseReservationsItemReservedTokensRegExp).describe('Positive bigint encoded as a decimal string.'),
+  "createdAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})).max(listClerkReservationsResponseReservationsMax),
+  "nextAfterId": zod.string().uuid().nullable().describe('Last UUID when the page is full; null otherwise. A following page may be empty.')
+})
+
+
+/**
+ * Requires an authenticated operator with operator.queue.act and the normal x-meridian-csrf header. The operator must confirm provider execution has stopped and supply an audit reason. Charges at least the reserved amount, appends audit evidence and settles atomically. Never refunds uncertain spend. Repeated reconciliation returns the existing inferenceCallId with replayed=true; subsequent input cannot change the recorded charge. A later provider result charges only excess usage not already charged in the same UTC budget month.
+ */
+export const ReconcileClerkReservationParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const reconcileClerkReservationBodyReasonMin = 10;
+export const reconcileClerkReservationBodyReasonMax = 1000;
+
+export const reconcileClerkReservationBodyChargedTokensMax = 2147483647;
+
+
+
+export const ReconcileClerkReservationBody = zod.object({
+  "reason": zod.string().min(reconcileClerkReservationBodyReasonMin).max(reconcileClerkReservationBodyReasonMax).describe('Trimmed operator explanation or provider evidence reference recorded in the audit chain.'),
+  "confirmedStopped": zod.literal(true).describe('Operator confirms the failed provider execution has stopped.'),
+  "chargedTokens": zod.number().min(1).max(reconcileClerkReservationBodyChargedTokensMax).optional().describe('Optional conservative charge, at least reservedTokens. Omission charges reservedTokens.')
+})
+
+export const ReconcileClerkReservationResponse = zod.object({
+  "inferenceCallId": zod.string().uuid(),
+  "replayed": zod.boolean()
 })
 
 

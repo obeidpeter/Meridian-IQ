@@ -110,7 +110,7 @@ function matrixCellClass(status: string | null, overdue = false): string {
   if (overdue && status !== "filed") {
     return "font-semibold text-red-700 dark:text-red-400";
   }
-  if (status === "filed") return "text-emerald-600 dark:text-emerald-400";
+  if (status === "filed") return "text-emerald-700 dark:text-emerald-400";
   if (status === "prepared") return "text-blue-600 dark:text-blue-400";
   return "text-slate-600 dark:text-slate-400";
 }

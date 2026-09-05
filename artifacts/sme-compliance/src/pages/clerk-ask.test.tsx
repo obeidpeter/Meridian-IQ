@@ -4,7 +4,13 @@
 // mutation's data — which used to blank the very answer being followed up on
 // (and never bring it back if the follow-up errored).
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { ClerkAnswer, ClerkCase } from "@workspace/api-client-react";
 
 // A controllable stand-in for the generated useAskClerk mutation hook,
@@ -140,6 +146,14 @@ beforeEach(() => {
 });
 
 describe("AskContent answer persistence", () => {
+  test("the capture link is distinguished without hover and keeps keyboard focus styling", () => {
+    render(<AskContent />);
+    const link = screen.getByRole("link", { name: "Send it to Clerk" });
+    expect(link.getAttribute("href")).toBe("/clerk");
+    expect(link.classList.contains("underline")).toBe(true);
+    expect(link.classList.contains("focus-visible:ring-2")).toBe(true);
+  });
+
   test("the shown answer survives an in-flight follow-up and a follow-up error, and is replaced on success", () => {
     render(<AskContent />);
 
@@ -278,13 +292,17 @@ describe("AnswerCard links and feedback", () => {
 
     fireEvent.click(screen.getByTestId("button-feedback-helpful"));
     expect(
-      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+      screen
+        .getByTestId("button-feedback-helpful")
+        .getAttribute("aria-pressed"),
     ).toBe("true");
     act(() => {
       harness.feedback.lastOptions?.onError?.({ status: 500 });
     });
     expect(
-      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+      screen
+        .getByTestId("button-feedback-helpful")
+        .getAttribute("aria-pressed"),
     ).toBe("false");
   });
 
@@ -294,13 +312,17 @@ describe("AnswerCard links and feedback", () => {
     deliver(answeredCase("case-1", dataAnswer("2 invoices are overdue.")));
     fireEvent.click(screen.getByTestId("button-feedback-helpful"));
     expect(
-      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+      screen
+        .getByTestId("button-feedback-helpful")
+        .getAttribute("aria-pressed"),
     ).toBe("true");
 
     askQuestion("and for June?");
     deliver(answeredCase("case-2", dataAnswer("June: 1 invoice is overdue.")));
     expect(
-      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+      screen
+        .getByTestId("button-feedback-helpful")
+        .getAttribute("aria-pressed"),
     ).toBe("false");
     fireEvent.click(screen.getByTestId("button-feedback-not-helpful"));
     expect(harness.feedback.calls[1]).toEqual({
@@ -393,9 +415,9 @@ describe("Ask 2.0 sections, plan, and follow-up pins", () => {
     );
 
     // One source line for the whole answer, and feedback still offered.
-    expect(screen.getByTestId("text-answer-from-records").textContent).toContain(
-      "computed from your invoices",
-    );
+    expect(
+      screen.getByTestId("text-answer-from-records").textContent,
+    ).toContain("computed from your invoices");
     expect(screen.getByTestId("button-feedback-helpful")).toBeTruthy();
   });
 
@@ -523,4 +545,3 @@ describe("Ask history (R92)", () => {
     expect(screen.queryByTestId("card-recent-questions")).toBeNull();
   });
 });
-

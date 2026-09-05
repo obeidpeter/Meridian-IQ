@@ -7,7 +7,14 @@
 // Plus (contract 0.45.0) the maker-checker ApprovalsCard: informational for
 // client users, actionable for firm roles, and the status-keyed submit title.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { renderWithClient } from "../test-utils";
 import type {
   Invoice,
@@ -34,6 +41,9 @@ const harness = vi.hoisted(() => ({
   approvals: {
     data: undefined as unknown,
     isSuccess: false,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
   },
   approve: {
     calls: [] as unknown[],
@@ -49,6 +59,9 @@ const harness = vi.hoisted(() => ({
     this.log.deliverSuccess = null;
     this.approvals.data = undefined;
     this.approvals.isSuccess = false;
+    this.approvals.isPending = false;
+    this.approvals.isError = false;
+    this.approvals.refetch.mockReset();
     this.approve.calls = [];
     this.approve.pending = false;
   },
@@ -87,6 +100,9 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     useListInvoiceApprovals: () => ({
       data: harness.approvals.data,
       isSuccess: harness.approvals.isSuccess,
+      isPending: harness.approvals.isPending,
+      isError: harness.approvals.isError,
+      refetch: harness.approvals.refetch,
     }),
     useApproveInvoice: () => ({
       isPending: harness.approve.pending,
@@ -210,6 +226,7 @@ function approval(over: Partial<InvoiceApproval> = {}): InvoiceApproval {
   return {
     id: "ap-1",
     invoiceId: "inv-1",
+    contentRevision: 3,
     approvedByUserId: "u-2",
     approvedByName: "Ngozi Bello",
     note: "Checked the buyer TIN.",
@@ -221,11 +238,41 @@ function approval(over: Partial<InvoiceApproval> = {}): InvoiceApproval {
 
 function renderApprovals(role: string | undefined, status = "draft") {
   return renderWithClient(
-    <ApprovalsCard invoiceId="inv-1" role={role} status={status} />,
+    <ApprovalsCard
+      invoiceId="inv-1"
+      role={role}
+      status={status}
+      contentRevision={3}
+    />,
   );
 }
 
 describe("ApprovalsCard", () => {
+  test("announces loading and allows retry after a read failure", async () => {
+    harness.approvals.isPending = true;
+    renderApprovals("firm_admin");
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading invoice approvals",
+    );
+    cleanup();
+    harness.approvals.isPending = false;
+    harness.approvals.isError = true;
+    renderApprovals("firm_admin");
+    fireEvent.click(screen.getByRole("button", { name: /retry|try again/i }));
+    expect(harness.approvals.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("coalesces two clicks before the pending render", async () => {
+    harness.approvals.isSuccess = true;
+    harness.approvals.data = [];
+    renderApprovals("firm_staff");
+    act(() => {
+      fireEvent.click(screen.getByTestId("button-approve-invoice"));
+      fireEvent.click(screen.getByTestId("button-approve-invoice"));
+    });
+    await waitFor(() => expect(harness.approve.calls).toHaveLength(1));
+  });
+
   test("renders each approval with approver, note and revoked state; client users get no approve button", () => {
     harness.approvals.isSuccess = true;
     harness.approvals.data = [
@@ -262,7 +309,10 @@ describe("ApprovalsCard", () => {
 
     fireEvent.click(screen.getByTestId("button-approve-invoice"));
     await waitFor(() => expect(harness.approve.calls).toHaveLength(1));
-    expect(harness.approve.calls[0]).toEqual({ id: "inv-1" });
+    expect(harness.approve.calls[0]).toEqual({
+      id: "inv-1",
+      data: { expectedRevision: 3 },
+    });
   });
 
   test("the approve button is disabled while the mutation is in flight", () => {

@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import pg from "pg";
 import { applyMigrations } from "./index.ts";
+import {
+  OWNER_ONLY_POLICIES,
+  reliabilityPolicyPins,
+} from "./reliability-policy-reference.ts";
 
 // RLS policy-qual pin (refactoring survey item 27). The coverage gate
 // (rls-coverage.test.ts) proves every tenant table HAS a policy; nothing
@@ -563,6 +567,10 @@ test("every RLS policy's rendered qual matches its pinned hash", async () => {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
     await applyMigrations(pool);
+    const expected = {
+      ...PINNED,
+      ...(await reliabilityPolicyPins(pool, qualHash)),
+    };
     const { rows } = await pool.query<{
       tablename: string;
       policyname: string;
@@ -570,8 +578,9 @@ test("every RLS policy's rendered qual matches its pinned hash", async () => {
       roles: string;
       qual: string | null;
       with_check: string | null;
+      permissive: string;
     }>(
-      `SELECT tablename, policyname, cmd,
+      `SELECT tablename, policyname, cmd, permissive,
               array_to_string(roles, ',') AS roles,
               qual, with_check
        FROM pg_policies WHERE schemaname = 'public'
@@ -587,12 +596,17 @@ test("every RLS policy's rendered qual matches its pinned hash", async () => {
     // must update this pin deliberately.
     assert.deepEqual(
       [...live.keys()].sort(),
-      Object.keys(PINNED).sort(),
+      Object.keys(expected).sort(),
       "the set of RLS policies changed — add/remove the matching PINNED entries (failure output above names the difference)",
     );
 
-    for (const [key, pin] of Object.entries(PINNED)) {
+    for (const [key, pin] of Object.entries(expected)) {
       const row = live.get(key)!;
+      assert.equal(
+        row.permissive,
+        "PERMISSIVE",
+        `${key}: policy composition changed`,
+      );
       const renderLine = `  "${key}": { cmd: "${row.cmd}", roles: "${row.roles}", qual: "${qualHash(row.qual ?? "")}", withCheck: "${qualHash(row.with_check ?? "")}" },`;
       assert.equal(
         row.cmd,
@@ -626,6 +640,27 @@ test("every RLS policy's rendered qual matches its pinned hash", async () => {
     // NO_CONTEXT bypass stages all depend on it; a policy without it bricks
     // every cross-tenant path on that table.
     for (const [key, row] of live) {
+      // Durable command outcomes are deliberately owner-only, even for bypass
+      // sessions. The independently pinned predicates require firm AND actor
+      // AND optional client scope; do not grant operators a blanket replay path.
+      if (OWNER_ONLY_POLICIES.has(key)) {
+        assert.ok(
+          !(row.qual ?? "").includes("app.bypass"),
+          `${key}: owner-only recovery must not gain bypass`,
+        );
+        for (const setting of [
+          "app.firm_id",
+          "app.operation_actor_id",
+          "app.operation_client_party_id",
+        ]) {
+          assert.ok(
+            (row.qual ?? "").includes(setting) &&
+              (row.with_check ?? "").includes(setting),
+            `${key}: missing owner binding ${setting}`,
+          );
+        }
+        continue;
+      }
       assert.ok(
         (row.qual ?? "").includes("app.bypass"),
         `${key}: the USING expression lost the app.bypass escape — no ` +
@@ -642,7 +677,7 @@ test("every RLS policy's rendered qual matches its pinned hash", async () => {
     // its policies reduced to decoration. Every pinned table must have row
     // security enabled AND forced — the guardrail migrations set both.
     const pinnedTables = [
-      ...new Set(Object.keys(PINNED).map((k) => k.split("/")[0])),
+      ...new Set(Object.keys(expected).map((k) => k.split("/")[0])),
     ];
     const { rows: states } = await pool.query<{
       relname: string;

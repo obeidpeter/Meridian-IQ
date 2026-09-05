@@ -13,7 +13,7 @@ import {
 import { randomUUID } from "node:crypto";
 import {
   getDb,
-  pool,
+  workerLockPool,
   runInBypassContext,
   outboxTable,
   invoicesTable,
@@ -1224,15 +1224,19 @@ const SWEEP_INTERVAL_MS = 60_000;
 // its error counter, its last-success gauge and its duration histogram, and
 // is the word in the log line — and runs under a per-sweep timeout so one
 // hung sweep cannot pin the whole pass (and with it every later tick, which
-// the reentrancy guard would skip forever). A timed-out sweep's promise is
-// abandoned, not cancelled; the pass moves on and the counter says so.
+// the reentrancy guard would skip forever). The pass moves on after a timeout,
+// but owns the underlying work and its distributed lock until actual settlement.
 export interface RegisteredSweep {
   name: string;
-  run: () => Promise<unknown>;
+  run: (signal: AbortSignal) => Promise<unknown>;
   /** 0 = the deployment default (SWEEP_TIMEOUT_MS), read at run time. */
   timeoutMs: number;
 }
 const SWEEPS: RegisteredSweep[] = [];
+const activeSweeps = new Map<
+  string,
+  { work: Promise<unknown>; controller: AbortController }
+>();
 const SWEEP_NAME = /^[a-z][a-z0-9_.-]{1,63}$/;
 const DEFAULT_SWEEP_TIMEOUT_MS = 120_000;
 
@@ -1246,7 +1250,17 @@ export function defaultSweepTimeoutMs(): number {
 export function registerSweep(
   name: string,
   sweep: () => Promise<unknown>,
-  opts: { timeoutMs?: number } = {},
+  opts?: { timeoutMs?: number; acceptsSignal?: false },
+): void;
+export function registerSweep(
+  name: string,
+  sweep: (signal: AbortSignal) => Promise<unknown>,
+  opts: { timeoutMs?: number; acceptsSignal: true },
+): void;
+export function registerSweep(
+  name: string,
+  sweep: (() => Promise<unknown>) | ((signal: AbortSignal) => Promise<unknown>),
+  opts: { timeoutMs?: number; acceptsSignal?: boolean } = {},
 ): void {
   if (!SWEEP_NAME.test(name)) {
     throw new Error(`Sweep name "${name}" must match ${SWEEP_NAME}`);
@@ -1254,7 +1268,12 @@ export function registerSweep(
   if (SWEEPS.some((s) => s.name === name)) {
     throw new Error(`Sweep "${name}" is already registered`);
   }
-  SWEEPS.push({ name, run: sweep, timeoutMs: opts.timeoutMs ?? 0 });
+  // Legacy sweeps may accept optional dependency objects. Never pass a signal
+  // as that argument unless registration explicitly opts into cancellation.
+  const run = opts.acceptsSignal
+    ? (sweep as (signal: AbortSignal) => Promise<unknown>)
+    : () => (sweep as () => Promise<unknown>)();
+  SWEEPS.push({ name, run, timeoutMs: opts.timeoutMs ?? 0 });
 }
 
 /** Remove a sweep by name (tests register salted sweeps and take them out). */
@@ -1286,14 +1305,15 @@ function withSweepTimeout<T>(
   name: string,
   work: Promise<T>,
   timeoutMs: number,
+  controller: AbortController,
 ): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new SweepTimeoutError(name, timeoutMs)),
-      timeoutMs,
-    );
-    timer.unref?.();
+    timer = setTimeout(() => {
+      const error = new SweepTimeoutError(name, timeoutMs);
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
   });
   return Promise.race([work, deadline]).finally(() => {
     if (timer) clearTimeout(timer);
@@ -1337,7 +1357,8 @@ registerSweep("pipeline.retention", sweepPipelineRetention);
 // rather than at scrape time, so /api/metrics never touches the database.
 export async function sweepOutboxGauges(): Promise<void> {
   const [row] = (
-    await getDb().execute(sql`
+    await runInBypassContext(() =>
+      getDb().execute(sql`
       SELECT
         count(*) FILTER (WHERE status = 'pending' AND (parked_until IS NULL OR parked_until <= now()))::int AS ready,
         count(*) FILTER (WHERE status = 'pending' AND parked_until > now())::int AS parked,
@@ -1348,7 +1369,8 @@ export async function sweepOutboxGauges(): Promise<void> {
           0
         )::float AS oldest_pending_age_seconds
       FROM outbox_events
-    `)
+    `),
+    )
   ).rows as {
     ready: number;
     parked: number;
@@ -1387,12 +1409,19 @@ function track<T>(pass: Promise<T>): Promise<T> {
 /** Resolve true once every in-flight pass has settled, false on timeout. */
 export async function awaitWorkerIdle(timeoutMs: number): Promise<boolean> {
   if (inFlight.size === 0) return true;
-  const settled = Promise.allSettled([...inFlight]).then(() => true);
+  const settled = (async () => {
+    while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
+    return true;
+  })();
+  let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<boolean>((resolve) => {
-    const timer = setTimeout(() => resolve(false), timeoutMs);
-    timer.unref?.();
+    timer = setTimeout(() => resolve(false), timeoutMs);
   });
-  return Promise.race([settled, deadline]);
+  try {
+    return await Promise.race([settled, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function inFlightPasses(): number {
@@ -1403,10 +1432,18 @@ async function withDistributedLock<T>(
   lockId: number,
   task: () => Promise<T>,
 ): Promise<{ acquired: boolean; value?: T }> {
-  const client = await pool.connect();
+  const client = await workerLockPool.connect();
   let acquired = false;
   let taskError: unknown;
   let releaseError: Error | undefined;
+  const onConnectionError = (error: Error) => {
+    releaseError = error;
+    // Losing a session lock is an ownership failure. Stop scheduling and ask
+    // cooperative work to stop; already-issued effects still require idempotency.
+    stopWorker();
+    logger.error({ lockId }, "worker lock connection lost; worker stopped");
+  };
+  client.on("error", onConnectionError);
   try {
     const result = await client.query<{ acquired: boolean }>(
       "SELECT pg_try_advisory_lock($1) AS acquired",
@@ -1436,6 +1473,7 @@ async function withDistributedLock<T>(
     }
     // Destroy a session whose unlock failed so a session-level lock cannot be
     // returned to the pool and strand all future sweep attempts.
+    client.removeListener("error", onConnectionError);
     client.release(releaseError);
     if (!taskError && releaseError) throw releaseError;
   }
@@ -1447,25 +1485,40 @@ async function withDistributedLock<T>(
 // not silently swallowed), and reports whether it actually ran.
 
 async function guardedSweepPass(): Promise<boolean> {
-  if (sweeping) return false;
+  if (sweeping || stopping) return false;
   sweeping = true;
-  return track(
+  let report!: (ran: boolean) => void;
+  const response = new Promise<boolean>((resolve) => {
+    report = resolve;
+  });
+  track(
     (async () => {
       try {
-        const result = await withDistributedLock(991_102, runSweepPass);
-        return result.acquired;
+        const result = await withDistributedLock(991_102, async () => {
+          const owned: Promise<unknown>[] = [];
+          try {
+            await runSweepPass(owned);
+            report(true);
+          } finally {
+            // The caller may stop waiting, but another process must not acquire
+            // our pass lock while a timed-out sweep still has side effects.
+            await Promise.allSettled(owned);
+          }
+        });
+        report(result.acquired);
       } catch (err) {
         // The pass itself (lock acquisition / release) failed — the sweeps
         // inside never throw past runSweepsOnce. Count it under its own
         // label so an unhandled rejection never escapes the interval.
         sweepErrorsTotal.inc({ sweep: "pass", kind: "error" });
         logger.error({ err }, "compliance sweep pass failed");
-        return false;
+        report(false);
       } finally {
         sweeping = false;
       }
     })(),
   );
+  return response;
 }
 
 /** One guarded sweep pass on demand (the external trigger and tests). */
@@ -1474,7 +1527,7 @@ export function runSweepPassOnce(): Promise<boolean> {
 }
 
 async function guardedDrainPass(): Promise<{ ran: boolean; drained: number }> {
-  if (draining) return { ran: false, drained: 0 };
+  if (draining || stopping) return { ran: false, drained: 0 };
   draining = true;
   return track(
     (async () => {
@@ -1502,7 +1555,7 @@ const DUPLICATE_STAMP_INTERVAL_MS = 60 * 60 * 1000;
 let lastDuplicateStampSweep = 0;
 
 async function guardedReconcilePass(): Promise<boolean> {
-  if (reconciling) return false;
+  if (reconciling || stopping) return false;
   reconciling = true;
   return track(
     (async () => {
@@ -1557,13 +1610,29 @@ export async function runScheduledWorkOnce(): Promise<{
 // registry.
 export async function runSweepsOnce(
   sweeps: RegisteredSweep[],
+  owned: Promise<unknown>[] = [],
 ): Promise<number> {
   let failures = 0;
   for (const sweep of sweeps) {
+    if (stopping) {
+      failures += 1;
+      break;
+    }
+    if (activeSweeps.has(sweep.name)) {
+      failures += 1;
+      sweepErrorsTotal.inc({ sweep: sweep.name, kind: "in_flight" });
+      continue;
+    }
     const timeoutMs = sweep.timeoutMs || defaultSweepTimeoutMs();
     const stop = sweepDurationSeconds.startTimer({ sweep: sweep.name });
+    const controller = new AbortController();
+    const work = Promise.resolve().then(() => sweep.run(controller.signal));
+    activeSweeps.set(sweep.name, { work, controller });
+    owned.push(work);
+    track(work);
+    void work.finally(() => activeSweeps.delete(sweep.name)).catch(() => {});
     try {
-      await withSweepTimeout(sweep.name, sweep.run(), timeoutMs);
+      await withSweepTimeout(sweep.name, work, timeoutMs, controller);
       sweepLastSuccessBySweep.setToCurrentTime({ sweep: sweep.name });
       stop({ outcome: "ok" });
     } catch (err) {
@@ -1580,8 +1649,8 @@ export async function runSweepsOnce(
   return failures;
 }
 
-async function runSweepPass(): Promise<void> {
-  const failures = await runSweepsOnce(SWEEPS);
+async function runSweepPass(owned: Promise<unknown>[]): Promise<void> {
+  const failures = await runSweepsOnce(SWEEPS, owned);
   // Record pass health for scraping: the run counter advances every pass (the
   // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
   // frozen overnight, stops it — OBS-01), while last_success only advances
@@ -1635,6 +1704,9 @@ export function resumeWorker(): void {
 
 export function stopWorker(): void {
   stopping = true;
+  for (const { controller } of activeSweeps.values()) {
+    controller.abort(new Error("Worker is stopping"));
+  }
   if (timer) {
     clearInterval(timer);
     timer = null;

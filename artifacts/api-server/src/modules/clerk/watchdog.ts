@@ -1,5 +1,10 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
-import { getDb, clerkCasesTable } from "@workspace/db";
+import {
+  getDb,
+  clerkCasesTable,
+  hasDatabaseContext,
+  runInBypassContext,
+} from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled, setFlag } from "../flags/flags";
@@ -48,6 +53,8 @@ const realDeps: WatchdogDeps = {
 export async function runClerkWatchdog(
   deps: WatchdogDeps = realDeps,
 ): Promise<WatchdogResult> {
+  if (!hasDatabaseContext())
+    return runInBypassContext(() => runClerkWatchdog(deps));
   // Already off (manually or by a previous trip): nothing to guard, and the
   // watchdog must never mask a deliberate operator disable by re-evaluating.
   if (!(await deps.isEnabled())) {
@@ -119,6 +126,7 @@ const STUCK_PENDING_MINUTES = Number(
 );
 
 export async function sweepStuckPendingCases(): Promise<number> {
+  if (!hasDatabaseContext()) return runInBypassContext(sweepStuckPendingCases);
   const minutes = STUCK_PENDING_MINUTES;
   if (!Number.isFinite(minutes) || minutes < 1) return 0;
   const cutoff = new Date(Date.now() - minutes * 60 * 1000);

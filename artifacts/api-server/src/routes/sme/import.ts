@@ -1,8 +1,5 @@
 import { Router, type IRouter } from "express";
-import {
-  ImportInvoicesBody,
-  ImportInvoicesResponse,
-} from "@workspace/api-zod";
+import { ImportInvoicesBody, ImportInvoicesResponse } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import {
   assertCan,
@@ -10,6 +7,8 @@ import {
   requireFirmScope,
 } from "../../modules/auth/rbac";
 import { importInvoices } from "../../modules/invoice/import";
+import { executeHttpOperation } from "../../modules/operations/http";
+import { importOperationOutcome } from "../../modules/operations/command";
 
 const router: IRouter = Router();
 
@@ -34,14 +33,29 @@ router.post("/invoices/import", async (req, res): Promise<void> => {
   }
   await assertPartyAccess(req.principal, clientPartyId);
   const firmId = requireFirmScope(req.principal);
-  const result = await importInvoices(
-    firmId,
+  const execute = async () =>
+    ImportInvoicesResponse.parse(
+      await importInvoices(
+        firmId,
+        clientPartyId,
+        rows,
+        commit,
+        req.principal.userId,
+      ),
+    );
+  if (!commit) {
+    res.json(await execute());
+    return;
+  }
+  await executeHttpOperation(req, res, {
+    command: "invoice.import",
     clientPartyId,
-    rows,
-    commit,
-    req.principal.userId,
-  );
-  res.json(ImportInvoicesResponse.parse(result));
+    payload: { ...parsed, commit },
+    execute: async () => {
+      const body = await execute();
+      return { statusCode: 200, body, ...importOperationOutcome(body) };
+    },
+  });
 });
 
 export default router;
