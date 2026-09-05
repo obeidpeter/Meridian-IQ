@@ -107,6 +107,10 @@ async function journeyPortalAuth(page, BASE, check) {
   await calculatorLink.click();
   await page.waitForURL(BASE + "/penalty-calculator/");
   await checkPageAccessibility(page, check, "penalty calculator");
+  await page
+    .getByLabel("Annual turnover", { exact: true })
+    .waitFor({ state: "visible" });
+  await checkPageAccessibility(page, check, "penalty calculator ready");
   check(
     "penalty calculator route serves its own application",
     (await page.getByTestId("text-page-title").innerText()).includes(

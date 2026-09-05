@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import { CSRF, commandHeaders } from "../../test-client.mjs";
 // Shared spine of the e2e journeys: the demo credentials, the CSRF marker,
@@ -39,7 +40,17 @@ export async function signIn(page, BASE, demoTestId, waitUrl) {
 
 export async function signOutFromApp(page, BASE) {
   await page.getByTestId("button-sign-out").first().click();
-  await page.waitForURL(BASE + "/login");
+  // Successful session cleanup redirects with a reason; require confirmed
+  // logout rather than accepting the local-only fallback as a passing journey.
+  const origin = new URL(BASE).origin;
+  await page.waitForURL(
+    (url) => url.origin === origin && url.pathname === "/login",
+  );
+  assert.equal(
+    new URL(page.url()).searchParams.get("reason"),
+    "signed-out",
+    "Healthy E2E logout must confirm server revocation, not local-only cleanup",
+  );
   await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
 }
 

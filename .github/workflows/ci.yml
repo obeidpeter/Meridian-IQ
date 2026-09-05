@@ -60,8 +60,8 @@ jobs:
       - name: Architecture boundaries
         run: pnpm run architecture:check
 
-      - name: Release, worker and load-tool regression tests
-        run: node --test scripts/src/ops/*.test.mjs scripts/src/load-smoke.test.mjs scripts/src/e2e/service-worker.test.mjs
+      - name: Release, worker, load-tool and journey regression tests
+        run: node --test scripts/src/ops/*.test.mjs scripts/src/load-smoke.test.mjs scripts/src/e2e/service-worker.test.mjs scripts/src/e2e/journeys/shared.test.mjs
 
       - name: Client transport and database deadline configuration tests
         run: node node_modules/tsx/dist/cli.mjs --test lib/api-client-react/test/custom-fetch.test.ts lib/db/src/connection-config.test.ts
@@ -298,6 +298,12 @@ jobs:
           BASE_PATH=/buyer/ PORT=3000 pnpm --filter @workspace/buyer-portal run build
           BASE_PATH=/penalty-calculator/ PORT=3000 pnpm --filter @workspace/penalty-calculator run build
 
+      - name: Verify landing and login accessibility across public states
+        run: node --test artifacts/landing/e2e/accessibility.test.mjs
+
+      - name: Verify calculator startup, loading and recovery accessibility
+        run: node --test scripts/src/e2e/penalty-calculator-loading.test.mjs
+
       - name: Push schema
         run: pnpm --filter @workspace/db run push
 
@@ -336,3 +342,5 @@ jobs:
             tmp/route-budget-r198/report.json
             tmp/route-budget-r198/*.build.log
             tmp/route-budget-r198/*/.vite/manifest.json
+            artifacts/landing/tmp/accessibility/**
+            tmp/penalty-calculator-loading/**

@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
-import { lazyRoute } from "@workspace/web-ui";
-const App = lazyRoute(() => import("./App"));
+import { CalculatorRoot } from "./calculator-root";
 import "./index.css";
 
-createRoot(document.getElementById("root")!).render(<App />);
+document.getElementById("copyright-year")!.textContent = String(
+  new Date().getFullYear(),
+);
+createRoot(document.getElementById("root")!).render(<CalculatorRoot />);

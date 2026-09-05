@@ -623,7 +623,7 @@ export function OperatorQueue() {
             Throughput and service indicators for the current operator desk.
           </p>
         </div>
-        <MetricStrip label="Queue health">
+        <MetricStrip label="Queue health metrics">
           <Metric
             label="Open"
             value={statsLoading ? "…" : String(stats?.openCount ?? "—")}

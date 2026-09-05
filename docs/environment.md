@@ -182,6 +182,11 @@ remains outside the active scope.
 These are test-process controls. CI owns stable values; local overrides should
 use isolated ports and databases.
 
+`LANDING_A11Y_BASE_URL` optionally points the public-page accessibility suite at
+an existing loopback preview. Without it, the suite serves the built artifacts on
+an isolated local port and closes that server afterward. The suite mocks only
+public read-only session/readiness requests; this is not production verification.
+
 ## Release and Test Controls
 
 Release verification uses `RELEASE_MANIFEST` (local CI manifest path),

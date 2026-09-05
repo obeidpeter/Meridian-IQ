@@ -537,7 +537,7 @@ function SignInPanel() {
               className="h-12 border-slate-300 bg-white px-4 font-mono text-lg tracking-[0.25em] shadow-sm"
               data-testid="input-totp-code"
             />
-            <p id="totp-help" className="text-xs text-slate-500">
+            <p id="totp-help" className="text-xs text-slate-600">
               Your app shows a new code every 30 seconds. A recovery code also
               works here. For security this step expires five minutes after you
               entered your password (
@@ -714,7 +714,7 @@ function SignInPanel() {
         </Button>
       </form>
 
-      <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+      <div className="mt-4 flex items-center gap-2 text-xs text-slate-600">
         <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
         Your connection is secure. You only see what your account allows.
       </div>
@@ -1668,7 +1668,10 @@ const ACCESS_PATHS = [
 
 function AccessStory() {
   return (
-    <section className="relative hidden min-h-screen overflow-hidden bg-[#0e4c45] text-white lg:flex lg:flex-col">
+    <aside
+      aria-labelledby="access-story-title"
+      className="relative hidden min-h-screen overflow-hidden bg-[#0e4c45] text-white lg:flex lg:flex-col"
+    >
       <div
         className="absolute inset-y-0 right-0 w-px bg-[#c9a227]/60"
         aria-hidden="true"
@@ -1686,7 +1689,7 @@ function AccessStory() {
             <span className="block text-lg font-extrabold leading-none">
               MeridianIQ
             </span>
-            <span className="mt-1 block text-[11px] font-semibold text-white/50">
+            <span className="mt-1 block text-[11px] font-semibold text-white/65">
               Invoicing, done right
             </span>
           </span>
@@ -1705,7 +1708,10 @@ function AccessStory() {
           <p className="text-xs font-extrabold uppercase text-[#e9cf78]">
             One sign-in for everything
           </p>
-          <h2 className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl">
+          <h2
+            id="access-story-title"
+            className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl"
+          >
             One account. The right workspace.
           </h2>
           <p className="mt-6 max-w-lg text-base leading-7 text-white/65">
@@ -1729,7 +1735,7 @@ function AccessStory() {
               </span>
               <span>
                 <span className="block text-sm font-extrabold">{title}</span>
-                <span className="mt-0.5 block text-xs text-white/50">
+                <span className="mt-0.5 block text-xs text-white/65">
                   {detail}
                 </span>
               </span>
@@ -1738,7 +1744,7 @@ function AccessStory() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/55">
+        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/65">
           <span className="inline-flex items-center gap-2">
             <ShieldCheck className="size-4 text-[#e9cf78]" aria-hidden="true" />
             Access by role
@@ -1757,11 +1763,11 @@ function AccessStory() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/35 xl:px-14">
+      <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/65 xl:px-14">
         <span>Lagos, Nigeria</span>
         <span>Made for Nigerian invoicing</span>
       </div>
-    </section>
+    </aside>
   );
 }
 
@@ -1784,7 +1790,7 @@ function AccessPortal({
       </a>
       <AccessStory />
 
-      <section className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
           <a
             href="/"
@@ -1834,7 +1840,7 @@ function AccessPortal({
           </div>
         </main>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-500 sm:px-10 xl:px-16">
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-600 sm:px-10 xl:px-16">
           <span>Sign-in protected. Access by role.</span>
           <a
             className="inline-flex min-h-6 items-center font-bold hover:text-slate-900"
@@ -1843,7 +1849,7 @@ function AccessPortal({
             Penalty calculator
           </a>
         </footer>
-      </section>
+      </div>
     </div>
   );
 }

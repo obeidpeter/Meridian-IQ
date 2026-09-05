@@ -4,13 +4,10 @@ import { serverError } from "@workspace/api-errors";
 import { ADVISORY_EMAIL } from "@workspace/format";
 import { trackUsabilityEvent } from "@workspace/web-ui";
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   CheckCircle2,
   Copy,
-  FileCheck2,
-  Grid2x2,
   LoaderCircle,
   ShieldCheck,
 } from "lucide-react";
@@ -373,62 +370,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <a
-        href="#main-content"
-        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#071a1c] focus:shadow-sm ${FOCUS_RING}`}
-      >
-        Skip to content
-      </a>
+    <>
       <Toaster />
-      {/* Header */}
-      <header className="border-b border-white/10 bg-[#071a1c] text-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-4 sm:gap-3 sm:px-6">
-          <a
-            href="/"
-            aria-label="MeridianIQ home"
-            className={`inline-flex items-center gap-3 rounded-md ${FOCUS_RING}`}
-          >
-            <div className="rounded-md bg-lime-300 p-1.5 text-[#071a1c]">
-              <FileCheck2 className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none">MeridianIQ</p>
-              <p className="text-xs leading-tight text-white/50">
-                Compliance planning tools
-              </p>
-            </div>
-          </a>
-          <a
-            href="/"
-            data-testid="link-back-to-website"
-            className={`ml-auto inline-flex size-9 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10 hover:text-white sm:size-auto sm:px-3 sm:py-2 ${FOCUS_RING}`}
-            aria-label="Back to website"
-          >
-            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-            <span className="hidden text-sm font-semibold sm:inline">
-              Back to website
-            </span>
-          </a>
-          <a
-            href="/login"
-            data-testid="link-all-apps"
-            className={`inline-flex size-9 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10 hover:text-white sm:size-auto sm:px-3 sm:py-2 ${FOCUS_RING}`}
-            aria-label="Open all apps"
-          >
-            <Grid2x2 className="h-5 w-5" aria-hidden="true" />
-            <span className="hidden text-sm font-semibold sm:inline">
-              All apps
-            </span>
-          </a>
-        </div>
-      </header>
-
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="mx-auto max-w-6xl px-4 py-8 focus:outline-none sm:px-6 sm:py-10"
-      >
+      <div>
         {/* Intro */}
         <div className="max-w-3xl border-b border-slate-200 pb-6">
           <p className="mb-2 inline-flex items-center gap-2 text-xs font-bold text-teal-700">
@@ -629,9 +573,9 @@ export default function App() {
                 Talk to an advisor (optional)
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Submit your email and this estimate to the MeridianIQ advisory
-                team. Calculator inputs remain in your browser until you press
-                Request review.
+                Calculator entries stay on your device unless you press Request
+                review. That sends your email, optional business name, and the
+                estimate summary to the MeridianIQ advisory team.
               </p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -880,7 +824,7 @@ export default function App() {
             </li>
           </ul>
         </section>
-      </main>
+      </div>
 
       {/* Live total bar on small screens (visual duplicate of the results card) */}
       {hasTurnover && (
@@ -898,15 +842,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 py-6 pb-20 text-xs text-muted-foreground sm:px-6 lg:pb-6">
-          © {new Date().getFullYear()} MeridianIQ. Estimates only — not legal or
-          tax advice. Calculator entries stay on your device unless you submit
-          the optional advisor request; that sends your contact details and the
-          estimate summary.
-        </div>
-      </footer>
-    </div>
+    </>
   );
 }
