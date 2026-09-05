@@ -183,7 +183,7 @@ export function IntegrationReliabilityWorkspace() {
                   ) : null}
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-400">
+                  <p className="text-[11px] font-bold uppercase text-slate-600">
                     Last sync
                   </p>
                   <p className="mt-1 text-sm font-semibold text-slate-700">
@@ -191,7 +191,7 @@ export function IntegrationReliabilityWorkspace() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-400">
+                  <p className="text-[11px] font-bold uppercase text-slate-600">
                     Run
                   </p>
                   <p className="mt-1 text-sm font-semibold text-slate-700">
@@ -201,7 +201,7 @@ export function IntegrationReliabilityWorkspace() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-400">
+                  <p className="text-[11px] font-bold uppercase text-slate-600">
                     Read / written
                   </p>
                   <p className="mt-1 text-sm font-extrabold tabular-nums text-slate-900">
@@ -209,7 +209,7 @@ export function IntegrationReliabilityWorkspace() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-400">
+                  <p className="text-[11px] font-bold uppercase text-slate-600">
                     Row errors
                   </p>
                   <p

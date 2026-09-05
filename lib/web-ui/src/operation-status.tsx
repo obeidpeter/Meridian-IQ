@@ -55,7 +55,8 @@ export function OperationStatusPanel({
   const statusCopy = STATUS_COPY[status];
   const Icon = statusCopy.icon;
   return (
-    <section
+    <div
+      role="group"
       className="mi-operation-status"
       data-state={status}
       aria-live={status === "failed" ? "assertive" : "polite"}
@@ -83,7 +84,7 @@ export function OperationStatusPanel({
               : "Recorded on this device"}
         </p>
       </div>
-    </section>
+    </div>
   );
 }
 

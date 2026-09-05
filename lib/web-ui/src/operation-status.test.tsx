@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ActivityCenter, OperationStatusPanel } from "./operation-status";
@@ -49,6 +50,43 @@ test("empty history still exposes server retry and unavailable state", () => {
   );
   expect(refresh).toHaveBeenCalledOnce();
   expect(screen.getByRole("status").textContent).toMatch(/unavailable/);
+});
+
+test("repeated operation titles remain named live groups inside one history landmark", () => {
+  const records: OperationRecord[] = ["first", "second"].map((id) => ({
+    ...operation,
+    id,
+    status: "succeeded",
+  }));
+  const { rerender } = render(
+    <ActivityCenter
+      operations={records}
+      onOpen={vi.fn()}
+      onDismiss={vi.fn()}
+      onClearCompleted={vi.fn()}
+    />,
+  );
+
+  const history = screen.getByRole("region", { name: "Recent operations" });
+  expect(screen.getAllByRole("region")).toEqual([history]);
+  const items = within(history).getAllByRole("listitem");
+  expect(items).toHaveLength(2);
+  for (const item of items) {
+    const summary = within(item).getByRole("group", {
+      name: "Invoice import: Completed",
+    });
+    expect(summary.getAttribute("aria-live")).toBe("polite");
+    expect(within(summary).getByText("Invoice import")).toBeTruthy();
+    expect(within(summary).getByText("Completed")).toBeTruthy();
+    expect(within(summary).getByText("1 created; 1 invalid.")).toBeTruthy();
+  }
+
+  rerender(<OperationStatusPanel {...operation} status="failed" />);
+  expect(
+    screen
+      .getByRole("group", { name: "Invoice import: Failed" })
+      .getAttribute("aria-live"),
+  ).toBe("assertive");
 });
 
 test("result verification failure is announced without claiming the command failed", async () => {

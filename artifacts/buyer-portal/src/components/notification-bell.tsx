@@ -36,7 +36,11 @@ const FEED_PARAMS: ListNotificationsParams = { limit: NOTIFICATION_FEED_LIMIT };
  * primitive — dismissed on Escape, outside pointer-down, and any wouter
  * navigation.
  */
-export function NotificationBell() {
+export function NotificationBell({
+  triggerClassName = "",
+}: {
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,7 +61,11 @@ export function NotificationBell() {
     };
     const onPointerDown = (e: PointerEvent) => {
       const container = containerRef.current;
-      if (container && e.target instanceof Node && !container.contains(e.target)) {
+      if (
+        container &&
+        e.target instanceof Node &&
+        !container.contains(e.target)
+      ) {
         setOpen(false);
       }
     };
@@ -100,7 +108,7 @@ export function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        className="relative"
+        className={`relative ${triggerClassName}`}
         aria-label={
           unread > 0 ? `Notifications — ${unread} unread` : "Notifications"
         }

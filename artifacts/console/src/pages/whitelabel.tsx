@@ -41,21 +41,17 @@ const BRAND_PRESETS = [
 type PreviewMode = "desktop" | "mobile";
 
 function parseHsl(value: string): [number, number, number] | null {
-  const match = value
+  const trimmed = value.trim();
+  const unwrapped = /^hsl\((.*)\)$/i.exec(trimmed)?.[1] ?? trimmed;
+  const match = unwrapped
     .trim()
-    .match(
-      /^(?:hsl\()?\s*(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%\s*\)?$/i,
-    );
+    .match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/);
   if (!match) return null;
   const h = Number(match[1]);
   const s = Number(match[2]);
   const l = Number(match[3]);
   if (h > 360 || s > 100 || l > 100) return null;
   return [h, s, l];
-}
-
-function hslLightness(value: string): number | null {
-  return parseHsl(value)?.[2] ?? null;
 }
 
 function whiteContrastEstimate(value: string): number | null {
@@ -133,10 +129,26 @@ export function WhiteLabel() {
   }, [firm, hydrated]);
 
   const subdomainValid = subdomain === "" || SUBDOMAIN_PATTERN.test(subdomain);
-  const primaryValid = hslLightness(primary) !== null;
-  const previewColor = `hsl(${primaryValid ? primary : DEFAULT_PRIMARY})`;
+  const parsedPrimary = parseHsl(primary);
+  const primaryValid = parsedPrimary !== null;
+  const normalizedPrimary = parsedPrimary
+    ? `${parsedPrimary[0]} ${parsedPrimary[1]}% ${parsedPrimary[2]}%`
+    : DEFAULT_PRIMARY;
+  const previewColor = `hsl(${normalizedPrimary})`;
   const contrast = whiteContrastEstimate(primary);
   const contrastPasses = contrast !== null && contrast >= 4.5;
+  const previewContrast = contrast ?? whiteContrastEstimate(DEFAULT_PRIMARY)!;
+  const previewWhiteText = previewContrast >= 21 / previewContrast;
+  const previewStyle = {
+    backgroundColor: previewColor,
+    color: previewWhiteText ? "#ffffff" : "#000000",
+  };
+  // Highlights increase contrast instead of washing out small preview labels.
+  const previewHighlight = {
+    backgroundColor: previewWhiteText
+      ? "rgb(0 0 0 / 15%)"
+      : "rgb(255 255 255 / 20%)",
+  };
   const initials =
     logoInitials ||
     (brandName || firm?.name || "MQ")
@@ -162,7 +174,7 @@ export function WhiteLabel() {
           theme: {
             ...(firm.theme ?? {}),
             brandName,
-            primary,
+            primary: normalizedPrimary,
             logoInitials,
           },
         },
@@ -188,7 +200,7 @@ export function WhiteLabel() {
   if (isLoading || !me) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-9 w-64" />
+        <WorkspaceHeader eyebrow="Firm experience" title="Brand studio" />
         <div className="grid gap-4 lg:grid-cols-2">
           <Skeleton className="h-96" />
           <Skeleton className="h-96" />
@@ -420,12 +432,15 @@ export function WhiteLabel() {
                 >
                   {previewMode === "mobile" ? (
                     <div
-                      className="flex h-14 items-center justify-between px-3 text-white"
-                      style={{ backgroundColor: previewColor }}
+                      className="flex h-14 items-center justify-between px-3"
+                      style={previewStyle}
                       data-testid="preview-header"
                     >
                       <span className="flex items-center gap-2">
-                        <span className="grid size-8 place-items-center rounded-md bg-white/20 text-xs font-extrabold">
+                        <span
+                          className="grid size-8 place-items-center rounded-md text-xs font-extrabold"
+                          style={previewHighlight}
+                        >
                           {initials}
                         </span>
                         <span className="max-w-36 truncate text-sm font-bold">
@@ -446,23 +461,29 @@ export function WhiteLabel() {
                   >
                     {previewMode === "desktop" && (
                       <div
-                        className="flex flex-col p-3 text-white"
-                        style={{ backgroundColor: previewColor }}
+                        className="flex flex-col p-3"
+                        style={previewStyle}
                         data-testid="preview-header"
                       >
-                        <span className="grid size-9 place-items-center rounded-md bg-white/20 text-xs font-extrabold">
+                        <span
+                          className="grid size-9 place-items-center rounded-md text-xs font-extrabold"
+                          style={previewHighlight}
+                        >
                           {initials}
                         </span>
                         <span className="mt-2 truncate text-xs font-bold">
                           {brandName || firm.name}
                         </span>
                         <div className="mt-8 space-y-2 text-[10px] font-semibold">
-                          <p className="rounded bg-white/20 px-2 py-1.5">
+                          <p
+                            className="rounded px-2 py-1.5"
+                            style={previewHighlight}
+                          >
                             Dashboard
                           </p>
-                          <p className="px-2 py-1.5 opacity-70">Invoices</p>
-                          <p className="px-2 py-1.5 opacity-70">Filings</p>
-                          <p className="px-2 py-1.5 opacity-70">Collections</p>
+                          <p className="px-2 py-1.5">Invoices</p>
+                          <p className="px-2 py-1.5">Filings</p>
+                          <p className="px-2 py-1.5">Collections</p>
                         </div>
                       </div>
                     )}
@@ -478,8 +499,8 @@ export function WhiteLabel() {
                         </div>
                         <button
                           type="button"
-                          className="rounded-md px-2.5 py-1.5 text-[10px] font-bold text-white"
-                          style={{ backgroundColor: previewColor }}
+                          className="rounded-md px-2.5 py-1.5 text-[10px] font-bold"
+                          style={previewStyle}
                           data-testid="preview-button"
                         >
                           New invoice

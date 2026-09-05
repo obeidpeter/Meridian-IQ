@@ -745,7 +745,7 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <Search aria-hidden="true" />
           </Button>
-          <NotificationBell />
+          <NotificationBell triggerClassName="text-white hover:bg-white/10 hover:text-white focus-visible:text-white focus-visible:ring-white focus-visible:ring-offset-0" />
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button

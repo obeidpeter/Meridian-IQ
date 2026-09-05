@@ -774,7 +774,10 @@ export function AskContent() {
         />
         <p className="text-xs text-muted-foreground">
           Looking to send an invoice instead?{" "}
-          <Link href="/clerk" className="text-primary hover:underline">
+          <Link
+            href="/clerk"
+            className="rounded-sm text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
             Send it to Clerk
           </Link>
           .
@@ -835,4 +838,3 @@ function RecentQuestions({
     </Card>
   );
 }
-

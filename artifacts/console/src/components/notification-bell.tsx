@@ -36,7 +36,11 @@ export { badgeText, markReadTimestamp };
 // the relative-time buckets come from lib/notifications — the SME app's
 // vocabulary, mirrored by a parity test in each app.
 
-export function NotificationBell() {
+export function NotificationBell({
+  triggerClassName = "",
+}: {
+  triggerClassName?: string;
+}) {
   const params = { limit: NOTIFICATION_FEED_LIMIT };
   const queryClient = useQueryClient();
   const { data: feed, isSuccess } = useListNotifications(params, {
@@ -63,7 +67,7 @@ export function NotificationBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
+          className={`relative ${triggerClassName}`}
           aria-label={
             feed.unreadCount > 0
               ? `Notifications — ${feed.unreadCount} unread`

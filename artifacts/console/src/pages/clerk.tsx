@@ -2314,7 +2314,7 @@ export function ClerkWorkspace() {
           <CardContent className="space-y-4">
             {!selected ? (
               <p className="text-sm text-muted-foreground">
-                Pick a case on the left, or read a new document.
+                Select a case to view its details, or read a new document.
               </p>
             ) : (
               <>

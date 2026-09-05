@@ -307,6 +307,17 @@ jobs:
       - name: Verify customer picker keyboard and failure recovery
         run: node --test scripts/src/e2e/customer-recovery.test.mjs
 
+      - name: Verify activity, Clerk, WHT, filing, branding and header accessibility
+        run: >-
+          node --test --test-concurrency=1
+          scripts/src/e2e/activity-accessibility.test.mjs
+          scripts/src/e2e/clerk-wht-accessibility.test.mjs
+          scripts/src/e2e/console-filing-branding-accessibility.test.mjs
+          scripts/src/e2e/notification-trigger-contrast.test.mjs
+
+      - name: Verify all Control Centre workspaces in both themes
+        run: node node_modules/tsx/dist/cli.mjs artifacts/console/src/pages/control-centre/__tests__/browser.mjs
+
       - name: Push schema
         run: pnpm --filter @workspace/db run push
 
@@ -348,3 +359,7 @@ jobs:
             artifacts/landing/tmp/accessibility/**
             tmp/penalty-calculator-loading/**
             tmp/reliability-customer-selectors/**
+            tmp/activity-accessibility/**
+            tmp/clerk-wht-accessibility/**
+            tmp/control-centre-a11y-r198/**
+            tmp/notification-trigger-contrast/**
