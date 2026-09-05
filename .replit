@@ -55,3 +55,8 @@ externalPort = 4200
 
 [userenv.development]
 SEED_DEMO = "true"
+
+[userenv.production]
+RELEASE_RECOVERY_MODE = "rollback"
+RELEASE_ROLLBACK_REVISION = "ea275be456a2c19babd06139de10cdbe322bc049"
+RELEASE_RUNTIME_STATE = "HOLD"
