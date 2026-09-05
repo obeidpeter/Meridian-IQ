@@ -294,6 +294,8 @@ for (const mode of ["http", "background"] as const) {
               drain: false,
               reconcile: false,
               sweeps: 0,
+              sweepNames: [],
+              criticalSweeps: 0,
             });
           };
     const reminderNames = [
