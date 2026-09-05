@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import { randomUUID, createHash, createHmac } from "node:crypto";
 import express from "express";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   getDb,
   hasDatabaseContext,
@@ -43,6 +43,7 @@ import {
   setMessageTransport,
   resetMessageTransport,
 } from "./modules/messaging/messaging.ts";
+import { pointerEntityRef } from "./modules/messaging/recipient-ref.ts";
 import {
   runScheduledWorkOnce,
   registerSweep,
@@ -65,7 +66,11 @@ const environment = {
 const previous = new Map(
   Object.keys(environment).map((key) => [key, process.env[key]]),
 );
-const providerContexts: boolean[] = [];
+const providerContexts: {
+  reference: string | null;
+  active: boolean;
+  connections: number;
+}[] = [];
 const received: { body: string; signature: string | undefined }[] = [];
 let base: string;
 let receiverBase: string;
@@ -86,22 +91,20 @@ before(async () => {
   setRailTransport({
     ...transport,
     submit: async (...args) => {
-      providerContexts.push(hasDatabaseContext());
-      assert.equal(
-        pool.totalCount - pool.idleCount,
-        0,
-        "rail I/O holds no application connection",
-      );
+      providerContexts.push({
+        reference: args[1].invoiceNumber,
+        active: hasDatabaseContext(),
+        connections: pool.totalCount - pool.idleCount,
+      });
       return transport.submit(...args);
     },
   });
-  setMessageTransport(async () => {
-    providerContexts.push(hasDatabaseContext());
-    assert.equal(
-      pool.totalCount - pool.idleCount,
-      0,
-      "message I/O holds no application connection",
-    );
+  setMessageTransport(async (_channel, _recipient, _template, entityRef) => {
+    providerContexts.push({
+      reference: entityRef,
+      active: hasDatabaseContext(),
+      connections: pool.totalCount - pool.idleCount,
+    });
     return { ok: true, providerMessageId: randomUUID() };
   });
   await getDb()
@@ -357,6 +360,14 @@ for (const mode of ["http", "background"] as const) {
           .where(eq(column, id));
         assert.equal(rows.length, 1, `one claim for ${id}`);
       }
+      // Other suites leave records in the shared DB, and this full pass may
+      // mint additional filings. Verify the exact salted entities we seeded.
+      const reminderRefs = [
+        pointerEntityRef("inv", f.reminderId),
+        pointerEntityRef("obl", f.obligationId),
+        pointerEntityRef("fil", f.filingId),
+        pointerEntityRef("whc", f.creditId),
+      ];
       const messages = await getDb()
         .select()
         .from(messagesTable)
@@ -364,6 +375,7 @@ for (const mode of ["http", "background"] as const) {
           and(
             eq(messagesTable.recipientPartyId, f.partyId),
             eq(messagesTable.channel, "email"),
+            inArray(messagesTable.entityId, reminderRefs),
           ),
         );
       assert.deepEqual(messages.map((row) => row.templateKey).sort(), [
@@ -372,11 +384,26 @@ for (const mode of ["http", "background"] as const) {
         "obligation_overdue",
         "wht_note_overdue",
       ]);
-      assert.ok(providerContexts.length >= 5);
+      const expectedReferences = [`SCHED-${f.invoiceId}`, ...reminderRefs];
+      const providers = providerContexts.filter(
+        (row) =>
+          row.reference !== null && expectedReferences.includes(row.reference),
+      );
+      assert.deepEqual(
+        providers.map((row) => row.reference).sort(),
+        [...expectedReferences].sort(),
+        "exactly one call for each of the five fixture effects",
+      );
       assert.ok(messages.every((row) => row.status === "sent"));
-      assert.ok(
-        providerContexts.every((context) => context === false),
-        "no provider I/O holds a DB context",
+      assert.deepEqual(
+        providers.map((row) => row.active),
+        [false, false, false, false, false],
+        "no fixture provider I/O holds a DB context",
+      );
+      assert.deepEqual(
+        providers.map((row) => row.connections),
+        [0, 0, 0, 0, 0],
+        "no fixture provider I/O holds an application connection",
       );
       await pass();
       assert.equal(
@@ -389,9 +416,20 @@ for (const mode of ["http", "background"] as const) {
           await getDb()
             .select()
             .from(messagesTable)
-            .where(eq(messagesTable.recipientPartyId, f.partyId))
+            .where(
+              and(
+                eq(messagesTable.recipientPartyId, f.partyId),
+                inArray(messagesTable.entityId, reminderRefs),
+              ),
+            )
         ).length,
         4,
+      );
+      assert.equal(
+        rail.calls.filter(
+          (call) => call.invoiceNumber === `SCHED-${f.invoiceId}`,
+        ).length,
+        1,
       );
     } finally {
       await disableFirmWebhook(f.firmId, f.hook.row.id);
