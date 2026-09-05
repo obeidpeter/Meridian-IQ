@@ -166,6 +166,33 @@ try {
   report.readabilitySelfTest.push(
     "accepts a readable label wrapped between intact words",
   );
+  await probe.setContent(`<style>
+    .mi-network-status__copy { display: block; width: 48px; font: 24px sans-serif; overflow-wrap: anywhere; }
+    .mi-network-status__copy small { display: block; font: inherit; }
+  </style><div class="mi-network-status"><span class="mi-network-status__copy"><small>Reconnect before submitting</small></span></div>`);
+  measured = await probe.evaluate(measureActionReadability);
+  assert(
+    measured.failures.some((item) =>
+      item.brokenWords.some((word) => word.word === "Reconnect"),
+    ),
+    "Readability guard missed broken words in connectivity copy",
+  );
+  report.readabilitySelfTest.push(
+    "rejects ordinary words split in connectivity copy",
+  );
+  await probe.addStyleTag({
+    content: ".mi-network-status__copy { width: 180px; }",
+  });
+  measured = await probe.evaluate(measureActionReadability);
+  assert.equal(
+    measured.failures.length,
+    0,
+    "Readability guard rejected intact connectivity words",
+  );
+  assert(measured.actions[0].labelLines > 1);
+  report.readabilitySelfTest.push(
+    "accepts connectivity copy wrapped between words",
+  );
   report.dialogFocusSelfTest = await verifyDialogFocusGuard(probe);
   await probe.close();
   for (const specimen of cases) {
@@ -371,6 +398,58 @@ try {
     }
     if (state === "forbidden")
       assert.equal(await page.locator(".mi-operation-status").count(), 0);
+    if (state === "offline" && width === 1440) {
+      const banner = page.locator(".mi-network-status");
+      assert(
+        await banner.evaluate((node) => {
+          const copy = node.querySelector(".mi-network-status__copy");
+          const button = node.querySelector("button");
+          return (
+            button.getBoundingClientRect().left >=
+            copy.getBoundingClientRect().right
+          );
+        }),
+        "Wide connectivity banner must retain its inline action",
+      );
+      // Constrain the component, not the viewport: narrow panes need the same
+      // readable layout even when the surrounding desktop remains wide.
+      await banner.evaluate((node) => {
+        node.style.width = "256px";
+      });
+      assert(
+        await banner.evaluate((node) => {
+          const bounds = node.getBoundingClientRect();
+          const style = globalThis.getComputedStyle(node);
+          const left =
+            bounds.left +
+            parseFloat(style.borderLeftWidth) +
+            parseFloat(style.paddingLeft);
+          const right =
+            bounds.right -
+            parseFloat(style.borderRightWidth) -
+            parseFloat(style.paddingRight);
+          return [
+            node.querySelector(".mi-network-status__copy"),
+            node.querySelector("button"),
+          ].every((child) => {
+            const box = child.getBoundingClientRect();
+            return Math.abs(box.left - left) <= 1 && box.right <= right + 1;
+          });
+        }),
+        "Narrow connectivity copy and action must use their full row without overflow",
+      );
+      assert.equal(
+        (await page.evaluate(measureActionReadability)).failures.length,
+        0,
+        "Narrow connectivity pane must preserve intact words",
+      );
+      await banner.evaluate((node) => {
+        node.style.removeProperty("width");
+      });
+      report.interactions.push(
+        `${id}: desktop inline action and narrow-container full-row copy/action remain readable`,
+      );
+    }
     console.log(
       `${id}: ${axe.violations.length} axe violations; ${geometry.clippedText.length} clipped; ${geometry.outsideViewport.length} outside; ${geometry.readability.failures.length} unreadable actions`,
     );

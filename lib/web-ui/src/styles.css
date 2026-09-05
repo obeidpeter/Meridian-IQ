@@ -1078,6 +1078,7 @@
 /* Connectivity is a full-width operational message, not a floating toast: it
    remains discoverable while offline and does not cover page controls. */
 .mi-network-status {
+  container: mi-network-status / inline-size;
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   align-items: center;
@@ -1115,6 +1116,7 @@
 .mi-network-status button svg {
   width: 1rem;
   height: 1rem;
+  flex-shrink: 0;
 }
 
 .mi-network-status__copy {
@@ -1141,8 +1143,12 @@
 
 .mi-network-status button {
   display: inline-flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   min-height: 2.25rem;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding: 0 0.75rem;
   border: 1px solid currentColor;
@@ -1151,6 +1157,8 @@
   color: inherit;
   font-size: 0.75rem;
   font-weight: 700;
+  white-space: normal;
+  overflow-wrap: normal;
 }
 
 .mi-network-status button:focus-visible {
@@ -1162,14 +1170,21 @@
   animation: mi-spin 0.8s linear infinite;
 }
 
-@media (max-width: 36rem) {
-  .mi-network-status {
-    grid-template-columns: 2rem minmax(0, 1fr);
+/* Follow the banner's available width, including enlarged text and narrow panes. */
+@container mi-network-status (max-width: 36rem) {
+  .mi-network-status__copy {
+    grid-column: 2 / -1;
   }
 
   .mi-network-status button {
-    grid-column: 2;
+    grid-column: 1 / -1;
     justify-self: start;
+  }
+}
+
+@container mi-network-status (max-width: 20rem) {
+  .mi-network-status__copy {
+    grid-column: 1 / -1;
   }
 }
 

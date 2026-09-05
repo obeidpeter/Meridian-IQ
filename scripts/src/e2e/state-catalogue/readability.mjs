@@ -1,7 +1,9 @@
 // Runs in the browser through page.evaluate; measure words, not just overflow.
 export function measureActionReadability() {
   const actions = [
-    ...globalThis.document.querySelectorAll(".mi-activity__actions button"),
+    ...globalThis.document.querySelectorAll(
+      ".mi-activity__actions button, .mi-network-status button, .mi-network-status__copy strong, .mi-network-status__copy small",
+    ),
   ]
     .filter(
       (button) => button.getClientRects().length && button.textContent.trim(),
