@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 import { collectAxeResults } from "../accessibility.mjs";
 import { measureActionReadability } from "./readability.mjs";
+import { assertDialogClosedAndFocusRestored } from "./dialog-focus.mjs";
+import { verifyDialogFocusGuard } from "./dialog-focus.testing.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../../..");
@@ -95,6 +97,7 @@ const report = {
   cases: [],
   interactions: [],
   readabilitySelfTest: [],
+  dialogFocusSelfTest: [],
 };
 try {
   const base = server.resolvedUrls.local[0];
@@ -163,6 +166,7 @@ try {
   report.readabilitySelfTest.push(
     "accepts a readable label wrapped between intact words",
   );
+  report.dialogFocusSelfTest = await verifyDialogFocusGuard(probe);
   await probe.close();
   for (const specimen of cases) {
     const { state, theme, width, text } = specimen;
@@ -334,11 +338,9 @@ try {
         "Saved result was not keyboard reachable",
       );
       await page.keyboard.press("Escape");
-      assert(
-        await page
-          .getByRole("button", { name: "Operation history", exact: true })
-          .evaluate((node) => node === globalThis.document.activeElement),
-        "Dialog did not restore focus",
+      await assertDialogClosedAndFocusRestored(
+        page,
+        page.getByRole("button", { name: "Operation history", exact: true }),
       );
       report.interactions.push(
         `${id}: dialog traps/restores keyboard focus; controls scroll into view with visible focus; result keyboard reachable`,
