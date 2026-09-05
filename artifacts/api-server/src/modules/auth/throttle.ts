@@ -236,4 +236,4 @@ async function sweepExpiredLoginAttempts(): Promise<void> {
   );
 }
 
-registerSweep("auth.login_attempts", sweepExpiredLoginAttempts);
+registerSweep("auth.login_attempts", sweepExpiredLoginAttempts, { critical: false });

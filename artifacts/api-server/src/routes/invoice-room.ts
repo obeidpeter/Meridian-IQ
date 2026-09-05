@@ -28,6 +28,7 @@ import {
   respondInInvoiceRoom,
   revokeInvoiceRoom,
   verifyInvoiceRoomOtp,
+  resolveRoomShareId,
 } from "../modules/invoice-room/service";
 import {
   digestRoomSecret,
@@ -236,12 +237,19 @@ router.post("/public/invoice-room/otp", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Open the secure invoice link again" });
     return;
   }
-  const retryAfter = await throttleActionAttempt(
+  // Two budgets (R105 review): per session, and per ROOM across every session
+  // — a link holder can re-exchange the link for a fresh session at will, so a
+  // session-only cap would reset on each exchange and scale with source IPs.
+  const shareId = await resolveRoomShareId(session);
+  for (const key of [
     `invoice-room-otp-send:${digestRoomSecret(session).slice(0, 32)}`,
-  );
-  if (retryAfter !== null) {
-    sendThrottled429(res, retryAfter, "Too many verification codes requested");
-    return;
+    `invoice-room-otp-send-share:${shareId}`,
+  ]) {
+    const retryAfter = await throttleActionAttempt(key);
+    if (retryAfter !== null) {
+      sendThrottled429(res, retryAfter, "Too many verification codes requested");
+      return;
+    }
   }
   res.status(202).json(await requestInvoiceRoomOtp(session, body.channel));
 });
@@ -254,14 +262,20 @@ router.post("/public/invoice-room/verify", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Open the secure invoice link again" });
     return;
   }
-  const throttleKey = `invoice-room-otp:${digestRoomSecret(session).slice(0, 32)}`;
-  const retryAfter = await throttleActionAttempt(throttleKey);
-  if (retryAfter !== null) {
-    sendThrottled429(res, retryAfter, "Too many verification attempts");
-    return;
+  const shareId = await resolveRoomShareId(session);
+  const throttleKeys = [
+    `invoice-room-otp:${digestRoomSecret(session).slice(0, 32)}`,
+    `invoice-room-otp-share:${shareId}`, // per room, across sessions (R105)
+  ];
+  for (const key of throttleKeys) {
+    const retryAfter = await throttleActionAttempt(key);
+    if (retryAfter !== null) {
+      sendThrottled429(res, retryAfter, "Too many verification attempts");
+      return;
+    }
   }
   const view = await verifyInvoiceRoomOtp(session, body.code);
-  await clearActionFailures(throttleKey);
+  for (const key of throttleKeys) await clearActionFailures(key);
   res.json(view);
 });
 

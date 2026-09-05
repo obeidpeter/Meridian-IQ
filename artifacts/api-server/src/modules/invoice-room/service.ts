@@ -23,7 +23,10 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import type { Principal } from "../auth/rbac";
-import { requireFirmScope } from "../auth/rbac";
+import { requireFirmScope,
+  assertClientPartyScope,
+  clientPartyScope,
+} from "../auth/rbac";
 import {
   hashPassword,
   issueSessionToken,
@@ -236,6 +239,15 @@ async function loadShareAndInvoice(shareId: string): Promise<{
     throw new DomainError("ROOM_NOT_FOUND", "Invoice Room not found", 404);
   }
   return { share, invoice };
+}
+
+/** The share a buyer session belongs to — the key for per-room throttles
+ *  (R105 review): a link holder can mint sessions at will, so a per-session
+ *  budget alone resets on every re-exchange. */
+export async function resolveRoomShareId(
+  sessionToken: string | null | undefined,
+): Promise<string> {
+  return runInBypassContext(async () => (await loadRoomAccess(sessionToken)).share.id);
 }
 
 export async function loadRoomAccess(
@@ -477,12 +489,8 @@ async function reserveRoom(
     if (!invoice || invoice.firmId !== firmId) {
       throw new DomainError("NOT_FOUND", "Invoice not found", 404);
     }
-    if (
-      principal.role === "client_user" &&
-      principal.clientPartyId !== invoice.supplierPartyId
-    ) {
-      throw new DomainError("FORBIDDEN", "Not permitted for this invoice", 403);
-    }
+    // SEC-03: the shared helper, not an inline role check (R105 review).
+    assertClientPartyScope(principal, invoice.supplierPartyId);
     if (
       !SHAREABLE_STATUSES.includes(
         invoice.status as (typeof SHAREABLE_STATUSES)[number],
@@ -759,9 +767,10 @@ export async function listInvoiceRooms(
 ): Promise<SupplierRoomSummary[]> {
   const firmId = requireFirmScope(principal);
   const scopes = [eq(invoiceRoomSharesTable.firmId, firmId)];
+  const partyScope = clientPartyScope(principal);
   if (principal.role === "client_user") {
-    if (!principal.clientPartyId) return [];
-    scopes.push(eq(invoicesTable.supplierPartyId, principal.clientPartyId));
+    if (!partyScope) return [];
+    scopes.push(eq(invoicesTable.supplierPartyId, partyScope));
   }
   if (invoiceId) scopes.push(eq(invoiceRoomSharesTable.invoiceId, invoiceId));
   const rows = await getDb()
@@ -1511,6 +1520,11 @@ export async function confirmInvoiceRoomPayment(input: {
       .where(eq(invoiceRoomSharesTable.id, request.shareId))
       .limit(1);
     if (!invoice || !share) return { applied: false };
+    // Deliberately no assertShareActive here: a payment link is only issued
+    // while the share is active, so a pending request always predates any
+    // revocation or expiry, and money the buyer actually paid must land as
+    // settlement evidence regardless of what happened to the link afterwards
+    // (R105 review). Revocation stops NEW links and views, never a settled payment.
     const occurredAt = input.paidAt ? new Date(input.paidAt) : new Date();
     const { event, created } = await appendSettlementEvent({
       invoiceId: invoice.id,
@@ -1744,7 +1758,13 @@ export async function sweepInvoiceRoomReminders(
       .orderBy(invoicesTable.dueDate)
       .limit(100);
     let claimed = 0;
+    // A firm whose invoice_room flag was darkened (an incident kill switch)
+    // must not keep receiving reminder links that 404 on open (R105 review).
+    const lit = new Map<string, boolean>();
     for (const { share, invoice } of candidates) {
+      if (!lit.has(share.firmId))
+        lit.set(share.firmId, await isFeatureEnabled("invoice_room", share.firmId));
+      if (!lit.get(share.firmId)) continue;
       const due = new Date(`${invoice.dueDate}T23:59:59+01:00`);
       const kind = due.getTime() < now.getTime() ? "overdue" : "due_soon";
       const claim = await appendRoomEvent({

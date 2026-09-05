@@ -137,9 +137,16 @@ export type PushReceiptTransport = (
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
+// fetch has no default timeout. Every sweep that fans out a push (the four
+// deadline-reminder sweeps, b2c.clocks, the Clerk delivery sweeps, push
+// receipts) bottoms out here, so an unbounded call here is an unbounded sweep
+// pass (R105 audit). Same budget and rationale as the messaging relay's
+// RELAY_TIMEOUT_MS: an abort is the ordinary transport-failure path.
+export const EXPO_TIMEOUT_MS = 5_000;
 
 const expoTransport: PushTransport = async (notifications) => {
   const resp = await fetch(EXPO_PUSH_URL, {
+    signal: AbortSignal.timeout(EXPO_TIMEOUT_MS),
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -178,6 +185,7 @@ const expoTransport: PushTransport = async (notifications) => {
 
 const expoReceiptTransport: PushReceiptTransport = async (ticketIds) => {
   const resp = await fetch(EXPO_RECEIPTS_URL, {
+    signal: AbortSignal.timeout(EXPO_TIMEOUT_MS),
     method: "POST",
     headers: {
       "content-type": "application/json",

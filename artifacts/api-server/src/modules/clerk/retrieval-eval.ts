@@ -264,7 +264,7 @@ registerSweep("clerk.retrieval_auto_eval", async function sweepRetrievalAutoEval
       "retrieval lane: nightly eval skipped (clerk disabled or provider unavailable)",
     );
   }
-});
+}, { critical: false });
 
 // ---- Drop watch -------------------------------------------------------------
 
@@ -387,4 +387,4 @@ export async function sweepRetrievalWatch(
   });
 }
 
-registerSweep("clerk.retrieval_watch", atMostHourly(sweepRetrievalWatch));
+registerSweep("clerk.retrieval_watch", atMostHourly(sweepRetrievalWatch), { critical: false });
