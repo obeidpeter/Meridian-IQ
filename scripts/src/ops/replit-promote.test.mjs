@@ -33,6 +33,9 @@ import {
 } from "./mobile-artifact.mjs";
 import { startStaticServer } from "../e2e/serve.mjs";
 
+const targetReplId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const providerReplId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
 const catalog = {
   postgresMajor: 16,
   role: {
@@ -119,10 +122,17 @@ function fixture(t) {
     format: 1,
     domain: "fixture.invalid",
     basePath: "/mobile/",
-    replId: null,
+    replId: targetReplId,
   };
   const eas = {
-    build: { production: { env: { EXPO_PUBLIC_DOMAIN: mobileConfig.domain } } },
+    build: {
+      production: {
+        env: {
+          EXPO_PUBLIC_DOMAIN: mobileConfig.domain,
+          EXPO_PUBLIC_REPL_ID: mobileConfig.replId,
+        },
+      },
+    },
   };
   write("artifacts/mobile/eas.json", JSON.stringify(eas));
   for (const name of [
@@ -160,7 +170,7 @@ function fixture(t) {
     write(`artifacts/${app}/dist/public/index.html`, `<main>${app}</main>`);
   write(
     "artifacts/api-server/dist/index.mjs",
-    `console.log(JSON.stringify({ executed: true, revision: process.env.BUILD_REVISION, expected: process.env.EXPECTED_BUILD_REVISION }));\n`,
+    `console.log(JSON.stringify({ executed: true, revision: process.env.BUILD_REVISION, expected: process.env.EXPECTED_BUILD_REVISION, providerReplId: process.env.REPL_ID }));\n`,
   );
   write("artifacts/api-server/dist/data/font.afm", "fixture font bytes");
   write("artifacts/mobile/dist/deployment.json", JSON.stringify(mobileConfig));
@@ -206,7 +216,8 @@ function fixture(t) {
     DATABASE_URL: "postgres://localhost/disposable",
     RELEASE_ROLLBACK_REVISION: "a".repeat(40),
     RELEASE_BASE_URL: "https://fixture.invalid",
-    REPL_ID: "11111111-1111-4111-8111-111111111111",
+    RELEASE_TARGET_REPL_ID: targetReplId,
+    REPL_ID: providerReplId,
     RELEASE_RECOVERY_PLAN_SHA256: "c".repeat(64),
     RELEASE_BACKUP_SHA256: "b".repeat(64),
   };
@@ -292,7 +303,10 @@ function fixture(t) {
       kind: "held-verification",
       revision: manifest.source.revision,
       manifestSha256: env.RELEASE_MANIFEST_SHA256,
-      target: { origin: env.RELEASE_BASE_URL, replId: env.REPL_ID },
+      target: {
+        origin: env.RELEASE_BASE_URL,
+        replId: env.RELEASE_TARGET_REPL_ID,
+      },
       recoveryPlanSha256: env.RELEASE_RECOVERY_PLAN_SHA256,
       backupSha256: env.RELEASE_BACKUP_SHA256,
       verifiedAt: at(-5),
@@ -556,6 +570,7 @@ test("API startup needs no Git and sets exact CI revision before importing uncha
     executed: true,
     revision: f.manifest.source.revision,
     expected: f.manifest.source.revision,
+    providerReplId: f.env.REPL_ID,
   });
   assert.deepEqual(assetInventory(f.root), f.manifest.assets);
 });
@@ -788,6 +803,7 @@ test("Replit empty metadata commits preserve the CI deployed revision; strict re
     executed: true,
     revision: f.manifest.source.revision,
     expected: f.manifest.source.revision,
+    providerReplId: f.env.REPL_ID,
   });
   f.write("source.txt", "changed source content\n");
   f.git("add", "source.txt");
@@ -816,6 +832,7 @@ test("default HOLD serves health only without Git, DB clients, API evaluation or
       env: {
         ...process.env,
         ...f.env,
+        REPL_ID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         PORT: String(port),
         PATH: "",
         DATABASE_URL: "invalid-no-db-client",
@@ -853,8 +870,12 @@ test("default HOLD serves health only without Git, DB clients, API evaluation or
     assert.equal(body.manifestSha256, f.env.RELEASE_MANIFEST_SHA256);
     assert.deepEqual(body.target, {
       origin: f.env.RELEASE_BASE_URL,
-      replId: f.env.REPL_ID,
+      replId: f.env.RELEASE_TARGET_REPL_ID,
     });
+    assert.equal(
+      JSON.stringify(body).includes("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+      false,
+    );
     assert.match(health.headers.get("cache-control"), /no-store/);
     for (const route of [
       "/api/readyz",
@@ -897,7 +918,7 @@ test("default HOLD serves health only without Git, DB clients, API evaluation or
   }
 });
 
-test("held Publish then repeated active RUN Publish is one logical activation and never changes assets", (t) => {
+test("HOLD and repeated RUN promotion/runtime retain one stable activation across provider IDs", (t) => {
   const f = fixture(t);
   const { plan } = f.authorize();
   let queries = 0;
@@ -917,17 +938,32 @@ test("held Publish then repeated active RUN Publish is one logical activation an
       ),
   };
   f.env.RELEASE_RUNTIME_STATE = "HOLD";
-  promoteReplit("api-server", f.env, f.root, deps);
+  promoteReplit("api-server", Object.freeze({ ...f.env }), f.root, deps);
   f.env.RELEASE_RUNTIME_STATE = "RUN";
   const originalPermit = readFileSync(f.env.RELEASE_ACTIVATION_PERMIT);
-  for (let repeat = 0; repeat < 2; repeat++)
-    promoteReplit("api-server", f.env, f.root, deps);
+  const originalHeld = readFileSync(f.env.RELEASE_HELD_EVIDENCE);
+  for (const provider of ["cccccccc-cccc-4ccc-8ccc-cccccccccccc", undefined]) {
+    f.env.REPL_ID = provider;
+    const env = Object.freeze({ ...f.env });
+    promoteReplit("api-server", env, f.root, deps);
+    assert.equal(env.REPL_ID, provider);
+    const started = f.cli("start", "api-server");
+    assert.equal(started.status, 0, started.stderr);
+    const body = JSON.parse(started.stdout.trim().split("\n").at(-1));
+    assert.equal(body.executed, true);
+    assert.equal(
+      body.providerReplId,
+      provider,
+      "runtime must not rewrite provider identity",
+    );
+  }
   assert.equal(queries, 3);
   assert.equal(catalogs, 3);
   assert.deepEqual(
     readFileSync(f.env.RELEASE_ACTIVATION_PERMIT),
     originalPermit,
   );
+  assert.deepEqual(readFileSync(f.env.RELEASE_HELD_EVIDENCE), originalHeld);
   assert.deepEqual(assetInventory(f.root), f.manifest.assets);
 });
 
@@ -970,7 +1006,9 @@ test("runtime scope, control-plane admission and invalid actions fail before API
     { RELEASE_ACTIVATION_PERMIT_SHA256: "0".repeat(64) },
     { RELEASE_ACTIVATION_ID: "33333333-3333-4333-8333-333333333333" },
     { RELEASE_BASE_URL: "https://elsewhere.invalid" },
-    { REPL_ID: "different-target" },
+    { RELEASE_TARGET_REPL_ID: undefined, REPL_ID: targetReplId },
+    { RELEASE_TARGET_REPL_ID: "different-target" },
+    { RELEASE_TARGET_REPL_ID: providerReplId },
     { RELEASE_RECOVERY_PLAN_SHA256: "0".repeat(64) },
     { RELEASE_BACKUP_SHA256: "0".repeat(64) },
     { RELEASE_HELD_EVIDENCE_SHA256: "0".repeat(64) },
@@ -1064,7 +1102,7 @@ test("activation binds actual backup heartbeat, plan, verified held evidence and
   );
 });
 
-test("CI production origin and available Repl ID bindings cannot drift", async (t) => {
+test("CI production origin and mandatory stable Repl ID bindings cannot drift", async (t) => {
   const f = fixture(t);
   const { manifest } = f;
   const mobile = {
@@ -1075,7 +1113,7 @@ test("CI production origin and available Repl ID bindings cannot drift", async (
   f.stamp(changed);
   assert.throws(
     () => promoteReplit("api-server", f.env, f.root),
-    /REPL_ID differs/,
+    /RELEASE_TARGET_REPL_ID differs/,
   );
   f.stamp();
   for (const origin of [
@@ -1087,5 +1125,108 @@ test("CI production origin and available Repl ID bindings cannot drift", async (
     await assert.rejects(
       startReplitApi({ ...f.env, RELEASE_BASE_URL: origin }, f.root),
     );
+  }
+});
+
+test("HOLD and RUN refuse missing, malformed or foreign stable targets before IO without provider fallback", async (t) => {
+  const f = fixture(t);
+  f.authorize();
+  for (const state of ["HOLD", "RUN"]) {
+    for (const target of [
+      undefined,
+      null,
+      "",
+      "not-a-uuid",
+      targetReplId.toUpperCase(),
+      ` ${targetReplId}`,
+      `${targetReplId}\n`,
+      providerReplId,
+    ]) {
+      const env = {
+        ...f.env,
+        RELEASE_RUNTIME_STATE: state,
+        RELEASE_TARGET_REPL_ID: target,
+        REPL_ID: targetReplId,
+        EXPO_PUBLIC_REPL_ID: targetReplId,
+      };
+      assert.throws(
+        () =>
+          promoteReplit("api-server", env, f.root, {
+            query: () =>
+              assert.fail("invalid target must precede DB preflight"),
+            catalog: () =>
+              assert.fail("invalid target must precede catalog IO"),
+          }),
+        /RELEASE_TARGET_REPL_ID/,
+      );
+      await assert.rejects(
+        startReplitApi(env, f.root),
+        /RELEASE_TARGET_REPL_ID/,
+      );
+    }
+  }
+});
+
+test("promotion requires a canonical CI mobile target rather than falling back to configured identity", (t) => {
+  const f = fixture(t);
+  for (const target of [
+    undefined,
+    null,
+    "",
+    "not-a-uuid",
+    targetReplId.toUpperCase(),
+    `${targetReplId}\n`,
+  ]) {
+    f.stamp({
+      ...f.manifest,
+      mobile: { ...f.manifest.mobile, replId: target },
+    });
+    assert.throws(
+      () =>
+        promoteReplit("api-server", f.env, f.root, {
+          query: () =>
+            assert.fail("invalid manifest target must precede DB preflight"),
+        }),
+      /CI mobile production Repl ID.*canonical UUID/,
+    );
+  }
+});
+
+test("provider diagnostics are sanitized in promotion and runtime without rewriting the provider value", (t) => {
+  const f = fixture(t);
+  const { plan } = f.authorize();
+  const logs = [];
+  t.mock.method(console, "log", (...values) => logs.push(values.join(" ")));
+  for (const provider of [
+    providerReplId,
+    `${providerReplId}\n`,
+    "not-an-id\nforged diagnostic",
+    "x".repeat(4096),
+  ]) {
+    f.env.REPL_ID = provider;
+    const expected = provider === providerReplId ? provider : "unavailable";
+    const diagnostic =
+      `replit: operator-approved target ${targetReplId}; provider REPL_ID ` +
+      `${expected} is execution context, not target attestation`;
+    logs.length = 0;
+    promoteReplit("api-server", Object.freeze({ ...f.env }), f.root, {
+      query: () => recovery(plan.backup.completedAt),
+      catalog: () => catalog,
+    });
+    assert.deepEqual(
+      logs.filter((line) => line.includes("provider REPL_ID")),
+      [diagnostic],
+    );
+    const result = f.cli("start", "api-server");
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(
+      result.stdout
+        .trim()
+        .split("\n")
+        .filter((line) => line.includes("provider REPL_ID")),
+      [diagnostic],
+    );
+    const body = JSON.parse(result.stdout.trim().split("\n").at(-1));
+    assert.equal(body.providerReplId, provider);
   }
 });

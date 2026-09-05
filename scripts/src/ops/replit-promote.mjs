@@ -34,6 +34,20 @@ function assertPublishable(app) {
   assert.ok(REPLIT_APPS.includes(app), `unsupported promotion app: ${app}`);
 }
 
+function logExecutionContext(identity, env) {
+  const providerId =
+    typeof env.REPL_ID === "string" &&
+    env.REPL_ID.length === 36 &&
+    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
+      env.REPL_ID,
+    )
+      ? env.REPL_ID
+      : "unavailable";
+  console.log(
+    `replit: operator-approved target ${identity.target.replId}; provider REPL_ID ${providerId} is execution context, not target attestation`,
+  );
+}
+
 function stagedManifest(app, env, root) {
   assertPublishable(app);
   const manifest = loadManifest(
@@ -93,7 +107,8 @@ export function promoteReplit(
 ) {
   const manifest = stagedManifest(app, env, root);
   const state = app === "api-server" ? runtimeState(env) : undefined;
-  if (app === "api-server") maintenanceIdentity(manifest, env);
+  if (app === "api-server")
+    logExecutionContext(maintenanceIdentity(manifest, env), env);
   if (state === "RUN")
     loadActivationPermit(env, activationBindings(manifest, env), {
       phase: "promotion",
@@ -216,6 +231,7 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
   if (app === "api-server") {
     const state = runtimeState(env);
     const identity = maintenanceIdentity(manifest, env);
+    logExecutionContext(identity, env);
     if (state === "HOLD") {
       assert.match(
         env.PORT ?? "",
