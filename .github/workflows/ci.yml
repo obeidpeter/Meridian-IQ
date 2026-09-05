@@ -281,6 +281,9 @@ jobs:
       - name: Build api-server
         run: pnpm --filter @workspace/api-server run build
 
+      - name: Verify built API PDF worker and native rasterization
+        run: node --test scripts/src/e2e/pdf-runtime.test.mjs
+
       - name: Build immutable mobile native export and serving package
         run: node scripts/src/ops/mobile-artifact.mjs build
 
