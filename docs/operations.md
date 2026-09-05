@@ -67,7 +67,8 @@ host requires an explicit reviewed build configuration, not runtime URL rewritin
    manifest outside every static `publicDir`; do not use a `VITE_` variable.
 3. Supply the API build's existing `DATABASE_URL` for the actual production
    target and the chosen recovery-mode configuration. Rollback mode requires a
-   qualified `RELEASE_ROLLBACK_REVISION`; maintenance-forward requires the
+   qualified `RELEASE_ROLLBACK_REVISION` from the reviewed release record;
+   maintenance-forward requires the
    independently approved recovery plan. Apply any separately reviewed
    versioned migrations and establish genuine backup/restore evidence first.
    In particular, production must already have migrations 0050-0054 before
@@ -85,8 +86,9 @@ host requires an explicit reviewed build configuration, not runtime URL rewritin
    rather than rebuilding. The API run command invokes the same adapter with
    `start api-server`, rechecks the checksum and all packaged asset bytes without
    Git, and sets `BUILD_REVISION` and `EXPECTED_BUILD_REVISION` to the verified
-   full SHA. It defaults to HOLD without importing the API; only an explicitly
-   authorized RUN activation imports unchanged `artifacts/api-server/dist/index.mjs`.
+   full SHA. The checked-in descriptor selects HOLD without importing the API;
+   only an explicitly authorized RUN activation imports unchanged
+   `artifacts/api-server/dist/index.mjs`.
    Mobile uses `start mobile` to verify the same seven-app inventory, validate
    its signed target configuration and load the packaged original CommonJS
    server. Both server startup commands force production mode. A runtime
@@ -136,7 +138,27 @@ recovery evidence. No production Publish was performed by this implementation.
 
 ## HOLD and RUN
 
-API startup defaults to `RELEASE_RUNTIME_STATE=HOLD`. Both states require
+API Publish requires exactly one command-level selection: `--hold`,
+`--rollback`, or `--run`. The checked-in descriptor uses `--hold`, so an
+ordinary Publish cannot inherit stale provider-side RUN values. Changing that
+argument is a temporary reviewed release action and it must return to `--hold`
+afterward. `--hold` selects the maintenance listener plus rollback preflight,
+`--rollback` selects an ordinary API start backed by rollback recovery, and
+`--run` selects maintenance-forward activation. Omitting the selection refuses.
+Each selection overrides inherited `RELEASE_RUNTIME_STATE` and
+`RELEASE_RECOVERY_MODE`.
+
+HOLD and rollback selection require a qualified full
+`RELEASE_ROLLBACK_REVISION` supplied through reviewed release metadata or
+configuration. The artifact descriptor deliberately contains no fallback SHA;
+update the reviewed release value for each approval rather than retaining a
+long-lived artifact constant. `--run` never converts rollback evidence into
+maintenance authorization: it still requires the current plan, held evidence,
+and a fresh promotion-time activation permit. An expired permit therefore
+blocks only an explicitly selected maintenance-forward RUN, not an ordinary
+descriptor-driven HOLD Publish.
+
+Both states require
 `RELEASE_BASE_URL` as the exact origin matching the CI manifest's mobile domain,
 `RELEASE_TARGET_REPL_ID` matching its mandatory mobile Repl ID, and independently trusted
 `RELEASE_MANIFEST_SHA256`, `RELEASE_RECOVERY_PLAN_SHA256` and

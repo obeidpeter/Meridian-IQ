@@ -38,17 +38,29 @@ const targetReplId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const providerReplId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const rollbackRevision = "a".repeat(40);
 
-test("explicit HOLD CLI mode overrides inherited RUN release values", () => {
+test("explicit CLI modes override inherited release state without embedding rollback metadata", () => {
   const inherited = {
     RELEASE_RUNTIME_STATE: "RUN",
     RELEASE_RECOVERY_MODE: "maintenance-forward",
     RELEASE_ROLLBACK_REVISION: "b".repeat(40),
   };
-  const env = releaseEnvForCli(["--hold", rollbackRevision], inherited);
-  assert.equal(env.RELEASE_RUNTIME_STATE, "HOLD");
-  assert.equal(env.RELEASE_RECOVERY_MODE, "rollback");
-  assert.equal(env.RELEASE_ROLLBACK_REVISION, rollbackRevision);
+  const hold = releaseEnvForCli(["--hold"], inherited);
+  assert.equal(hold.RELEASE_RUNTIME_STATE, "HOLD");
+  assert.equal(hold.RELEASE_RECOVERY_MODE, "rollback");
+  assert.equal(hold.RELEASE_ROLLBACK_REVISION, "b".repeat(40));
+  const rollback = releaseEnvForCli(["--rollback"], inherited);
+  assert.equal(rollback.RELEASE_RUNTIME_STATE, "RUN");
+  assert.equal(rollback.RELEASE_RECOVERY_MODE, "rollback");
+  const run = releaseEnvForCli(["--run"], {
+    ...inherited,
+    RELEASE_RUNTIME_STATE: "HOLD",
+    RELEASE_RECOVERY_MODE: "rollback",
+  });
+  assert.equal(run.RELEASE_RUNTIME_STATE, "RUN");
+  assert.equal(run.RELEASE_RECOVERY_MODE, "maintenance-forward");
   assert.equal(inherited.RELEASE_RUNTIME_STATE, "RUN");
+  for (const args of [[], ["--hold", rollbackRevision], ["--unknown"]])
+    assert.throws(() => releaseEnvForCli(args, inherited));
 });
 
 const catalog = {
@@ -571,14 +583,14 @@ test("API startup needs no Git and sets exact CI revision before importing uncha
   const f = fixture(t);
   f.authorize();
   rmSync(path.join(f.root, ".git"), { recursive: true });
-  const build = f.cli("build", "api-server");
+  const build = f.cli("build", "api-server", "--run");
   assert.notEqual(build.status, 0);
   assert.match(build.stderr, /matching Git checkout/);
   f.env.PATH = "";
   f.env.BUILD_REVISION = "old-revision";
   f.env.EXPECTED_BUILD_REVISION = "old-expected";
   f.env.REPLIT_DEPLOYMENT_ID = "deployment-uuid-not-a-source-sha";
-  const started = f.cli("start", "api-server");
+  const started = f.cli("start", "api-server", "--run");
   assert.equal(started.status, 0, started.stderr);
   const output = JSON.parse(started.stdout.trim().split("\n").at(-1));
   assert.deepEqual(output, {
@@ -593,7 +605,7 @@ test("API startup needs no Git and sets exact CI revision before importing uncha
 test("runtime fails closed before executing API on missing checksum, missing manifest or tampering", (t) => {
   const f = fixture(t);
   const rejected = () => {
-    const result = f.cli("start", "api-server");
+    const result = f.cli("start", "api-server", "--run");
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /REFUSED/);
     assert.doesNotMatch(result.stdout, /executed/);
@@ -670,14 +682,16 @@ test("seven production descriptors use verified promotion and preserve developme
     if (app === "api-server") {
       assert.ok(
         production.includes(
-          '["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server", "--hold", "ea275be456a2c19babd06139de10cdbe322bc049"]',
+          '["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server", "--hold"]',
         ),
       );
       assert.ok(
         production.includes(
-          '["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server", "--hold", "ea275be456a2c19babd06139de10cdbe322bc049"]',
+          '["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server", "--hold"]',
         ),
       );
+      assert.doesNotMatch(production, /ea275be456a2c19babd06139de10cdbe322bc049/);
+      assert.doesNotMatch(production, /RELEASE_(?:RUNTIME_STATE|RECOVERY_MODE|ROLLBACK_REVISION)\s*=/);
       assert.ok(production.includes('path = "/api/healthz"'));
     } else {
       assert.match(
@@ -819,7 +833,7 @@ test("Replit empty metadata commits preserve the CI deployed revision; strict re
       f.manifest,
     );
   f.authorize();
-  const started = f.cli("start", "api-server");
+  const started = f.cli("start", "api-server", "--run");
   assert.equal(started.status, 0, started.stderr);
   assert.deepEqual(JSON.parse(started.stdout.trim().split("\n").at(-1)), {
     executed: true,
@@ -847,7 +861,7 @@ test("default HOLD serves health only without Git, DB clients, API evaluation or
   rmSync(path.join(f.root, ".git"), { recursive: true });
   const child = spawn(
     process.execPath,
-    ["scripts/src/ops/replit-promote.mjs", "start", "api-server"],
+    ["scripts/src/ops/replit-promote.mjs", "start", "api-server", "--hold"],
     {
       cwd: f.root,
       windowsHide: true,
@@ -969,7 +983,7 @@ test("HOLD and repeated RUN promotion/runtime retain one stable activation acros
     const env = Object.freeze({ ...f.env });
     promoteReplit("api-server", env, f.root, deps);
     assert.equal(env.REPL_ID, provider);
-    const started = f.cli("start", "api-server");
+    const started = f.cli("start", "api-server", "--run");
     assert.equal(started.status, 0, started.stderr);
     const body = JSON.parse(started.stdout.trim().split("\n").at(-1));
     assert.equal(body.executed, true);
@@ -999,12 +1013,25 @@ test("expired permits refuse new Publish but bound cold starts remain admitted a
       }),
     /expired for promotion/,
   );
+  assert.deepEqual(
+    promoteReplit(
+      "api-server",
+      releaseEnvForCli(["--hold"], f.env),
+      f.root,
+      {
+        query: () => recovery(),
+        catalog: () => structuredClone(catalog),
+      },
+    ),
+    f.manifest,
+    "explicit HOLD must ignore an expired inherited RUN activation",
+  );
   rmSync(path.join(f.root, ".git"), { recursive: true });
   rmSync(f.env.RELEASE_RECOVERY_PLAN);
   rmSync(f.env.RELEASE_HELD_EVIDENCE);
   f.env.PATH = "";
   f.env.DATABASE_URL = "invalid-no-db-client";
-  const started = f.cli("start", "api-server");
+  const started = f.cli("start", "api-server", "--run");
   assert.equal(started.status, 0, started.stderr);
   assert.equal(
     JSON.parse(started.stdout.trim().split("\n").at(-1)).executed,
@@ -1018,11 +1045,6 @@ test("runtime scope, control-plane admission and invalid actions fail before API
   f.authorize();
   const original = { ...f.env };
   for (const changes of [
-    { RELEASE_RUNTIME_STATE: "run" },
-    { RELEASE_RUNTIME_STATE: "" },
-    { RELEASE_RUNTIME_STATE: "RESUME" },
-    { RELEASE_RECOVERY_MODE: "rollback" },
-    { RELEASE_RECOVERY_MODE: undefined },
     { RELEASE_TRAFFIC_DRAINED: "0" },
     { RELEASE_ACTIVATION_PERMIT_SHA256: undefined },
     { RELEASE_ACTIVATION_PERMIT_SHA256: "0".repeat(64) },
@@ -1036,7 +1058,7 @@ test("runtime scope, control-plane admission and invalid actions fail before API
     { RELEASE_HELD_EVIDENCE_SHA256: "0".repeat(64) },
   ]) {
     Object.assign(f.env, original, changes);
-    const result = f.cli("start", "api-server");
+    const result = f.cli("start", "api-server", "--run");
     assert.notEqual(result.status, 0, JSON.stringify(changes));
     assert.match(result.stderr, /REFUSED/);
     assert.doesNotMatch(result.stdout, /"executed":true/);
@@ -1239,7 +1261,7 @@ test("provider diagnostics are sanitized in promotion and runtime without rewrit
       logs.filter((line) => line.includes("provider REPL_ID")),
       [diagnostic],
     );
-    const result = f.cli("start", "api-server");
+    const result = f.cli("start", "api-server", "--run");
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(
       result.stdout

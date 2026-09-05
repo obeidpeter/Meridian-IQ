@@ -13,7 +13,7 @@ import {
 import { run } from "./common.mjs";
 import { release } from "./release.mjs";
 import { MOBILE_DIR, validateMobileArtifact } from "./mobile-artifact.mjs";
-import { loadMaintenancePlan } from "./recovery-plan.mjs";
+import { loadMaintenancePlan, recoveryMode } from "./recovery-plan.mjs";
 import { loadActivationPermit } from "./activation-permit.mjs";
 import { loadHeldEvidence } from "./postdeploy.mjs";
 import {
@@ -107,9 +107,11 @@ export function promoteReplit(
 ) {
   const manifest = stagedManifest(app, env, root);
   const state = app === "api-server" ? runtimeState(env) : undefined;
+  const mode =
+    app === "api-server" ? env.RELEASE_RECOVERY_MODE : undefined;
   if (app === "api-server")
     logExecutionContext(maintenanceIdentity(manifest, env), env);
-  if (state === "RUN")
+  if (state === "RUN" && mode === "maintenance-forward")
     loadActivationPermit(env, activationBindings(manifest, env), {
       phase: "promotion",
     });
@@ -170,7 +172,7 @@ export function promoteReplit(
         verifyArtifact: (value) => verifyReplitArtifact(value, root),
       },
     );
-    if (env.RELEASE_RECOVERY_MODE === "maintenance-forward") {
+    if (mode === "maintenance-forward") {
       // release() binds this exact approved plan to the actual backup heartbeat
       // and completion time. Reloading with our expected SHA also binds the env.
       const plan = loadMaintenancePlan(env, {
@@ -198,6 +200,10 @@ export function promoteReplit(
     if (state === "HOLD")
       console.log(
         "replit: HOLD only; API bundle and workers will not start; rollback preflight does not authorize RUN",
+      );
+    else if (mode === "rollback")
+      console.log(
+        `replit: rollback-backed normal RUN using reviewed fallback ${env.RELEASE_ROLLBACK_REVISION}`,
       );
   }
   console.log(
@@ -230,6 +236,7 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
   );
   if (app === "api-server") {
     const state = runtimeState(env);
+    const mode = recoveryMode(env);
     const identity = maintenanceIdentity(manifest, env);
     logExecutionContext(identity, env);
     if (state === "HOLD") {
@@ -243,16 +250,22 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
       );
       return startMaintenanceServer(identity, { port: Number(env.PORT) });
     }
-    // The independently trusted permit is durable admission for this exact
-    // deployment. Cold starts check bindings, not current promotion-time TTL.
-    const permit = loadActivationPermit(
-      env,
-      activationBindings(manifest, env),
-      { phase: "runtime" },
-    );
-    console.log(
-      `replit: RUN activation ${permit.activationId}; startup writes authorized; external ingress and schedules must remain held pending real API readiness`,
-    );
+    if (mode === "maintenance-forward") {
+      // The independently trusted permit is durable admission for this exact
+      // deployment. Cold starts check bindings, not current promotion-time TTL.
+      const permit = loadActivationPermit(
+        env,
+        activationBindings(manifest, env),
+        { phase: "runtime" },
+      );
+      console.log(
+        `replit: RUN activation ${permit.activationId}; startup writes authorized; external ingress and schedules must remain held pending real API readiness`,
+      );
+    } else {
+      console.log(
+        `replit: starting normal release with reviewed rollback ${env.RELEASE_ROLLBACK_REVISION}`,
+      );
+    }
   }
   if (app === "mobile") {
     if (env.BASE_PATH)
@@ -286,24 +299,35 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
 export const startReplitApi = (env = process.env, root = ROOT) =>
   startReplitService("api-server", env, root);
 
-export function releaseEnvForCli(extra, env = process.env) {
-  if (extra.length === 0) return env;
+export function releaseEnvForCli(
+  extra,
+  env = process.env,
+  app = "api-server",
+) {
+  if (app !== "api-server") {
+    assert.equal(
+      extra.length,
+      0,
+      "release-mode selection is only valid for the API release gate",
+    );
+    return env;
+  }
   assert.equal(
     extra.length,
-    2,
-    "use --hold <rollback-revision> or omit release-mode arguments",
+    1,
+    "select exactly one release mode: --hold, --rollback, or --run",
   );
-  assert.equal(extra[0], "--hold", "unknown release-mode argument");
-  assert.match(
-    extra[1],
-    /^[a-f0-9]{40}$/,
-    "--hold requires a full rollback revision SHA",
+  assert.ok(
+    ["--hold", "--rollback", "--run"].includes(extra[0]),
+    "unknown release mode; use --hold, --rollback, or --run",
   );
+  const maintenanceForward = extra[0] === "--run";
   return {
     ...env,
-    RELEASE_RUNTIME_STATE: "HOLD",
-    RELEASE_RECOVERY_MODE: "rollback",
-    RELEASE_ROLLBACK_REVISION: extra[1],
+    RELEASE_RUNTIME_STATE: extra[0] === "--hold" ? "HOLD" : "RUN",
+    RELEASE_RECOVERY_MODE: maintenanceForward
+      ? "maintenance-forward"
+      : "rollback",
   };
 }
 
@@ -314,13 +338,12 @@ if (
   try {
     const [action, app, ...extra] = process.argv.slice(2);
     assertPublishable(app);
-    const env = releaseEnvForCli(extra);
-    if (extra.length > 0)
-      assert.equal(
-        app,
-        "api-server",
-        "--hold is only valid for the API release gate",
-      );
+    const env = releaseEnvForCli(extra, process.env, app);
+    if (app === "api-server")
+      Object.assign(process.env, {
+        RELEASE_RUNTIME_STATE: env.RELEASE_RUNTIME_STATE,
+        RELEASE_RECOVERY_MODE: env.RELEASE_RECOVERY_MODE,
+      });
     if (action === "build") promoteReplit(app, env);
     else {
       assert.ok(
