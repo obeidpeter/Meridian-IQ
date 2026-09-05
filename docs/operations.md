@@ -125,7 +125,12 @@ assume cross-service atomic promotion if the provider has not demonstrated it.
 Keep provider-side dev-to-production data copying and inferred schema pushes
 disabled; this adapter cannot control an independent Publish database-sync
 stage. Verify that stage separately. Existing locked runtime dependencies must
-also survive packaging; the adapter does not install them. Parent/operator owns
+also survive packaging; the adapter does not install them. In particular, retain
+the locked `pdf-parse` dependency tree, including its PDF.js worker files and
+platform-matching native canvas package. PDF parsing is intentionally external to
+the API bundle so those package-relative resources resolve correctly. Run
+`node --test scripts/src/e2e/pdf-runtime.test.mjs` against the staged API dist and
+its installed dependencies before publishing. Parent/operator owns
 secure artifact transfer, provider configuration, production approval and real
 recovery evidence. No production Publish was performed by this implementation.
 
