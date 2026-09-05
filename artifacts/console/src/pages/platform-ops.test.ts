@@ -23,14 +23,16 @@ import {
 // never silently degrade to a raw dotted action string.
 
 describe("HEALTH_ALERT_ACTION_LABELS", () => {
-  test("covers exactly the six known alert actions with their words", () => {
+  test("covers exactly the eight known alert actions with their words", () => {
     expect(HEALTH_ALERT_ACTION_LABELS).toEqual({
       "ops.rail.circuit_open": "Rail circuit open",
       "ops.outbox.dead": "Dead-lettered event",
+      "ops.sweep.pass_abandoned": "Sweep pass abandoned",
       "ops.webhook.delivery_dead": "Webhook delivery dead",
       "clerk.spend.anomaly": "Firm spend anomaly",
       "clerk.quality.drop": "Extraction quality drop",
       "clerk.injection_resistance.dropped": "Injection resistance drop",
+      "clerk.reconcile_agreement.drop": "Reconciliation agreement drop",
     });
   });
 });

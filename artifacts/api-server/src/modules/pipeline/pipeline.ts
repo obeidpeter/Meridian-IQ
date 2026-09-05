@@ -24,6 +24,7 @@ import {
   type OutboxEvent,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
+import { alertOnceViaAuditLedger } from "../clerk/watch-shared";
 import { buildCanonical } from "../invoice/service";
 import { canTransition, recordTransition } from "../invoice/lifecycle";
 import {
@@ -1232,11 +1233,21 @@ export interface RegisteredSweep {
   run: (signal: AbortSignal) => Promise<unknown>;
   /** 0 = the deployment default (SWEEP_TIMEOUT_MS), read at run time. */
   timeoutMs: number;
+  /** false = best-effort: its failure is reported (metrics, the trigger's
+   *  `degraded` list) but never fails the pass heartbeat or the external
+   *  trigger. Absent = critical (R105). */
+  critical?: boolean;
+}
+
+/** Names and criticality of the sweeps that failed in one pass (R105). */
+export interface SweepFailureReport {
+  failed: string[];
+  critical: number;
 }
 const SWEEPS: RegisteredSweep[] = [];
 const activeSweeps = new Map<
   string,
-  { work: Promise<unknown>; controller: AbortController }
+  { work: Promise<unknown>; controller: AbortController; timeoutMs: number }
 >();
 const SWEEP_NAME = /^[a-z][a-z0-9_.-]{1,63}$/;
 const DEFAULT_SWEEP_TIMEOUT_MS = 120_000;
@@ -1251,17 +1262,17 @@ export function defaultSweepTimeoutMs(): number {
 export function registerSweep(
   name: string,
   sweep: () => Promise<unknown>,
-  opts?: { timeoutMs?: number; acceptsSignal?: false },
+  opts?: { timeoutMs?: number; acceptsSignal?: false; critical?: boolean },
 ): void;
 export function registerSweep(
   name: string,
   sweep: (signal: AbortSignal) => Promise<unknown>,
-  opts: { timeoutMs?: number; acceptsSignal: true },
+  opts: { timeoutMs?: number; acceptsSignal: true; critical?: boolean },
 ): void;
 export function registerSweep(
   name: string,
   sweep: (() => Promise<unknown>) | ((signal: AbortSignal) => Promise<unknown>),
-  opts: { timeoutMs?: number; acceptsSignal?: boolean } = {},
+  opts: { timeoutMs?: number; acceptsSignal?: boolean; critical?: boolean } = {},
 ): void {
   if (!SWEEP_NAME.test(name)) {
     throw new Error(`Sweep name "${name}" must match ${SWEEP_NAME}`);
@@ -1274,7 +1285,12 @@ export function registerSweep(
   const run = opts.acceptsSignal
     ? (sweep as (signal: AbortSignal) => Promise<unknown>)
     : () => (sweep as () => Promise<unknown>)();
-  SWEEPS.push({ name, run, timeoutMs: opts.timeoutMs ?? 0 });
+  SWEEPS.push({
+    name,
+    run,
+    timeoutMs: opts.timeoutMs ?? 0,
+    critical: opts.critical ?? true,
+  });
 }
 
 /** Remove a sweep by name (tests register salted sweeps and take them out). */
@@ -1285,11 +1301,84 @@ export function unregisterSweep(name: string): boolean {
   return true;
 }
 
-export function listSweeps(): { name: string; timeoutMs: number }[] {
+export function listSweeps(): {
+  name: string;
+  timeoutMs: number;
+  critical: boolean;
+}[] {
   return SWEEPS.map((s) => ({
     name: s.name,
     timeoutMs: s.timeoutMs || defaultSweepTimeoutMs(),
+    critical: s.critical !== false,
   }));
+}
+
+// R105: how long a pass keeps its ownership (the in-process guard and the
+// distributed lock) waiting for a timed-out sweep to settle. Past this ceiling
+// the pass counts, alerts once per stuck sweep and releases ownership, so a
+// sweep that ignores its abort signal can no longer stall every later pass
+// until a restart. The abandoned work stays tracked for shutdown, and a later
+// pass skips a sweep that is still in flight (the in_flight failure kind).
+// Unset = twice the stuck sweep's own timeout — a sweep gets three budgets in
+// total before it is abandoned — so a sweep registered with a long timeout is
+// never abandoned early by a fleet-wide constant.
+export function sweepSettleCeilingMs(stuckTimeouts: number[] = []): number {
+  const configured = Number(process.env.SWEEP_SETTLE_CEILING_MS);
+  if (Number.isFinite(configured) && configured >= 1_000)
+    return Math.floor(configured);
+  const longest = Math.max(defaultSweepTimeoutMs(), ...stuckTimeouts);
+  return 2 * longest;
+}
+
+export const SWEEP_PASS_ABANDONED_ACTION = "ops.sweep.pass_abandoned";
+const alertPassAbandoned = alertOnceViaAuditLedger({
+  action: SWEEP_PASS_ABANDONED_ACTION,
+  entityType: "sweep",
+  actorId: "pipeline",
+});
+
+/** Wait for a pass's sweeps to settle, up to the ceiling; false = abandoned. */
+async function settleOwnedWork(owned: Promise<unknown>[]): Promise<boolean> {
+  if (owned.length === 0) return true;
+  const ceilingMs = sweepSettleCeilingMs(
+    [...activeSweeps.values()].map((active) => active.timeoutMs),
+  );
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), ceilingMs);
+  });
+  const settled = await Promise.race([
+    Promise.allSettled(owned).then(() => true),
+    deadline,
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+  if (settled) return true;
+  const stuck = [...activeSweeps.keys()];
+  sweepErrorsTotal.inc({ sweep: "pass", kind: "abandoned" });
+  logger.error(
+    { stuck, ceilingMs },
+    "compliance sweep pass abandoned: ownership released while a sweep is still unsettled",
+  );
+  for (const name of stuck) {
+    try {
+      // The pass may be HTTP-triggered (no ambient context): scope the alert.
+      await runInBypassContext(() =>
+        alertPassAbandoned(
+          name,
+          {
+            ceilingMs,
+            reason:
+              "A sweep ignored its timeout and abort signal past the settle ceiling; the pass released its lock so later passes can run. Investigate the sweep's external calls.",
+          },
+          "compliance sweep abandoned past the settle ceiling",
+        ),
+      );
+    } catch (err) {
+      logger.error({ err, sweep: name }, "could not record the abandoned-sweep alert");
+    }
+  }
+  return false;
 }
 
 export class SweepTimeoutError extends Error {
@@ -1350,7 +1439,7 @@ export async function sweepPipelineRetention(): Promise<void> {
   });
 }
 
-registerSweep("pipeline.retention", sweepPipelineRetention);
+registerSweep("pipeline.retention", sweepPipelineRetention, { critical: false });
 
 // Outbox gauges (R96): depth by state, the age of the oldest ready event and
 // the dead-letter count — the series an alert on "the pipeline is stuck"
@@ -1488,10 +1577,26 @@ async function withDistributedLock<T>(
 interface SweepPassResult {
   ran: boolean;
   failures: number;
+  /** Names of the sweeps that failed (static identifiers, never tenant data). */
+  failedSweeps: string[];
+  /** How many of those are critical (absent `critical: false`). */
+  criticalFailures: number;
 }
 
+const passResult = (
+  ran: boolean,
+  failures: number,
+  report: SweepFailureReport,
+): SweepPassResult => ({
+  ran,
+  failures,
+  failedSweeps: [...report.failed],
+  criticalFailures: report.critical,
+});
+
 async function guardedSweepPass(): Promise<SweepPassResult> {
-  if (sweeping || stopping) return { ran: false, failures: 0 };
+  if (sweeping || stopping)
+    return passResult(false, 0, { failed: [], critical: 0 });
   sweeping = true;
   let report!: (result: SweepPassResult) => void;
   const response = new Promise<SweepPassResult>((resolve) => {
@@ -1499,29 +1604,32 @@ async function guardedSweepPass(): Promise<SweepPassResult> {
   });
   track(
     (async () => {
+      const failed: SweepFailureReport = { failed: [], critical: 0 };
       try {
         const result = await withDistributedLock(991_102, async () => {
           const owned: Promise<unknown>[] = [];
           try {
-            const failures = await runSweepPass(owned);
+            const failures = await runSweepPass(owned, failed);
             // A timeout must report failure promptly while retaining ownership
             // until the underlying work settles. Healthy passes await unlock.
-            if (failures > 0) report({ ran: true, failures });
+            if (failures > 0) report(passResult(true, failures, failed));
             return failures;
           } finally {
             // The caller may stop waiting, but another process must not acquire
-            // our pass lock while a timed-out sweep still has side effects.
-            await Promise.allSettled(owned);
+            // our pass lock while a timed-out sweep still has side effects —
+            // up to the settle ceiling, past which ownership is released and
+            // the stuck sweep is alerted (R105).
+            await settleOwnedWork(owned);
           }
         });
-        report({ ran: result.acquired, failures: result.value ?? 0 });
+        report(passResult(result.acquired, result.value ?? 0, failed));
       } catch (err) {
         // The pass itself (lock acquisition / release) failed — the sweeps
         // inside never throw past runSweepsOnce. Count it under its own
         // label so an unhandled rejection never escapes the interval.
         sweepErrorsTotal.inc({ sweep: "pass", kind: "error" });
         logger.error({ err }, "compliance sweep pass failed");
-        report({ ran: false, failures: 1 });
+        report(passResult(false, 1, { failed: ["pass"], critical: 1 }));
       } finally {
         sweeping = false;
       }
@@ -1609,7 +1717,14 @@ async function guardedReconcilePass(): Promise<{
 export async function runScheduledWorkOnce(): Promise<{
   ran: { drain: boolean; reconcile: boolean; sweeps: boolean };
   drained: number;
-  failed: { drain: boolean; reconcile: boolean; sweeps: number };
+  failed: {
+    drain: boolean;
+    reconcile: boolean;
+    sweeps: number;
+    /** Static sweep names (R105) — safe to return to the external trigger. */
+    sweepNames: string[];
+    criticalSweeps: number;
+  };
 }> {
   const sweeps = await guardedSweepPass();
   const drain = await guardedDrainPass();
@@ -1621,6 +1736,8 @@ export async function runScheduledWorkOnce(): Promise<{
       drain: drain.failed,
       reconcile: reconcile.failed,
       sweeps: sweeps.failures,
+      sweepNames: sweeps.failedSweeps,
+      criticalSweeps: sweeps.criticalFailures,
     },
   };
 }
@@ -1633,15 +1750,23 @@ export async function runScheduledWorkOnce(): Promise<{
 export async function runSweepsOnce(
   sweeps: RegisteredSweep[],
   owned: Promise<unknown>[] = [],
+  report?: SweepFailureReport,
 ): Promise<number> {
   let failures = 0;
+  const note = (sweep: RegisteredSweep) => {
+    if (!report) return;
+    report.failed.push(sweep.name);
+    if (sweep.critical !== false) report.critical += 1;
+  };
   for (const sweep of sweeps) {
     if (stopping) {
       failures += 1;
+      if (report) report.critical += 1;
       break;
     }
     if (activeSweeps.has(sweep.name)) {
       failures += 1;
+      note(sweep);
       sweepErrorsTotal.inc({ sweep: sweep.name, kind: "in_flight" });
       continue;
     }
@@ -1649,7 +1774,7 @@ export async function runSweepsOnce(
     const stop = sweepDurationSeconds.startTimer({ sweep: sweep.name });
     const controller = new AbortController();
     const work = Promise.resolve().then(() => sweep.run(controller.signal));
-    activeSweeps.set(sweep.name, { work, controller });
+    activeSweeps.set(sweep.name, { work, controller, timeoutMs });
     owned.push(work);
     track(work);
     void work.finally(() => activeSweeps.delete(sweep.name)).catch(() => {});
@@ -1659,6 +1784,7 @@ export async function runSweepsOnce(
       stop({ outcome: "ok" });
     } catch (err) {
       failures += 1;
+      note(sweep);
       const kind = err instanceof SweepTimeoutError ? "timeout" : "error";
       sweepErrorsTotal.inc({ sweep: sweep.name, kind });
       stop({ outcome: kind });
@@ -1671,8 +1797,11 @@ export async function runSweepsOnce(
   return failures;
 }
 
-async function runSweepPass(owned: Promise<unknown>[]): Promise<number> {
-  const failures = await runSweepsOnce(SWEEPS, owned);
+async function runSweepPass(
+  owned: Promise<unknown>[],
+  report: SweepFailureReport,
+): Promise<number> {
+  const failures = await runSweepsOnce(SWEEPS, owned, report);
   // Record pass health for scraping: the run counter advances every pass (the
   // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
   // frozen overnight, stops it — OBS-01), while last_success only advances

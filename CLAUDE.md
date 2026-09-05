@@ -7,8 +7,8 @@ invoices, with an operator "Compliance Desk" and an AI intake assistant
 `docs/clerk-ai.md` (the AI assistant), `docs/platform.md` (tenancy, auth,
 background work, rails, exports), `docs/architecture.md` (the C4 context
 and container maps plus the decision log — start there for the big picture),
-`docs/operations.md` (the verified release path: Publish, HOLD/RUN, backups,
-rollback), `docs/development.md` / `docs/environment.md` (local setup and
+`docs/operations.md` (the release path: Publish, the pilot and governed
+profiles, backups, rollback), `docs/development.md` / `docs/environment.md` (local setup and
 every env name) and `docs/repository-map.md` / `docs/troubleshooting.md`.
 
 ## Monorepo layout (pnpm workspaces)
@@ -149,19 +149,21 @@ that Publish later consumes.
 
 ## Deployment notes
 
-- Deployment is the verified release path in `docs/operations.md`, not a
-  workflow restart. Replit Publish runs `scripts/src/ops/replit-promote.mjs
+- Deployment is the release path in `docs/operations.md`, not a workflow
+  restart. Replit Publish runs `scripts/src/ops/replit-promote.mjs
   build|start api-server` against the exact immutable CI artifact
-  (`release/build-manifest.json` + the seven `dist` trees); it never rebuilds,
-  installs or pushes schema. The API boots in `RELEASE_RUNTIME_STATE=HOLD`
-  by default — a maintenance wrapper that serves health and answers 503 to
-  business and readiness requests — and only an approved RUN activation
-  (permit + held evidence + drained traffic) imports the API. `--hold <sha>`
-  pins the rollback revision. `ops:release` is the read-only preflight and
-  `ops:postdeploy` the after-the-fact parity check.
-- Schema changes reach production only as reviewed versioned migrations under
-  the release plan; the boot-time guardrail re-assertion (D5) still runs, and
-  the stale-build banner clears once the promoted API reports the contract
-  version the web bundles were built with.
+  (`release/build-manifest.json` + its `.sha256` sidecar + the seven `dist`
+  trees); it never rebuilds or installs. Under the default **pilot profile**
+  (`RELEASE_PROFILE=pilot`, ADR 0004) the API build syncs the target schema —
+  plain `push`, which fails the build on a destructive diff, then the
+  guardrail migrations — and the API starts as RUN; `RELEASE_RUNTIME_STATE=
+  HOLD` is a plain maintenance switch. The **governed profile** keeps the
+  HOLD-by-default, permit-bound RUN ceremony with `ops:release` as its
+  read-only preflight. `ops:postdeploy` is the after-the-fact parity check in
+  both.
+- A destructive schema change never reaches production by push: it needs a
+  reviewed versioned migration. The boot-time guardrail re-assertion (D5)
+  still runs, and the stale-build banner clears once the promoted API reports
+  the contract version the web bundles were built with.
 - `FRAME_ANCESTORS` env overrides the clickjacking allowlist per deployment
   (defaults to `'self'` + the Replit preview domains).

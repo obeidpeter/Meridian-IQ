@@ -79,9 +79,17 @@ export async function pingSweep(
           (pass) => result.ran?.[pass] === true,
         )
       ) {
+        // R105: best-effort sweeps that failed ride along as `degraded` —
+        // static sweep names, never tenant data. The pass still completed.
+        const degraded = Array.isArray(result.degraded)
+          ? result.degraded.filter((name) => typeof name === "string")
+          : [];
+        if (degraded.length)
+          console.warn(`${P}: degraded sweeps: ${degraded.join(", ")}`);
         return {
           status: "ok",
           ran: { drain: true, reconcile: true, sweeps: true },
+          ...(degraded.length ? { degraded } : {}),
         };
       }
       throw new Error(`Sweep did not complete (HTTP ${response.status})`);

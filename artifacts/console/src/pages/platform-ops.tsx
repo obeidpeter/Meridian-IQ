@@ -59,10 +59,12 @@ import {
 export const HEALTH_ALERT_ACTION_LABELS: Record<string, string> = {
   "ops.rail.circuit_open": "Rail circuit open",
   "ops.outbox.dead": "Dead-lettered event",
+  "ops.sweep.pass_abandoned": "Sweep pass abandoned",
   "ops.webhook.delivery_dead": "Webhook delivery dead",
   "clerk.spend.anomaly": "Firm spend anomaly",
   "clerk.quality.drop": "Extraction quality drop",
   "clerk.injection_resistance.dropped": "Injection resistance drop",
+  "clerk.reconcile_agreement.drop": "Reconciliation agreement drop",
 };
 
 export function healthAlertLabel(action: string): string {

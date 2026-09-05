@@ -547,6 +547,8 @@ export async function revokeActionPolicy(
 
 // System actor for the tripwire audits (audit actor_id is free text — the
 // watch sweeps' convention).
+// Policies run per sweep pass (R105 bound on an otherwise unbounded loop).
+const ACTION_POLICY_BATCH = 50;
 const SWEEP_ACTOR = "action-policy-sweep";
 
 // Half or more of a run's targets failing outright means something is
@@ -1022,7 +1024,11 @@ export async function runActionPolicySweep(): Promise<ActionPolicySweepResult> {
       .orderBy(
         clerkActionPoliciesTable.createdAt,
         clerkActionPoliciesTable.id,
-      ),
+      )
+      // One pass runs at most a batch (R105): each policy may fan out sends,
+      // so an unbounded candidate set was an unbounded pass. The next pass
+      // picks up the rest — lastRunDay keeps the once-per-day invariant.
+      .limit(ACTION_POLICY_BATCH),
   );
 
   let policiesRun = 0;

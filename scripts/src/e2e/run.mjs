@@ -16,6 +16,7 @@
 //   BASE_PATH=/buyer/ PORT=1 pnpm --filter @workspace/buyer-portal run build
 //   BASE_PATH=/penalty-calculator/ PORT=1 pnpm --filter @workspace/penalty-calculator run build
 import { spawn } from "node:child_process";
+import { EXPECTED_E2E_CHECKS } from "./expected-count.mjs";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -345,6 +346,13 @@ try {
     `\n${results.length - failed.length}/${results.length} checks passed`,
   );
   exitCode = failed.length ? 1 : 0;
+  if (results.length !== EXPECTED_E2E_CHECKS) {
+    const drift = `e2e check count is ${results.length}; the documented count (scripts/src/e2e/expected-count.mjs) is ${EXPECTED_E2E_CHECKS} — update the constant and the docs together`;
+    if (process.env.GITHUB_ACTIONS === "true") {
+      console.error(drift);
+      exitCode = exitCode || 1;
+    } else console.warn(drift);
+  }
 } catch (err) {
   console.error("E2E crashed:", err);
   console.error(

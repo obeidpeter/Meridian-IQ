@@ -67,7 +67,7 @@ not only happy-path coverage.
   migrations 0050-0054, preserving rows and enforcing additive rollback contracts.
 - `lib/db/src/migrations/reliability-policy-reference.ts`: independent reviewed
   owner-policy definitions; PostgreSQL canonicalizes them for exact policy pins.
-- [Runtime evidence checklist](runtime-evidence-r198.md): test commands,
+- [R198 runtime evidence record](history/2026-09-r198/runtime-evidence-r198.md): test commands,
   artifact promotion prerequisites, manual checks and unverified runtime claims.
 
 ## Generated and Runtime Output

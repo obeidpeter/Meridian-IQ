@@ -52,7 +52,8 @@ async function limitSweep(
 //   is a status transition, batch collection uses onConflictDoNothing, and the
 //   outbox drain claims with FOR UPDATE SKIP LOCKED.
 // - No auth bypass: it takes no input, acts on no caller-chosen entity, and
-//   returns no tenant data — only pass outcomes and failure counts. This is
+//   returns no tenant data — only pass outcomes, failure counts and the
+//   static names of failed sweeps. This is
 //   the same work the server already runs on its own timers.
 // - Hammering it is a cheap no-op: module-level guards collapse concurrent
 //   triggers, a pass with nothing due does no writes, and limitSweep bounds
@@ -78,11 +79,13 @@ router.get(
     try {
       const result = await runScheduledWorkOnce();
       const tookMs = Date.now() - startedAt;
-      if (
-        result.failed.sweeps ||
-        result.failed.drain ||
-        result.failed.reconcile
-      ) {
+      const { sweepNames, criticalSweeps, ...counts } = result.failed;
+      // R105: only a critical failure (the drain, the reconcile, or a sweep
+      // registered as critical) fails the heartbeat and the trigger. A
+      // best-effort sweep's failure rides along as `degraded` so a broken
+      // optional sweep can never block release readiness — it is still
+      // counted under its own label in the metrics.
+      if (counts.drain || counts.reconcile || criticalSweeps > 0) {
         await markOperationFailed(
           "scheduled_work",
           new Error("Scheduled work partially failed"),
@@ -97,13 +100,12 @@ router.get(
           "external sweep trigger partially failed",
         );
         res.setHeader("Retry-After", "60");
-        res
-          .status(503)
-          .json({
-            status: "partial_failure",
-            ran: result.ran,
-            failed: result.failed,
-          });
+        res.status(503).json({
+          status: "partial_failure",
+          ran: result.ran,
+          failed: { ...counts, criticalSweeps },
+          failedSweeps: sweepNames,
+        });
         return;
       }
       if (!result.ran.sweeps || !result.ran.drain || !result.ran.reconcile) {
@@ -118,9 +120,14 @@ router.get(
         tookMs,
         drained: result.drained,
         ran: result.ran,
+        ...(sweepNames.length ? { degraded: sweepNames } : {}),
       });
       req.log.info({ ...result, tookMs }, "external sweep trigger completed");
-      res.json({ status: "ok", ran: result.ran });
+      res.json({
+        status: "ok",
+        ran: result.ran,
+        ...(sweepNames.length ? { degraded: sweepNames } : {}),
+      });
     } catch (error) {
       await markOperationFailed("scheduled_work", error, {
         requestId: String(req.id),

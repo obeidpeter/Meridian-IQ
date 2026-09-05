@@ -311,4 +311,4 @@ registerSweep("clerk.red_team_growth", async function sweepRedTeamGrowth(): Prom
   if (stored > 0) {
     logger.info({ stored }, "clerk red team: adversarial fixtures generated");
   }
-});
+}, { critical: false });

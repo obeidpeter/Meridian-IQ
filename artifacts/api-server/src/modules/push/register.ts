@@ -6,4 +6,4 @@ import { sweepPushReceipts } from "./push";
 // frequent cadence cost nothing). Kept separate from push.ts so the push
 // module stays importable by node --test without dragging in the pipeline
 // worker's dependency graph (whose extensionless imports node cannot load).
-registerSweep("push.receipts", () => sweepPushReceipts());
+registerSweep("push.receipts", () => sweepPushReceipts(), { critical: false });

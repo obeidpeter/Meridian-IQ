@@ -6,201 +6,64 @@ Development, staging, and production must use separate databases, secrets,
 provider credentials, web origins, and backup destinations. Staging is the
 promotion gate; it is not a production alias.
 
-## Release Sequence
+## Release Path (pilot profile)
 
-1. Record the candidate Git SHA and expected contract version.
-2. Confirm CI, dependency audit, migration rollback, restore drill and E2E, plus
-   either a qualified application fallback or the separately approved
-   maintenance-forward policy described below.
-3. Create a verified backup before any staging schema or data migration.
-4. Deploy the candidate to staging with `EXPECTED_BUILD_REVISION` set.
-5. Verify health, readiness, release-readiness checks, logs, and core journeys.
-6. Observe error rate, latency, outbox age, dead letters, Clerk failures, and
-   provider health through the agreed staging window.
-7. Promote separately only after explicit production approval.
+A merge to `main` is deployed by one Replit Publish. There is no rebuild, no
+install and no manual evidence file in this profile (ADR 0004); what the
+Publish trusts is the immutable artifact CI produced for that exact commit.
 
-Run `ops:release -- --yes` with the trusted CI manifest and checksum before
-promotion, then `ops:postdeploy` against the destination. The release script is
-a verifier, not a deployment command. It checks source/build identity, backup
-and restore heartbeats, and the full tested database security catalog. It never
-runs schema push in its production path. Schema differences fail closed until
-reviewed versioned SQL has been applied under a separately approved plan.
-See [runtime evidence and state contracts](runtime-evidence-r198.md).
+1. Wait for CI on `main` to be green. Its last steps stamp
+   `release/build-manifest.json` (source tree and byte hashes, the seven-app
+   asset inventory, the contract version, the CI run identity) and its
+   `.sha256` sidecar, and upload them with all seven `artifacts/<app>/dist`
+   trees as `meridian-release-<sha>`.
+2. Stage that artifact into the clean Replit checkout of the same commit:
+   `release/build-manifest.json`, `release/build-manifest.json.sha256` and the
+   seven `dist` trees. Do not rebuild, rename or merge older output into it.
+3. Publish. Every service's production build runs
+   `node scripts/src/ops/replit-promote.mjs build <app>`, which refuses unless
+   the checkout is clean, the local source tree, tracked-source hash and
+   schema hash equal the manifest, and the packaged assets match the inventory
+   byte for byte. The API build additionally syncs the target schema — plain
+   `drizzle push` (a destructive diff prompts, gets end-of-file and fails the
+   build) and then the guardrail migrations — using the deployment's
+   `DATABASE_URL`. Web builds need no database.
+4. The API runs `replit-promote.mjs start api-server`: it re-verifies the
+   packaged bytes without Git, sets `BUILD_REVISION` and
+   `EXPECTED_BUILD_REVISION` to the tested revision, and imports the unchanged
+   `artifacts/api-server/dist/index.mjs`. Boot re-asserts the guardrail
+   migrations under an advisory lock and holds readiness until they verify.
+5. Verify: `/api/healthz` reports the manifest's revision and contract version
+   (the web apps' stale-build banner clears), `/api/readyz` answers `ready`,
+   and `DATABASE_URL=… RELEASE_BASE_URL=https://… pnpm --filter
+   @workspace/scripts run ops:postdeploy` confirms source, contract, public
+   asset bytes and database catalog parity after the fact.
 
-The release readiness endpoint must report no blocked checks. Warnings require
-an owner, written acceptance, and a rollback trigger.
+`RELEASE_RUNTIME_STATE=HOLD` is the maintenance switch in this profile: the API
+serves `/api/healthz` only and answers 503 to everything else without
+connecting to the database. Set it, Publish, do the maintenance, unset it,
+Publish again.
 
-## Native Replit Publish
+Rollback in this profile is a Publish of the previous green commit's artifact:
+the same steps with the earlier staged manifest and `dist` trees. Additive
+schema changes are forward-compatible; a change that removed or retyped a
+column needs a forward corrective migration instead (see Rollback below).
 
-The API, five web and mobile `artifact.toml` production build commands now invoke
-`node scripts/src/ops/replit-promote.mjs build <app>`. They do not run `pnpm
-build`, install dependencies, fetch artifacts or infer schema. Normal local
-builds, CI builds and all development descriptor commands remain unchanged.
-Mobile now participates in the seven-artifact contract; the temporary blanket
-refusal is removed. CI invokes `node scripts/src/ops/mobile-artifact.mjs build`
-and `check`. This uses the existing iOS/Android Metro export, packages its native
-manifests/assets, unchanged server, template, app metadata and EAS configuration
-under `artifacts/mobile/dist`, then probes the original packaged server over
-loopback. It does not substitute an unrelated web-only `expo export`.
-Local Expo development and ordinary package builds remain available.
+## Governed profile (HOLD/RUN)
 
-Mobile identity is recorded in the checksum-protected manifest and
-`artifacts/mobile/dist/deployment.json`: domain `meridian-iq.replit.app`,
-base path `/mobile/`, Repl ID `d096574a-b3d8-4990-8bf5-4be1e6646e06`.
-The production EAS environment is the reviewed configuration source. The current
-build couples the API host and mobile bundle-asset host. The parent must verify
-in the Replit UI that the expo-domain service actually exposes manifests/assets
-at that host/path; the observed API URL alone is not proof. A different mobile
-host requires an explicit reviewed build configuration, not runtime URL rewriting.
-
-1. Require the approved successful CI run and its full source SHA. Securely
-   transfer its `meridian-release-<SHA>` artifact into the matching clean Replit
-   checkout, preserving `release/build-manifest.json` and all seven
-   `artifacts/<app>/dist/**` trees. Do not rebuild, rename assets or merge old
-   output into the candidate. The CI upload includes hidden files so its
-   transport matches the complete manifest inventory.
-2. Independently obtain the manifest checksum from the trusted CI run and set
-   `RELEASE_MANIFEST_SHA256` in the Publish build and API runtime configuration.
-   Do not trust a checksum downloaded alongside an untrusted manifest. The
-   adapter always reads the root-relative `release/build-manifest.json`; it
-   does not fetch URLs or accept a public/browser manifest path. Keep the
-   manifest outside every static `publicDir`; do not use a `VITE_` variable.
-3. Supply the API build's existing `DATABASE_URL` for the actual production
-   target and the chosen recovery-mode configuration. Rollback mode requires a
-   qualified `RELEASE_ROLLBACK_REVISION`; maintenance-forward requires the
-   independently approved recovery plan. Apply any separately reviewed
-   versioned migrations and establish genuine backup/restore evidence first.
-   In particular, production must already have migrations 0050-0054 before
-   this preflight can pass. The post-merge development migration is not evidence
-   that production was upgraded; the parent/operator applies production changes
-   only after backup approval.
-   The API build runs the existing read-only release preflight automatically;
-   missing recovery, role/RLS/trigger/catalog drift or missing configuration
-   blocks Publish. Web build verification requires no database credentials.
-4. Verify native Publish uses these descriptors without an override. Each of
-   the seven commands requires the clean Git checkout and exact source/schema
-   hashes plus the complete matching seven-app asset inventory. Dirty or missing
-   source (including unexpected untracked files), missing siblings, a wrong
-   manifest, extra assets or tampering refuses
-   rather than rebuilding. The API run command invokes the same adapter with
-   `start api-server`, rechecks the checksum and all packaged asset bytes without
-   Git, and sets `BUILD_REVISION` and `EXPECTED_BUILD_REVISION` to the verified
-   full SHA. It defaults to HOLD without importing the API; only an explicitly
-   authorized RUN activation imports unchanged `artifacts/api-server/dist/index.mjs`.
-   Mobile uses `start mobile` to verify the same seven-app inventory, validate
-   its signed target configuration and load the packaged original CommonJS
-   server. Both server startup commands force production mode. A runtime
-   `BASE_PATH` mismatch refuses instead of altering the tested mobile paths.
-5. After HOLD Publish, use the held-verification flow below; do not mistake its
-   maintenance health response for API readiness. After authorized RUN Publish,
-   run ordinary `ops:postdeploy` against the actual origin and every API replica.
-   Confirm source/contract, readiness, public bytes and target catalog parity;
-   retain the native build/start logs and CI run identity.
-   Deployment UUIDs are not source revisions and are not accepted as evidence.
-
-Replit describes publishing as a snapshot of the app, but snapshot contents must
-be verified for this repository's application-router deployment. See the
-[Replit publishing documentation](https://docs.replit.com/learn/projects-and-artifacts/replit-deployments).
-Native Publish may add an empty "Published your App" commit. The Replit adapter
-alone permits a different local HEAD when the checkout is clean and the complete
-Git tree, tracked-source byte hash and schema byte hash equal the trusted CI
-manifest. Assets and mobile configuration must still match exactly. It logs the
-local HEAD and tested CI revision separately; it does not claim they are the
-same commit. Both runtime revision variables remain the manifest's CI revision.
-The generic `ops:release` verifier remains strict about exact source revision;
-no environment flag enables this exception outside the native adapter.
-In particular, `dist` is Git-ignored: confirm the secure staging upload survives
-the native build snapshot, and that the final API/mobile runtimes contain all
-seven dist trees, the manifest and
-`scripts/src/ops/{replit-promote,build-manifest,mobile-artifact,release,security-catalog,common,recovery-plan,activation-permit,maintenance-server,postdeploy}.mjs`.
-The build must retain matching `.git` metadata; runtime need not. Missing paths,
-missing checksum propagation or Git stripping at build time deliberately fail
-closed. There is no fallback to local compilation, a sidecar checksum or a
-deployment UUID. Test these packaging assumptions on staging before production;
-local fixture tests are not proof of Replit snapshot behavior.
-On staging, deliberately fail the API preflight and mobile service and confirm
-the whole Publish is rejected without promoting sibling web services. Do not
-assume cross-service atomic promotion if the provider has not demonstrated it.
-
-Keep provider-side dev-to-production data copying and inferred schema pushes
-disabled; this adapter cannot control an independent Publish database-sync
-stage. Verify that stage separately. Existing locked runtime dependencies must
-also survive packaging; the adapter does not install them. In particular, retain
-the locked `pdf-parse` dependency tree, including its PDF.js worker files and
-platform-matching native canvas package. PDF parsing is intentionally external to
-the API bundle so those package-relative resources resolve correctly. Run
-`node --test scripts/src/e2e/pdf-runtime.test.mjs` against the staged API dist and
-its installed dependencies before publishing. Parent/operator owns
-secure artifact transfer, provider configuration, production approval and real
-recovery evidence. No production Publish was performed by this implementation.
-
-## HOLD and RUN
-
-API startup defaults to `RELEASE_RUNTIME_STATE=HOLD`. Both states require
-`RELEASE_BASE_URL` as the exact origin matching the CI manifest's mobile domain,
-`RELEASE_TARGET_REPL_ID` matching its mandatory mobile Repl ID, and independently trusted
-`RELEASE_MANIFEST_SHA256`, `RELEASE_RECOVERY_PLAN_SHA256` and
-`RELEASE_BACKUP_SHA256`. Never derive these trust inputs from unreviewed staged
-files. HOLD runtime performs no database connection, API import or plan-TTL
-validation; it serves maintenance health and rejects business/readiness requests
-with 503. It has no remote resume endpoint.
-
-The stable target is explicit operator configuration, not provider attestation.
-Before configuring `RELEASE_TARGET_REPL_ID`, retain independent control-plane
-evidence associating the source app ID, selected production deployment and
-production origin. Both the configured target and CI mobile target must be
-canonical lowercase UUIDs and match exactly. Set the same value for Publish
-builds, HOLD/RUN runtime and external postdeploy verification; it remains bound
-through held evidence and the activation permit. Missing targets never fall
-back to the manifest, `EXPO_PUBLIC_REPL_ID` or provider `REPL_ID`.
-
-Provider `REPL_ID` identifies the observed execution context and is not assumed
-to be the stable source-app target across build/runtime contexts. Preserve it
-unchanged. Build/start diagnostics record it separately in sanitized form;
-health identity excludes it so verification from another host does not depend
-on the verifier's execution context. A diagnostic ID is not authorization or
-proof of deployment ownership. Do not overwrite it, alter auth/DB credentials,
-or accept an arbitrary target just to make a failed gate pass. If independent
-target/origin association cannot be established, keep maintenance in place.
-
-The maintenance-forward release validator is integrated, but operational use
-still needs actual approvals and evidence under
-[the reviewed plan contract](maintenance-release-r198.md). After a separately
-approved external drain, retain the fresh pre-change backup/drill and apply
-only reviewed versioned migrations. Publish the verified immutable candidate in
-HOLD, then record held verification using a new output file:
-
-```bash
-node scripts/src/ops/postdeploy.mjs --held --evidence-out release/held-evidence.json
-```
-
-This verifies the HOLD wrapper, business/readiness 503 responses, public asset
-bytes, CI identity, target security catalog and recovery plan. Its output has
-`apiReadinessVerified: false`; it does not prove the API is running or authorize
-startup. Obtain the output's checksum through the trusted verification record.
-
-RUN additionally requires `RELEASE_RECOVERY_MODE=maintenance-forward`,
-`RELEASE_TRAFFIC_DRAINED=1`, `RELEASE_ACTIVATION_PERMIT`, independently trusted
-`RELEASE_ACTIVATION_PERMIT_SHA256`, `RELEASE_ACTIVATION_ID` (canonical UUID), and
-`RELEASE_HELD_EVIDENCE_SHA256`. RUN promotion also requires the corresponding
-`RELEASE_HELD_EVIDENCE` file and current approved recovery plan. The permit binds
-the exact candidate, manifest, target, backup, plan and held evidence, and
-explicitly authorizes startup writes. External ingress and schedules must stay
-held until real post-RUN readiness and operator signoff.
-
-Inside the checkout, only the fixed `release/recovery-plan.json`,
-`release/held-evidence.json` and `release/activation-permit.json` evidence paths
-are permitted; alternatively keep evidence outside the checkout. They are not
-public assets. RUN runtime verifies the permit and digest bindings; plan and
-held-evidence files need not be present there. Approval TTLs apply to each new
-Publish, not later cold starts of the admitted release. Reusing the same active
-permit is the same logical activation, not a single-use guarantee.
-
-Ordinary postdeploy verifies RUN, the local permit, actual API readiness,
-source/assets and database catalog. It cannot currently attest the activation
-UUID remotely; retain the matching control-plane and startup records instead of
-claiming remote activation-ID proof. The HOLD/RUN path still requires actual
-host/staging verification; local fixture tests are not deployment approval.
+`RELEASE_PROFILE=governed` keeps the R198–R200 ceremony for when a live tenant
+base justifies it: the API boots in HOLD by default; `ops:release -- --yes` is a
+read-only preflight that requires the trusted manifest checksum, a rollback
+revision or an approved maintenance-forward plan, fresh backup and restore-drill
+evidence and semantic catalog parity; RUN needs `RELEASE_RECOVERY_MODE=
+maintenance-forward`, `RELEASE_TRAFFIC_DRAINED=1`, an activation permit bound
+to the candidate, manifest, target, backup, plan and held evidence, and the
+held-verification output of `postdeploy --held`. The evidence contracts,
+identity bindings (`RELEASE_BASE_URL`, `RELEASE_TARGET_REPL_ID`, the three
+independently trusted checksums) and the staging drills are recorded in
+[the R198 records](history/2026-09-r198/README.md); `docs/environment.md`
+lists every variable. Nothing in that path was removed — it is selected by
+configuration, and its tests still run in CI.
 
 ## Database Safety
 
@@ -209,12 +72,15 @@ host/staging verification; local fixture tests are not deployment approval.
 - The post-merge hook is frozen-install plus reviewed versioned migrations only.
   Missing historical baseline tables require explicit offline maintenance;
   never repair that failure using an online schema push or non-frozen install.
-- Never run schema push against serving traffic. `--offline-bootstrap` is an
-  explicit maintenance-only escape hatch requiring `RELEASE_TRAFFIC_DRAINED=1`,
-  existing recovery evidence and the trusted manifest. The operator must stop
-  every API instance, worker, schedule and external writer beforehand. A crash
-  or verification failure means traffic remains stopped; the script cannot
-  establish or release maintenance mode and never claims that it has.
+- The pilot profile's API build runs a plain schema push before the new
+  revision serves: additive changes land with the deploy, a destructive diff
+  fails the build and needs a reviewed migration. The governed profile never
+  pushes online: `--offline-bootstrap` is its explicit maintenance-only escape
+  hatch requiring `RELEASE_TRAFFIC_DRAINED=1`, existing recovery evidence and
+  the trusted manifest, with every API instance, worker, schedule and external
+  writer stopped first. A crash or verification failure there means traffic
+  remains stopped; the script cannot establish or release maintenance mode and
+  never claims that it has.
 - Long-running work and external calls must not hold request transactions.
 - Consequential operations reserve idempotency before provider side effects.
 - Rollback tests and restore drills use disposable databases only.
@@ -378,6 +244,10 @@ release plan requiring a post-drain pre-change snapshot still needs a fresh
 backup and matching retained-archive drill after that separately approved drain.
 
 ## Rollback
+
+In the pilot profile an application-only rollback is a Publish of the previous
+green commit's artifact (Release Path above). The rest of this section is the
+data-compatibility reasoning that decides whether that is enough.
 
 For the contract 0.99.0 transition, baseline
 `8347dd29f3d947634a62739088e67548a8d0a946` (0.98) is not write-compatible with

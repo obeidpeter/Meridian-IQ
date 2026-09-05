@@ -948,4 +948,5 @@ registerSweep(
       );
     }
   },
+  { critical: false },
 );
