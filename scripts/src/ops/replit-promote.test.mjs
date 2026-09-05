@@ -25,6 +25,7 @@ import {
 import {
   promoteReplit,
   REPLIT_APPS,
+  releaseEnvForCli,
   startReplitApi,
 } from "./replit-promote.mjs";
 import {
@@ -35,6 +36,20 @@ import { startStaticServer } from "../e2e/serve.mjs";
 
 const targetReplId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const providerReplId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const rollbackRevision = "a".repeat(40);
+
+test("explicit HOLD CLI mode overrides inherited RUN release values", () => {
+  const inherited = {
+    RELEASE_RUNTIME_STATE: "RUN",
+    RELEASE_RECOVERY_MODE: "maintenance-forward",
+    RELEASE_ROLLBACK_REVISION: "b".repeat(40),
+  };
+  const env = releaseEnvForCli(["--hold", rollbackRevision], inherited);
+  assert.equal(env.RELEASE_RUNTIME_STATE, "HOLD");
+  assert.equal(env.RELEASE_RECOVERY_MODE, "rollback");
+  assert.equal(env.RELEASE_ROLLBACK_REVISION, rollbackRevision);
+  assert.equal(inherited.RELEASE_RUNTIME_STATE, "RUN");
+});
 
 const catalog = {
   postgresMajor: 16,
@@ -652,20 +667,27 @@ test("seven production descriptors use verified promotion and preserve developme
       descriptor.indexOf("[services.production]"),
     );
     assert.doesNotMatch(production, /"pnpm"/);
-    assert.match(
-      production,
-      new RegExp(
-        `\\[\\s*"node", "scripts/src/ops/replit-promote\\.mjs", "build", "${app}"\\s*\\]`,
-      ),
-    );
     if (app === "api-server") {
       assert.ok(
         production.includes(
-          '["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server"]',
+          '["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server", "--hold", "ea275be456a2c19babd06139de10cdbe322bc049"]',
+        ),
+      );
+      assert.ok(
+        production.includes(
+          '["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server", "--hold", "ea275be456a2c19babd06139de10cdbe322bc049"]',
         ),
       );
       assert.ok(production.includes('path = "/api/healthz"'));
-    } else if (app !== "mobile") {
+    } else {
+      assert.match(
+        production,
+        new RegExp(
+          `\\[\\s*"node", "scripts/src/ops/replit-promote\\.mjs", "build", "${app}"\\s*\\]`,
+        ),
+      );
+    }
+    if (app !== "api-server" && app !== "mobile") {
       assert.ok(
         production.includes(`publicDir = "artifacts/${app}/dist/public"`),
       );

@@ -286,22 +286,49 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
 export const startReplitApi = (env = process.env, root = ROOT) =>
   startReplitService("api-server", env, root);
 
+export function releaseEnvForCli(extra, env = process.env) {
+  if (extra.length === 0) return env;
+  assert.equal(
+    extra.length,
+    2,
+    "use --hold <rollback-revision> or omit release-mode arguments",
+  );
+  assert.equal(extra[0], "--hold", "unknown release-mode argument");
+  assert.match(
+    extra[1],
+    /^[a-f0-9]{40}$/,
+    "--hold requires a full rollback revision SHA",
+  );
+  return {
+    ...env,
+    RELEASE_RUNTIME_STATE: "HOLD",
+    RELEASE_RECOVERY_MODE: "rollback",
+    RELEASE_ROLLBACK_REVISION: extra[1],
+  };
+}
+
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   try {
     const [action, app, ...extra] = process.argv.slice(2);
-    assert.equal(extra.length, 0, "unexpected promotion arguments");
     assertPublishable(app);
-    if (action === "build") promoteReplit(app);
+    const env = releaseEnvForCli(extra);
+    if (extra.length > 0)
+      assert.equal(
+        app,
+        "api-server",
+        "--hold is only valid for the API release gate",
+      );
+    if (action === "build") promoteReplit(app, env);
     else {
       assert.ok(
         action === "start" && ["api-server", "mobile"].includes(app),
         "use build <app> or start <api-server|mobile>",
       );
-      process.env.NODE_ENV = "production";
-      await startReplitService(app);
+      env.NODE_ENV = "production";
+      await startReplitService(app, env);
     }
   } catch (error) {
     console.error(`replit: REFUSED: ${error.message}`);
