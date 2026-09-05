@@ -67,13 +67,13 @@ export const importRunsTable = pgTable(
     }),
     check(
       "import_runs_manifest_check",
-      sql`${t.totalRows} BETWEEN 1 AND 5000 AND ${t.chunkSize} BETWEEN 1 AND 250
+      sql`${t.totalRows} >= 1 AND ${t.totalRows} <= 5000 AND ${t.chunkSize} >= 1 AND ${t.chunkSize} <= 250
     AND ${t.manifestHash} ~ '^[0-9a-f]{64}$' AND jsonb_typeof(${t.chunkHashes}) = 'array'
     AND jsonb_array_length(${t.chunkHashes}) = ((${t.totalRows} + ${t.chunkSize} - 1) / ${t.chunkSize})`,
     ),
     check(
       "import_runs_checkpoint_check",
-      sql`${t.nextChunkIndex} BETWEEN 0 AND jsonb_array_length(${t.chunkHashes})
+      sql`${t.nextChunkIndex} >= 0 AND ${t.nextChunkIndex} <= jsonb_array_length(${t.chunkHashes})
     AND (${t.finalizedAt} IS NULL OR ${t.nextChunkIndex} = jsonb_array_length(${t.chunkHashes}))`,
     ),
   ],
@@ -121,7 +121,7 @@ export const importRunChunksTable = pgTable(
     uniqueIndex("import_run_chunks_operation_uidx").on(t.operationId),
     check(
       "import_run_chunks_counts_check",
-      sql`${t.chunkIndex} >= 0 AND ${t.rowCount} BETWEEN 1 AND 250
+      sql`${t.chunkIndex} >= 0 AND ${t.rowCount} >= 1 AND ${t.rowCount} <= 250
     AND ${t.createdCount} >= 0 AND ${t.invalidCount} >= 0 AND ${t.createdCount} + ${t.invalidCount} = ${t.rowCount}`,
     ),
   ],

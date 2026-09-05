@@ -4,8 +4,13 @@ import { EventEmitter } from "node:events";
 import { after, before, describe, test } from "node:test";
 import { getDb, pool, runRequestContext } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { migration0051 } from "../../../../../lib/db/src/migrations/0051_operation_recovery.ts";
 import { migration0054 } from "../../../../../lib/db/src/migrations/0054_import_runs.ts";
+import {
+  importRunsTable,
+  importRunChunksTable,
+} from "../../../../../lib/db/src/schema/import-runs.ts";
 import type { Principal } from "../auth/rbac.ts";
 import {
   importInvoices,
@@ -194,6 +199,155 @@ describe(
     });
     after(async () => {
       await pool.end();
+    });
+
+    test("import check definitions survive strict deparse round-trip with schema parity and unchanged bounds", async () => {
+      const manifest = (total_rows: number, chunk_size: number) => ({
+        total_rows,
+        chunk_size,
+        manifest_hash: "a".repeat(64),
+        chunk_hashes: Array.from(
+          { length: Math.ceil(total_rows / Math.max(1, chunk_size)) },
+          () => "b".repeat(64),
+        ),
+      });
+      const checkpoint = (
+        next_chunk_index: number,
+        finalized_at: string | null = null,
+      ) => ({
+        next_chunk_index,
+        finalized_at,
+        chunk_hashes: ["a", "b"],
+      });
+      const counts = (
+        row_count: number,
+        created_count = row_count,
+        invalid_count = 0,
+        chunk_index = 0,
+      ) => ({
+        row_count,
+        created_count,
+        invalid_count,
+        chunk_index,
+      });
+      const probes: Record<string, [Record<string, unknown>, boolean][]> = {
+        import_runs_manifest_check: [
+          [manifest(1, 1), true],
+          [manifest(5000, 250), true],
+          [manifest(0, 1), false],
+          [manifest(5001, 250), false],
+          [manifest(1, 0), false],
+          [manifest(1, 251), false],
+        ],
+        import_runs_checkpoint_check: [
+          [checkpoint(0), true],
+          [checkpoint(2), true],
+          [checkpoint(-1), false],
+          [checkpoint(3), false],
+          [checkpoint(1, "2026-09-04T00:00:00Z"), false],
+          [checkpoint(2, "2026-09-04T00:00:00Z"), true],
+        ],
+        import_run_chunks_counts_check: [
+          [counts(1), true],
+          [counts(250), true],
+          [counts(0), false],
+          [counts(251), false],
+          [counts(1, 1, 0, -1), false],
+          [counts(1, -1, 2), false],
+          [counts(1, 2, -1), false],
+          [counts(1, 0, 0), false],
+        ],
+      };
+      const client = await pool.connect();
+      const dialect = new PgDialect();
+      let checked = 0;
+      try {
+        await client.query("BEGIN");
+        for (const table of [importRunsTable, importRunChunksTable]) {
+          const config = getTableConfig(table);
+          const source = await client.query<{
+            name: string;
+            definition: string;
+          }>(
+            "SELECT conname AS name, pg_get_constraintdef(oid, false) AS definition FROM pg_constraint WHERE conrelid = $1::regclass AND contype = 'c' ORDER BY conname",
+            [`public.${config.name}`],
+          );
+          assert.equal(source.rows.length, config.checks.length);
+          // LIKE omits CHECKs; every definition below is parsed afresh.
+          await client.query(
+            `CREATE TEMP TABLE "${config.name}" (LIKE public."${config.name}") ON COMMIT DROP`,
+          );
+          for (const check of config.checks) {
+            const expected = source.rows.find(
+              (row) => row.name === check.name,
+            )!.definition;
+            const expression = dialect.sqlToQuery(check.value);
+            assert.equal(expression.params.length, 0);
+            await client.query(
+              `ALTER TABLE pg_temp."${config.name}" ADD CONSTRAINT "${check.name}" CHECK (${expression.sql})`,
+            );
+            const read = () =>
+              client.query<{ definition: string }>(
+                "SELECT pg_get_constraintdef(oid, false) AS definition FROM pg_constraint WHERE conrelid = $1::regclass AND conname = $2",
+                [`pg_temp.${config.name}`, check.name],
+              );
+            assert.equal(
+              (await read()).rows[0].definition,
+              expected,
+              `${check.name}: Drizzle and migration predicates differ`,
+            );
+            await client.query(
+              `ALTER TABLE pg_temp."${config.name}" DROP CONSTRAINT "${check.name}"`,
+            );
+            await client.query(
+              `ALTER TABLE pg_temp."${config.name}" ADD CONSTRAINT "${check.name}" ${expected}`,
+            );
+            assert.equal(
+              (await read()).rows[0].definition,
+              expected,
+              `${check.name}: pg_dump-style reparse changed strict catalog text`,
+            );
+            for (const [record, accepted] of probes[check.name]) {
+              const zeroDenominator =
+                check.name === "import_runs_manifest_check" &&
+                record.chunk_size === 0;
+              if (zeroDenominator)
+                await client.query("SAVEPOINT zero_chunk_size");
+              try {
+                const result = await client.query<{ accepted: boolean }>(
+                  `SELECT (${expression.sql}) AS accepted FROM jsonb_populate_record(NULL::pg_temp."${config.name}", $1::jsonb) AS "${config.name}"`,
+                  [JSON.stringify(record)],
+                );
+                assert.equal(
+                  result.rows[0].accepted,
+                  accepted,
+                  `${check.name}: ${JSON.stringify(record)}`,
+                );
+              } catch (error) {
+                // AND evaluation order is unspecified; either path must reject zero.
+                if (
+                  !zeroDenominator ||
+                  (error as { code?: string } | null)?.code !== "22012"
+                )
+                  throw error;
+              } finally {
+                if (zeroDenominator) {
+                  await client.query("ROLLBACK TO SAVEPOINT zero_chunk_size");
+                  await client.query("RELEASE SAVEPOINT zero_chunk_size");
+                }
+              }
+            }
+            checked++;
+          }
+        }
+        assert.equal(checked, 3);
+      } finally {
+        try {
+          await client.query("ROLLBACK");
+        } finally {
+          client.release();
+        }
+      }
     });
 
     test("run creation retries preserve the manifest and reject edits", async () => {

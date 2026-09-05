@@ -4,17 +4,17 @@ Baseline: main at 8347dd29f (PR197). Application changes are on agent/reliabilit
 
 ## Progress
 
-| Area | Review items | Status |
-| --- | --- | --- |
-| Invoice authorization, transactions, revisions, decimal validation | F02-F04, F09-F10 | Implemented; 12 math/date/cursor/export and 16 approval/conflict UI regressions pass; HTTP/DB validation pending |
-| Offline/session boundaries, lazy routes, mobile revalidation | F01, F16, F20-F21 | Implemented; deferred create/import/draft work is generation-bound; final unit run passes |
-| Durable idempotency and operation recovery | F05 | Create/import wrappers and recovery APIs integrated; PostgreSQL validation pending |
-| Search, stable pagination, multiple drafts | F17-F19 | Implemented; SME draft/submission and mobile search/intent regressions pass |
-| Workers, webhook recovery, database and Clerk admission | F06, F08, F11-F14 | Implemented; focused regressions pass; PostgreSQL validation pending |
-| Explicit database trust boundaries | F15 | HTTP missing-context fallback and expired cached query dispatch closed; sibling savepoints reject overlap; 44 focused tests pass, PostgreSQL validation pending |
-| Release verification, accessibility, failure-path tests | F07, F22-F24 | Implemented; local release and axe regressions pass; target evidence pending |
-| Domain-focused decomposition and shared state consistency | F25-F26 | Included with changed flows |
-| Build, integrated tests, PR and deployment | All | Local gates and final catalogue/budgets pass; PR198 pushed; PostgreSQL API and frontend suites passed after corrections; full migration/restore/E2E and final combined CI remain pending; not deployed |
+| Area                                                               | Review items      | Status                                                                                                                                                                                                 |
+| ------------------------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Invoice authorization, transactions, revisions, decimal validation | F02-F04, F09-F10  | Implemented; 12 math/date/cursor/export and 16 approval/conflict UI regressions pass; HTTP/DB validation pending                                                                                       |
+| Offline/session boundaries, lazy routes, mobile revalidation       | F01, F16, F20-F21 | Implemented; deferred create/import/draft work is generation-bound; final unit run passes                                                                                                              |
+| Durable idempotency and operation recovery                         | F05               | Create/import wrappers and recovery APIs integrated; PostgreSQL validation pending                                                                                                                     |
+| Search, stable pagination, multiple drafts                         | F17-F19           | Implemented; SME draft/submission and mobile search/intent regressions pass                                                                                                                            |
+| Workers, webhook recovery, database and Clerk admission            | F06, F08, F11-F14 | Implemented; focused regressions pass; PostgreSQL validation pending                                                                                                                                   |
+| Explicit database trust boundaries                                 | F15               | HTTP missing-context fallback and expired cached query dispatch closed; sibling savepoints reject overlap; 44 focused tests pass, PostgreSQL validation pending                                        |
+| Release verification, accessibility, failure-path tests            | F07, F22-F24      | Implemented; local release and axe regressions pass; target evidence pending                                                                                                                           |
+| Domain-focused decomposition and shared state consistency          | F25-F26           | Included with changed flows                                                                                                                                                                            |
+| Build, integrated tests, PR and deployment                         | All               | Local gates and final catalogue/budgets pass; PR198 pushed; PostgreSQL API and frontend suites passed after corrections; full migration/restore/E2E and final combined CI remain pending; not deployed |
 
 Do not mark an area complete without recording its tests and any remaining operational verification.
 
@@ -72,3 +72,13 @@ The final combined local operations run passed **174 tests, zero failed/skipped*
 The private disposable restore host is prepared outside the Replit checkout, using the official pgvector 0.8.0/PostgreSQL 16 image with no network, no published ports, and a private Unix socket. pgvector 0.8.0 successfully loaded there. Production metadata confirms UTF8/libc `C.UTF-8` with null collation versions and only plpgsql 1.0/vector 0.8.0. The production login's SET ROLE transition and certificate-verified transport passed read-only checks. These are prerequisites only: no production archive or restore had completed when this section was recorded. The final combined GitHub CI run and actual production recovery evidence remain outstanding.
 
 Release remains blocked pending a green immutable candidate, qualified recovery policy, current target backup/restore evidence, reviewed additive migrations, verified native snapshot/promotion behavior and deployed source/asset/security parity. Do not bypass these checks to make publishing proceed.
+
+### Production Backup and CI Qualification (September 5)
+
+The operator authorized production backup, isolated restore and private local download. Using recovery tools at `dc80a4f46a0c436dfeb3e0dcda6f6f4e7b868f4c`, the second independently captured archive passed a real PostgreSQL restore: all 106 public-table counts, the complete compared security catalog (including 21 triggers), 13 role prerequisites, 12 memberships, extension versions, database properties and the runtime role transition matched. The restore completed at `2026-09-04T23:54:05.901009Z`. Its encrypted transfer was authenticated, decrypted locally and checked against the producer's archive and manifest hashes. Source code and complete Git history are retained with the private local backup. Temporary encrypted staging was removed from the Replit checkout; no readable production archive was placed in the application directory.
+
+The first archive failed verification because eight trigger entries contained empty SQL bodies. It remains diagnostic evidence only and is not an accepted recovery archive. A subsequent full exported-snapshot schema control and the new full archive/restore passed without weakening comparison. The original discrepancy's cause is unresolved. This reinforces the requirement to restore-test the exact retained archive rather than accept dump exit status or table-of-contents entries alone.
+
+This capability drill does not certify PITR, external object storage, credential recovery or a fresh post-drain deployment backup. No production migration, writer drain, publish, activation or resume has occurred. The old source snapshot remains a pre-change recovery artifact, not a write-compatible rollback after the new invoice rules are applied.
+
+Combined CI run `33930598358` passed application tests and both migration checks, then found a strict constraint-text difference during the backup/restore integration. PostgreSQL expands leading `BETWEEN` into nested `AND` terms, while re-parsing its dump flattens that grouping. A real isolated PostgreSQL regression confirmed equivalent explicit lower/upper bounds round-trip unchanged. The fix is confined to the not-yet-deployed import constraints and matching schema definitions; the strict security-catalog comparison remains unchanged. A new complete CI run is required before merge or deployment.

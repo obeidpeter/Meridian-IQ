@@ -49,20 +49,21 @@ CREATE TABLE IF NOT EXISTS import_run_chunks (
   CONSTRAINT import_run_chunks_run_fk FOREIGN KEY (firm_id, actor_id, run_id) REFERENCES import_runs(firm_id, actor_id, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS import_run_chunks_operation_uidx ON import_run_chunks(operation_id);
+-- Explicit bounds preserve pg_get_constraintdef text across pg_dump/restore.
 ALTER TABLE import_runs DROP CONSTRAINT IF EXISTS import_runs_manifest_check;
 ALTER TABLE import_runs ADD CONSTRAINT import_runs_manifest_check CHECK (
-  total_rows BETWEEN 1 AND 5000 AND chunk_size BETWEEN 1 AND 250
+  total_rows >= 1 AND total_rows <= 5000 AND chunk_size >= 1 AND chunk_size <= 250
   AND manifest_hash ~ '^[0-9a-f]{64}$' AND jsonb_typeof(chunk_hashes) = 'array'
   AND jsonb_array_length(chunk_hashes) = ((total_rows + chunk_size - 1) / chunk_size)
 );
 ALTER TABLE import_runs DROP CONSTRAINT IF EXISTS import_runs_checkpoint_check;
 ALTER TABLE import_runs ADD CONSTRAINT import_runs_checkpoint_check CHECK (
-  next_chunk_index BETWEEN 0 AND jsonb_array_length(chunk_hashes)
+  next_chunk_index >= 0 AND next_chunk_index <= jsonb_array_length(chunk_hashes)
   AND (finalized_at IS NULL OR next_chunk_index = jsonb_array_length(chunk_hashes))
 );
 ALTER TABLE import_run_chunks DROP CONSTRAINT IF EXISTS import_run_chunks_counts_check;
 ALTER TABLE import_run_chunks ADD CONSTRAINT import_run_chunks_counts_check CHECK (
-  chunk_index >= 0 AND row_count BETWEEN 1 AND 250 AND created_count >= 0 AND invalid_count >= 0
+  chunk_index >= 0 AND row_count >= 1 AND row_count <= 250 AND created_count >= 0 AND invalid_count >= 0
   AND created_count + invalid_count = row_count
 );
 GRANT SELECT, INSERT, UPDATE ON import_runs TO meridian_app;

@@ -2,11 +2,19 @@
 
 ## Status and Authority
 
-This documents preparation only. It is not a deployment authorization, a drain
-record, a backup approval, or an executable operator plan. Backup approval remains
-pending. No production action or backup observation has been performed by adding
-this module. Test fixtures contain synthetic evidence and must never be submitted
-as an operator plan.
+Maintenance preparation is approved. The user also explicitly approved the
+production backup, isolated restore drill and private local download; all three
+completed on 2026-09-05 local time (2026-09-04 at 23:54 UTC). Verification covered
+all 106 table counts, the security catalog, 21 triggers, 13 roles, 12 memberships,
+extensions and database properties.
+
+This was an initial capability drill, **not the fresh post-drain backup required
+for a maintenance release**. No concrete maintenance window execution, production
+drain or operator resume has been authorized or started. No populated operator
+plan or activation permit exists, and no production DDL or deployment has been
+performed. This document is not authorization to begin those actions. Test
+fixtures contain synthetic evidence and must never be submitted as an operator
+plan or activation permit.
 
 The maintenance-forward path keeps **all writers stopped until verification and
 explicit operator signoff**. It never permits schema push, automatic resume, or an
