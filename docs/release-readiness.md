@@ -86,6 +86,9 @@ These checks cannot be truthfully completed by source code alone:
    `USABILITY_EVIDENCE_REF`. Repeat within 180 days after major workflow work.
    Include a no-account Invoice Room journey, OTP recovery, a revoked link,
    duplicate submission, 200% zoom, and a 320 CSS-pixel viewport.
+   Use the [usability pilot protocol](usability-pilot.md) for the draft,
+   navigation, and buyer-query tasks. A prepared protocol or automated test
+   result is not evidence of completed participant sessions.
 3. Obtain and retain production authority-rail accreditation evidence before
    setting `RAIL_ACCREDITATION_CONFIRMED=true`. Set `REQUIRE_LIVE_RAILS=true`
    only for a release that must use accredited live rails; it turns any

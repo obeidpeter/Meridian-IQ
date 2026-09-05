@@ -2254,7 +2254,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  /* The shell owns its own breakpoint (48rem = Tailwind md): a utility class
+  /* The shell owns its own breakpoint (64rem = Tailwind lg): a utility class
      on the element would tie with these single-class rules and lose to
      source order. */
   display: none;
@@ -2455,7 +2455,7 @@
   color: var(--mi-muted);
 }
 
-@media (min-width: 48rem) {
+@media (min-width: 64rem) {
   .mi-topbar {
     display: flex;
   }
@@ -2604,4 +2604,46 @@ a.mi-readiness__label:focus-visible {
 .mi-card-icon[data-tone="info"] {
   background: var(--mi-info-soft);
   color: var(--mi-info);
+}
+.mi-nav__section-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.mi-nav__section-toggle span {
+  overflow-wrap: anywhere;
+}
+.mi-nav__section-toggle svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.mi-nav__section-toggle[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+.mi-nav__section-toggle:hover {
+  background: rgb(255 255 255 / 8%);
+}
+.mi-nav__section-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+.mi-today__step-status {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
 }

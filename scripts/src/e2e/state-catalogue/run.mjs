@@ -233,9 +233,7 @@ try {
         );
       if (state === "failed") await page.getByRole("alert").waitFor();
       if (["partial", "dialog"].includes(state))
-        await page
-          .getByText("Saved result (HTTP 200)", { exact: true })
-          .click();
+        await page.getByText("Technical details", { exact: true }).click();
     }
     if (state === "route-failed")
       await page

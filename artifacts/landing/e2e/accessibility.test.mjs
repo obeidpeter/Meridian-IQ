@@ -153,6 +153,18 @@ for (const [name, viewport] of viewports) {
     assert.equal(await page.getByRole("banner").count(), 1);
     assert.equal(await page.getByRole("contentinfo").count(), 1);
     assert.equal(
+      await page.getByTestId("link-hero-contact").getAttribute("href"),
+      "#request-access",
+    );
+    assert.equal(
+      await page.getByTestId("link-hero-login").getAttribute("href"),
+      "/login",
+    );
+    assert.match(
+      await page.getByTestId("link-hero-login").textContent(),
+      /Already invited\? Sign in/,
+    );
+    assert.equal(
       await page
         .getByRole("main")
         .getByRole("heading", { level: 1 })

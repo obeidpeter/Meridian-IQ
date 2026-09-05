@@ -260,7 +260,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f6f7] dark:bg-background md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen bg-[#f3f6f7] dark:bg-background lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -276,7 +276,7 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-[#0b2030] px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between bg-[#0b2030] px-4 py-3 lg:hidden">
         <BrandMark />
         <div className="flex items-center gap-1">
           <Button
@@ -303,6 +303,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent
               side="left"
+              aria-describedby={undefined}
               className="w-[17rem] border-r-0 bg-[#0b2030] p-0 text-white [&>button]:text-white"
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -312,7 +313,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <section
-        className="border-b border-slate-200 bg-white px-4 py-3 md:hidden"
+        className="border-b border-slate-200 bg-white px-4 py-3 lg:hidden"
         aria-label="Current workspace"
       >
         <p className="text-[11px] font-bold text-sky-700">
@@ -323,12 +324,12 @@ export function Layout({ children }: { children: ReactNode }) {
         </p>
       </section>
 
-      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col lg:flex">
         <NavLinks {...navProps} />
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white/95 px-8 backdrop-blur dark:bg-white dark:text-slate-900 dark:[&_button:hover]:bg-slate-100 dark:[&_button:hover]:text-slate-900 md:flex lg:px-10">
+        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between gap-6 border-b border-slate-200 bg-white/95 px-8 backdrop-blur dark:bg-white dark:text-slate-900 dark:[&_button:hover]:bg-slate-100 dark:[&_button:hover]:text-slate-900 lg:flex lg:px-10">
           <div className="min-w-0">
             <p className="text-[11px] font-bold text-sky-700">
               Buyer finance workspace

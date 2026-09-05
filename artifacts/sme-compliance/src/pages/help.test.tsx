@@ -9,6 +9,17 @@ afterEach(cleanup);
 // topic list is a small contract: unique ids, plain-language content, and a
 // rendered anchor for every topic.
 describe("help topics", () => {
+  test("draft help explains account sync, expiry and safe retry", () => {
+    const draft = HELP_TOPICS.find((topic) => topic.id === "drafts")!;
+    expect(draft.summary).toContain("account");
+    expect(draft.steps.join(" ")).toContain("seven days");
+    expect(draft.steps.join(" ")).toContain("Not saved");
+    expect(
+      HELP_TOPICS.find((topic) => topic.id === "recover-invoice")?.steps.join(
+        " ",
+      ),
+    ).toContain("Retry original invoice");
+  });
   test("ids are unique and content is complete", () => {
     const ids = HELP_TOPICS.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);

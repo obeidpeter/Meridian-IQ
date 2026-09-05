@@ -37,6 +37,16 @@ function statusTime(value: string): string {
   }).format(date);
 }
 
+export function operationActionLabel(
+  operation: Pick<OperationRecord, "command" | "kind">,
+): string {
+  if (operation.command === "invoice.import" || operation.kind === "import")
+    return "View import";
+  if (operation.command === "invoice.create" || operation.kind === "invoice")
+    return "View invoice";
+  return "Return to task";
+}
+
 export function OperationStatusPanel({
   title,
   status,
@@ -161,7 +171,9 @@ export function ActivityCenter({
             <div className="mi-activity__actions">
               <button type="button" onClick={() => onOpen(operation.route)}>
                 <ExternalLink aria-hidden="true" />
-                <span className="mi-activity__action-label">Open source</span>
+                <span className="mi-activity__action-label">
+                  {operationActionLabel(operation)}
+                </span>
               </button>
               {operation.serverId && onRecover ? (
                 <button
@@ -201,9 +213,8 @@ export function ActivityCenter({
             </div>
             {operation.serverResult ? (
               <details>
-                <summary>
-                  Saved result (HTTP {operation.serverResult.statusCode})
-                </summary>
+                <summary>Technical details</summary>
+                <p>Response code: {operation.serverResult.statusCode}</p>
                 <pre
                   role="region"
                   tabIndex={0}

@@ -1,6 +1,16 @@
 export { triggerDownload } from "./trigger-download";
-export { SessionActivityCenter, SessionOperationRecovery, operationSessionKey, useSessionOperations } from "./session-operation-recovery";
-export { webSession, signOutAndRedirect, clearLegacySessionCaches, expireSession } from "./session-coordinator";
+export {
+  SessionActivityCenter,
+  SessionOperationRecovery,
+  operationSessionKey,
+  useSessionOperations,
+} from "./session-operation-recovery";
+export {
+  webSession,
+  signOutAndRedirect,
+  clearLegacySessionCaches,
+  expireSession,
+} from "./session-coordinator";
 export { SessionBoundary } from "./session-boundary";
 export { lazyRoute, RouteErrorBoundary, RouteLoading } from "./route-recovery";
 export {
@@ -118,3 +128,4 @@ export {
   type ReadinessState,
   type ReadinessStep,
 } from "./readiness";
+export { NavigationSection } from "./navigation-section";

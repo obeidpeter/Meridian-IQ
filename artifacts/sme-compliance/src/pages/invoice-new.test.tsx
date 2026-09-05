@@ -301,6 +301,30 @@ describe("no-TIN buyer never blocks a draft", () => {
   });
 });
 
+test("readiness and creation both reject a missing price, but accept a zero price", async () => {
+  const draft = storedDraft();
+  draft.lines[0].unitPrice = "";
+  localStorage.setItem(KEY, JSON.stringify(draft));
+  renderWithClient(<InvoiceNew />);
+  await restoreLegacy();
+  expect(
+    screen.getByTestId("readiness-line-items").getAttribute("data-state"),
+  ).toBe("todo");
+  const price = document.getElementById("line-0-unit-price")!;
+  price.scrollIntoView = vi.fn();
+  fireEvent.click(screen.getByRole("button", { name: "Create invoice" }));
+  expect(harness.createCalls).toHaveLength(0);
+  expect(document.activeElement).toBe(price);
+  fireEvent.change(document.getElementById("line-0-unit-price")!, {
+    target: { value: "0" },
+  });
+  expect(
+    screen.getByTestId("readiness-line-items").getAttribute("data-state"),
+  ).toBe("done");
+  fireEvent.click(screen.getByRole("button", { name: "Create invoice" }));
+  await waitFor(() => expect(harness.createCalls).toHaveLength(1));
+});
+
 describe("durable draft persistence", () => {
   test("unmount during the draft flush prevents the following create command", async () => {
     let release!: () => void;
@@ -650,7 +674,9 @@ describe("session-bound invoice commands", () => {
       localStorage.setItem(KEY, JSON.stringify(storedDraft()));
       renderWithClient(<InvoiceNew />);
       await restoreLegacy();
-      const session = load.mock.contexts.at(-1) as InvoiceDraftSession | undefined;
+      const session = load.mock.contexts.at(-1) as
+        | InvoiceDraftSession
+        | undefined;
       expect(session).toBeDefined();
       session!.state = {
         ...session!.state,

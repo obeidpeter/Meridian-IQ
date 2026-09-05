@@ -77,7 +77,7 @@ describe.each(["app", "console", "buyer"] as const)(
           />,
         );
         await screen.findByText("Server history checked");
-        fireEvent.click(screen.getByRole("button", { name: "Open source" }));
+        fireEvent.click(screen.getByRole("button", { name: "View import" }));
         expect(operationDestination(route)).toBe(`/${owner}${route}`);
         if (workspace === owner) {
           expect(navigate).toHaveBeenCalledExactlyOnceWith(route);
@@ -115,7 +115,7 @@ describe.each(["app", "console", "buyer"] as const)(
         />,
       );
       await screen.findByText("Server history checked");
-      fireEvent.click(screen.getByRole("button", { name: "Open source" }));
+      fireEvent.click(screen.getByRole("button", { name: "View import" }));
       if (workspace === "app") {
         expect(navigate).toHaveBeenCalledExactlyOnceWith(route);
         expect(assign).not.toHaveBeenCalled();

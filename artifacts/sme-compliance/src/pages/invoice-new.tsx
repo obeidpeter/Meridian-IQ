@@ -66,6 +66,7 @@ import {
   emptyLine,
   draftHasWork,
   lineTotals,
+  invoiceLineErrors,
   toInvoiceLineInputs,
   updateLineAt,
 } from "@/lib/invoice-lines";
@@ -159,7 +160,7 @@ export function InvoiceNew() {
           status: rejected ? "failed" : "partial",
           savedSummary: rejected
             ? "The server rejected this request before creation. Correct the invoice and retry."
-            : "Outcome unconfirmed. Retry the preserved original request with its original command key.",
+            : "We could not confirm whether your invoice was created. Use Retry original invoice to check safely without creating a duplicate.",
         });
         throw error;
       }
@@ -350,16 +351,11 @@ export function InvoiceNew() {
   // for stamping until the TIN exists (canonical validation).
   if (!draft.issueDate) errors.issueDate = "Issue date is required.";
   draft.lines.forEach((l, i) => {
-    if (!l.description.trim())
-      errors[`line-${i}-desc`] = "Description required.";
-    if (!Number.isFinite(Number(l.quantity)) || !(Number(l.quantity) > 0))
-      errors[`line-${i}-qty`] = "Qty must be finite and > 0.";
-    if (
-      !Number.isFinite(Number(l.unitPrice)) ||
-      !(Number(l.unitPrice) >= 0) ||
-      l.unitPrice === ""
-    )
-      errors[`line-${i}-price`] = "Price required.";
+    const lineErrors = invoiceLineErrors(l);
+    if (lineErrors.description)
+      errors[`line-${i}-desc`] = lineErrors.description;
+    if (lineErrors.quantity) errors[`line-${i}-qty`] = lineErrors.quantity;
+    if (lineErrors.unitPrice) errors[`line-${i}-price`] = lineErrors.unitPrice;
   });
   const isValid = Object.keys(errors).length === 0;
 
@@ -433,7 +429,7 @@ export function InvoiceNew() {
         toast({
           title: "Invoice not sent",
           description:
-            "Save or reconcile this draft before creating its invoice.",
+            "Wait for this draft to save, or review the conflicting account version, before creating the invoice.",
           variant: "destructive",
         });
         return;
@@ -492,7 +488,7 @@ export function InvoiceNew() {
           ? "Invoice creation not confirmed"
           : "Could not create invoice",
         description: uncertain
-          ? `${serverErrorMessage(e)} Retry the preserved original request to recover its result. Do not create a replacement invoice.`
+          ? "We could not confirm whether your invoice was created. Select Retry original invoice to check safely. Do not start a replacement invoice."
           : serverErrorMessage(e),
         variant: "destructive",
       });
@@ -508,9 +504,11 @@ export function InvoiceNew() {
   // The guided rail (R70): each step names its form section, links to it,
   // and says what is still missing. The TIN row is "attention", never
   // blocking — a draft without a buyer TIN is lawful; stamping is not.
-  const linesComplete = draft.lines.every(
-    (l) => l.description.trim() && Number(l.quantity) > 0,
-  );
+  const linesComplete =
+    draft.lines.length > 0 &&
+    draft.lines.every(
+      (line) => Object.keys(invoiceLineErrors(line)).length === 0,
+    );
   const vatLawful = draft.lines.every(
     (l) => Number(l.vatRate) === 0.075 || Number(l.vatRate) === 0,
   );
@@ -548,7 +546,7 @@ export function InvoiceNew() {
       href: "#invoice-lines",
       detail: linesComplete
         ? undefined
-        : "Every line needs a description and a quantity above zero.",
+        : "Every line needs a description, a quantity above zero and a valid unit price. Zero-priced items are allowed.",
     },
     {
       id: "vat",
@@ -580,12 +578,12 @@ export function InvoiceNew() {
               ? "This invoice was already created."
               : submission.status === "blocked"
                 ? "The original request cannot be read on this device. Check account activity before creating a replacement invoice; it could duplicate a completed invoice."
-                : "Invoice creation is not yet confirmed. The original customer, amounts and request are preserved on this device. Reconcile this request before starting a replacement invoice."}
+                : "We could not confirm whether this invoice was created. Your customer and amounts are kept on this device. Select Retry original invoice to check safely without creating a duplicate."}
           </p>
           {submission.status !== "blocked" && (
             <Button onClick={submit} disabled={submitting}>
               {submitting
-                ? "Reconciling..."
+                ? "Checking invoice..."
                 : submission.status === "succeeded"
                   ? "View created invoice"
                   : "Retry original invoice"}

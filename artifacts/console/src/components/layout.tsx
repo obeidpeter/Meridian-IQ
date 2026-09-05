@@ -66,6 +66,7 @@ import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { ClerkDock } from "@/components/clerk-dock";
 import {
   CommandMenu,
+  NavigationSection,
   NetworkStatus,
   readRecentItems,
   ReleaseBadge,
@@ -123,7 +124,7 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "Practice",
+    title: "Daily work",
     links: [
       {
         href: "/today",
@@ -149,6 +150,11 @@ const NAV_GROUPS: NavGroup[] = [
         icon: GitBranch,
         capability: "console.portfolio.read",
       },
+    ],
+  },
+  {
+    title: "Client services and setup",
+    links: [
       {
         href: "/clients/import",
         label: "Client import",
@@ -439,8 +445,17 @@ function NavLinks({
       <div className="mi-nav">
         <div className="mi-nav__scroll">
           {groups.map((group) => (
-            <div key={group.title} className="mi-nav__group">
-              <p className="mi-nav__title">{group.title}</p>
+            <NavigationSection
+              key={group.title}
+              title={group.title}
+              primary={
+                group.title === "Daily work" || group.title === "Bank assurance"
+              }
+              active={group.links.some((link) =>
+                isLinkActive(location, link.href),
+              )}
+              route={location}
+            >
               {group.links.map((link) => {
                 const Icon = link.icon;
                 const isActive = isLinkActive(location, link.href);
@@ -458,7 +473,7 @@ function NavLinks({
                   </Link>
                 );
               })}
-            </div>
+            </NavigationSection>
           ))}
         </div>
       </div>
@@ -826,7 +841,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[var(--mi-canvas)] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="min-h-screen overflow-x-clip bg-[var(--mi-canvas)] lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -881,6 +896,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent
               side="left"
+              aria-describedby={undefined}
               className="w-[17rem] border-r-0 bg-[var(--mi-sidebar)] p-0 text-white [&>button]:text-white"
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -894,7 +910,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <p>{pageTitle}</p>
       </section>
 
-      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col lg:flex">
         <NavLinks {...navProps} />
       </aside>
 
