@@ -848,7 +848,7 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <div className="mi-mobilebar">
+      <header className="mi-mobilebar">
         <BrandMark
           caption={bankWorkspace ? "Bank Data Room" : "Accountant Console"}
         />
@@ -888,11 +888,11 @@ export function Layout({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
         </div>
-      </div>
-      <div className="mi-mobilebar__context">
+      </header>
+      <section className="mi-mobilebar__context" aria-label="Current workspace">
         <p>{workspaceName}</p>
         <p>{pageTitle}</p>
-      </div>
+      </section>
 
       <aside className="sticky top-0 hidden h-screen min-h-screen flex-col md:flex">
         <NavLinks {...navProps} />

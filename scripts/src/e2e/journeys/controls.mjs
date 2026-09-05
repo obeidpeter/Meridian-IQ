@@ -3,6 +3,8 @@
 // proposed-actions + standing-approval (automation) round-trip, the Notice
 // Desk obligations spine, the Filing Desk register walk, and the WHT Desk
 // (category → remittance schedule → credit-note walk).
+import assert from "node:assert/strict";
+import { seedIncomingWhtBill } from "./wht-fixture.mjs";
 import {
   CSRF,
   DEMO_CLIENT_PARTY_ID,
@@ -836,7 +838,7 @@ async function journeyFilings(page, BASE, check) {
 // the bill on the remittance schedule; a WHT-categorised RECEIVABLE takes a
 // recorded deduction that opens an awaiting_note credit, which the credit
 // note's reference + date walk to note_received; and month-end close carries
-// the wht_credits chase item. Every probe document uses a Date.now() number
+// the wht_credits chase item. Every probe document uses a fresh unique number
 // (WHT-*/WHT-R-*, outside every pinned namespace), so the idempotent
 // POST /api/wht/credits can never hand back an earlier run's already-noted
 // row — the walk is deterministic per run, no kept-DB skip needed. Both
@@ -855,37 +857,75 @@ async function journeyWht(page, BASE, check) {
   try {
     await apiLogin(page, BASE, "demo.staff@meridianiq.example");
 
-    // A NEW previous-period bill with a human-picked category. The seeded
-    // vendor party is discovered from the existing bills ledger rather than
-    // pinned — the seed owns that id.
+    // An incoming bill from the unengaged vendor is a scratch-DB fixture,
+    // not an outgoing invoice created on that vendor's behalf. Category
+    // assignment still exercises the authorized, revision-checked API.
     const billsRes = await page.request.get(
       BASE + `/api/bills?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     const bills = billsRes.ok() ? await billsRes.json() : [];
-    const vendorPartyId = bills[0]?.supplierPartyId ?? null;
-    const billNumber = `WHT-${Date.now()}`;
-    const createdBill = vendorPartyId
-      ? await createDraftInvoice(page, BASE, {
-          supplierPartyId: vendorPartyId,
-          buyerPartyId: DEMO_CLIENT_PARTY_ID,
-          invoiceNumber: billNumber,
-          issueDate: `${period}-15`,
-          description: "WHT probe professional services",
-          unitPrice: "200000",
+    assert.equal(
+      billsRes.status(),
+      200,
+      "incoming bill fixture discovery must succeed",
+    );
+    const sourceBill = bills.find((bill) => bill.invoiceNumber === "BILL-2001");
+    assert.ok(sourceBill, "seeded BILL-2001 must exist");
+    const { invoiceId: billId, invoiceNumber: billNumber } =
+      seedIncomingWhtBill({
+        sourceBillId: sourceBill.invoiceId,
+        clientPartyId: DEMO_CLIENT_PARTY_ID,
+        period,
+      });
+    const denied = await createDraftInvoice(page, BASE, {
+      supplierPartyId: sourceBill.supplierPartyId,
+      buyerPartyId: DEMO_CLIENT_PARTY_ID,
+      invoiceNumber: `${billNumber}-DENIED`,
+      issueDate: `${period}-15`,
+      description: "Unengaged vendor create must be denied",
+      unitPrice: "200000",
+    });
+    check(
+      "outgoing invoice creation for an unengaged vendor stays forbidden",
+      denied.status === 403,
+      `status ${denied.status}`,
+    );
+    const initialBillRes = await page.request.get(
+      BASE + `/api/invoices/${billId}`,
+    );
+    assert.equal(
+      initialBillRes.status(),
+      200,
+      "seeded incoming bill must be readable",
+    );
+    const initialBill = await initialBillRes.json();
+    assert.equal(
+      initialBill.invoice.whtCategory,
+      null,
+      "fixture must not preassign WHT",
+    );
+    const categoryRes = await page.request.patch(
+      BASE + `/api/invoices/${billId}`,
+      {
+        headers: CSRF,
+        data: {
+          expectedRevision: initialBill.invoice.contentRevision,
           whtCategory: "services_5",
-        })
-      : { status: 0, invoiceId: null };
-    const billDetailRes = createdBill.invoiceId
-      ? await page.request.get(BASE + `/api/invoices/${createdBill.invoiceId}`)
-      : null;
-    const billDetail = billDetailRes?.ok() ? await billDetailRes.json() : null;
+        },
+      },
+    );
+    const billDetailRes = await page.request.get(
+      BASE + `/api/invoices/${billId}`,
+    );
+    const billDetail = billDetailRes.ok() ? await billDetailRes.json() : null;
     check(
       "a bill carries its WHT category",
-      createdBill.status === 201 &&
-        billDetail?.invoice?.whtCategory === "services_5",
-      vendorPartyId
-        ? `create ${createdBill.status}, whtCategory ${billDetail?.invoice?.whtCategory ?? "-"}`
-        : "no seeded bill to discover the vendor from",
+      categoryRes.status() === 200 &&
+        billDetailRes.status() === 200 &&
+        billDetail?.invoice?.whtCategory === "services_5" &&
+        billDetail.invoice.contentRevision ===
+          initialBill.invoice.contentRevision + 1,
+      `patch ${categoryRes.status()}, whtCategory ${billDetail?.invoice?.whtCategory ?? "-"}`,
     );
 
     // Sync now that the period holds a WHT-categorised bill: the register

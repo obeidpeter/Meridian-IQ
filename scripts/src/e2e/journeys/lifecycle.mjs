@@ -1,6 +1,7 @@
 // Lifecycle journeys: the credit-note + workflow smoke, and the two
 // password journeys (self-service round trip, operator-issued reset) — both
 // restore the demo password so the suite reruns on the same seed.
+import assert from "node:assert/strict";
 import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
@@ -8,6 +9,48 @@ import {
   pollUntil,
   signIn,
 } from "./shared.mjs";
+
+export async function waitForNewInvoiceDraft(
+  page,
+  BASE,
+  { timeout = 10000 } = {},
+) {
+  const origin = new URL(BASE).origin;
+  const isFormRoute = (url) =>
+    url.origin === origin && url.pathname === "/app/invoices/new";
+  const isDraftRoute = (url) =>
+    isFormRoute(url) &&
+    url.searchParams.getAll("draft").length === 1 &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      url.searchParams.get("draft"),
+    );
+  await page.waitForURL(isFormRoute, { timeout });
+  // The form's mount effect adds the durable draft identity by replaceState.
+  await page.waitForURL(isDraftRoute, { timeout });
+  assert.ok(
+    isDraftRoute(new URL(page.url())),
+    "new-invoice URL must contain one valid draft UUID",
+  );
+  for (const id of ["buyer-select", "invoice-number", "line-0-description"]) {
+    await page.waitForSelector(`#${id}:enabled:not([readonly])`, {
+      state: "visible",
+      timeout,
+    });
+  }
+  assert.ok(
+    isDraftRoute(new URL(page.url())),
+    "draft route must remain current when the form is ready",
+  );
+}
+
+export async function selectFirstInvoiceCustomer(page) {
+  await page.locator("#buyer-select").click();
+  await page
+    .getByRole("listbox", { name: "Customers", exact: true })
+    .getByRole("option")
+    .first()
+    .click();
+}
 
 // ---------- SME staff: credit note + workflow smoke ----------
 // Signs in as demo.staff and deliberately leaves that session signed in —
@@ -106,8 +149,7 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
     (await page.locator('[data-testid="text-no-buyers"]').count()) === 0;
   if (buyersAvailable) {
     await page.getByLabel("Invoice number").fill(draftNumber);
-    await page.locator("#buyer-select").click();
-    await page.getByRole("option").first().click();
+    await selectFirstInvoiceCustomer(page);
     await page.locator("#line-0-description").fill("E2E smoke goods");
     await page.locator("#line-0-quantity").fill("2");
     await page.locator("#line-0-unit-price").fill("1500");
@@ -189,7 +231,7 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   await page.locator("#invoice-search").fill("");
   await page.getByTestId("text-page-title").click();
   await page.keyboard.press("n");
-  await page.waitForURL("**/app/invoices/new", { timeout: 10000 });
+  await waitForNewInvoiceDraft(page, BASE);
   check("n jumps to the new-invoice form", true);
 
   // Recurring invoices page renders with its create entry point.

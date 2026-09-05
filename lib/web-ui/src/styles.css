@@ -23,7 +23,7 @@
   --mi-muted: #5f6f6c;
   --mi-critical: #b42318;
   --mi-critical-soft: #fde8e6;
-  --mi-warning: #b5620a;
+  --mi-warning: #9a5309;
   --mi-warning-soft: #fdf1dd;
   --mi-positive: #087a50;
   --mi-positive-soft: #e3f5ec;
@@ -282,7 +282,7 @@
 
 .mi-segmented__item[aria-pressed="true"] {
   background: var(--mi-ink);
-  color: white;
+  color: var(--mi-paper);
 }
 
 .mi-segmented__item:focus-visible,
@@ -1451,7 +1451,7 @@
   padding: 0 0.9rem;
   border: 1px solid var(--mi-teal);
   background: var(--mi-teal);
-  color: #fff;
+  color: var(--mi-paper);
 }
 
 .mi-button-quiet {

@@ -39,12 +39,27 @@ export async function signIn(page, BASE, demoTestId, waitUrl) {
 }
 
 export async function signOutFromApp(page, BASE) {
-  await page.getByTestId("button-sign-out").first().click();
-  // Successful session cleanup redirects with a reason; require confirmed
-  // logout rather than accepting the local-only fallback as a passing journey.
   const origin = new URL(BASE).origin;
+  // The signed-in portal can already be at /login, even with an old reason.
+  // Observe this click's server response before accepting the redirect/form.
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        candidate.url() === `${origin}/api/auth/logout` &&
+        candidate.request().method() === "POST",
+    ),
+    page.getByTestId("button-sign-out").first().click(),
+  ]);
+  assert.equal(
+    response.status(),
+    204,
+    "Healthy E2E logout must receive the server's 204 confirmation",
+  );
   await page.waitForURL(
-    (url) => url.origin === origin && url.pathname === "/login",
+    (url) =>
+      url.origin === origin &&
+      url.pathname === "/login" &&
+      url.searchParams.get("reason") === "signed-out",
   );
   assert.equal(
     new URL(page.url()).searchParams.get("reason"),

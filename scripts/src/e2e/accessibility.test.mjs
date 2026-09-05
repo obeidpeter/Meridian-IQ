@@ -43,3 +43,75 @@ test("real axe engine detects names and contrast; keyboard assertion catches a l
     await browser.close();
   }
 });
+
+test("dialog keyboard guard observes deferred close and never repairs missing focus", async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+  });
+  try {
+    for (const mode of ["delayed", "missing-focus", "hidden-dialog"]) {
+      const page = await browser.newPage();
+      try {
+        await page.setContent(`
+          <button id="trigger">Open</button>
+          <div role="dialog" aria-label="Fixture" hidden><button id="inside">Inside</button></div>
+          <script>
+            const trigger = document.querySelector('#trigger');
+            const dialog = document.querySelector('[role=dialog]');
+            const inside = document.querySelector('#inside');
+            trigger.onclick = () => { dialog.hidden = false; inside.focus(); };
+            inside.onkeydown = (event) => {
+              if (event.key === 'Tab') { event.preventDefault(); inside.focus(); }
+              if (event.key !== 'Escape') return;
+              if (${JSON.stringify(mode)} === 'hidden-dialog') {
+                dialog.hidden = true; trigger.focus(); return;
+              }
+              // Fixture lifecycle only; the production guard never sets focus.
+              setTimeout(() => {
+                dialog.remove();
+                if (${JSON.stringify(mode)} === 'delayed') setTimeout(() => trigger.focus(), 150);
+              }, 150);
+            };
+          </script>
+        `);
+        const trigger = page.locator("#trigger");
+        const run = checkDialogKeyboard(
+          page,
+          trigger,
+          page.getByRole("dialog"),
+          (label, ok) => assert.ok(ok, label),
+          mode,
+        );
+        if (mode === "delayed") {
+          await run;
+          assert.equal(
+            await trigger.evaluate(
+              (element) => element === globalThis.document.activeElement,
+            ),
+            true,
+          );
+        } else {
+          await assert.rejects(
+            run,
+            mode === "missing-focus"
+              ? /Dialog did not restore focus/
+              : /Dialog did not close/,
+          );
+          if (mode === "missing-focus") {
+            assert.equal(
+              await trigger.evaluate(
+                (element) => element === globalThis.document.activeElement,
+              ),
+              false,
+            );
+          }
+        }
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+});

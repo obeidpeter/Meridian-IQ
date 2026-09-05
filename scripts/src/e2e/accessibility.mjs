@@ -1,5 +1,6 @@
 /* global document, getComputedStyle */
 import axe from "axe-core";
+import { assertDialogClosedAndFocusRestored } from "./state-catalogue/dialog-focus.mjs";
 
 export async function collectAxeResults(page) {
   await page.evaluate(axe.source);
@@ -240,7 +241,7 @@ export async function checkDialogKeyboard(page, trigger, dialog, check, label) {
     }
   }
   await page.keyboard.press("Escape");
-  await dialog.waitFor({ state: "hidden" });
+  await assertDialogClosedAndFocusRestored(page, trigger);
   check(
     `${label}: Escape restores trigger focus`,
     await trigger.evaluate((element) => element === document.activeElement),

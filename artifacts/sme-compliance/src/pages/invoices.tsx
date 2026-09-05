@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { Link } from "wouter";
 import {
   useGetMe,
@@ -108,12 +108,14 @@ function BulkSubmitDialog({
   open,
   report,
   isPending,
+  triggerRef,
   onConfirm,
   onClose,
 }: {
   open: boolean;
   report: { rows: BulkSubmitRowResult[]; remaining: number } | null;
   isPending: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -127,10 +129,17 @@ function BulkSubmitDialog({
     <Dialog
       open={open}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !isPending) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent
+        closeDisabled={isPending}
+        onCloseAutoFocus={(event) => {
+          // This controlled dialog's trigger lives outside its Radix root.
+          event.preventDefault();
+          triggerRef.current?.focus();
+        }}
+      >
         {report === null ? (
           <>
             <DialogHeader>
@@ -226,7 +235,7 @@ function BulkSubmitDialog({
               </p>
             )}
             <DialogFooter>
-              <Button variant="ghost" onClick={onClose}>
+              <Button variant="ghost" onClick={onClose} disabled={isPending}>
                 Close
               </Button>
               {report.remaining > 0 && (
@@ -347,6 +356,7 @@ export function Invoices() {
   // deduped by invoiceId (an invalid draft stays pending by design, so it
   // reappears in every batch until fixed).
   const [bulkOpen, setBulkOpen] = useState(false);
+  const bulkTriggerRef = useRef<HTMLButtonElement>(null);
   const [bulkReport, setBulkReport] = useState<{
     rows: BulkSubmitRowResult[];
     remaining: number;
@@ -476,6 +486,7 @@ export function Invoices() {
           </Button>
           {me?.clientPartyId && (
             <Button
+              ref={bulkTriggerRef}
               variant="outline"
               onClick={openBulk}
               disabled={initialLoading || bulkSubmit.isPending}
@@ -495,6 +506,7 @@ export function Invoices() {
         open={bulkOpen}
         report={bulkReport}
         isPending={bulkSubmit.isPending}
+        triggerRef={bulkTriggerRef}
         onConfirm={runBulkSubmit}
         onClose={closeBulk}
       />
@@ -588,7 +600,10 @@ export function Invoices() {
                 <>
                   Create your first invoice, or bring your whole book across in
                   one go with{" "}
-                  <Link href="/import" className="text-primary hover:underline">
+                  <Link
+                    href="/import"
+                    className="rounded-sm text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
                     bulk import
                   </Link>
                   .

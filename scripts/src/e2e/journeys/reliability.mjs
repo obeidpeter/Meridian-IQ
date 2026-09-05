@@ -97,7 +97,11 @@ export async function journeyKeyboardRecovery(page, BASE, check) {
   const customer = page.locator("#buyer-select");
   await customer.waitFor();
   await tabTo(page, customer);
-  await page.getByRole("option").first().waitFor();
+  await page
+    .getByRole("listbox", { name: "Customers", exact: true })
+    .getByRole("option")
+    .first()
+    .waitFor();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   check(
@@ -141,6 +145,9 @@ export async function journeyCustomerFailureRecovery(page, BASE, check) {
   try {
     await page.goto(BASE + "/app/invoices/new");
     await tabTo(page, page.locator("#buyer-select"));
+    const customerOptions = page
+      .getByRole("listbox", { name: "Customers", exact: true })
+      .getByRole("option");
     const retry = page.getByRole("button", { name: "Retry search" });
     await retry.waitFor({ timeout: 20_000 });
     check(
@@ -152,12 +159,12 @@ export async function journeyCustomerFailureRecovery(page, BASE, check) {
     );
     check(
       "customer failure cannot select a stale option",
-      (await page.getByRole("option").count()) === 0,
+      (await customerOptions.count()) === 0,
     );
     failing = false;
     await tabTo(page, retry);
     await page.keyboard.press("Enter");
-    await page.getByRole("option").first().waitFor({ timeout: 15_000 });
+    await customerOptions.first().waitFor({ timeout: 15_000 });
     check(
       "customer retry recovers options without reloading form",
       await page.locator("#buyer-select").isVisible(),

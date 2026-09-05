@@ -61,7 +61,7 @@ jobs:
         run: pnpm run architecture:check
 
       - name: Release, worker, load-tool and journey regression tests
-        run: node --test scripts/src/ops/*.test.mjs scripts/src/load-smoke.test.mjs scripts/src/e2e/service-worker.test.mjs scripts/src/e2e/journeys/shared.test.mjs
+        run: node --test scripts/src/ops/*.test.mjs scripts/src/load-smoke.test.mjs scripts/src/e2e/service-worker.test.mjs scripts/src/e2e/journeys/*.test.mjs
 
       - name: Client transport and database deadline configuration tests
         run: node node_modules/tsx/dist/cli.mjs --test lib/api-client-react/test/custom-fetch.test.ts lib/db/src/connection-config.test.ts
@@ -304,6 +304,9 @@ jobs:
       - name: Verify calculator startup, loading and recovery accessibility
         run: node --test scripts/src/e2e/penalty-calculator-loading.test.mjs
 
+      - name: Verify customer picker keyboard and failure recovery
+        run: node --test scripts/src/e2e/customer-recovery.test.mjs
+
       - name: Push schema
         run: pnpm --filter @workspace/db run push
 
@@ -344,3 +347,4 @@ jobs:
             tmp/route-budget-r198/*/.vite/manifest.json
             artifacts/landing/tmp/accessibility/**
             tmp/penalty-calculator-loading/**
+            tmp/reliability-customer-selectors/**
