@@ -2,7 +2,7 @@ import { clerkEvalRunsTable, runInBypassContext } from "@workspace/db";
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { runEvalCorpus } from "./eval";
 import { growEvalFixtures } from "./eval-growth";
 import { getClerkGateway } from "./provider";

@@ -1,4 +1,4 @@
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { sweepPushReceipts } from "./push";
 
 // Wires the push-receipt straggler sweep onto the shared compliance-sweep

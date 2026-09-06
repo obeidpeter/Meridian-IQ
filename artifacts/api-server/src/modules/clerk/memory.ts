@@ -14,7 +14,7 @@ import {
   isEffectiveFeatureEnabled,
   isFeatureEnabled,
 } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { atMostHourly } from "./watch-shared";
 import {
   CLERK_FLAG_KEY,

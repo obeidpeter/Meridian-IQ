@@ -28,7 +28,7 @@ import {
   proposalForKind,
 } from "./actions";
 import { decisionRailStanding } from "./action-effectiveness";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { alertOnceViaAuditLedger, atMostHourly } from "./watch-shared";
 import {
   ROLE_CAPABILITIES,

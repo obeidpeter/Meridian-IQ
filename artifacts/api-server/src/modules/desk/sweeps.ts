@@ -7,7 +7,7 @@ import {
   operatorCasesTable,
   invoicesTable,
 } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 
 // INT-02, second half: "unmapped errors alert operators and enter the
 // catalogue within one working day." The catalogue page lists unmapped codes

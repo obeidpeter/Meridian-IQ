@@ -1,4 +1,4 @@
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { sweepDeadlineReminders } from "./reminders";
 import { sweepRecurringInvoices } from "./recurring";
 

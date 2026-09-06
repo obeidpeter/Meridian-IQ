@@ -13,7 +13,7 @@ import {
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import {
   GENERATION_SWEEP_TIMEOUT_MS,
   generationDeadline,

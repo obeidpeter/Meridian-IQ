@@ -11,7 +11,7 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import {
   GENERATION_SWEEP_TIMEOUT_MS,
   generationDeadline,

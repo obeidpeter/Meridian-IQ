@@ -9,7 +9,7 @@ import {
   type CaseTriage,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { logger } from "../../lib/logger";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "../clerk/gateway";
 import { fenceUntrusted } from "../clerk/prompts";

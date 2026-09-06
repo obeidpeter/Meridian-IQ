@@ -43,7 +43,7 @@ import {
   type DeterministicStepKind,
 } from "./plan-steps";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import type { AskAnswer } from "./ask";
 
 // Do with Clerk Phase 2 (round 32): plan runs — an approved multi-step

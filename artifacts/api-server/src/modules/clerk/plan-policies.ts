@@ -19,7 +19,7 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { isPurposePermitted } from "../consent/consent";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { alertOnceViaAuditLedger, atMostHourly } from "./watch-shared";
 import {
   hasLiveEngagement,

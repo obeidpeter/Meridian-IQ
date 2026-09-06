@@ -7,7 +7,7 @@ import {
   firmWebhookDeliveriesTable,
   membershipsTable,
 } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { alertOnceViaAuditLedger, atMostHourly } from "../clerk/watch-shared";
 import { isFeatureEnabled } from "../flags/flags";
 import { sendMessage } from "../messaging/messaging";

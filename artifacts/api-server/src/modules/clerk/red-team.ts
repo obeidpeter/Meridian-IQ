@@ -6,7 +6,7 @@ import {
   clerkRedTeamFixturesTable,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";

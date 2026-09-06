@@ -6,13 +6,11 @@ import {
   listSweeps,
   orderedSweeps,
   runSweepsOnce,
-  awaitWorkerIdle,
-  inFlightPasses,
   SweepTimeoutError,
-  stopWorker,
-  resumeWorker,
   type RegisteredSweep,
-} from "./pipeline.ts";
+} from "./sweeps.ts";
+import { awaitWorkerIdle, inFlightPasses } from "./in-flight.ts";
+import { stopWorker, resumeWorker } from "./pipeline.ts";
 import { registry } from "../../lib/metrics.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 

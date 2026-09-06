@@ -14,7 +14,7 @@ import {
   isEffectiveFeatureEnabled,
   isFeatureEnabled,
 } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { logger } from "../../lib/logger";
 import { assertFirmClerkBudget } from "./budget";
 import { segmentDocument, type BatchSegment } from "./batch";
