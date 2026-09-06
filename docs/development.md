@@ -78,7 +78,11 @@ pnpm --filter @workspace/db run test
 ```
 
 Use only a disposable database: the main-app HTTP integration and E2E failure
-fixtures require `E2E_DATABASE_DISPOSABLE=1`. The main-app test explicitly sets
+fixtures require `E2E_DATABASE_DISPOSABLE=1`. The credit suite uses the same
+flag to retire (layer-3 revoke) any assessment population an earlier run left
+behind — the bank Data Room aggregates the whole platform, so its k-anonymity
+assertions start from an empty population — and fails fast on a reused
+database without it (R108). The main-app test explicitly sets
 `ENABLE_DEV_AUTH=true` before importing the server; production auth remains
 unchanged. SQL trigger fault injection is always removed during teardown.
 
