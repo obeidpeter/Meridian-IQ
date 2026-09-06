@@ -58,3 +58,5 @@ SEED_DEMO = "true"
 
 [userenv.production]
 RELEASE_PROFILE = "pilot"
+PILOT_OPERATOR_EMAIL = "obeidpeter1@gmail.com"
+PILOT_OPERATOR_FULL_NAME = "Obeid Peter"
