@@ -8,6 +8,7 @@ import { migration0051 } from "../../../lib/db/src/migrations/0051_operation_rec
 import { migration0052 } from "../../../lib/db/src/migrations/0052_invoice_drafts.ts";
 import { migration0053 } from "../../../lib/db/src/migrations/0053_clerk_reservations.ts";
 import { migration0054 } from "../../../lib/db/src/migrations/0054_import_runs.ts";
+import { migration0055 } from "../../../lib/db/src/migrations/0055_production_bootstrap_claims.ts";
 
 test("migration-only R198 upgrade matches scratch schema semantics and preserves financial rows", () => {
   assert.equal(
@@ -28,6 +29,7 @@ test("migration-only R198 upgrade matches scratch schema semantics and preserves
     migration0052,
     migration0053,
     migration0054,
+    migration0055,
   ];
   // This is an explicit pre-R198 fixture, not an inferred/general down migration.
   // All destructive setup and replay occur in one transaction that never commits.
@@ -39,8 +41,8 @@ test("migration-only R198 upgrade matches scratch schema semantics and preserves
     SET LOCAL statement_timeout = '60s';
     SET LOCAL lock_timeout = '5s';
     DO $$ BEGIN
-      IF (SELECT max(version) FROM _schema_migrations) <> 54 THEN
-        RAISE EXCEPTION 'upgrade fixture requires the reviewed 0054 baseline';
+      IF (SELECT max(version) FROM _schema_migrations) <> 55 THEN
+        RAISE EXCEPTION 'upgrade fixture requires the reviewed 0055 baseline';
       END IF;
     END $$;
     INSERT INTO firms(id,name) VALUES ('${firm}','Migration-only fixture');
@@ -52,13 +54,14 @@ test("migration-only R198 upgrade matches scratch schema semantics and preserves
     CREATE TEMP TABLE pre_invoice_evidence AS SELECT to_jsonb(i)-'content_revision' AS row FROM invoices i;
     CREATE TEMP TABLE pre_line_evidence AS SELECT to_jsonb(l) AS row FROM invoice_lines l;
     ${CATALOG_SQL}
+    ${migration0055.down}
     ${migration0054.down}
     ${migration0051.down}
     DROP TABLE import_run_chunks, import_runs, operations, invoice_drafts, clerk_reservations;
     ALTER TABLE invoice_approvals DROP COLUMN content_revision;
     ALTER TABLE invoices DROP COLUMN content_revision;
     DROP INDEX invoice_lines_number_uidx;
-    DELETE FROM _schema_migrations WHERE version BETWEEN 50 AND 54;
+    DELETE FROM _schema_migrations WHERE version BETWEEN 50 AND 55;
     ${migrations
       .map(
         (migration) => `${migration.up}
