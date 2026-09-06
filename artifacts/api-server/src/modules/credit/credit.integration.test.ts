@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import {
   confirmationsTable,
   consentRecordsTable,
@@ -82,9 +82,45 @@ const eligibleFacts: EligibilityFacts = {
   volumeVsPriorAverageBps: 10_000,
 };
 
+// R108: the Data Room aggregates every consenting business on the platform,
+// so this suite's k-anonymity assertions (suppressed below five businesses,
+// exactly five once the fifth assessment lands) need an EMPTY population to
+// start from, and assessments left by an earlier run on a reused scratch
+// database would raise it past k. The assessment ledger is append-only
+// (meridian_append_only), so the stale population is retired the way the
+// product retires a business: one layer-3 revoke per stale supplier, which
+// the Data Room's latest-consent join honours immediately. The api-server
+// suite already runs only against a database declared disposable
+// (E2E_DATABASE_DISPOSABLE=1 in the verify battery and in CI); without the
+// flag the suite fails fast with the reason instead of a misleading
+// k-anonymity assertion.
+async function retireStaleAssessmentPopulation(): Promise<void> {
+  const stale = await getDb()
+    .selectDistinct({ partyId: eligibilityAssessmentsTable.supplierPartyId })
+    .from(eligibilityAssessmentsTable)
+    .where(isNotNull(eligibilityAssessmentsTable.supplierPartyId));
+  if (stale.length === 0) return;
+  assert.equal(
+    process.env.E2E_DATABASE_DISPOSABLE,
+    "1",
+    "credit.integration needs an empty assessment population: set E2E_DATABASE_DISPOSABLE=1 to retire (layer-3 revoke) the businesses an earlier run left on this scratch database",
+  );
+  await getDb().insert(consentRecordsTable).values(
+    stale.map(({ partyId }) => ({
+      partyId: partyId as string,
+      layer: 3,
+      action: "revoke" as const,
+      scope: "credit_scoring",
+      basis: "consent",
+      channel: "test",
+    })),
+  );
+}
+
 before(async () => {
   await creditFlag.saveAndSet(true);
   await dataRoomFlag.saveAndSet(true);
+  await retireStaleAssessmentPopulation();
   const db = getDb();
   await db.insert(firmsTable).values({
     id: firmId,
