@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { LEDGER_TOKENS_SQL } from "./budget";
 import { getDb, runInBypassContext } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
 import { median } from "../invoice/date-math";
 

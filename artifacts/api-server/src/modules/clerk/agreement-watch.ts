@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { AUTO_RECONCILE_FLAG_KEY, AUTO_RECONCILE_THRESHOLD } from "./plan-steps";
 import {
   alertOnceViaAuditLedger,

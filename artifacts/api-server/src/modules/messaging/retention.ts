@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { atMostHourly } from "../clerk/watch-shared";
 
 // Messages-ledger retention. Every alert the platform sends lands one row in

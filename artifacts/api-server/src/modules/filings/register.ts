@@ -1,4 +1,4 @@
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { atMostHourly } from "../clerk/watch-shared";
 import { sweepFilingMint } from "./sweep";
 import { sweepFilingReminders } from "./reminders";

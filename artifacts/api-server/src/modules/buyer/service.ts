@@ -13,7 +13,7 @@ import {
 import { isPresentableAsEligible } from "../invoice/lifecycle.ts";
 import { recordConfirmation } from "../invoice/confirmations.ts";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { DomainError } from "../errors";
 import { assertBuyerPartyAccess, type Principal } from "../auth/rbac";
 import { partyNamesById } from "../party/party";

@@ -1,4 +1,4 @@
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { sweepObligationReminders } from "./reminders";
 
 // Wires the obligation deadline-reminder sweep onto the shared 1-minute loop

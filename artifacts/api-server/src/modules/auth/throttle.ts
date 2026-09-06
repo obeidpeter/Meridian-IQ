@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { pool } from "@workspace/db";
 import { bumpFixedWindow } from "../../lib/fixed-window";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { normalizeEmail } from "./session";
 
 // Persistent login throttle (SEC-02, SEC-M4). Two independent fixed-window

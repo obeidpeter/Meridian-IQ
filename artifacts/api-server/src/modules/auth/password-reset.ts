@@ -10,7 +10,7 @@ import { DomainError } from "../errors";
 import { hashPassword, normalizeEmail } from "./session";
 import { hashInviteToken } from "./invitations";
 import { appendAudit } from "../audit/audit";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import type { Principal } from "./rbac";
 
 // Password recovery (IDN-02), on the invitation rail's posture.

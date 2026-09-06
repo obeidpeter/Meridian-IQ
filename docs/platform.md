@@ -126,11 +126,17 @@ looked at. Reporting and attestation only: no identity federation.
 ## Background work (the pipeline worker)
 
 `modules/pipeline/pipeline.ts` runs three in-process loops: outbox drain,
-reconciliation sweep, and the registered compliance sweeps. Register new
-periodic work with `registerSweep("area.name", fn, { timeoutMs? })` —
+reconciliation sweep, and the registered compliance sweeps. Since R107 the
+sweep registry, per-sweep timeout, settle ceiling and pass runner live in
+`modules/pipeline/sweeps.ts`, the in-flight tracker in `in-flight.ts` and
+the advisory pass lock in `distributed-lock.ts`; pipeline.ts keeps the
+guarded passes and the timers and re-exports the public names, so both
+import paths work. Register new periodic work with
+`registerSweep("area.name", fn, { timeoutMs?, critical? })` from
+`modules/pipeline/sweeps` —
 wrapped `atMostHourly` when every worker tick would be too often. The sweep
 inventory lives in the code, not here: grep `registerSweep(` for the
-authoritative list (40 sweeps at R101).
+authoritative list (43 sweeps at R107).
 
 **Sweep hygiene (R101).** Every sweep is named, and the name is the label:
 `meridian_sweep_errors_total{sweep,kind}` counts each failure as `error` or

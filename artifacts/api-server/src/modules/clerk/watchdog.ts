@@ -8,7 +8,7 @@ import {
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled, setFlag } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { CLERK_FLAG_KEY } from "./gateway";
 import { sweepExpiredClaims } from "./claims";
 import { sweepExpiredCaseContent } from "./retention";

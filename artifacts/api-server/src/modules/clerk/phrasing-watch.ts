@@ -5,7 +5,7 @@ import {
   clerkPhrasingEvalRunsTable,
   type ClerkPhrasingEvalRun,
 } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../flags/flags";

@@ -13,7 +13,7 @@ import { appendAudit } from "../audit/audit";
 import { fanOutAlert } from "../messaging/fan-out";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { isFeatureEnabled } from "../flags/flags";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 
 // B2C reporting module (SME-08, C5). B2C transactions above NGN 50,000 must be
 // reported within 24 hours of capture; late reporting attracts a daily penalty.

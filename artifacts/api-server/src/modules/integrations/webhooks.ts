@@ -11,7 +11,7 @@ import {
   type FirmWebhookRow,
   type FirmWebhookDeliveryRow,
 } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { DomainError } from "../errors";
 import { logger } from "../../lib/logger";
 import { webhookFanoutOldestAge } from "../../lib/metrics";

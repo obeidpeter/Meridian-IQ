@@ -19,7 +19,7 @@ import { countFirmMissingBills } from "../invoice/missing-bills";
 import { sendMessage } from "../messaging/messaging";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import {
   GENERATION_SWEEP_TIMEOUT_MS,
   generationDeadline,

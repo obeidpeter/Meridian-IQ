@@ -1,4 +1,4 @@
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { sweepWhtReminders } from "./reminders";
 
 // The WHT credit-note chase sweep rides the minute loop UNWRAPPED (the

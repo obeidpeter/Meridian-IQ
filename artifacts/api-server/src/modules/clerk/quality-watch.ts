@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
-import { registerSweep } from "../pipeline/pipeline";
+import { registerSweep } from "../pipeline/sweeps";
 import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
 
 // Kept-rate drift watch — the accuracy sibling of resistance-watch.ts. The
