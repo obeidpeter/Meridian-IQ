@@ -15,6 +15,7 @@ import {
 } from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
 import { disableProductionDemoIdentities } from "./bootstrap/security";
+import { provisionProductionPilotOperator } from "./bootstrap/pilot-operator";
 import { assertSessionSigningConfigured } from "./modules/auth/session";
 import { markReady, markUnready } from "./lib/readiness";
 import { installGracefulShutdown } from "./lib/shutdown";
@@ -245,6 +246,14 @@ async function bootstrapApplication(isProduction: boolean): Promise<void> {
       { disabled },
       "Disabled copied demonstration identities in production",
     );
+  }
+  const pilotOperator = await provisionProductionPilotOperator();
+  if (pilotOperator === "provisioned") {
+    logger.warn(
+      "Provisioned the first individual production operator; remove the pilot operator bootstrap settings and restart",
+    );
+  } else if (pilotOperator === "already-provisioned") {
+    logger.info("Individual production operator already provisioned");
   }
 }
 

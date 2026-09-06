@@ -25,3 +25,4 @@
 - [Autoscale wake-up sweep](autoscale-wakeup-sweep.md) — prod scales to zero; overnight alerts need an external ~5-min ping of the public /api/internal/sweep trigger (separate Scheduled Deployment app).
 - [Verifying prod guardrails](prod-guardrail-verification.md) — deploy logs drop pino boot lines; prove boot-applied migrations via _schema_migrations.applied_at, not log strings.
 - [CI DB-backed tests](ci-db-backed-tests.md) — quality-gate must push schema AND apply guardrail migrations (meridian_app grants/RLS) before api-server tests; suites opening pg pools need --test-force-exit.
+- [Production bootstrap claims](production-bootstrap-claims.md) — privileged bootstrap consumption is permanent security state and must survive application/migration rollback.

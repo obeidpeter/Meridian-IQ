@@ -161,6 +161,33 @@ export const RELIABILITY_LADDER = [
       fn("meridian_import_run_checkpoint", false),
     ],
   },
+  {
+    version: 55,
+    atTop: [
+      secured(
+        "production_bootstrap_claims",
+        "meridian_production_bootstrap_bypass",
+      ),
+      grants("production_bootstrap_claims", false),
+      trigger(
+        "production_bootstrap_claims",
+        "meridian_bootstrap_claim_immutable",
+      ),
+    ],
+    // This security state is deliberately additive and survives application
+    // rollback so consumed privileged-bootstrap credentials cannot become live.
+    afterRollback: [
+      secured(
+        "production_bootstrap_claims",
+        "meridian_production_bootstrap_bypass",
+      ),
+      grants("production_bootstrap_claims", false),
+      trigger(
+        "production_bootstrap_claims",
+        "meridian_bootstrap_claim_immutable",
+      ),
+    ],
+  },
 ];
 
 export async function reliabilityRollbackFixtures(pool: pg.Pool) {
@@ -175,6 +202,7 @@ export async function reliabilityRollbackFixtures(pool: pg.Pool) {
   const reservation = randomUUID();
   const run = randomUUID();
   const importOperation = randomUUID();
+  const bootstrapClaimKey = "rollback-ladder-0055";
   await pool.query(
     "INSERT INTO firms (id,name) VALUES ($1,'Rollback fixture')",
     [firm],
@@ -254,6 +282,18 @@ export async function reliabilityRollbackFixtures(pool: pg.Pool) {
   } finally {
     client.release();
   }
+  await pool.query(
+    `INSERT INTO production_bootstrap_claims (key, operator_user_id)
+     VALUES ($1, $2)
+     ON CONFLICT (key) DO NOTHING`,
+    [bootstrapClaimKey, randomUUID()],
+  );
+  const bootstrapClaimBefore = (
+    await pool.query(
+      "SELECT to_jsonb(t) AS row FROM production_bootstrap_claims t WHERE key=$1",
+      [bootstrapClaimKey],
+    )
+  ).rows[0]?.row;
 
   // PostgreSQL jsonb snapshots preserve all values, including timestamps and IDs.
   const snapshots = new Map<
@@ -389,6 +429,18 @@ export async function reliabilityRollbackFixtures(pool: pg.Pool) {
   }
 
   const afterRollback = async (version: number) => {
+    if (version === 55) {
+      assert.deepEqual(
+        (
+          await pool.query(
+            "SELECT to_jsonb(t) AS row FROM production_bootstrap_claims t WHERE key=$1",
+            [bootstrapClaimKey],
+          )
+        ).rows[0]?.row,
+        bootstrapClaimBefore,
+        "consumed privileged-bootstrap claim survives application rollback",
+      );
+    }
     if (version === 50) {
       assert.deepEqual(
         (
@@ -535,6 +587,7 @@ export async function reliabilityRollbackFixtures(pool: pg.Pool) {
         "the exact reviewed revision survives rollback and reapply",
       );
       assert.equal(preserved.note, "Retain approval evidence");
+      await afterRollback(55);
       await afterRollback(50);
       const legacy = (
         await pool.query(

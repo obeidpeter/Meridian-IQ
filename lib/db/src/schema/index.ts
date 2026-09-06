@@ -33,3 +33,4 @@ export * from "./operations.ts";
 export * from "./invoice-drafts.ts";
 export * from "./clerk-reservations.ts";
 export * from "./import-runs.ts";
+export * from "./bootstrap.ts";
