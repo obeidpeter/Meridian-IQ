@@ -151,4 +151,4 @@ export async function sweepSpendWatch(
   });
 }
 
-registerSweep("clerk.spend_watch", atMostHourly(sweepSpendWatch));
+registerSweep("clerk.spend_watch", atMostHourly(sweepSpendWatch), { critical: false });

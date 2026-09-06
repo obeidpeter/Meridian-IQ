@@ -149,7 +149,7 @@ registerSweep("clerk.phrasing_auto_eval", async function sweepPhrasingAutoEval()
       "phrasing lane: nightly eval skipped (clerk disabled or provider unavailable)",
     );
   }
-});
+}, { critical: false });
 
 export interface PhrasingWatchResult {
   checked: boolean;
@@ -215,4 +215,4 @@ export async function sweepPhrasingWatch(
   });
 }
 
-registerSweep("clerk.phrasing_watch", atMostHourly(sweepPhrasingWatch));
+registerSweep("clerk.phrasing_watch", atMostHourly(sweepPhrasingWatch), { critical: false });

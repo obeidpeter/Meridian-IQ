@@ -2,13 +2,45 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 
+// R105: two release profiles. `pilot` (the default) is the pre-pilot path —
+// the verified CI artifact starts as RUN after a schema sync, with HOLD as a
+// plain maintenance switch. `governed` keeps the permit-bound HOLD/RUN
+// ceremony (recovery plan, held evidence, activation permit, drained traffic)
+// for when a live tenant base justifies it. Nothing in either profile
+// rebuilds, installs or trusts unverified bytes.
+export function releaseProfile(env) {
+  const profile = env.RELEASE_PROFILE ?? "pilot";
+  assert.ok(
+    profile === "pilot" || profile === "governed",
+    "RELEASE_PROFILE must be pilot or governed",
+  );
+  return profile;
+}
+
 export function runtimeState(env) {
-  const state = env.RELEASE_RUNTIME_STATE ?? "HOLD";
+  const state =
+    env.RELEASE_RUNTIME_STATE ??
+    (releaseProfile(env) === "pilot" ? "RUN" : "HOLD");
   assert.ok(
     state === "HOLD" || state === "RUN",
     "RELEASE_RUNTIME_STATE must be HOLD or RUN",
   );
   return state;
+}
+
+/** What a pilot-profile HOLD reports: identity only, no governed evidence. */
+export function pilotIdentity(manifest, env) {
+  assert.match(
+    manifest.source?.revision ?? "",
+    /^[a-f0-9]{40}$/,
+    "candidate must be a full SHA",
+  );
+  return {
+    profile: "pilot",
+    buildRevision: manifest.source.revision,
+    contractVersion: manifest.contractVersion,
+    manifestSha256: env.RELEASE_MANIFEST_SHA256,
+  };
 }
 
 export function deploymentOrigin(base) {

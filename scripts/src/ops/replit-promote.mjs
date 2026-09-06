@@ -1,5 +1,6 @@
 // Native Publish validates staged CI output; it never compiles or downloads it.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -23,6 +24,8 @@ import { loadHeldEvidence } from "./postdeploy.mjs";
 import {
   activationBindings,
   maintenanceIdentity,
+  pilotIdentity,
+  releaseProfile,
   runtimeState,
   startMaintenanceServer,
 } from "./maintenance-server.mjs";
@@ -33,6 +36,49 @@ export const REPLIT_APPS = [
   "mobile",
 ];
 const manifestPath = (root) => path.join(root, "release/build-manifest.json");
+
+// The manifest checksum. Governed: only an independently supplied
+// RELEASE_MANIFEST_SHA256 is trusted. Pilot: the sidecar CI wrote beside the
+// manifest (`<sha256>  build-manifest.json`) is enough — it proves the staged
+// bytes are the CI upload, which is the guarantee a pre-pilot needs; an
+// explicit RELEASE_MANIFEST_SHA256 still wins when set.
+function withManifestChecksum(env, root) {
+  if (env.RELEASE_MANIFEST_SHA256 || releaseProfile(env) === "governed")
+    return env;
+  const sidecar = `${manifestPath(root)}.sha256`;
+  assert.ok(
+    existsSync(sidecar),
+    "pilot Publish needs release/build-manifest.json.sha256 beside the staged manifest (or RELEASE_MANIFEST_SHA256)",
+  );
+  const checksum = readFileSync(sidecar, "utf8").trim().split(/\s+/)[0] ?? "";
+  assert.match(checksum, /^[a-f0-9]{64}$/, "malformed manifest checksum sidecar");
+  return { ...env, RELEASE_MANIFEST_SHA256: checksum };
+}
+
+// Pilot profile: the API build syncs the target schema — plain `push` (a
+// destructive diff prompts, gets EOF without a terminal and fails closed) and
+// then the guardrail migrations — so an additive change lands with the
+// deploy and anything destructive needs a reviewed migration. Only the API
+// build touches the database; web builds verify bytes only.
+function pilotSchemaSync(env, root, dependencies) {
+  assert.ok(
+    env.DATABASE_URL,
+    "the pilot API build needs DATABASE_URL to sync the target schema",
+  );
+  const execute = dependencies.execute ?? run;
+  for (const script of ["push", "migrate"]) {
+    const result = execute("pnpm", ["--filter", "@workspace/db", "run", script], {
+      cwd: root,
+      env,
+      stdio: "inherit",
+    });
+    assert.equal(
+      result.status,
+      0,
+      `schema ${script} failed: the Publish build stops here; a destructive diff needs a reviewed migration`,
+    );
+  }
+}
 
 function assertPublishable(app) {
   assert.ok(REPLIT_APPS.includes(app), `unsupported promotion app: ${app}`);
@@ -109,13 +155,19 @@ export function promoteReplit(
   root = ROOT,
   dependencies = {},
 ) {
+  env = withManifestChecksum(env, root);
+  const profile = releaseProfile(env);
   const manifest = stagedManifest(app, env, root);
   const state = app === "api-server" ? runtimeState(env) : undefined;
   const mode =
     app === "api-server" ? env.RELEASE_RECOVERY_MODE : undefined;
-  if (app === "api-server")
+  if (app === "api-server" && profile === "governed")
     logExecutionContext(maintenanceIdentity(manifest, env), env);
-  if (state === "RUN" && mode === "maintenance-forward")
+  if (
+    state === "RUN" &&
+    profile === "governed" &&
+    mode === "maintenance-forward"
+  )
     loadActivationPermit(env, activationBindings(manifest, env), {
       phase: "promotion",
     });
@@ -166,7 +218,12 @@ export function promoteReplit(
   );
   verifyReplitArtifact(manifest, root);
 
-  if (app === "api-server") {
+  if (app === "api-server" && profile === "pilot") {
+    pilotSchemaSync(env, root, dependencies);
+    console.log(
+      `replit: pilot profile — verified artifact ${manifest.source.revision}, schema synced; the API starts in ${state}`,
+    );
+  } else if (app === "api-server") {
     // All services verify all seven builds. Only the API needs target DB credentials;
     // its mandatory read-only preflight retains recovery and semantic catalog gates.
     release(
@@ -227,6 +284,7 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
     "production",
     "Replit server startup requires NODE_ENV=production",
   );
+  env = withManifestChecksum(env, root);
   const manifest = stagedManifest(app, env, root);
   assert.deepEqual(
     assetInventory(root),
@@ -239,7 +297,25 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
     manifest.mobile,
     "mobile deployment identity differs from CI artifact",
   );
-  if (app === "api-server") {
+  if (app === "api-server" && releaseProfile(env) === "pilot") {
+    const state = runtimeState(env);
+    if (state === "HOLD") {
+      assert.match(
+        env.PORT ?? "",
+        /^[1-9][0-9]{0,4}$/,
+        "HOLD requires a valid PORT",
+      );
+      console.log(
+        `replit: pilot HOLD revision ${manifest.source.revision}; API not imported; maintenance health is not API readiness`,
+      );
+      return startMaintenanceServer(pilotIdentity(manifest, env), {
+        port: Number(env.PORT),
+      });
+    }
+    console.log(
+      `replit: pilot RUN revision ${manifest.source.revision}; no activation permit is required in this profile`,
+    );
+  } else if (app === "api-server") {
     const state = runtimeState(env);
     const mode = recoveryMode(env);
     const identity = maintenanceIdentity(manifest, env);
@@ -319,6 +395,14 @@ export function releaseEnvForCli(
     );
     return env;
   }
+  if (releaseProfile(env) === "pilot") {
+    assert.equal(
+      extra.length,
+      0,
+      "pilot release mode is configured with RELEASE_RUNTIME_STATE; command selection is governed-only",
+    );
+    return env;
+  }
   assert.equal(
     extra.length,
     1,
@@ -346,7 +430,7 @@ if (
     const [action, app, ...extra] = process.argv.slice(2);
     assertPublishable(app);
     const env = releaseEnvForCli(extra, process.env, app);
-    if (app === "api-server")
+    if (app === "api-server" && releaseProfile(env) === "governed")
       Object.assign(process.env, {
         RELEASE_RUNTIME_STATE: env.RELEASE_RUNTIME_STATE,
         RELEASE_RECOVERY_MODE: env.RELEASE_RECOVERY_MODE,

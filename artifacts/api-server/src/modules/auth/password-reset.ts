@@ -237,4 +237,4 @@ export async function sweepExpiredPasswordResets(): Promise<void> {
   });
 }
 
-registerSweep("auth.password_resets", sweepExpiredPasswordResets);
+registerSweep("auth.password_resets", sweepExpiredPasswordResets, { critical: false });

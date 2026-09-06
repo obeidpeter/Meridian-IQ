@@ -240,4 +240,4 @@ export async function sweepAgreementWatch(
   });
 }
 
-registerSweep("clerk.agreement_watch", atMostHourly(sweepAgreementWatch));
+registerSweep("clerk.agreement_watch", atMostHourly(sweepAgreementWatch), { critical: false });

@@ -27,7 +27,9 @@ import {
   REPLIT_APPS,
   releaseEnvForCli,
   startReplitApi,
+  startReplitService,
 } from "./replit-promote.mjs";
+import { releaseProfile, runtimeState } from "./maintenance-server.mjs";
 import {
   validateMobileArtifact,
   verifyMobileServing,
@@ -40,6 +42,7 @@ const rollbackRevision = "a".repeat(40);
 
 test("explicit CLI modes override inherited release state without embedding rollback metadata", () => {
   const inherited = {
+    RELEASE_PROFILE: "governed",
     RELEASE_RUNTIME_STATE: "RUN",
     RELEASE_RECOVERY_MODE: "maintenance-forward",
     RELEASE_ROLLBACK_REVISION: "b".repeat(40),
@@ -240,6 +243,7 @@ function fixture(t) {
   };
   const env = {
     NODE_ENV: "production",
+    RELEASE_PROFILE: "governed",
     DATABASE_URL: "postgres://localhost/disposable",
     RELEASE_ROLLBACK_REVISION: "a".repeat(40),
     RELEASE_BASE_URL: "https://fixture.invalid",
@@ -718,16 +722,18 @@ test("seven production descriptors use verified promotion and preserve developme
     if (app === "api-server") {
       assert.ok(
         production.includes(
-          '["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server", "--hold"]',
+          '["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server"]',
         ),
       );
       assert.ok(
         production.includes(
-          '["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server", "--hold"]',
+          '["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "start", "api-server"]',
         ),
       );
-      assert.doesNotMatch(production, /ea275be456a2c19babd06139de10cdbe322bc049/);
-      assert.doesNotMatch(production, /RELEASE_(?:RUNTIME_STATE|RECOVERY_MODE|ROLLBACK_REVISION)\s*=/);
+      // R105: the pilot profile is explicit in both phases; no HOLD pin, no
+      // rollback revision, no governed evidence in the descriptor.
+      assert.equal(production.match(/RELEASE_PROFILE = "pilot"/g)?.length, 2);
+      assert.doesNotMatch(production, /RELEASE_RUNTIME_STATE|RELEASE_ROLLBACK_REVISION|--hold/);
       assert.ok(production.includes('path = "/api/healthz"'));
     } else {
       assert.match(
@@ -1308,5 +1314,154 @@ test("provider diagnostics are sanitized in promotion and runtime without rewrit
     );
     const body = JSON.parse(result.stdout.trim().split("\n").at(-1));
     assert.equal(body.providerReplId, provider);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R105: the pilot profile (the default) — verified artifact → schema sync → RUN
+// without recovery plan, permit or held evidence; governed stays opt-in.
+
+function pilotEnv(env) {
+  const rest = { ...env };
+  for (const key of [
+    "RELEASE_PROFILE",
+    "RELEASE_ROLLBACK_REVISION",
+    "RELEASE_BASE_URL",
+    "RELEASE_TARGET_REPL_ID",
+    "RELEASE_RECOVERY_PLAN_SHA256",
+    "RELEASE_BACKUP_SHA256",
+  ])
+    delete rest[key];
+  return rest;
+}
+
+test("release profile defaults to pilot, RUN by default, and refuses unknown values", () => {
+  assert.equal(releaseProfile({}), "pilot");
+  assert.equal(runtimeState({}), "RUN");
+  assert.equal(runtimeState({ RELEASE_RUNTIME_STATE: "HOLD" }), "HOLD");
+  assert.equal(runtimeState({ RELEASE_PROFILE: "governed" }), "HOLD");
+  assert.throws(() => releaseProfile({ RELEASE_PROFILE: "staging" }), /pilot or governed/);
+  assert.throws(() => runtimeState({ RELEASE_RUNTIME_STATE: "run" }), /HOLD or RUN/);
+});
+
+test("pilot promotion verifies the artifact, syncs the schema and starts RUN without governed evidence", (t) => {
+  const f = fixture(t);
+  const env = pilotEnv(f.env);
+  const executed = [];
+  const dependencies = {
+    query: () => assert.fail("the pilot profile never runs the governed preflight"),
+    execute: (command, args) => {
+      executed.push([command, ...args].join(" "));
+      return { status: 0 };
+    },
+  };
+  const manifest = promoteReplit("api-server", env, f.root, dependencies);
+  assert.equal(manifest.source.revision, f.manifest.source.revision);
+  assert.deepEqual(executed, [
+    "pnpm --filter @workspace/db run push",
+    "pnpm --filter @workspace/db run migrate",
+  ]);
+  assert.throws(
+    () =>
+      promoteReplit("api-server", env, f.root, {
+        ...dependencies,
+        execute: () => ({ status: 1 }),
+      }),
+    /schema push failed/,
+  );
+  assert.throws(
+    () => promoteReplit("api-server", { ...env, DATABASE_URL: "" }, f.root, dependencies),
+    /DATABASE_URL/,
+  );
+  // Web builds verify bytes only: no database, no schema sync.
+  promoteReplit("landing", { ...env, DATABASE_URL: "" }, f.root, {
+    execute: () => assert.fail("web builds run no schema sync"),
+  });
+  // Tampering still refuses before any schema work.
+  f.write("artifacts/console/dist/public/index.html", "changed after build");
+  assert.throws(
+    () => promoteReplit("api-server", env, f.root, dependencies),
+    /differ|mismatch|tamper/i,
+  );
+  f.write("artifacts/console/dist/public/index.html", "<main>console</main>");
+  // Start: RUN by default, no permit, exact CI revision set before import.
+  for (const key of Object.keys(f.env)) delete f.env[key];
+  Object.assign(f.env, env);
+  rmSync(path.join(f.root, ".git"), { recursive: true });
+  f.env.PATH = "";
+  const started = f.cli("start", "api-server");
+  assert.equal(started.status, 0, started.stderr);
+  const output = JSON.parse(started.stdout.trim().split("\n").at(-1));
+  assert.equal(output.executed, true);
+  assert.equal(output.revision, f.manifest.source.revision);
+  assert.equal(output.expected, f.manifest.source.revision);
+  assert.match(started.stdout, /pilot RUN/);
+});
+
+test("pilot accepts the CI checksum sidecar, refuses a missing or tampered one, and still honours an explicit checksum", (t) => {
+  const f = fixture(t);
+  const env = pilotEnv(f.env);
+  const dependencies = { execute: () => ({ status: 0 }) };
+  const bytes = readFileSync(path.join(f.root, "release/build-manifest.json"));
+  delete env.RELEASE_MANIFEST_SHA256;
+  assert.throws(
+    () => promoteReplit("landing", env, f.root, dependencies),
+    /build-manifest\.json\.sha256/,
+  );
+  f.write(
+    "release/build-manifest.json.sha256",
+    `${digest(bytes)}  build-manifest.json\n`,
+  );
+  promoteReplit("landing", env, f.root, dependencies);
+  f.write("release/build-manifest.json.sha256", `${"e".repeat(64)}  build-manifest.json\n`);
+  assert.throws(
+    () => promoteReplit("landing", env, f.root, dependencies),
+    /checksum mismatch/,
+  );
+  f.write("release/build-manifest.json.sha256", "not-a-checksum\n");
+  assert.throws(
+    () => promoteReplit("landing", env, f.root, dependencies),
+    /malformed manifest checksum sidecar/,
+  );
+  // An explicit value wins over the sidecar.
+  promoteReplit("landing", { ...env, RELEASE_MANIFEST_SHA256: digest(bytes) }, f.root, dependencies);
+  // Governed never falls back to the sidecar.
+  f.write("release/build-manifest.json.sha256", `${digest(bytes)}  build-manifest.json\n`);
+  assert.throws(
+    () => promoteReplit("landing", { ...env, RELEASE_PROFILE: "governed" }, f.root, dependencies),
+    /trusted CI artifact record/,
+  );
+});
+
+test("pilot HOLD is a plain maintenance switch: health only, no API import, no permit", async (t) => {
+  const f = fixture(t);
+  const env = { ...pilotEnv(f.env), RELEASE_RUNTIME_STATE: "HOLD" };
+  const reservation = createServer();
+  await new Promise((resolve) => reservation.listen(0, "127.0.0.1", resolve));
+  const port = reservation.address().port;
+  await new Promise((resolve) => reservation.close(resolve));
+  rmSync(path.join(f.root, ".git"), { recursive: true });
+  const server = await startReplitService(
+    "api-server",
+    { ...env, PORT: String(port) },
+    f.root,
+  );
+  try {
+    const health = await fetch(`http://127.0.0.1:${port}/api/healthz`);
+    assert.equal(health.status, 200);
+    const body = await health.json();
+    assert.equal(body.mode, "hold");
+    assert.equal(body.apiImported, false);
+    assert.equal(body.profile, "pilot");
+    assert.equal(body.buildRevision, f.manifest.source.revision);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/readyz`)).status, 503);
+    assert.equal(
+      (await fetch(`http://127.0.0.1:${port}/api/invoices`)).status,
+      503,
+      "business requests are refused while held",
+    );
+  } finally {
+    server.close();
+    server.closeAllConnections();
   }
 });

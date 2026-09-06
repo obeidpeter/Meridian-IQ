@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -21,8 +21,9 @@ import type { PushTemplateKey } from "../push/push";
 // function and window constants, its claim ledger, and its template keys.
 //
 // Sweep-only: run without an enclosing database transaction, including when
-// invoked by the HTTP scheduler. Candidate and preference reads use short
-// contexts; each per-row CLAIM commits before any send leaves. Messaging and
+// invoked by the HTTP scheduler. The candidate read and ONE batched
+// preference read per pass use short contexts; each per-row CLAIM commits
+// before any send leaves. Messaging and
 // push own their separate database stages around transaction-free provider I/O.
 // Holding one bypass transaction across the whole pass — claims,
 // prefs reads AND the provider sends — meant a mid-pass failure rolled back
@@ -68,6 +69,24 @@ export async function runClaimFirstReminderSweep<Row>(
   cfg: ReminderSweepConfig<Row>,
 ): Promise<number> {
   const messagingOn = await isFeatureEnabled("messaging_notifications", null);
+  // One batched preferences read per pass (R105) instead of one short
+  // transaction per reminder; a pass is bounded by the candidate fetch, so the
+  // IN-list is at most 2x the batch limit. Read before any claim so no claim
+  // waits on it; a preference that changes mid-pass is picked up next pass.
+  const prefsByParty = new Map<
+    string,
+    typeof alertPreferencesTable.$inferSelect
+  >();
+  const partyIds = [...new Set(candidates.map((row) => cfg.clientPartyIdOf(row)))];
+  if (messagingOn && partyIds.length > 0) {
+    const rows = await runInBypassContext(() =>
+      getDb()
+        .select()
+        .from(alertPreferencesTable)
+        .where(inArray(alertPreferencesTable.clientPartyId, partyIds)),
+    );
+    for (const prefs of rows) prefsByParty.set(prefs.clientPartyId, prefs);
+  }
   let claimed = 0;
   for (const row of candidates) {
     if (claimed >= cfg.batchLimit) break;
@@ -90,13 +109,7 @@ export async function runClaimFirstReminderSweep<Row>(
     if (days < -cfg.staleOverdueDays) continue;
 
     const clientPartyId = cfg.clientPartyIdOf(row);
-    const [prefs] = await runInBypassContext(() =>
-      getDb()
-        .select()
-        .from(alertPreferencesTable)
-        .where(sql`${alertPreferencesTable.clientPartyId} = ${clientPartyId}`)
-        .limit(1),
-    );
+    const prefs = prefsByParty.get(clientPartyId);
     // No prefs row means the table defaults apply: whatsapp/email/push on,
     // sms off, deadline alerts on.
     if (prefs && !prefs.deadlineAlerts) continue;

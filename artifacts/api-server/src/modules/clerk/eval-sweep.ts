@@ -41,4 +41,5 @@ registerSweep(
       "clerk learning loop: nightly eval run complete",
     );
   },
+  { critical: false },
 );

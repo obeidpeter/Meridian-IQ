@@ -5,8 +5,11 @@ SME clients prepare, validate, stamp (via FIRS/MBS rails), and reconcile
 invoices, with an operator "Compliance Desk" and an AI intake assistant
 ("Clerk"). This file is the lean index — the deep references are
 `docs/clerk-ai.md` (the AI assistant), `docs/platform.md` (tenancy, auth,
-background work, rails, exports) and `docs/architecture.md` (the C4 context
-and container maps plus the decision log — start there for the big picture).
+background work, rails, exports), `docs/architecture.md` (the C4 context
+and container maps plus the decision log — start there for the big picture),
+`docs/operations.md` (the release path: Publish, the pilot and governed
+profiles, backups, rollback), `docs/development.md` / `docs/environment.md` (local setup and
+every env name) and `docs/repository-map.md` / `docs/troubleshooting.md`.
 
 ## Monorepo layout (pnpm workspaces)
 
@@ -29,7 +32,7 @@ lib/
   web-ui            Design-system primitives + shell shared by the web apps
   web-config        The one Vite config (PORT/BASE_PATH contract, CSP)
   integrations-openai-ai-server   Model-provider client (imported ONLY by modules/clerk/provider.ts)
-scripts/            e2e harness (Playwright) + dev tooling
+scripts/            e2e harness (Playwright), ops (release, backup, promote, postdeploy) + quality gates
 ```
 
 ## Contract-first: the one workflow to internalize
@@ -49,13 +52,14 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.98.0`).
+contract change (it is currently `0.99.0`).
 
 ## Clerk AI — the principles (details: docs/clerk-ai.md)
 
 Clerk never files anything: extraction proposes, a human disposes, and
 approval creates a DRAFT invoice only. Every model call flows through
-`modules/clerk/gateway.ts` — kill switch (`clerk_ai` flag), append-only
+`modules/clerk/gateway.ts` — kill switch (the `clerk_ai_runtime` flag; `clerk_ai`
+is the per-firm entitlement), append-only
 inference ledger written on the RAW pool (spend accounting survives any
 rollback), schema-validated output, fail closed — and is capped by a per-firm
 monthly token budget checked BEFORE the provider is touched and again in the
@@ -80,9 +84,11 @@ from `drizzle push`; RLS policies/triggers come from the numbered guardrail
 migrations in `lib/db/src/migrations` (a new tenant table needs a policy
 migration). Every production boot re-applies the guardrail migrations
 idempotently under an advisory lock and holds readiness until they verify
-(D5) — the post-merge script and `ops:release` run them too, so a merge
-never leaves the RLS window open. Two gotchas you must not learn the hard
-way:
+(D5) — the post-merge hook runs the versioned migrations too, so a merge
+never leaves the RLS window open. `ops:release` is a read-only preflight and
+never pushes schema; nothing pushes schema against serving traffic
+(`docs/operations.md` § Database Safety). Two gotchas you must not learn the
+hard way:
 
 - **SEC-03.** Firm-keyed RLS shares a firm across all its `client_user`s, so
   a client route must ALSO call `assertClientPartyScope` / filter by
@@ -109,6 +115,7 @@ observability (`/api/healthz`, `/api/readyz`, `/api/metrics`).
 A scratch Postgres 16 is required (`DATABASE_URL=postgresql://…/meridian_ci`).
 
 ```
+pnpm run check                                  # architecture + secret + docs gates, typecheck, lint, DB-free unit suites (incl. api-server test:pure)
 pnpm --filter @workspace/api-spec run codegen   # must produce zero drift
 pnpm run typecheck                              # libs + all packages
 pnpm run lint
@@ -125,19 +132,38 @@ pnpm --filter @workspace/buyer-portal run test
 pnpm --filter @workspace/landing run test
 pnpm --filter @workspace/penalty-calculator run test
 pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
+pnpm --filter @workspace/scripts run test:reliability     # release/ops, worker, load-tool and journey-helper regressions
+pnpm --filter @workspace/scripts run test:accessibility   # axe engine + keyboard assertion regression
 # web builds use checked-in defaults; deployment may override BASE_PATH + PORT
 pnpm run build
 # then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 183 checks vs real builds + DB (standard seed run)
+pnpm --filter @workspace/scripts run e2e        # 424 checks vs real builds + DB (standard seed run)
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of the above.
+CI (`.github/workflows/ci.yml`) runs all of the above plus the release
+artifact steps: migration-only upgrade parity, a snapshot-consistent backup
+retained and restored with a full catalog check, the PDF-worker and mobile
+package verifications, the accessibility matrices across public and signed-in
+states, lazy-route bundle budgets, and the stamped immutable build manifest
+that Publish later consumes.
 
 ## Deployment notes
 
-- After a merge, **restart the Replit api-server workflow** — otherwise the
-  deployed `dist` is stale and the version-skew banner fires. Schema `push` and
-  the guardrail migrations run on boot, so new columns/policies land with that
-  restart.
+- Deployment is the release path in `docs/operations.md`, not a workflow
+  restart. Replit Publish runs `scripts/src/ops/replit-promote.mjs
+  build|start api-server` against the exact immutable CI artifact
+  (`release/build-manifest.json` + its `.sha256` sidecar + the seven `dist`
+  trees); it never rebuilds or installs. Under the default **pilot profile**
+  (`RELEASE_PROFILE=pilot`, ADR 0004) the API build syncs the target schema —
+  plain `push`, which fails the build on a destructive diff, then the
+  guardrail migrations — and the API starts as RUN; `RELEASE_RUNTIME_STATE=
+  HOLD` is a plain maintenance switch. The **governed profile** keeps the
+  HOLD-by-default, permit-bound RUN ceremony with `ops:release` as its
+  read-only preflight. `ops:postdeploy` is the after-the-fact parity check in
+  both.
+- A destructive schema change never reaches production by push: it needs a
+  reviewed versioned migration. The boot-time guardrail re-assertion (D5)
+  still runs, and the stale-build banner clears once the promoted API reports
+  the contract version the web bundles were built with.
 - `FRAME_ANCESTORS` env overrides the clickjacking allowlist per deployment
   (defaults to `'self'` + the Replit preview domains).

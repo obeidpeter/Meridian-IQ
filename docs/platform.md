@@ -498,6 +498,30 @@ piece of state that was process-local, the login throttle, is now in
 Postgres (`login_attempts`), so its caps hold cluster-wide. On Autoscale
 (scales to zero), the in-process timers freeze while idle; an external
 scheduler pings `GET /api/internal/sweep` to run one full pass on demand.
+Since #203 the route reports the pass honestly: 200 `ok` when the sweeps,
+the drain and the reconcile all ran clean; 202 `busy` (Retry-After 5) when
+another owner holds a pass, without clearing the last failure heartbeat;
+503 `partial_failure` (Retry-After 60, aggregate failure counts, no tenant
+data or raw errors) when any of them failed — a failed claim fails the pass
+instead of looking like an empty queue, and timed-out work keeps its lock
+until it settles. HTTP-triggered passes run the same short explicit
+database contexts as the timer (breaker reads, reminder candidates and
+preferences), never a transaction around rail or provider I/O.
+Since R105 every sweep is registered as critical (the default) or
+best-effort (`critical: false`: retention purges, the Clerk watches, evals,
+digests, statements and briefs, memory indexing, buyer exposures, onboarding
+runs, push receipts): only a critical sweep, the drain or the reconcile fails
+the pass and the `scheduled_work` heartbeat, while a best-effort failure
+rides on a 200 as `degraded: [names]`; the 503 body lists `failedSweeps`
+(static names, never tenant data). A pass waits for a timed-out sweep only up
+to the settle ceiling (`SWEEP_SETTLE_CEILING_MS`, default twice the sweep's
+own timeout), then counts `kind="abandoned"`, appends one
+`ops.sweep.pass_abandoned` health alert per stuck sweep and releases its
+lock, so a sweep that ignores its abort signal can no longer stall every
+later pass; a later pass skips a sweep still in flight. The Expo push
+transport, where every unbounded sweep bottomed out, is bounded by
+`EXPO_TIMEOUT_MS` (5 s), and reminder passes read alert preferences in one
+batched query.
 
 ## Messaging, inbound rails & the notification inbox
 
@@ -1410,14 +1434,18 @@ pnpm --filter @workspace/scripts run ops:restore-drill`. Dumps the source,
   this proves it every run). Prints PASS/FAIL per assertion plus dump/restore
   timings. CI runs it on every merge against the CI database; run it
   per-release too — an untested backup is a hope, not a backup.
-- **Release**: `ops:release -- --yes` is a read-only online preflight requiring
+- **Release** (pilot profile, the default — ADR 0004): one Replit Publish of
+  the green commit's CI artifact; the API build verifies the staged bytes and
+  syncs the schema (plain `push`, which fails closed on a destructive diff,
+  then the guardrail migrations), and the API starts as RUN.
+- **Release** (governed profile): `ops:release -- --yes` is a read-only online preflight requiring
   the trusted CI manifest/checksum, rollback revision, recovery evidence and
   semantic catalog parity. It does not push schema or deploy. Apply reviewed
   additive migrations before promotion; retain traffic isolation for explicit
   offline baseline bootstrap and any failed bootstrap. `RELEASE_PUSH_FORCE` is
   rejected. Post-merge uses frozen installation and versioned migrations only.
   `ops:postdeploy` verifies actual source/contract/assets and database parity.
-  Follow [runtime evidence and release safety](runtime-evidence-r198.md) for the
+  Follow [R198 runtime evidence record](history/2026-09-r198/runtime-evidence-r198.md) for the
   complete prerequisites, trust boundary and maintenance procedure.
 
 **Honest DR statement.** RPO = your backup cadence: the tool does not

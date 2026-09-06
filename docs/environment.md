@@ -88,8 +88,8 @@ Quality and regression alerts:
 
 ## Background Work, Readiness, and Retention
 
-`SWEEP_URL`, `SWEEP_TIMEOUT_MS`, `SWEEP_RATE_LIMIT_PER_MIN`,
-`OUTBOX_LEASE_MS`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_RETRY_HORIZON_MS`,
+`SWEEP_URL`, `SWEEP_TIMEOUT_MS`, `SWEEP_SETTLE_CEILING_MS`,
+`SWEEP_RATE_LIMIT_PER_MIN`, `OUTBOX_LEASE_MS`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_RETRY_HORIZON_MS`,
 `SCHEDULED_WORK_MAX_AGE_MS`, `BACKUP_MAX_AGE_MS`,
 `RESTORE_DRILL_MAX_AGE_MS`, `OUTBOX_RELEASE_MAX_AGE_SECONDS`,
 `MESSAGES_RETENTION_DAYS`, `ADVISORY_INBOX_VERIFIED_AT`,
@@ -98,6 +98,14 @@ Quality and regression alerts:
 
 Timestamp evidence uses ISO 8601. Future, malformed, missing, or stale
 evidence warns in non-production and blocks where production policy requires.
+
+`SWEEP_SETTLE_CEILING_MS` (unset = twice the timed-out sweep's own timeout,
+minimum 1000) bounds how long a sweep pass keeps its in-process guard and
+distributed lock waiting for a timed-out sweep to settle. Past the ceiling the
+pass records `meridian_sweep_errors_total{sweep="pass",kind="abandoned"}`,
+raises one `ops.sweep.pass_abandoned` health alert per stuck sweep and releases
+ownership so later passes can run; the abandoned work is still awaited at
+shutdown, and a later pass skips a sweep that is still in flight.
 
 ## Backup and Release Tooling
 
@@ -215,7 +223,15 @@ rollback SHA. Its explicit alternative is `maintenance-forward`, requiring
 `RELEASE_RECOVERY_PLAN` and independently trusted `RELEASE_RECOVERY_PLAN_SHA256`
 plus actual external drain evidence. Preparation approval is not a populated plan.
 
-`RELEASE_RUNTIME_STATE` defaults to `HOLD`. API HOLD and RUN require
+`RELEASE_PROFILE` selects the release path (R105): `pilot` (the default) starts
+the verified CI artifact as RUN after the API build has synced the schema
+(plain `push`, then the guardrail migrations; a destructive diff fails the
+build), needs no recovery plan, permit or held evidence, and reads the manifest
+checksum from CI's `release/build-manifest.json.sha256` sidecar when
+`RELEASE_MANIFEST_SHA256` is unset; `RELEASE_RUNTIME_STATE=HOLD` is then a plain
+maintenance switch. `governed` keeps everything below.
+
+Under `governed`, `RELEASE_RUNTIME_STATE` defaults to `HOLD`. API HOLD and RUN require
 `RELEASE_BASE_URL` matching the CI mobile domain and the mandatory
 `RELEASE_TARGET_REPL_ID` matching the CI mobile Repl ID exactly,
 and independently trusted `RELEASE_MANIFEST_SHA256`,

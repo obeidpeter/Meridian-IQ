@@ -100,3 +100,32 @@ test("share credentials are fragment-only and public actions verify contact iden
     );
   }
 });
+
+test("OTP budgets are keyed per room as well as per session, and reminders respect the flag (R105 review)", () => {
+  const routeSource = src("routes/invoice-room.ts");
+  const otp = routeBlock(routeSource, "/public/invoice-room/otp");
+  const verify = routeBlock(routeSource, "/public/invoice-room/verify");
+  assert.ok(
+    otp.includes("invoice-room-otp-send-share:${shareId}"),
+    "OTP sends are budgeted per room across sessions",
+  );
+  assert.ok(
+    verify.includes("invoice-room-otp-share:${shareId}"),
+    "OTP verification is budgeted per room across sessions",
+  );
+  assert.ok(
+    verify.includes("for (const key of throttleKeys) await clearActionFailures(key)"),
+    "a successful verification clears both budgets",
+  );
+  const service = src("modules/invoice-room/service.ts");
+  assert.ok(
+    service.includes('isFeatureEnabled("invoice_room", share.firmId)') &&
+      service.indexOf("sweepInvoiceRoomReminders") <
+        service.lastIndexOf('isFeatureEnabled("invoice_room", share.firmId)'),
+    "the reminder sweep skips firms whose invoice_room flag is dark",
+  );
+  assert.ok(
+    service.includes("assertClientPartyScope(principal, invoice.supplierPartyId)"),
+    "supplier scope uses the shared SEC-03 helper",
+  );
+});

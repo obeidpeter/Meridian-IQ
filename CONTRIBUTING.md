@@ -19,6 +19,12 @@ production readiness checks to make a test pass.
 Use conventional, imperative commit subjects. Avoid mixing generated output,
 format-only churn, dependency upgrades, and behavior changes in one commit.
 
+Keep a pull request to one concern a reviewer can hold in their head: one
+feature, one hardening theme, or one documentation pass. A round that needs
+migrations, a contract bump and a release-machinery change is three pull
+requests, not one; the R-series convention is one round per pull request,
+squash-merged on green.
+
 ## Architecture Rules
 
 - Web and mobile code call the API client; they do not import the database or
