@@ -474,6 +474,12 @@ const PINNED: Record<string, PinnedPolicy> = {
     qual: "5074b35259440c75",
     withCheck: "5074b35259440c75",
   },
+  "production_bootstrap_claims/meridian_production_bootstrap_bypass": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "f4fc01217632ad30",
+    withCheck: "f4fc01217632ad30",
+  },
   "push_devices/meridian_tenant_isolation": {
     cmd: "ALL",
     roles: "public",
