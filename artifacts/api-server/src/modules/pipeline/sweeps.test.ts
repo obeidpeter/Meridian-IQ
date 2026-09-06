@@ -4,6 +4,7 @@ import {
   registerSweep,
   unregisterSweep,
   listSweeps,
+  orderedSweeps,
   runSweepsOnce,
   awaitWorkerIdle,
   inFlightPasses,
@@ -206,4 +207,19 @@ test("shutdown aborts cooperatively but waits for actual settlement and refuses 
 test("awaitWorkerIdle answers true when nothing is in flight", async () => {
   assert.equal(inFlightPasses(), 0);
   assert.equal(await awaitWorkerIdle(10), true);
+});
+
+test("a pass runs every critical sweep before any best-effort one, registration order within each (R106)", () => {
+  const sweeps = [
+    { name: "a.best", critical: false },
+    { name: "b.critical" },
+    { name: "c.best", critical: false },
+    { name: "d.critical", critical: true },
+  ];
+  assert.deepEqual(
+    orderedSweeps(sweeps).map((s) => s.name),
+    ["b.critical", "d.critical", "a.best", "c.best"],
+  );
+  // The registry listing itself keeps registration order.
+  assert.equal(orderedSweeps([]).length, 0);
 });

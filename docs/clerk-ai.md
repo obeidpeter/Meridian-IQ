@@ -1164,7 +1164,7 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   the client detail page (generate/refresh button); the SME dashboard
   shows the client's own latest brief read-only.
 - **Monthly sweep + delivery** (Phase 2, round 50 — the statement rail
-  verbatim): generation rides the shared sweep behind the opt-in
+  verbatim): generation rides the shared sweep (sliced to its own five-minute budget since R106, `modules/clerk/sweep-budget.ts`) behind the opt-in
   `clerk_advisory_briefs` flag (seeded dark; it spends firm tokens on
   every engaged client's note) — try-lock 731_852, live-engagement
   candidates missing the LIVE month's row via the natural-key anti-join

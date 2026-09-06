@@ -2204,7 +2204,10 @@ answers 429 with a `Retry-After` is obeyed: the next try waits at least that
 long (capped at 1 hour) even when the backoff would have been shorter.
 
 Worker and shutdown knobs (R101): `SWEEP_TIMEOUT_MS` (default 120000) bounds
-each named compliance sweep so a hung one cannot stall the minute pass;
+each named compliance sweep so a hung one cannot stall the minute pass (the
+four model-calling generation sweeps — digests, client statements, advisory
+briefs, escalation triage — carry a five-minute budget of their own and stop
+generating, cleanly, at the last item that still fits it; R106);
 `SHUTDOWN_TIMEOUT_MS` (default 25000) is how long a stopping instance waits
 for in-flight requests and the running worker pass before it exits anyway.
 A stopping worker finishes the submission in flight and claims no more, and

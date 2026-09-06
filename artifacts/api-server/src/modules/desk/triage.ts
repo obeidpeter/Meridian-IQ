@@ -14,6 +14,11 @@ import { logger } from "../../lib/logger";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "../clerk/gateway";
 import { fenceUntrusted } from "../clerk/prompts";
 import { getClerkGateway } from "../clerk/provider";
+import {
+  GENERATION_SWEEP_TIMEOUT_MS,
+  generationDeadline,
+  sliceExhausted,
+} from "../clerk/sweep-budget";
 
 // Escalation triage (Clerk idea #4). Client escalations arrive as free text
 // and land in the Desk queue untriaged; Clerk PROPOSES routing — a category
@@ -28,7 +33,9 @@ import { getClerkGateway } from "../clerk/provider";
 // must never wait on, or fail because of, a model call. Same transaction
 // discipline as the digest sweep: candidates are claimed in one short bypass
 // transaction, model calls happen OUTSIDE any transaction, each result is
-// written in its own short transaction.
+// written in its own short transaction. Best-effort with its own sliced
+// budget (R106, sweep-budget.ts): an untriaged case is simply picked up by
+// a later pass, so readiness never hinges on the model provider.
 
 const TRIAGE_FLAG_KEY = "clerk_triage";
 const TRIAGE_PROMPT_VERSION = "triage.v1";
@@ -129,7 +136,11 @@ export async function triageCase(
 
 // The pass itself, with the gateway injected (digest-sweep pattern) so tests
 // drive it with a fake provider while the sweep wires the real one.
-export async function runTriagePass(gateway: ClerkGateway): Promise<number> {
+export async function runTriagePass(
+  gateway: ClerkGateway,
+  signal?: AbortSignal,
+): Promise<number> {
+  const deadline = generationDeadline();
   // Claim work in ONE short bypass transaction; the model calls below run
   // outside any transaction so a slow provider never stalls the sweep loop's
   // siblings or pins a pooled connection.
@@ -173,7 +184,12 @@ export async function runTriagePass(gateway: ClerkGateway): Promise<number> {
   if (candidates.length === 0) return 0;
 
   let proposed = 0;
-  for (const candidate of candidates) {
+  let sliced = 0;
+  for (const [at, candidate] of candidates.entries()) {
+    if (sliceExhausted(signal, deadline)) {
+      sliced = candidates.length - at;
+      break;
+    }
     const triage = await triageCase(candidate, knownCodes, gateway);
     if (triage.status === "proposed") proposed += 1;
     await runInBypassContext(() =>
@@ -189,13 +205,15 @@ export async function runTriagePass(gateway: ClerkGateway): Promise<number> {
     );
   }
   logger.info(
-    { candidates: candidates.length, proposed },
+    { candidates: candidates.length, proposed, sliced },
     "escalation triage sweep completed",
   );
   return proposed;
 }
 
-export async function sweepEscalationTriage(): Promise<void> {
+export async function sweepEscalationTriage(
+  signal?: AbortSignal,
+): Promise<void> {
   if (!(await isFeatureEnabled(TRIAGE_FLAG_KEY))) return;
   if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return;
   // No provider configured: leave the cases untriaged (they are picked up
@@ -206,7 +224,11 @@ export async function sweepEscalationTriage(): Promise<void> {
   } catch {
     return;
   }
-  await runTriagePass(gateway);
+  await runTriagePass(gateway, signal);
 }
 
-registerSweep("desk.escalation_triage", sweepEscalationTriage);
+registerSweep("desk.escalation_triage", sweepEscalationTriage, {
+  critical: false,
+  acceptsSignal: true,
+  timeoutMs: GENERATION_SWEEP_TIMEOUT_MS,
+});

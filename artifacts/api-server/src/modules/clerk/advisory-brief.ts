@@ -14,6 +14,11 @@ import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
 import { registerSweep } from "../pipeline/pipeline";
+import {
+  GENERATION_SWEEP_TIMEOUT_MS,
+  generationDeadline,
+  sliceExhausted,
+} from "./sweep-budget";
 import { gatewayOrNull } from "./provider";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
@@ -812,8 +817,10 @@ export async function sweepAdvisoryBriefs(
   // The optional firm pin exists for TESTS (a suite generates only its own
   // salted firms instead of minting briefs across the whole scratch DB);
   // production passes never set it.
-  opts: { onlyFirmIds?: string[] } = {},
+  opts: { onlyFirmIds?: string[]; signal?: AbortSignal } = {},
 ): Promise<void> {
+  // R106: slice the batch to the sweep budget (sweep-budget.ts).
+  const deadline = generationDeadline();
   if (await isFeatureEnabled(BRIEF_FLAG_KEY)) {
     const monthStart = lagosMonthStart(0);
     const pairs = await runInBypassContext(async () => {
@@ -855,7 +862,12 @@ export async function sweepAdvisoryBriefs(
     if (pairs.length > 0) {
       const gateway = await gatewayOrNull();
       let generated = 0;
-      for (const pair of pairs) {
+      let sliced = 0;
+      for (const [at, pair] of pairs.entries()) {
+        if (sliceExhausted(opts.signal, deadline)) {
+          sliced = pairs.length - at;
+          break;
+        }
         // PER-FIRM flag wall (the firm-spending-sweep rule from the memory
         // indexer): an operator override can darken one firm mid-month —
         // its clients must not have notes phrased on its budget by a
@@ -892,9 +904,9 @@ export async function sweepAdvisoryBriefs(
           );
         }
       }
-      if (generated > 0) {
+      if (generated > 0 || sliced > 0) {
         logger.info(
-          { generated, monthStart },
+          { generated, sliced, monthStart },
           "advisory brief sweep: monthly briefs generated",
         );
       }
@@ -914,4 +926,8 @@ export async function sweepAdvisoryBriefs(
   }
 }
 
-registerSweep("clerk.advisory_briefs", () => sweepAdvisoryBriefs(), { critical: false });
+registerSweep(
+  "clerk.advisory_briefs",
+  (signal) => sweepAdvisoryBriefs({ signal }),
+  { critical: false, acceptsSignal: true, timeoutMs: GENERATION_SWEEP_TIMEOUT_MS },
+);
