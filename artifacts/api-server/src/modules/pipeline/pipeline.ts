@@ -1797,11 +1797,24 @@ export async function runSweepsOnce(
   return failures;
 }
 
+/** R106: the order a pass runs the registry in — every critical sweep first
+ *  (registration order), then the best-effort ones, so statutory work never
+ *  queues behind a best-effort model-calling sweep such as the Clerk
+ *  generation sweeps. `listSweeps()` keeps registration order. */
+export function orderedSweeps<T extends { critical?: boolean }>(
+  sweeps: readonly T[],
+): T[] {
+  return [
+    ...sweeps.filter((s) => s.critical !== false),
+    ...sweeps.filter((s) => s.critical === false),
+  ];
+}
+
 async function runSweepPass(
   owned: Promise<unknown>[],
   report: SweepFailureReport,
 ): Promise<number> {
-  const failures = await runSweepsOnce(SWEEPS, owned, report);
+  const failures = await runSweepsOnce(orderedSweeps(SWEEPS), owned, report);
   // Record pass health for scraping: the run counter advances every pass (the
   // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
   // frozen overnight, stops it — OBS-01), while last_success only advances

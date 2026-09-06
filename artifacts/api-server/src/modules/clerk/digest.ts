@@ -20,6 +20,11 @@ import { sendMessage } from "../messaging/messaging";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
 import { registerSweep } from "../pipeline/pipeline";
+import {
+  GENERATION_SWEEP_TIMEOUT_MS,
+  generationDeadline,
+  sliceExhausted,
+} from "./sweep-budget";
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import {
@@ -888,7 +893,9 @@ export async function latestDigestForFirm(
 
 registerSweep(
   "clerk.digests",
-  async function sweepClerkDigests(): Promise<void> {
+  async function sweepClerkDigests(signal: AbortSignal): Promise<void> {
+    // R106: slice the batch to the sweep budget (sweep-budget.ts).
+    const deadline = generationDeadline();
     // Opt-in: generating digests for every firm can spend firm tokens, so the
     // flag must be turned on deliberately (off/missing = no digests at all).
     if (await isFeatureEnabled(DIGEST_FLAG_KEY)) {
@@ -924,12 +931,17 @@ registerSweep(
         // just from the template path.
         const gateway = await gatewayOrNull();
         let generated = 0;
-        for (const firm of firms) {
+        let sliced = 0;
+        for (const [at, firm] of firms.entries()) {
+          if (sliceExhausted(signal, deadline)) {
+            sliced = firms.length - at;
+            break;
+          }
           await generateFirmDigest(firm.id, gateway);
           generated += 1;
         }
         logger.info(
-          { generated },
+          { generated, sliced },
           "clerk digest sweep: weekly digests generated",
         );
       }
@@ -948,5 +960,5 @@ registerSweep(
       );
     }
   },
-  { critical: false },
+  { critical: false, acceptsSignal: true, timeoutMs: GENERATION_SWEEP_TIMEOUT_MS },
 );

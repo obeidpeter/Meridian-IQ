@@ -509,8 +509,8 @@ database contexts as the timer (breaker reads, reminder candidates and
 preferences), never a transaction around rail or provider I/O.
 Since R105 every sweep is registered as critical (the default) or
 best-effort (`critical: false`: retention purges, the Clerk watches, evals,
-digests, statements and briefs, memory indexing, buyer exposures, onboarding
-runs, push receipts): only a critical sweep, the drain or the reconcile fails
+digests, statements and briefs, escalation triage, memory indexing, buyer
+exposures, onboarding runs, push receipts): only a critical sweep, the drain or the reconcile fails
 the pass and the `scheduled_work` heartbeat, while a best-effort failure
 rides on a 200 as `degraded: [names]`; the 503 body lists `failedSweeps`
 (static names, never tenant data). A pass waits for a timed-out sweep only up
@@ -522,6 +522,19 @@ later pass; a later pass skips a sweep still in flight. The Expo push
 transport, where every unbounded sweep bottomed out, is bounded by
 `EXPO_TIMEOUT_MS` (5 s), and reminder passes read alert preferences in one
 batched query.
+
+Since R106 a pass runs every critical sweep before any best-effort one
+(`orderedSweeps`; registration order within each class), so statutory work
+never queues behind a model call. The four model-calling generation sweeps —
+`clerk.digests`, `clerk.client_statements`, `clerk.advisory_briefs`,
+`desk.escalation_triage` — register their own five-minute budget
+(`GENERATION_SWEEP_TIMEOUT_MS` in `modules/clerk/sweep-budget.ts`) and
+slice their batch to it: the loop stops before the first item that could no
+longer complete within the budget (one worst-case 60 s provider call plus a
+margin), logs `sliced`, returns cleanly and leaves the rest to the next pass
+— every candidate query selects "not yet generated this period", so a slice
+is idempotent. A sliced pass is a success, not a timeout, and the abort
+signal is honoured at the same boundary.
 
 ## Messaging, inbound rails & the notification inbox
 

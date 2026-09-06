@@ -12,6 +12,11 @@ import {
 import { isFeatureEnabled } from "../flags/flags";
 import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
 import { registerSweep } from "../pipeline/pipeline";
+import {
+  GENERATION_SWEEP_TIMEOUT_MS,
+  generationDeadline,
+  sliceExhausted,
+} from "./sweep-budget";
 import { tryAdvisoryXactLock } from "../../lib/advisory-lock";
 import { logger } from "../../lib/logger";
 import { lagosMonthStart, lagosWindowSql } from "../../lib/lagos-time";
@@ -383,7 +388,11 @@ export async function deliverClientStatements(
   });
 }
 
-export async function sweepClientStatements(): Promise<void> {
+export async function sweepClientStatements(
+  signal?: AbortSignal,
+): Promise<void> {
+  // R106: slice the batch to the sweep budget (sweep-budget.ts).
+  const deadline = generationDeadline();
   // Opt-in GENERATION only: statements for every engaged client can spend
   // firm tokens, so the flag must be turned on deliberately (off/missing =
   // none generated at all). The flag deliberately does NOT gate delivery
@@ -435,7 +444,12 @@ export async function sweepClientStatements(): Promise<void> {
       // statements — just from the template path.
       const gateway = await gatewayOrNull();
       let generated = 0;
-      for (const pair of pairs) {
+      let sliced = 0;
+      for (const [at, pair] of pairs.entries()) {
+        if (sliceExhausted(signal, deadline)) {
+          sliced = pairs.length - at;
+          break;
+        }
         // Firm-pinned generation (rounds 53-54; monthly-rail.ts owns the
         // privilege + in-transaction-ceiling posture). Per-pair poison
         // isolation: one broken pair must not abort the rest of the pass —
@@ -463,7 +477,7 @@ export async function sweepClientStatements(): Promise<void> {
         }
       }
       logger.info(
-        { generated, monthStart },
+        { generated, sliced, monthStart },
         "client statement sweep: monthly statements generated",
       );
     }
@@ -483,4 +497,8 @@ export async function sweepClientStatements(): Promise<void> {
   }
 }
 
-registerSweep("clerk.client_statements", sweepClientStatements, { critical: false });
+registerSweep("clerk.client_statements", sweepClientStatements, {
+  critical: false,
+  acceptsSignal: true,
+  timeoutMs: GENERATION_SWEEP_TIMEOUT_MS,
+});

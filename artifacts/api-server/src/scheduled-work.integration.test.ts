@@ -34,6 +34,7 @@ import { lagosDateOffset } from "./test-helpers/fixtures.ts";
 import { startFakeRail, type FakeRail } from "./modules/rails/fake-rail.ts";
 import { createHttpRailTransport } from "./modules/rails/transports/http.ts";
 import { setRailTransport } from "./modules/rails/adapter.ts";
+import { GENERATION_SWEEP_TIMEOUT_MS } from "./modules/clerk/sweep-budget.ts";
 import {
   createFirmWebhook,
   disableFirmWebhook,
@@ -306,6 +307,19 @@ for (const mode of ["http", "background"] as const) {
     ];
     for (const name of reminderNames)
       assert.ok(listSweeps().some((sweep) => sweep.name === name));
+    // R106: the model-calling generation sweeps carry their own budget and
+    // are best-effort, so a slow provider never fails the heartbeat.
+    for (const name of [
+      "clerk.digests",
+      "clerk.client_statements",
+      "clerk.advisory_briefs",
+      "desk.escalation_triage",
+    ]) {
+      const sweep = listSweeps().find((s) => s.name === name);
+      assert.ok(sweep, name);
+      assert.equal(sweep.timeoutMs, GENERATION_SWEEP_TIMEOUT_MS, name);
+      assert.equal(sweep.critical, false, name);
+    }
     try {
       // Sweeps precede drain: a second pass fans out the stamp just committed.
       await pass();
