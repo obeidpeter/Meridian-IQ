@@ -85,19 +85,29 @@ test("share credentials are fragment-only and public actions verify contact iden
   const security = src("modules/invoice-room/security.ts");
   assert.ok(security.includes("url.hash ="));
   assert.ok(!security.includes("searchParams.set"));
-  const service = src("modules/invoice-room/service.ts");
+  // R109 split the service by flow; each verified action lives in its module.
+  for (const [fn, file] of [
+    ["respondInInvoiceRoom", "buyer"],
+    ["reportInvoiceRoomPayment", "buyer"],
+    ["createInvoiceRoomPaymentLink", "payments"],
+    ["claimInvoiceRoomAccount", "claim"],
+  ] as const) {
+    const flow = src(`modules/invoice-room/${file}.ts`);
+    const at = flow.indexOf(`export async function ${fn}`);
+    assert.ok(at >= 0, `${fn} exists in ${file}.ts`);
+    assert.ok(
+      flow.slice(at, at + 2_500).includes("requireVerified: true"),
+      `${fn} must require OTP-verified room access`,
+    );
+  }
+  const facade = src("modules/invoice-room/service.ts");
   for (const fn of [
     "respondInInvoiceRoom",
     "reportInvoiceRoomPayment",
     "createInvoiceRoomPaymentLink",
     "claimInvoiceRoomAccount",
   ]) {
-    const at = service.indexOf(`export async function ${fn}`);
-    assert.ok(at >= 0, `${fn} exists`);
-    assert.ok(
-      service.slice(at, at + 2_500).includes("requireVerified: true"),
-      `${fn} must require OTP-verified room access`,
-    );
+    assert.ok(facade.includes(fn), `${fn} stays on the service surface`);
   }
 });
 
@@ -117,15 +127,17 @@ test("OTP budgets are keyed per room as well as per session, and reminders respe
     verify.includes("for (const key of throttleKeys) await clearActionFailures(key)"),
     "a successful verification clears both budgets",
   );
-  const service = src("modules/invoice-room/service.ts");
+  const reminders = src("modules/invoice-room/reminders.ts");
   assert.ok(
-    service.includes('isFeatureEnabled("invoice_room", share.firmId)') &&
-      service.indexOf("sweepInvoiceRoomReminders") <
-        service.lastIndexOf('isFeatureEnabled("invoice_room", share.firmId)'),
+    reminders.includes('isFeatureEnabled("invoice_room", share.firmId)') &&
+      reminders.indexOf("sweepInvoiceRoomReminders") <
+        reminders.lastIndexOf('isFeatureEnabled("invoice_room", share.firmId)'),
     "the reminder sweep skips firms whose invoice_room flag is dark",
   );
   assert.ok(
-    service.includes("assertClientPartyScope(principal, invoice.supplierPartyId)"),
+    src("modules/invoice-room/supplier.ts").includes(
+      "assertClientPartyScope(principal, invoice.supplierPartyId)",
+    ),
     "supplier scope uses the shared SEC-03 helper",
   );
 });
