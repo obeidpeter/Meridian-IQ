@@ -41,6 +41,9 @@ origins explicit.
 | `ENABLE_DEV_AUTH`             | Enables development-only authentication. Never set in production.                                       |
 | `DEMO_PASSWORD`               | Local seeded-account password. Never reuse a real password.                                             |
 | `SEED_DEMO`                   | Creates local/demo fixtures. Keep off for production data.                                              |
+| `PILOT_OPERATOR_EMAIL`        | One-time first production operator email; configure only with the other two pilot settings.             |
+| `PILOT_OPERATOR_FULL_NAME`    | One-time first production operator display name.                                                        |
+| `PILOT_OPERATOR_PASSWORD`     | One-time first production operator password; secret-store only and at least 16 characters.              |
 | `TOTP_REQUIRED_ROLES`         | Comma-separated roles requiring TOTP; production baseline includes operator, firm admin, and bank user. |
 | `PASSWORD_KDF_CONCURRENCY`    | Concurrent password-hash limit.                                                                         |
 | `PASSWORD_KDF_MAX_QUEUE`      | Bounded waiting queue for password hashing.                                                             |
@@ -58,6 +61,14 @@ Machine credential rings and compatibility test names:
 
 The `*_TEST_*` variables are test-only. Never configure them as production
 credentials.
+
+The three `PILOT_OPERATOR_*` settings are an exceptional production-bootstrap
+path for a deployment with no real operator. Configure all three together,
+publish once, confirm the individual operator can sign in, then remove all three
+settings and restart. The database permanently records consumption in the same
+transaction as the user, membership, and audit event; retained or restored
+settings cannot create another operator or reset the first operator's password.
+Historical demo addresses are rejected.
 
 ## Clerk AI
 
