@@ -197,15 +197,17 @@ their constraints, grants and policies. The historical registry is not a complet
 schema history and must not be treated as a generic schema conversion.
 Consequences: a new tenant table is not done until its policy migration
 exists; scratch databases need push THEN migrate, in that order; production
-table changes require reviewed migration execution before artifact promotion;
+table changes require reviewed schema changes applied by Replit's native
+Publish flow before artifact promotion;
 `ops:release` refuses schema drift instead of pushing against serving traffic.
 An explicit offline bootstrap requires drained writers and retains maintenance
 on failure. Every production
 boot applies the hand-written guardrail migrations idempotently under an
 advisory lock and then verifies coverage before readiness. The manual
-`@workspace/db migrate` command remains the pre-deploy/recovery path; boot is
-the fail-closed safety net for RLS, trigger, and index guardrails that Publish
-cannot express.
+`@workspace/db migrate` command is for local/disposable setup and explicit
+recovery procedures, not the normal production Publish path; boot is the
+fail-closed safety net for RLS, trigger, and index guardrails that native
+Publish cannot express.
 
 ### D6 — Prefix-mounted SPAs on one origin
 

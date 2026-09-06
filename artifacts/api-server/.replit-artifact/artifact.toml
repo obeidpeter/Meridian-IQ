@@ -15,7 +15,7 @@ run = "pnpm --filter @workspace/api-server run dev"
 [services.production]
 
 [services.production.build]
-# Pilot profile (R105): verify the staged CI artifact, sync the schema, no rebuild.
+# Pilot profile (R105): verify the staged CI artifact; Replit Publish owns schema changes.
 args = ["node", "scripts/src/ops/replit-promote.mjs", "build", "api-server"]
 
 [services.production.build.env]

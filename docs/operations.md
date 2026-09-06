@@ -24,10 +24,9 @@ Publish trusts is the immutable artifact CI produced for that exact commit.
    `node scripts/src/ops/replit-promote.mjs build <app>`, which refuses unless
    the checkout is clean, the local source tree, tracked-source hash and
    schema hash equal the manifest, and the packaged assets match the inventory
-   byte for byte. The API build additionally syncs the target schema — plain
-   `drizzle push` (a destructive diff prompts, gets end-of-file and fails the
-   build) and then the guardrail migrations — using the deployment's
-   `DATABASE_URL`. Web builds need no database.
+   byte for byte. These artifact builds perform no database mutation. Replit's
+   native Publish flow compares development and production, surfaces any schema
+   changes or rename decisions, and applies only the confirmed diff.
 4. The API runs `replit-promote.mjs start api-server`: it re-verifies the
    packaged bytes without Git, sets `BUILD_REVISION` and
    `EXPECTED_BUILD_REVISION` to the tested revision, and imports the unchanged
@@ -97,10 +96,9 @@ approval never grants maintenance-forward authorization.
 - The post-merge hook is frozen-install plus reviewed versioned migrations only.
   Missing historical baseline tables require explicit offline maintenance;
   never repair that failure using an online schema push or non-frozen install.
-- The pilot profile's API build runs a plain schema push before the new
-  revision serves: additive changes land with the deploy, a destructive diff
-  fails the build and needs a reviewed migration. The governed profile never
-  pushes online: `--offline-bootstrap` is its explicit maintenance-only escape
+- Neither release profile runs schema push or migrations from an artifact build.
+  Replit's native Publish diff owns normal production schema changes. The
+  governed profile's `--offline-bootstrap` is its explicit maintenance-only escape
   hatch requiring `RELEASE_TRAFFIC_DRAINED=1`, existing recovery evidence and
   the trusted manifest, with every API instance, worker, schedule and external
   writer stopped first. A crash or verification failure there means traffic

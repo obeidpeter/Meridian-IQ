@@ -55,31 +55,6 @@ function withManifestChecksum(env, root) {
   return { ...env, RELEASE_MANIFEST_SHA256: checksum };
 }
 
-// Pilot profile: the API build syncs the target schema — plain `push` (a
-// destructive diff prompts, gets EOF without a terminal and fails closed) and
-// then the guardrail migrations — so an additive change lands with the
-// deploy and anything destructive needs a reviewed migration. Only the API
-// build touches the database; web builds verify bytes only.
-function pilotSchemaSync(env, root, dependencies) {
-  assert.ok(
-    env.DATABASE_URL,
-    "the pilot API build needs DATABASE_URL to sync the target schema",
-  );
-  const execute = dependencies.execute ?? run;
-  for (const script of ["push", "migrate"]) {
-    const result = execute("pnpm", ["--filter", "@workspace/db", "run", script], {
-      cwd: root,
-      env,
-      stdio: "inherit",
-    });
-    assert.equal(
-      result.status,
-      0,
-      `schema ${script} failed: the Publish build stops here; a destructive diff needs a reviewed migration`,
-    );
-  }
-}
-
 function assertPublishable(app) {
   assert.ok(REPLIT_APPS.includes(app), `unsupported promotion app: ${app}`);
 }
@@ -219,9 +194,8 @@ export function promoteReplit(
   verifyReplitArtifact(manifest, root);
 
   if (app === "api-server" && profile === "pilot") {
-    pilotSchemaSync(env, root, dependencies);
     console.log(
-      `replit: pilot profile — verified artifact ${manifest.source.revision}, schema synced; the API starts in ${state}`,
+      `replit: pilot profile — verified artifact ${manifest.source.revision}; Replit Publish owns schema changes and the API starts in ${state}`,
     );
   } else if (app === "api-server") {
     // All services verify all seven builds. Only the API needs target DB credentials;

@@ -223,11 +223,13 @@ Native Replit production descriptors read `release/build-manifest.json` from the
 checkout and require `RELEASE_MANIFEST_SHA256` during every build verification
 and API startup. Provide the checksum independently through trusted Publish
 configuration; it is not a download credential and must not be client-bundled.
-The API build additionally requires the existing production `DATABASE_URL` and
-the selected recovery-mode configuration for mandatory read-only preflight. The
-startup adapter sets `BUILD_REVISION` and `EXPECTED_BUILD_REVISION` from the
-checksum-verified manifest before loading the API, overriding a stale value or
-Replit deployment UUID. No new secret or download mechanism is introduced.
+Under the governed profile, the API build additionally requires the existing
+production `DATABASE_URL` and selected recovery-mode configuration for mandatory
+read-only preflight. The pilot build performs no database mutation; Replit's
+native Publish schema diff owns production schema changes. The startup adapter
+sets `BUILD_REVISION` and `EXPECTED_BUILD_REVISION` from the checksum-verified
+manifest before loading the API, overriding a stale value or Replit deployment
+UUID. No new secret or download mechanism is introduced.
 
 `RELEASE_RECOVERY_MODE` defaults to `rollback`, which requires the qualified
 rollback SHA. Its explicit alternative is `maintenance-forward`, requiring
@@ -235,10 +237,11 @@ rollback SHA. Its explicit alternative is `maintenance-forward`, requiring
 plus actual external drain evidence. Preparation approval is not a populated plan.
 
 `RELEASE_PROFILE` selects the release path (R105): `pilot` (the default) starts
-the verified CI artifact as RUN after the API build has synced the schema
-(plain `push`, then the guardrail migrations; a destructive diff fails the
-build), needs no recovery plan, permit or held evidence, and reads the manifest
-checksum from CI's `release/build-manifest.json.sha256` sidecar when
+the verified CI artifact as RUN after Replit's native Publish flow has applied
+any confirmed development-to-production schema diff. The artifact build itself
+performs no database mutation. Pilot needs no recovery plan, permit or held
+evidence, and reads the manifest checksum from CI's
+`release/build-manifest.json.sha256` sidecar when
 `RELEASE_MANIFEST_SHA256` is unset; `RELEASE_RUNTIME_STATE=HOLD` is then a plain
 maintenance switch. `governed` keeps everything below.
 

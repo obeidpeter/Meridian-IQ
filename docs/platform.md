@@ -27,20 +27,17 @@ their production rollout checks live in
   that must persist even when the handler returns an error (e.g. the login
   throttle counters) must write on the **raw `pool`**, not `getDb()`. See
   `modules/auth/throttle.ts`.
-- **Migrations vs push.** Tables come from `drizzle push`; the versioned
-  guardrail migrations (`lib/db/src/migrations`, RLS policies, triggers,
-  retention) apply on boot outside production and must roll back cleanly
-  (the rollback test enforces this). Adding a tenant table? Add a firm-keyed
-  RLS policy in a new numbered migration and extend the rollback test — the
-  `rls-coverage` test fails CI for any tenant-keyed table without a policy
-  (documented allowlist: `audit_events`), and `rls-isolation.test.ts`
-  (api-server) exercises the policies behaviorally under the real
-  `meridian_app` role. Production does NOT run migrations at boot
-  (deliberate; Publish owns prod schema) — after merging a new guardrail
-  migration, apply it to production manually
-  (`pnpm --filter @workspace/db run migrate` against the prod
-  `DATABASE_URL`); the boot-time guardrail verifier logs exactly which
-  tables are uncovered until then.
+- **Migrations vs push.** `drizzle push` creates tables only in local and
+  disposable environments; Replit's native Publish diff owns normal production
+  table changes. The versioned guardrail migrations (`lib/db/src/migrations`,
+  RLS policies, triggers, retention) apply idempotently on API boot, including
+  production, under an advisory lock and must roll back cleanly (the rollback
+  test enforces this). Readiness remains blocked if they fail or leave coverage
+  incomplete. Adding a tenant table? Add a firm-keyed RLS policy in a new
+  numbered migration and extend the rollback test — the `rls-coverage` test
+  fails CI for any tenant-keyed table without a policy (documented allowlist:
+  `audit_events`), and `rls-isolation.test.ts` (api-server) exercises the
+  policies behaviorally under the real `meridian_app` role.
 
 **Per-staff client assignment (D12).** `client_assignments` (firm ↔ client
 party ↔ user; policy migration 0045) is a firm-scoped convenience register:
@@ -1454,9 +1451,9 @@ pnpm --filter @workspace/scripts run ops:restore-drill`. Dumps the source,
   timings. CI runs it on every merge against the CI database; run it
   per-release too — an untested backup is a hope, not a backup.
 - **Release** (pilot profile, the default — ADR 0004): one Replit Publish of
-  the green commit's CI artifact; the API build verifies the staged bytes and
-  syncs the schema (plain `push`, which fails closed on a destructive diff,
-  then the guardrail migrations), and the API starts as RUN.
+  the green commit's CI artifact; each artifact build verifies the staged bytes
+  without database mutation, Replit's native Publish flow owns any confirmed
+  development-to-production schema diff, and the API starts as RUN.
 - **Release** (governed profile): `ops:release -- --yes` is a read-only online preflight requiring
   the trusted CI manifest/checksum, rollback revision, recovery evidence and
   semantic catalog parity. It does not push schema or deploy. Apply reviewed

@@ -2121,10 +2121,11 @@ pnpm --filter @workspace/db run test                # migration rollback test (n
 pnpm --filter @workspace/api-spec run codegen       # regenerate API clients after editing openapi.yaml
 ```
 
-On boot the server applies schema changes and its guardrail migrations
-(append-only triggers, row-level security, retention) and — **only when demo
-seeding is enabled** (`SEED_DEMO=true`; off by default everywhere, and
-ignored in production whatever it is set to) — seeds the demo tenant:
+Replit's native Publish flow owns normal production table changes. On boot the
+server idempotently applies only its hand-written guardrail migrations
+(append-only triggers, row-level security, retention), blocks readiness if they
+fail, and — **only when demo seeding is enabled** (`SEED_DEMO=true`; off by
+default everywhere, and ignored in production whatever it is set to) — seeds the demo tenant:
 flags, demo firm and clients, the demo accounts, invoices in every lifecycle state, operator cases, billing tiers,
 CPD content. Seeding is idempotent — restarts never duplicate data.
 
@@ -2162,7 +2163,7 @@ unreachable (404), not broken:
 | `CLERK_COST_PER_1M_INPUT_USD` / `CLERK_COST_PER_1M_OUTPUT_USD`                             | Price the economics meter uses for its USD estimate; both unset shows tokens only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `PUBLIC_APP_URL`                                                                           | HTTPS origin used for password-reset and Invoice Room links. Invoice Room fails closed in production when this value is absent or unsafe.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `LOG_LEVEL` / `PGPOOL_MAX`                                                                 | Server log level (default `info`) and the database pool size per instance (default 20).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `RELEASE_PROFILE` | The release path a Publish follows: `pilot` (default — verified CI artifact, schema sync, start) or `governed` (the permit-bound HOLD/RUN ceremony). `RELEASE_RUNTIME_STATE=HOLD` is the maintenance switch in either. |
+| `RELEASE_PROFILE` | The release path a Publish follows: `pilot` (default — native Publish schema diff, verified CI artifact, start) or `governed` (the permit-bound HOLD/RUN ceremony). Artifact builds never mutate the database. `RELEASE_RUNTIME_STATE=HOLD` is the maintenance switch in either. |
 | `SWEEP_SETTLE_CEILING_MS` | How long a sweep pass waits for a timed-out sweep before abandoning it, releasing its lock and raising a health alert (unset = twice the sweep's own timeout). |
 | `METRICS_TOKEN` / `SWEEP_TOKEN`                                                            | Metrics and sweep secrets (`METRICS_KEYS` / `SWEEP_KEYS` rings, or the single tokens). Both endpoints fail closed in production when their ring is empty. Use signed requests; operation credentials are never accepted in a URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `EXPECTED_BUILD_REVISION`                                                                  | Git SHA that should be running. The release-readiness check compares it with `REPLIT_GIT_SHA` (or another detected build revision) and blocks a production release on mismatch.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -2334,9 +2335,9 @@ DATABASE_URL=… pnpm --filter @workspace/scripts run ops:release -- --yes  # re
   enabled and forced on `invoices`. CI runs it on every merge; run it
   per release too.
 - **Release** is one Replit Publish of the green commit's CI artifact under
-  the default pilot profile: the build verifies the staged bytes, syncs the
-  schema (an additive change lands with the deploy; a destructive diff stops
-  the build and needs a reviewed migration) and the API starts. `ops:release`
+  the default pilot profile: the build verifies the staged bytes without
+  mutating the database, Replit's native Publish flow applies any confirmed
+  schema diff, and the API starts. `ops:release`
   is the governed profile's read-only preflight — it requires `--yes`, the
   manifest checksum, rollback identity and fresh backup and restore evidence
   and never pushes schema. `docs/operations.md` is the procedure for both

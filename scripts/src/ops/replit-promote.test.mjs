@@ -1318,8 +1318,8 @@ test("provider diagnostics are sanitized in promotion and runtime without rewrit
 });
 
 // ---------------------------------------------------------------------------
-// R105: the pilot profile (the default) — verified artifact → schema sync → RUN
-// without recovery plan, permit or held evidence; governed stays opt-in.
+// R105: the pilot profile (the default) — verified artifact → RUN without
+// deploy-time DB mutation, recovery plan, permit or held evidence.
 
 function pilotEnv(env) {
   const rest = { ...env };
@@ -1344,40 +1344,19 @@ test("release profile defaults to pilot, RUN by default, and refuses unknown val
   assert.throws(() => runtimeState({ RELEASE_RUNTIME_STATE: "run" }), /HOLD or RUN/);
 });
 
-test("pilot promotion verifies the artifact, syncs the schema and starts RUN without governed evidence", (t) => {
+test("pilot promotion verifies the artifact and starts RUN without deploy-time DB mutation or governed evidence", (t) => {
   const f = fixture(t);
   const env = pilotEnv(f.env);
-  const executed = [];
+  delete env.DATABASE_URL;
   const dependencies = {
     query: () => assert.fail("the pilot profile never runs the governed preflight"),
-    execute: (command, args) => {
-      executed.push([command, ...args].join(" "));
-      return { status: 0 };
-    },
+    execute: () => assert.fail("pilot Publish must not mutate the database"),
   };
   const manifest = promoteReplit("api-server", env, f.root, dependencies);
   assert.equal(manifest.source.revision, f.manifest.source.revision);
-  assert.deepEqual(executed, [
-    "pnpm --filter @workspace/db run push",
-    "pnpm --filter @workspace/db run migrate",
-  ]);
-  assert.throws(
-    () =>
-      promoteReplit("api-server", env, f.root, {
-        ...dependencies,
-        execute: () => ({ status: 1 }),
-      }),
-    /schema push failed/,
-  );
-  assert.throws(
-    () => promoteReplit("api-server", { ...env, DATABASE_URL: "" }, f.root, dependencies),
-    /DATABASE_URL/,
-  );
-  // Web builds verify bytes only: no database, no schema sync.
-  promoteReplit("landing", { ...env, DATABASE_URL: "" }, f.root, {
-    execute: () => assert.fail("web builds run no schema sync"),
-  });
-  // Tampering still refuses before any schema work.
+  // Web builds follow the same verification-only rule.
+  promoteReplit("landing", env, f.root, dependencies);
+  // Tampering still refuses before any deployment action.
   f.write("artifacts/console/dist/public/index.html", "changed after build");
   assert.throws(
     () => promoteReplit("api-server", env, f.root, dependencies),
