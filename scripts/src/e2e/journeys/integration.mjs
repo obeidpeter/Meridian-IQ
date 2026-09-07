@@ -380,7 +380,7 @@ async function journeyIntegrationLayer(
   // which rail it serves. Operator endpoints need an ops session; the API
   // login swaps the browser context's cookie, and the admin session is
   // restored the same way before the payment leg below.
-  await apiLogin(page, BASE, "ops@meridianiq.example");
+  await apiLogin(page, BASE, "ops@valo.example");
   const casesRes = await page.request.get(
     BASE + "/api/operator/cases?status=open",
   );
@@ -419,7 +419,7 @@ async function journeyIntegrationLayer(
       configured("rail_secondary") === false,
     `rails: ${rails.map((r) => `${r.rail}=${r.transport}/${r.environment}/${r.configured}/${r.state}`).join(", ") || "none"}; config primary ${configured("rail_primary")}, secondary ${configured("rail_secondary")}`,
   );
-  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@valo.example");
 
   // -- Payments: intent for a closed month, settled by the machine rail -----
   // The statement's default month is the newest closed Lagos month; if its

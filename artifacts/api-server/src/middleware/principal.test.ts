@@ -70,6 +70,24 @@ test("safe methods pass with a cookie and no header", async () => {
   }
 });
 
+test("Valo-only and matching dual CSRF markers preserve the same guard", async () => {
+  const base = await listen(guardedApp());
+  for (const headers of [
+    { "x-valo-csrf": "1" },
+    { "x-valo-csrf": "1", "x-meridian-csrf": "1" },
+  ]) {
+    const res = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { ...COOKIE, ...headers } as Record<string, string>,
+    });
+    assert.equal(res.status, 200);
+  }
+  const empty = await fetch(`${base}/api/auth/login`, {
+    method: "POST", headers: { ...COOKIE, "x-valo-csrf": "" },
+  });
+  assert.equal(empty.status, 403);
+});
+
 test("browser-facing mutations require the header even without a cookie", async () => {
   const base = await listen(guardedApp());
   const bare = await fetch(`${base}/api/invoices`, { method: "POST" });

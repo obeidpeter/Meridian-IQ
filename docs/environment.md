@@ -113,7 +113,8 @@ evidence warns in non-production and blocks where production policy requires.
 `SWEEP_SETTLE_CEILING_MS` (unset = twice the timed-out sweep's own timeout,
 minimum 1000) bounds how long a sweep pass keeps its in-process guard and
 distributed lock waiting for a timed-out sweep to settle. Past the ceiling the
-pass records `meridian_sweep_errors_total{sweep="pass",kind="abandoned"}`,
+pass records `valo_sweep_errors_total{sweep="pass",kind="abandoned"}`
+(also exported as the legacy `meridian_sweep_errors_total`),
 raises one `ops.sweep.pass_abandoned` health alert per stuck sweep and releases
 ownership so later passes can run; the abandoned work is still awaited at
 shutdown, and a later pass skips a sweep that is still in flight.

@@ -38,7 +38,7 @@ export function Today() {
   }
   return (
     <TodayWorkspace
-      eyebrow="Meridian Today"
+      eyebrow="Valo Today"
       title="Buyer work today"
       description="Stamped invoices awaiting review and supplier follow-ups are ordered by urgency."
       summary={data.summary}

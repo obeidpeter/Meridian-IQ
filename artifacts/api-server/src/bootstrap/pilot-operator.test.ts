@@ -67,7 +67,7 @@ test("rejects partial, weak and historical demo credentials", async () => {
   );
   await assert.rejects(
     provisionProductionPilotOperator(
-      { ...validEnv, PILOT_OPERATOR_EMAIL: "ops@meridianiq.example" },
+      { ...validEnv, PILOT_OPERATOR_EMAIL: "ops@valo.example" },
       dependencies(),
     ),
     /historical demo identities/,

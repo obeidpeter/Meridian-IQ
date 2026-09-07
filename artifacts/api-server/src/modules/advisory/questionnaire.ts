@@ -147,7 +147,7 @@ const SECTIONS: Section[] = [
         id: "retention",
         prompt:
           "Are stamped invoices and records retained for the required period?",
-        helpText: "A minimum 24-month retention applies; the MeridianIQ standard is 7 years.",
+        helpText: "A minimum 24-month retention applies; the Valo standard is 7 years.",
         weight: 1,
         remediation:
           "Enable long-term retention of stamped artifacts on Nigeria-resident storage.",

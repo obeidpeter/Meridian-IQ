@@ -1,4 +1,4 @@
-// The user journeys that prove MeridianIQ's surfaces against a freshly seeded
+// The user journeys that prove Valo's surfaces against a freshly seeded
 // database: portal auth, the operator's Compliance Desk, firm admin tooling,
 // the auditor's read-only boundary, consent, supplier bills (payables), the
 // VAT position + compliance pack, maker-checker governance, collection

@@ -1,5 +1,5 @@
 /**
- * Semantic design tokens for the MeridianIQ SME companion app.
+ * Semantic design tokens for the Valo SME companion app.
  *
  * These tokens are derived from the sibling web artifact
  * (`artifacts/sme-compliance/src/index.css`) so both products share one

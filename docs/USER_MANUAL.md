@@ -1,8 +1,8 @@
-# MeridianIQ — User Manual
+# Valo — User Manual
 
 _One data spine. Five ways in._
 
-This manual explains everything MeridianIQ does and how to use it — written
+This manual explains everything Valo does and how to use it — written
 for the people who use it every day (SME owners, accountants, buyer finance
 teams, bank reviewers, Compliance Desk operators, auditors) with a final
 section for whoever runs the system.
@@ -11,7 +11,7 @@ section for whoever runs the system.
 
 ## Contents
 
-1. [What is MeridianIQ?](#1-what-is-meridianiq)
+1. [What is Valo?](#1-what-is-valo)
 2. [Quick start: signing in](#2-quick-start-signing-in)
 3. [Who sees what: the seven account types](#3-who-sees-what-the-seven-account-types)
 4. [The Compliance App — for SMEs](#4-the-compliance-app--for-smes)
@@ -31,7 +31,7 @@ section for whoever runs the system.
 
 ---
 
-## 1. What is MeridianIQ?
+## 1. What is Valo?
 
 Nigeria's tax authority requires businesses to submit their invoices to the
 national e-invoicing platform for validation **before** the buyer acts on
@@ -39,7 +39,7 @@ them. A validated invoice receives an official stamp — an IRN, a CSID and a
 QR code. Missing the submission window, or submitting invoices the platform
 rejects, attracts penalties.
 
-MeridianIQ makes that painless, and then makes it worth more:
+Valo makes that painless, and then makes it worth more:
 
 - **For SMEs** — guided invoicing that catches errors _before_ submission,
   automatic transmission with retries, a permanent vault of stamped invoices,
@@ -66,7 +66,7 @@ mobile companion app:
 | `/console/`            | **Console, Compliance Desk and Bank Data Room**     | Firms, operators, auditors, banks |
 | `/buyer/`              | **Buyer Rails**                                     | Buyer finance teams               |
 | `/penalty-calculator/` | **Penalty Calculator**                              | Anyone — no account needed        |
-| Mobile app             | **MeridianIQ Companion** (iOS/Android)              | SME owners, firm staff on the go  |
+| Mobile app             | **Valo Mobile** (iOS/Android)                       | SME owners, firm staff on the go  |
 
 ---
 
@@ -91,15 +91,15 @@ credentials. Production startup disables all known demo identities. See
 | Account                       | Email                           | Signs you into                              |
 | ----------------------------- | ------------------------------- | ------------------------------------------- |
 | SME owner (Adaeze Foods)      | `owner@adaezefoods.example`     | Compliance App — owns the consent decisions |
-| SME firm staff                | `demo.staff@meridianiq.example` | Compliance App, with live demo data         |
-| Accountant (firm admin)       | `demo.admin@meridianiq.example` | Accountant Console (and the Compliance App) |
-| Compliance Desk operator      | `ops@meridianiq.example`        | The operator queue in the Console           |
+| SME firm staff                | `demo.staff@valo.example`       | Compliance App, with live demo data         |
+| Accountant (firm admin)       | `demo.admin@valo.example`       | Accountant Console (and the Compliance App) |
+| Compliance Desk operator      | `ops@valo.example`              | The operator queue in the Console           |
 | Buyer finance (Zenith Retail) | `finance@zenithretail.example`  | Buyer Rails                                 |
-| Read-only auditor             | `audit@meridianiq.example`      | Audit & evidence (read-only Console)        |
+| Read-only auditor             | `audit@valo.example`            | Audit & evidence (read-only Console)        |
 
 Two further accounts are seeded but not shown as buttons: a second buyer
 (`accounts@saharalogistics.example`) and a second operator
-(`claims.approver@meridianiq.example`) — the latter exists so the claims
+(`claims.approver@valo.example`) — the latter exists so the claims
 register's maker-checker rule (you cannot approve your own draft) can be
 exercised in the demo.
 
@@ -122,7 +122,7 @@ recorded on the audit trail.
 ### Forgot your password?
 
 Use **Forgot your password?** on the sign-in panel. Resets are issued as
-one-time links: ask your firm administrator — or MeridianIQ support — to send
+one-time links: ask your firm administrator — or Valo support — to send
 you one, then open it and choose a new password (at least 8 characters). The
 link works once, expires after 24 hours, and signs out every other session on
 your account. Operators issue reset links from **Console → Invitations**.
@@ -134,6 +134,10 @@ Authenticator, Aegis, 1Password — anything that speaks standard TOTP codes).
 Deployments can also _require_ 2FA for chosen roles (typically operators and
 firm admins) — a required-but-unenrolled account is refused at sign-in with
 instructions to enrol first.
+
+New authenticator setup links show **Valo** as the issuer. Existing entries
+labelled **MeridianIQ** still work with the same codes and recovery codes;
+you do not need to disable or re-enrol 2FA because the product name changed.
 
 **Turning it on** — on the portal, while signed in, the account card has a
 **Two-factor authentication** section:
@@ -180,7 +184,7 @@ The mobile companion supports the same challenge — see
 
 ## 3. Who sees what: the seven account types
 
-MeridianIQ enforces permissions at every level — the menus you see, the pages
+Valo enforces permissions at every level — the menus you see, the pages
 you can open, and the data the server will return.
 
 | Role            | Plain-language description                                                                                                                                                                                                                          |
@@ -188,7 +192,7 @@ you can open, and the data the server will return.
 | **Client user** | The SME itself (e.g. the business owner). Creates and submits its own invoices, and is the account that grants or revokes **consent** over the business's data.                                                                                     |
 | **Firm staff**  | An accountant working clients' books. Everything the client can do (except consent decisions), plus firm-wide views.                                                                                                                                |
 | **Firm admin**  | Runs the practice. Everything staff can do, plus onboarding pipeline management, billing & payments, white-label branding, ERP integrations, client import, team invitations, and the firm's API keys & webhooks.                                   |
-| **Operator**    | MeridianIQ's own Compliance Desk. Works a cross-tenant case queue, reviews Clerk's document extractions, edits the error catalogue, manages platform health, feature flags and party data. Does **not** see firm business pages like the portfolio. |
+| **Operator**    | Valo's own Compliance Desk. Works a cross-tenant case queue, reviews Clerk's document extractions, edits the error catalogue, manages platform health, feature flags and party data. Does **not** see firm business pages like the portfolio. |
 | **Buyer user**  | A finance person at a large buyer. Sees only invoices addressed to their own organisation.                                                                                                                                                          |
 | **Bank user**   | A governed institutional reviewer. Sees only privacy-protected credit-readiness cohorts after 2FA, a current DPA-bound grant, and platform activation. Never sees business identities, invoices, exact amounts or financing controls.               |
 | **Auditor**     | Read-only everything. Can view every screen the numbers live on, and can verify/export the audit log — but every button that would change something is absent or refused.                                                                           |
@@ -310,7 +314,7 @@ rate) before **Create invoice** is offered.
   issue-time rate on the record, used to fold the invoice into naira
   reporting honestly. Leave it blank and the invoice still works, but naira
   views (the VAT position, CSV exports) will show it as _excluded_ rather
-  than guess a rate — MeridianIQ never assumes ₦1 = 1 unit. An NGN invoice
+  than guess a rate — Valo never assumes ₦1 = 1 unit. An NGN invoice
   never carries a rate.
 - **Add customer** — a dialog right on the form (legal name, optional TIN /
   street / city), so a new buyer never blocks an invoice.
@@ -381,7 +385,7 @@ approval from **somebody else** first.
   the invoice simply stays where it was.
 - A colleague opens the invoice and clicks **Approve for submission** on
   its **Approvals** card. Any firm account can approve (client accounts and
-  MeridianIQ operators cannot); what matters is that the person who then
+  Valo operators cannot); what matters is that the person who then
   submits is _someone else_ — approving your own submission never counts.
 - The Approvals card is the evidence trail: who approved, when, and any
   note. **Editing the invoice cancels its approvals** — an approval only
@@ -431,10 +435,10 @@ more than a stamped one — it's the buyer saying _"yes, we owe this."_
 ### Sharing an Invoice Room _(feature-flagged)_
 
 Invoice Room is the account-optional route for a buyer who should not have to
-join MeridianIQ before checking one invoice. On a stamped invoice, open the
+join Valo before checking one invoice. On a stamped invoice, open the
 **Invoice Room** card and choose email, WhatsApp, or **Copy link**. Set an
 expiry, decide whether reminders should run, and confirm the buyer's contact
-consent before MeridianIQ sends anything.
+consent before Valo sends anything.
 
 - A newly created link is shown once for copying. **Replace link** immediately
   retires the prior URL and its active browser sessions; **Revoke** closes it
@@ -464,7 +468,7 @@ link still grants read-only access to that invoice.
 ### Supplier bills
 
 **Bills** is your purchases ledger — the other side of the invoice book. A
-bill is a supplier's invoice captured into MeridianIQ (usually through Send
+bill is a supplier's invoice captured into Valo (usually through Send
 to Clerk) with **your business as the buyer**. Bills exist to be tracked and
 checked, never filed: a supplier document can never be submitted for
 stamping from your account.
@@ -476,7 +480,7 @@ stamping from your account.
   bill itself is never edited — its status is _read from_ the evidence, so
   it is always honest, and unflagging isn't a thing: evidence is permanent.
 - **Verify the stamp** — type the IRN and CSID printed on the supplier's
-  invoice and MeridianIQ checks them against the national record, keeping
+  invoice and Valo checks them against the national record, keeping
   the result on the bill. This protects your **input VAT**: your VAT claim
   rests on valid supplier invoices, and an invalid or missing stamp is
   exactly what an inspection would find — better you find it first, before
@@ -588,7 +592,7 @@ silently.
    nothing else about the bill changes. Credit lines (money coming in) still
    match your own invoices only.
 
-This is the honest way an invoice becomes "paid" in MeridianIQ — a real,
+This is the honest way an invoice becomes "paid" in Valo — a real,
 source-tagged settlement event, never a manual tick-box — and the same
 evidence rule drives a bill's payment status.
 
@@ -636,7 +640,7 @@ period; your accountant
 walks each one from **Upcoming** to **Prepared** to **Filed**, and a filed
 row shows the filing date and the authority's acknowledgment reference.
 Unfiled rows past their date are flagged **Overdue**, ones inside the next
-7 days **Due soon**. MeridianIQ records that a filing happened — it never
+7 days **Due soon**. Valo records that a filing happened — it never
 files anything with an authority itself. When a return's statutory date is
 inside the next 7 days — or has passed — the platform sends your business
 one deadline alert per threshold over your enabled channels (the same
@@ -647,7 +651,7 @@ opt-outs as every deadline alert).
 When a corporate buyer pays one of your invoices, Nigerian law may oblige
 it to **withhold** part of the amount and remit it to the authority on your
 behalf — leaving you owed a **credit note** as evidence of the deduction.
-MeridianIQ tracks that chase end to end:
+Valo tracks that chase end to end:
 
 - **On the invoice form** — pick a **WHT category** when a deduction
   applies: supply of goods (2%), construction & works (2%), services &
@@ -698,11 +702,11 @@ itself.
 The **Consent** page shows the three permission layers over your business
 data, each grantable and revocable **by you** (the client account):
 
-1. **Compliance & submission** — lets MeridianIQ validate, submit, vault and
+1. **Compliance & submission** — lets Valo validate, submit, vault and
    alert. Without it, nothing can be submitted on your behalf.
 2. **Anonymized benchmarking** — allows anonymized, aggregate industry
    statistics. Never shown with your name.
-3. **Credit readiness** — allows MeridianIQ to evaluate whether verified invoice evidence meets its published
+3. **Credit readiness** — allows Valo to evaluate whether verified invoice evidence meets its published
    readiness rules and include the result in protected bank cohorts. This is
    optional, does not apply for finance or move money, and can be switched off
    immediately.
@@ -719,7 +723,7 @@ never passwords or security codes), and the party-level audit trail. Very
 large sections are capped and marked _truncated_ rather than silently
 shortened, and the download itself is recorded on the audit trail.
 
-### Your first sign-in: choosing what MeridianIQ may do
+### Your first sign-in: choosing what Valo may do
 
 The very first time a business's own account signs in, the app shows a
 one-page **consent step** before the workspace — layers 1 and 2 as plain
@@ -737,7 +741,7 @@ own account.
 
 ## 5. Clerk — the AI assistant
 
-Clerk is MeridianIQ's built-in assistant. One principle governs everything it
+Clerk is Valo's built-in assistant. One principle governs everything it
 does: **Clerk never files anything.** It reads documents and proposes; a
 human reviews and decides; approval creates a _draft_ invoice — or, for a
 tax-authority notice, a tracked _obligation_ — and nothing more. Numbers
@@ -982,7 +986,7 @@ next to the two _submit_ kinds (reminders always stay a human job — someone
 has to read and send them) there's an **Automate daily** button. Granting a
 standing approval means:
 
-- Once a day at most, MeridianIQ assembles that batch and runs it **under
+- Once a day at most, Valo assembles that batch and runs it **under
   your name, without asking again** — the confirmation dialog says exactly
   that, and states the ceiling you chose.
 - **Daily limit (invoices per run)** — you pick how many invoices one run
@@ -1282,7 +1286,7 @@ Money / Compliance / Connections & delivery**:
 
 - **Receivables** — outstanding money per client and currency, with 90+-day
   and oldest-due columns and top debtors.
-- **Billing statement** — what MeridianIQ charges the firm each closed
+- **Billing statement** — what Valo charges the firm each closed
   month: accepted invoices, Clerk usage (with a by-purpose breakdown), base
   fee, overage, total — exportable as CSV. The **Payments** section collects
   it: **Record payment intent — \<month\>** computes the month's fee
@@ -1427,7 +1431,7 @@ Monthly revenue-share statements per firm: billed invoice count, subscription
 
 - overage, and the firm's share. Generate a period on demand and **export
   CSV** for accounting. (This is the firm's _earnings_ view; what the firm
-  _owes_ MeridianIQ is the portfolio's billing statement card.)
+  _owes_ Valo is the portfolio's billing statement card.)
 
 ### API & webhooks _(firm admin only)_
 
@@ -1457,9 +1461,13 @@ last use.
 
 Payloads are **pointer-only** (ids and timestamps — never amounts, names or
 documents); fetch the details through the API with an API key. Every
-delivery is signed: the `x-meridian-signature` header carries an HMAC-SHA256
+delivery is signed: the `x-valo-signature` header carries an HMAC-SHA256
 of the raw body, keyed by the **SHA-256 hash of your signing secret** (hash
 the stored `whsec_…` secret once, then verify each body against that key).
+The legacy `x-meridian-signature` header carries the same signature, and
+`x-valo-event` / `x-meridian-event` carry the same event type. Receivers using
+the legacy headers continue to work; these aliases do not create a second
+delivery.
 Failed deliveries retry with backoff up to 5 attempts, then park as **dead**;
 the **Deliveries** view shows every attempt, and a dead delivery has a
 **Retry** button that re-queues it for a fresh attempt cycle (only dead
@@ -1727,12 +1735,12 @@ the other apps.
 
 ### Starting from an Invoice Room
 
-A supplier may send an Invoice Room link before you have a MeridianIQ account.
+A supplier may send an Invoice Room link before you have a Valo account.
 You can inspect and download that one invoice immediately, then verify the
 saved contact to respond or report payment. **Add to Buyer Rails** creates a
 new buyer login only after email verification and links the invoice's buyer
 organisation. If that email already belongs to an account, sign in through the
-normal portal; MeridianIQ does not disclose or replace the existing account.
+normal portal; Valo does not disclose or replace the existing account.
 
 ### Confirmations
 
@@ -1840,7 +1848,7 @@ estimator ships inside the mobile app, equally offline.)
 
 ## 10. The Mobile Companion
 
-The MeridianIQ Companion (iOS/Android, built with Expo) is the
+The Valo Mobile companion (iOS/Android, built with Expo) is the
 on-the-go subset of the Compliance App for SME owners and firm staff. Sign
 in with your normal email and password (firm users then pick which client
 business to work in — switchable later from Settings). The app follows your
@@ -1928,7 +1936,7 @@ Settings** — plus screens reached from Home:
 
 ## 11. The life of an invoice
 
-Everything in MeridianIQ hangs off one idea: **an invoice's history is
+Everything in Valo hangs off one idea: **an invoice's history is
 append-only.** Drafts are editable; from submission onward nothing is ever
 edited or deleted — states are only ever _added_. That's what makes the vault,
 the audit trail and (one day) financing trustworthy.
@@ -2003,7 +2011,7 @@ human decision, every state only ever added:
 
 ## 12. Feature flags: why some pages say "not yet enabled"
 
-MeridianIQ ships capabilities **dark** and switches them on when their
+Valo ships capabilities **dark** and switches them on when their
 evidence gate passes (or per firm). A dark feature isn't hidden — it's
 unreachable, for every role. If a page shows _"…is not yet enabled"_, ask
 your operator to flip its flag (Compliance Desk → Feature flags).
@@ -2303,7 +2311,8 @@ DATABASE_URL=postgres://... pnpm --filter @workspace/scripts run e2e
   account); passwords are scrypt-hashed; sessions are HMAC-signed HttpOnly
   cookies (7 days) revoked in bulk by password change/reset and 2FA
   changes; optional TOTP 2FA with single-use recovery codes; every
-  state-changing browser request requires a custom CSRF header.
+  state-changing browser request requires the custom `x-valo-csrf` header
+  (the legacy `x-meridian-csrf` remains accepted).
 - Every principal is rate-limited; AI-spending routes have a tighter class.
 - Alert messages and webhook payloads are pointer-only by construction.
 - Machine credentials are least-privilege: API keys carry only an explicit
@@ -2356,7 +2365,7 @@ recreate the database) and restart the server — never row-by-row DELETE.
 
 **"Signed in as … This workspace needs a … account."**
 That workspace isn't for your role — e.g. a buyer opening the console. Use
-**Back to the MeridianIQ portal** and pick a highlighted tile.
+**Back to the Valo portal** and pick a highlighted tile.
 
 **"… is not yet enabled" on Reconciliation / B2C / Buyer Rails / Integrations / White-label.**
 The feature's flag is dark. An operator can flip it: Compliance Desk →
@@ -2400,7 +2409,9 @@ lost), create a new one under **Console → API & webhooks**.
 **My webhook receiver rejects every signature.**
 The HMAC key is the **SHA-256 hash of your signing secret**, not the secret
 itself: compute `sha256(whsec_…)` as lowercase hex once, then verify
-`HMAC-SHA256(body, that-hash)` against the `x-meridian-signature` header.
+`HMAC-SHA256(body, that-hash)` against the `x-valo-signature` header.
+The legacy `x-meridian-signature` contains the identical signature and also
+remains valid for verification.
 
 **"A payment for this month is already in motion" / "nothing to collect".**
 One live payment intent per billing month — check the payments list under
@@ -2442,8 +2453,10 @@ line names the transport in use — `simulator` or `http` — and its
 environment, so you can tell whether it is a real access point or the demo
 simulator that is refusing), one
 _Rail circuit breaker OPEN_ health alert per outage (not one per minute), and
-in `/api/metrics` a rising `meridian_outbox_events{state="parked"}` and
-`meridian_outbox_oldest_pending_age_seconds` with a flat `state="dead"`.
+in `/api/metrics` a rising `valo_outbox_events{state="parked"}` and
+`valo_outbox_oldest_pending_age_seconds` with a flat `state="dead"`.
+The corresponding `meridian_*` names remain aliases of the same measurements;
+do not sum the old and new names together.
 Nothing is lost: parked submissions wait for the breaker, burn no retries,
 and resume on their own — one probe per cooldown, then the backlog drains
 with jittered backoff. Do nothing unless the outage outlasts the retry
@@ -2491,9 +2504,9 @@ on the invoice itself.
 | **Stamp**                | The IRN + CSID + QR issued when the national platform accepts an invoice.                                                                                                                                                                                                                              |
 | **TIN**                  | Tax Identification Number of a business. Validated TINs gate the confirmation workflow.                                                                                                                                                                                                                |
 | **CAC number**           | Corporate Affairs Commission registration number.                                                                                                                                                                                                                                                      |
-| **APP / rail**           | Access Point Provider — the accredited channel that transmits invoices to the authority. MeridianIQ uses two, with automatic failover.                                                                                                                                                                 |
+| **APP / rail**           | Access Point Provider — the accredited channel that transmits invoices to the authority. Valo uses two, with automatic failover.                                                                                                                                                                 |
 | **Vault**                | Permanent, write-once storage of stamped invoice artifacts.                                                                                                                                                                                                                                            |
-| **Clerk**                | MeridianIQ's AI assistant: reads documents, answers register-grounded questions, phrases drafts. Proposes only — a human always decides.                                                                                                                                                               |
+| **Clerk**                | Valo's AI assistant: reads documents, answers register-grounded questions, phrases drafts. Proposes only — a human always decides.                                                                                                                                                               |
 | **Extraction case**      | One invoice document Clerk has read, waiting for (or through) human review. Approval creates a draft invoice only.                                                                                                                                                                                     |
 | **Notice case**          | One tax-authority notice Clerk has read, waiting for firm review in the intake queue's Notices tab. Approval records an **obligation** — never an invoice — and notice cases never ride the fast lane.                                                                                                 |
 | **Fast lane**            | Invoice extraction cases that passed pre-flight cleanly with high confidence — eligible for one-click bulk approval, re-verified server-side. Invoices only; never notices.                                                                                                                            |

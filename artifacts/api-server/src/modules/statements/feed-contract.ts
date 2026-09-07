@@ -241,7 +241,7 @@ export const liveBankRelayConnector: StatementFeedConnector = {
   key: "open-banking-relay",
   name: "Production open-banking relay",
   description:
-    "Live transactions through the deployment-owned MeridianIQ bank adapter protocol.",
+    "Live transactions through the deployment-owned Valo bank adapter protocol.",
   mode: "live",
   isConfigured: isBankRelayConfigured,
   configurationFields: [

@@ -17,7 +17,7 @@ import { createdAt, id, updatedAt } from "./columns.ts";
 // which a buyer actually withheld — minted when a deduction is RECORDED
 // (a human accepting a short-pay reconciliation match, or recording it by
 // hand), never speculatively from the category alone. Evidence-only
-// posture, the filing_returns idiom: MeridianIQ records that a credit
+// posture, the filing_returns idiom: Valo records that a credit
 // note was received (reference + date), it never claims anything with an
 // authority itself.
 

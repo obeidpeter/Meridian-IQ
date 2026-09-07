@@ -36,13 +36,13 @@ place. You only need an Expo account and the steps below, run on your own comput
 
 1. Make sure the Replit workspace is running (the API server and the Expo dev server
    must be up).
-2. Open the installed **MeridianIQ Mobile** dev build on the phone. Scan the QR code
+2. Open the installed **Valo Mobile** dev build on the phone. Scan the QR code
    shown by the Expo workflow in Replit (same QR you used with Expo Go) so the dev
    build loads the app.
 3. Sign in, go to **Settings**, and turn on **Push notifications**. Accept the
    notification permission prompt. The app registers the device with the API.
 4. Tap **Send test alert** — a notification should appear on the phone within a few
-   seconds ("MeridianIQ … Open the app for details.").
+   seconds ("Valo … Open the app for details.").
 5. To see a real pre-breach alert: have an open B2C batch whose reporting deadline is
    inside the 4-hour warning margin — the scheduler sends a `b2c_window_alert` push to
    all registered devices of clients with push enabled.

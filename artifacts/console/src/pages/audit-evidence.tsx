@@ -131,7 +131,7 @@ export function AuditEvidence() {
         complete: valid,
       };
       downloadBlob(
-        `meridianiq-audit-bundle-${new Date().toISOString().slice(0, 10)}.json`,
+        `valo-audit-bundle-${new Date().toISOString().slice(0, 10)}.json`,
         JSON.stringify(bundle, null, 2),
         "application/json",
       );

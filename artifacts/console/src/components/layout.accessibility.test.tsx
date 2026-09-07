@@ -43,7 +43,7 @@ test("the mobile brand and navigation controls belong to a banner", () => {
   const menu = screen.getByRole("button", { name: "Open navigation" });
   const header = menu.closest("header");
   expect(header).not.toBeNull();
-  expect(within(header!).getByText("MeridianIQ")).toBeTruthy();
+  expect(within(header!).getByText("Valo")).toBeTruthy();
   // CSS selects one responsive header; neither belongs inside the main content.
   expect(screen.getAllByRole("banner")).toHaveLength(2);
   expect(header!.closest("main, section, article, aside, nav")).toBeNull();

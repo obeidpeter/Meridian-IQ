@@ -165,7 +165,7 @@ test(
                       clientPartyId: "00000000-0000-4000-8000-000000000003",
                       buyerPartyId: "00000000-0000-4000-8000-000000000004",
                       role: app.role,
-                      email: "fixture@meridianiq.example",
+                      email: "fixture@valo.example",
                       fullName: "Local fixture",
                       capabilities: ["invoice.read", "invoice.respond"],
                       features: ["invoice_lifecycle"],
@@ -174,7 +174,7 @@ test(
                       releaseTag: "R4",
                     },
                     "/api/notifications": { items: [], unreadCount: 0 },
-                    "/api/healthz": { contractVersion: "0.99.0" },
+                    "/api/healthz": { contractVersion: "0.100.0" },
                   };
                   const known =
                     request.method() === "GET" &&

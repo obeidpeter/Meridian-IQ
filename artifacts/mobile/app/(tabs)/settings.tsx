@@ -418,7 +418,7 @@ export default function SettingsScreen() {
         color={colors.mutedForeground}
         style={{ textAlign: "center", marginTop: 24 }}
       >
-        MeridianIQ Companion v{version}
+        Valo Companion v{version}
       </AppText>
     </ScreenScroll>
   );

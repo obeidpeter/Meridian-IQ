@@ -40,6 +40,7 @@ if ("serviceWorker" in navigator) {
               keys
                 .filter(
                   (k) =>
+                    k.startsWith("valo-sme-static-") ||
                     k.startsWith("meridianiq-sme-static-") ||
                     /^meridianiq-v\d+$/.test(k),
                 )

@@ -34,6 +34,13 @@ export const PRODUCTION_DEMO_EMAILS = [
   "accounts@saharalogistics.example",
   "audit@meridianiq.example",
   "claims.approver@meridianiq.example",
+  // The rebranded demo identities are equally forbidden. Keep the historical
+  // entries above: copied databases may still contain those credentials.
+  "demo.staff@valo.example",
+  "demo.admin@valo.example",
+  "ops@valo.example",
+  "audit@valo.example",
+  "claims.approver@valo.example",
   // First-landing consent capture persona (D15): seeded with no consent event.
   "owner@tundeprints.example",
 ] as const;

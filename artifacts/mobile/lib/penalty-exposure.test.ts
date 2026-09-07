@@ -39,6 +39,6 @@ test("the fix line states the exposure is removable", () => {
 test("penaltyExposureNote: estimate-not-advice, with the as-of date", () => {
   assert.equal(
     penaltyExposureNote("29 Jul 2026"),
-    "An estimate under MeridianIQ's published penalty model — not legal or tax advice. As of 29 Jul 2026.",
+    "An estimate under Valo's published penalty model — not legal or tax advice. As of 29 Jul 2026.",
   );
 });

@@ -90,6 +90,8 @@ export function psql(url, sql, execute = run) {
     res = execute(
       "psql",
       [
+        // Windows psql stops option parsing at a positional database argument.
+        "--dbname",
         connection.url,
         "-X",
         "-A",

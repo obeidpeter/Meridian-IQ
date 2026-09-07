@@ -18,6 +18,7 @@ import {
   resolveApiKeyPrincipal,
 } from "../modules/integrations/api-keys";
 import { logger } from "../lib/logger";
+import { brandHeader } from "../lib/brand-headers";
 
 // Principal resolution.
 //
@@ -129,7 +130,6 @@ if (DEV_AUTH_ENABLED) {
 }
 
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const CSRF_HEADER = "x-meridian-csrf";
 const MACHINE_PATHS = new Set([
   "/api/inbound/email",
   "/api/inbound/whatsapp",
@@ -156,7 +156,7 @@ export function requireCsrfHeader(
     next();
     return;
   }
-  if (header(req, CSRF_HEADER)) {
+  if (brandHeader(req, "csrf")) {
     next();
     return;
   }
@@ -192,7 +192,7 @@ async function principalFromMembership(
   if (memberships.length === 0) return null;
 
   const requestedFirm = header(req, "x-firm-id");
-  const requestedWorkspace = header(req, "x-meridian-workspace");
+  const requestedWorkspace = brandHeader(req, "workspace");
   const membership = requestedFirm
     ? memberships.find((m) => m.firmId === requestedFirm)
     : requestedWorkspace === "buyer"

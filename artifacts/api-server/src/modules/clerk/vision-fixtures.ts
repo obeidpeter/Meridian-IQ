@@ -289,8 +289,8 @@ function renderPdf(build: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
     size: "A5",
     margin: MARGIN,
     info: {
-      Title: "MeridianIQ eval fixture",
-      Author: "MeridianIQ",
+      Title: "Valo eval fixture",
+      Author: "Valo",
       CreationDate: PINNED_CREATED,
     },
   });

@@ -1,7 +1,7 @@
 // Filing Desk (Phase 1): the statutory returns register — one row per client
 // × tax type × period, minted deterministically from the statutory calendar
 // (never by hand and never by a model), then walked upcoming → prepared →
-// filed by the firm. Evidence-only posture: MeridianIQ records that a return
+// filed by the firm. Evidence-only posture: Valo records that a return
 // was prepared and filed (date + acknowledgment reference), it never files
 // anything with an authority itself.
 //

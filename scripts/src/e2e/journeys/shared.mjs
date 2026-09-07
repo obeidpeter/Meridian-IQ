@@ -10,11 +10,11 @@ import { CSRF, commandHeaders } from "../../test-client.mjs";
 const DEMO_PASSWORD = "meridian-e2e-2027!";
 
 const DEMO_EMAIL_BY_TEST_ID = {
-  "button-demo-ops": "ops@meridianiq.example",
-  "button-demo-demo.admin": "demo.admin@meridianiq.example",
-  "button-demo-audit": "audit@meridianiq.example",
+  "button-demo-ops": "ops@valo.example",
+  "button-demo-demo.admin": "demo.admin@valo.example",
+  "button-demo-audit": "audit@valo.example",
   "button-demo-owner": "owner@adaezefoods.example",
-  "button-demo-demo.staff": "demo.staff@meridianiq.example",
+  "button-demo-demo.staff": "demo.staff@valo.example",
   // Seeded WITHOUT any consent event: the first-landing capture journey.
   "button-demo-tunde": "owner@tundeprints.example",
 };

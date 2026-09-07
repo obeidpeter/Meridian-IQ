@@ -140,7 +140,7 @@ export const creditVerificationStateEnum = pgEnum("credit_verification_state", [
 
 // Financing-grade KYB evidence is append-only and deliberately data-minimal:
 // owner names, dates of birth and identity documents remain with the approved
-// verification provider. MeridianIQ stores outcome, coverage and opaque
+// verification provider. Valo stores outcome, coverage and opaque
 // evidence references only; bank responses expose none of those references.
 export const creditKybChecksTable = pgTable(
   "credit_kyb_checks",

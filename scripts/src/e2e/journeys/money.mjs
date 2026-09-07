@@ -110,7 +110,7 @@ async function journeyPayables(page, BASE, check) {
 // the same session); the journey signs out at the end so the next journey's
 // portal shows the demo buttons again.
 async function journeyVatPositionAndPack(page, BASE, check) {
-  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+  await apiLogin(page, BASE, "demo.staff@valo.example");
 
   // The month-to-date position for the demo client (current Lagos month by
   // default — the option list includes it, unlike the closed-month VAT pack).
@@ -179,7 +179,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
 
   // Firm side as the admin: the rollup, then the consent-gated notify — 202
   // whether anything was sent (the endpoint is never a consent oracle).
-  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@valo.example");
   const firmRes = await page.request.get(BASE + "/api/console/vat-positions");
   const firm = firmRes.status() === 200 ? await firmRes.json() : null;
   check(
@@ -211,7 +211,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
 // The created invoice stays a DRAFT under a Date.now()-unique number (the
 // WHT-journey idiom), so no later journey's picks are disturbed.
 async function journeyBulkImport(page, BASE, check) {
-  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+  await apiLogin(page, BASE, "demo.staff@valo.example");
   await page.goto(BASE + "/app/import", { waitUntil: "networkidle" });
 
   const stamp = Date.now();

@@ -62,6 +62,7 @@ import { appendAudit } from "../modules/audit/audit";
 import { sendRawToRelay } from "../modules/messaging/messaging";
 import { logger } from "../lib/logger";
 import { recordUsabilityEvent } from "../lib/metrics";
+import { brandHeader } from "../lib/brand-headers";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly session cookie;
 // the principal middleware resolves it on subsequent requests. Login/logout
@@ -147,7 +148,7 @@ async function loadMemberships(userId: string) {
 type Membership = Awaited<ReturnType<typeof loadMemberships>>[number];
 
 function selectMembership(req: Request, memberships: Membership[]): Membership {
-  const workspace = req.get("x-meridian-workspace");
+  const workspace = brandHeader(req, "workspace");
   return (
     (workspace === "buyer"
       ? memberships.find((membership) => membership.role === "buyer_user")
@@ -196,13 +197,13 @@ async function completeSignIn(
   membership: Membership,
   audit: { action: string; after: Record<string, unknown> },
 ) {
+  const isMobileClient = brandHeader(req, "client") === "mobile";
   const token = await issueSessionToken(user.id, sessionEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   // Only native/mobile clients (which cannot use HttpOnly cookies) receive the
   // bearer token in the response body; they identify themselves with the
-  // X-Meridian-Client header. Browser apps stay cookie-only so an XSS cannot
+  // X-Valo-Client header (the legacy name is also accepted). Browser apps stay cookie-only so an XSS cannot
   // read a replayable session token out of the sign-in response (SEC-02).
-  const isMobileClient = req.get("x-meridian-client") === "mobile";
   await appendAudit({
     actorId: user.id,
     firmId: membership.firmId,

@@ -23,7 +23,7 @@ router.post("/public/advisory-requests", async (req, res): Promise<void> => {
   if (!body.consent) {
     throw new DomainError(
       "CONTACT_CONSENT_REQUIRED",
-      "Confirm that MeridianIQ may use these details to contact you",
+      "Confirm that Valo may use these details to contact you",
       400,
     );
   }
@@ -69,7 +69,7 @@ router.post("/public/access-requests", async (req, res): Promise<void> => {
   if (!body.consent) {
     throw new DomainError(
       "CONTACT_CONSENT_REQUIRED",
-      "Confirm that MeridianIQ may use these details to contact you",
+      "Confirm that Valo may use these details to contact you",
       400,
     );
   }

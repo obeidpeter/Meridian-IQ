@@ -1,3 +1,4 @@
+import { ValoMark } from "@workspace/web-ui";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -7,7 +8,6 @@ import {
 } from "@workspace/api-client-react";
 import {
   BarChart3,
-  Compass,
   FileCheck2,
   Landmark,
   ShieldCheck,
@@ -35,9 +35,9 @@ const LAYERS = [
     scope: "compliance_submission",
     icon: FileCheck2,
     description:
-      "Lets MeridianIQ validate, submit and vault your invoices, and send you deadline alerts. Without it, nothing can be submitted on your behalf.",
+      "Lets Valo validate, submit and vault your invoices, and send you deadline alerts. Without it, nothing can be submitted on your behalf.",
     declineNote:
-      "Without this, MeridianIQ cannot submit or stamp invoices for you. You can allow it later from Consent.",
+      "Without this, Valo cannot submit or stamp invoices for you. You can allow it later from Consent.",
   },
   {
     layer: 2,
@@ -99,10 +99,10 @@ export function ConsentCapture({
       <div className="mx-auto w-full max-w-2xl">
         <div className="mi-brand mb-8 !text-[var(--mi-ink)]">
           <span className="mi-brand__mark !bg-[var(--mi-teal-soft)] !text-[var(--mi-teal)]">
-            <Compass aria-hidden="true" />
+            <ValoMark aria-hidden="true" />
           </span>
           <span>
-            <span className="mi-brand__name">MeridianIQ</span>
+            <span className="mi-brand__name">Valo</span>
             <span className="mi-brand__caption !text-[var(--mi-muted)]">
               Compliance Workspace
             </span>
@@ -111,7 +111,7 @@ export function ConsentCapture({
 
         <p className="mi-eyebrow">Before you start</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">
-          Choose what MeridianIQ may do for your business
+          Choose what Valo may do for your business
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           These are your permissions, recorded in a ledger you can read and

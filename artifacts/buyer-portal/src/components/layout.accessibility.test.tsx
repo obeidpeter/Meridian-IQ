@@ -54,7 +54,7 @@ test("the mobile brand and navigation controls belong to a banner", async () => 
   const menu = container.querySelector('[aria-label="Open navigation"]')!;
   const header = menu.closest("header");
   expect(header).not.toBeNull();
-  expect(header!.textContent).toContain("MeridianIQ");
+  expect(header!.textContent).toContain("Valo");
   // CSS selects one responsive header; neither belongs inside the main content.
   expect(container.querySelectorAll("header")).toHaveLength(2);
   expect(header!.closest("main, section, article, aside, nav")).toBeNull();

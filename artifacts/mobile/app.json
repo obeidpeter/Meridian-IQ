@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "MeridianIQ Mobile",
+    "name": "Valo",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": ["mobile", "valo"],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/icon.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -22,7 +22,11 @@
       }
     },
     "android": {
-      "package": "com.meridianiq.mobile"
+      "package": "com.meridianiq.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0f766e"
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -40,8 +44,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
-          "color": "#0d7c64"
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#0f766e"
         }
       ]
     ],

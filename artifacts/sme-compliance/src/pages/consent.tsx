@@ -54,7 +54,7 @@ const LAYERS = [
     scope: "compliance_submission",
     icon: FileCheck2,
     description:
-      "Lets MeridianIQ validate, submit and vault your invoices, and send deadline alerts. Without it, nothing can be submitted on your behalf.",
+      "Lets Valo validate, submit and vault your invoices, and send deadline alerts. Without it, nothing can be submitted on your behalf.",
     dormant: false,
   },
   {
@@ -72,7 +72,7 @@ const LAYERS = [
     scope: "credit_scoring",
     icon: Landmark,
     description:
-      "Allows MeridianIQ to evaluate your verified invoice history for credit readiness and include it only in privacy-protected bank cohorts. It does not apply for finance, share your identity, or move money.",
+      "Allows Valo to evaluate your verified invoice history for credit readiness and include it only in privacy-protected bank cohorts. It does not apply for finance, share your identity, or move money.",
     dormant: false,
   },
 ] as const;
@@ -88,7 +88,7 @@ function scopeTitle(scope: string): string {
 // The consequence a client accepts when revoking each layer — shown in the
 // confirm dialog before the ledger event is recorded.
 const REVOKE_CONSEQUENCES: Record<number, string> = {
-  1: "MeridianIQ stops validating, submitting and vaulting your invoices, and deadline alerts stop.",
+  1: "Valo stops validating, submitting and vaulting your invoices, and deadline alerts stop.",
   2: "Your data stops feeding anonymized industry benchmarks.",
   3: "Credit-readiness assessment stops immediately and your records leave future bank Data Room cohorts.",
 };
@@ -426,7 +426,7 @@ export function Consent() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Download a complete copy of the data MeridianIQ holds about your
+                Download a complete copy of the data Valo holds about your
                 business.
               </p>
               {exportFailed ? (

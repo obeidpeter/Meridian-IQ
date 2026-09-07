@@ -16,6 +16,7 @@
 //   BASE_PATH=/buyer/ PORT=1 pnpm --filter @workspace/buyer-portal run build
 //   BASE_PATH=/penalty-calculator/ PORT=1 pnpm --filter @workspace/penalty-calculator run build
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { EXPECTED_E2E_CHECKS } from "./expected-count.mjs";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -228,8 +229,11 @@ function browserExecutable() {
 // `pnpm install`). It boots FIRST and must answer before the api-server is
 // spawned, so the server's first rail call never races the rail's listen.
 const rail = spawn(
-  path.join(ROOT, "node_modules/.bin/tsx"),
-  ["artifacts/api-server/src/fake-rail-main.ts"],
+  process.execPath,
+  [
+    createRequire(import.meta.url).resolve("tsx/cli"),
+    "artifacts/api-server/src/fake-rail-main.ts",
+  ],
   {
     cwd: ROOT,
     env: { ...process.env, PORT: String(RAIL_PORT), FAKE_RAIL_TOKEN },

@@ -52,8 +52,8 @@ async function main() {
 
   // Demo identities and fixed demo ids (bootstrap/seed.ts: DEMO, DEMO_PASSWORD).
   const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
-  const STAFF_EMAIL = "demo.staff@meridianiq.example";
-  const ADMIN_EMAIL = "demo.admin@meridianiq.example";
+  const STAFF_EMAIL = "demo.staff@valo.example";
+  const ADMIN_EMAIL = "demo.admin@valo.example";
   const CLIENT_PARTY_ID = "22222222-2222-4222-8222-222222222222";
 
   function fail(msg) {

@@ -859,7 +859,7 @@ export function Confirmations() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Invoices appear when your suppliers address them to your
-                    organization on MeridianIQ.
+                    organization on Valo.
                   </p>
                 </>
               ) : (

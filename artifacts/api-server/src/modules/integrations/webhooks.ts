@@ -62,7 +62,8 @@ const DNS_TIMEOUT_MS = 3_000;
 const CLAIM_BATCH = 10;
 const LAST_ERROR_MAX = 300;
 
-export const SIGNATURE_HEADER = "x-meridian-signature";
+export const SIGNATURE_HEADER = "x-valo-signature";
+export const LEGACY_SIGNATURE_HEADER = "x-meridian-signature";
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -70,7 +71,8 @@ function sha256Hex(value: string): string {
 
 // Delivery signing. Only the secret's sha256 is stored (shown-once posture),
 // so the stored hash IS the HMAC key: signature =
-// HMAC-SHA256(body, sha256hex(secret)), hex-encoded, in X-Meridian-Signature.
+// HMAC-SHA256(body, sha256hex(secret)), hex-encoded, in X-Valo-Signature.
+// The same signature is also sent under the legacy name for existing receivers.
 // The receiver derives the same key by hashing its stored secret once. This
 // keeps the raw (possibly reused) secret unrecoverable platform-side while
 // every delivery still authenticates; a DB leak could forge signatures — as
@@ -644,6 +646,8 @@ async function postDelivery(delivery: ClaimedDelivery): Promise<{
       const status = await postPinnedHttps(target, body, {
         "content-type": "application/json",
         [SIGNATURE_HEADER]: signDeliveryBody(delivery.secret_hash, body),
+        [LEGACY_SIGNATURE_HEADER]: signDeliveryBody(delivery.secret_hash, body),
+        "x-valo-event": delivery.event_type,
         "x-meridian-event": delivery.event_type,
       });
       return status >= 200 && status < 300
@@ -655,6 +659,8 @@ async function postDelivery(delivery: ClaimedDelivery): Promise<{
       headers: {
         "content-type": "application/json",
         [SIGNATURE_HEADER]: signDeliveryBody(delivery.secret_hash, body),
+        [LEGACY_SIGNATURE_HEADER]: signDeliveryBody(delivery.secret_hash, body),
+        "x-valo-event": delivery.event_type,
         "x-meridian-event": delivery.event_type,
       },
       body,

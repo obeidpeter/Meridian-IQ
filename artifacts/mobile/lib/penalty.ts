@@ -1,5 +1,5 @@
 /**
- * MeridianIQ offline penalty estimator — calculation core.
+ * Valo offline penalty estimator — calculation core.
  *
  * Subset of the calculation core ported from the public penalty-calculator web
  * artifact (`artifacts/penalty-calculator/src/lib/penalty.ts`): only the
@@ -18,7 +18,7 @@
  *           turnover band.
  *
  * The statutory instrument publishes no monetary figures, so the amounts
- * below are MeridianIQ's stated model — surfaced as an estimate, not advice.
+ * below are Valo's stated model — surfaced as an estimate, not advice.
  */
 
 import { formatCurrency } from "./format";

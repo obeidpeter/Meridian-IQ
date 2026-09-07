@@ -574,7 +574,7 @@ export function WhiteLabel() {
                     className="text-sm font-mono mt-1 break-all"
                     data-testid="text-public-url"
                   >
-                    https://{subdomain || "your-firm"}.meridianiq.example
+                    https://{subdomain || "your-firm"}.valo.example
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
                     The public shell resolves your branding before login via{" "}

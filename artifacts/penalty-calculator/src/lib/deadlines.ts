@@ -3,7 +3,7 @@ import type { TurnoverBand } from "./penalty.ts";
 /**
  * Indicative e-invoicing onboarding waves. The rollout is phased by taxpayer
  * size: larger taxpayers onboard (and face enforcement) first. These are
- * MeridianIQ's planning dates to help taxpayers orient themselves — they are
+ * Valo's planning dates to help taxpayers orient themselves — they are
  * not a substitute for the tax authority's official notices.
  *
  * Dates are stored as ISO (`yyyy-mm-dd`) and each wave's status is computed

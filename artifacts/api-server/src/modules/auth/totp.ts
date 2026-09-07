@@ -144,7 +144,7 @@ export function generateTotpSecret(): string {
 }
 
 export function buildOtpauthUri(email: string, secret: string): string {
-  const issuer = "MeridianIQ";
+  const issuer = "Valo";
   return (
     `otpauth://totp/${encodeURIComponent(`${issuer}:${email}`)}` +
     `?secret=${secret}&issuer=${encodeURIComponent(issuer)}` +

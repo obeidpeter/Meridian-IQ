@@ -61,6 +61,7 @@ export function trackUsabilityEvent(
     keepalive: true,
     headers: {
       "Content-Type": "application/json",
+      "x-valo-csrf": "1",
       "x-meridian-csrf": "1",
     },
     body: JSON.stringify({ event, surface }),

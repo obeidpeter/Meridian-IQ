@@ -34,7 +34,7 @@ async function journeyGovernance(page, BASE, check) {
   const BUYER = "55555555-5555-4555-8555-555555555555"; // Zenith Retail
 
   try {
-    await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+    await apiLogin(page, BASE, "demo.admin@valo.example");
     const onRes = await page.request.put(BASE + "/api/firm/policies", {
       data: { submitApprovalRequired: true },
       headers: CSRF,
@@ -49,7 +49,7 @@ async function journeyGovernance(page, BASE, check) {
     // Staff: fresh draft → validate → submit refuses. DomainError serializes
     // as {error: message} (no code field), so the check matches the guard's
     // message text.
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
     const created = await createDraftInvoice(page, BASE, {
       supplierPartyId: DEMO_CLIENT_PARTY_ID,
       buyerPartyId: BUYER,
@@ -78,7 +78,7 @@ async function journeyGovernance(page, BASE, check) {
     );
 
     // A DIFFERENT human approves — evidence row, 201.
-    await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+    await apiLogin(page, BASE, "demo.admin@valo.example");
     const reviewResponse = await page.request.get(
       BASE + `/api/invoices/${invoiceId}`,
     );
@@ -100,7 +100,7 @@ async function journeyGovernance(page, BASE, check) {
 
     // The original submitter retries: a live approval by ANOTHER user now
     // satisfies the guard.
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
     const submitRes = await page.request.post(
       BASE + `/api/invoices/${invoiceId}/submit`,
       { headers: CSRF },
@@ -114,7 +114,7 @@ async function journeyGovernance(page, BASE, check) {
     // MUST run even when a check above failed or threw: a policy left on
     // would break every later single-actor submit. The restore is itself a
     // check so a silent failure here can never masquerade as a pass.
-    await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+    await apiLogin(page, BASE, "demo.admin@valo.example");
     const offRes = await page.request.put(BASE + "/api/firm/policies", {
       data: { submitApprovalRequired: false },
       headers: CSRF,
@@ -154,7 +154,7 @@ async function journeyGovernance(page, BASE, check) {
 async function journeyCollections(page, BASE, check, hookKey) {
   const BUILD_CLIENT = "cb000004-0000-4000-8000-0000000000b4"; // Lagos BuildRight
 
-  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@valo.example");
 
   const createdRes = await page.request.post(
     BASE + "/api/collection-accounts",
@@ -341,7 +341,7 @@ async function journeyAutomation(page, BASE, check) {
 
   try {
     // Operator lights both flags (seeded rows, so PATCH answers 204).
-    await apiLogin(page, BASE, "ops@meridianiq.example");
+    await apiLogin(page, BASE, "ops@valo.example");
     const onStatuses = await setFlags(true);
     check(
       "operator lights the clerk_actions + clerk_action_policies flags",
@@ -353,7 +353,7 @@ async function journeyAutomation(page, BASE, check) {
     // submission window, so the live submit_overdue proposal must pick it up
     // (alongside the seeded overdue INV-1001, which this journey never
     // touches).
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
     const issueDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
@@ -507,7 +507,7 @@ async function journeyAutomation(page, BASE, check) {
     //     as a pass. (Revocation deliberately runs FIRST: grants stay
     //     pausable/revocable while the flags are dark, but the order keeps
     //     the finally independent of that guarantee.)
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
     const listRes = await page.request.get(
       BASE + `/api/clerk/action-policies?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
@@ -521,7 +521,7 @@ async function journeyAutomation(page, BASE, check) {
         { headers: CSRF },
       );
     }
-    await apiLogin(page, BASE, "ops@meridianiq.example");
+    await apiLogin(page, BASE, "ops@valo.example");
     const offStatuses = await setFlags(false);
     check(
       "clerk automation flags restored to dark",
@@ -545,7 +545,7 @@ async function journeyObligations(page, BASE, check) {
   let obligationId = null;
 
   try {
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
 
     const created = await page.request.post(BASE + "/api/obligations", {
       data: {
@@ -676,7 +676,7 @@ async function journeyFilings(page, BASE, check) {
   const period = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
 
   try {
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
 
     const sync = await page.request.post(BASE + "/api/filings/sync", {
       headers: CSRF,
@@ -855,7 +855,7 @@ async function journeyWht(page, BASE, check) {
   const today = new Date().toISOString().slice(0, 10);
 
   try {
-    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@valo.example");
 
     // An incoming bill from the unengaged vendor is a scratch-DB fixture,
     // not an outgoing invoice created on that vendor's behalf. Category

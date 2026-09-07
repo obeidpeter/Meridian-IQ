@@ -48,23 +48,23 @@ const PAGES = [
   ["sme-calendar", "/app/calendar", "owner@adaezefoods.example"],
   ["sme-month-end", "/app/month-end", "owner@adaezefoods.example"],
   ["sme-vat", "/app/vat", "owner@adaezefoods.example"],
-  ["console-portfolio", "/console", "demo.admin@meridianiq.example"],
-  ["console-pipeline", "/console/pipeline", "demo.admin@meridianiq.example"],
+  ["console-portfolio", "/console", "demo.admin@valo.example"],
+  ["console-pipeline", "/console/pipeline", "demo.admin@valo.example"],
   [
     "console-invitations",
     "/console/invitations",
-    "demo.admin@meridianiq.example",
+    "demo.admin@valo.example",
   ],
-  ["console-advisory", "/console/advisory", "demo.admin@meridianiq.example"],
+  ["console-advisory", "/console/advisory", "demo.admin@valo.example"],
   [
     "console-access-review",
     "/console/access-review",
-    "demo.admin@meridianiq.example",
+    "demo.admin@valo.example",
   ],
   [
     "console-notifications",
     "/console/notifications",
-    "demo.admin@meridianiq.example",
+    "demo.admin@valo.example",
   ],
 ];
 

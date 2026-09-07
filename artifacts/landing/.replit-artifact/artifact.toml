@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "MeridianIQ"
+title = "Valo"
 version = "1.0.0"
 id = "artifacts/landing"
 router = "path"

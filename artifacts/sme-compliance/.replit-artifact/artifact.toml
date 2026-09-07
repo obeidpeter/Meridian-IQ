@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/app/"
-title = "MeridianIQ"
+title = "Valo"
 version = "1.0.0"
 id = "artifacts/sme-compliance"
 router = "path"

@@ -1,7 +1,8 @@
+import { ValoMark } from "@workspace/web-ui";
 import { useEffect, type ReactNode } from "react";
 import { expireSession } from "@workspace/web-ui";
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
-import { Building2, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
+import { RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
@@ -29,10 +30,10 @@ function BrandSplash({
       <header className="absolute inset-x-0 top-0 border-b border-border bg-card/95">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-5 sm:px-8">
           <span className="grid size-9 place-items-center rounded-lg bg-[#0b2545] text-[#66e6f2] shadow-sm">
-            <Building2 className="size-5" aria-hidden="true" />
+            <ValoMark className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <p className="text-base font-extrabold leading-none">MeridianIQ</p>
+            <p className="text-base font-extrabold leading-none">Valo</p>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
               Buyer portal
             </p>
@@ -88,7 +89,7 @@ export function RequireSession({
     return (
       <BrandSplash
         title="Opening your buyer workspace"
-        description="Verifying your secure MeridianIQ session."
+        description="Verifying your secure Valo session."
         icon={<Spinner className="size-6 text-primary" aria-hidden="true" />}
       >
         <span className="sr-only" role="status">
@@ -101,7 +102,7 @@ export function RequireSession({
   if (error && !unauthenticated) {
     return (
       <BrandSplash
-        title="MeridianIQ is temporarily unavailable"
+        title="Valo is temporarily unavailable"
         description="We could not reach the service. Check your connection, then try again."
         icon={<WifiOff className="size-6" aria-hidden="true" />}
       >
@@ -139,7 +140,7 @@ export function RequireSession({
         testId="card-wrong-workspace"
       >
         <Button onClick={goToPortal} data-testid="button-back-to-portal">
-          Back to the MeridianIQ portal
+          Back to the Valo portal
         </Button>
       </BrandSplash>
     );

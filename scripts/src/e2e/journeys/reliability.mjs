@@ -37,7 +37,7 @@ export async function journeyWorkerAccounts(page, BASE, check) {
     });
   const first = await identity();
   assert.equal(first.status, 200);
-  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@valo.example");
   const second = await identity();
   check(
     "installed worker: account B never receives A identity",
@@ -86,7 +86,7 @@ export async function journeyKeyboardRecovery(page, BASE, check) {
   const email = page.getByTestId("input-email");
   await email.waitFor();
   await tabTo(page, email);
-  await page.keyboard.type("demo.staff@meridianiq.example");
+  await page.keyboard.type("demo.staff@valo.example");
   await tabTo(page, page.getByTestId("input-password"));
   await page.keyboard.type(DEMO_PASSWORD);
   await tabTo(page, page.getByTestId("button-sign-in"));
@@ -129,7 +129,7 @@ export async function journeyKeyboardRecovery(page, BASE, check) {
 }
 
 export async function journeyCustomerFailureRecovery(page, BASE, check) {
-  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+  await apiLogin(page, BASE, "demo.staff@valo.example");
   let failing = true;
   await page.route("**/api/parties?**", async (route) => {
     const url = new URL(route.request().url());
@@ -184,7 +184,7 @@ export async function journeyCustomerFailureRecovery(page, BASE, check) {
 }
 
 export async function journeyStaleInvoiceWrites(page, BASE, check) {
-  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@valo.example");
   const partiesResponse = await page.request.get(
     BASE + "/api/parties?type=buyer&limit=200",
   );

@@ -121,7 +121,7 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   "data.pending_approvals",
   // Penalty exposure with the forced own-party pin: the overdue paper and
   // its links are the caller's own supplier-pinned invoices, and the rates
-  // are MeridianIQ's published public model — nothing firm-internal.
+  // are Valo's published public model — nothing firm-internal.
   "data.penalty_exposure",
   // Invoice-pinned status with the forced own-party pin: the lookup only
   // matches invoices where the caller's party sits on EITHER side, so a

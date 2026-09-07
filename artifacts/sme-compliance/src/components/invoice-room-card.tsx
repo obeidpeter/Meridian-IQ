@@ -245,7 +245,7 @@ export function InvoiceRoomComposer({
           </DialogTitle>
           <DialogDescription>
             {created
-              ? `Send this one-time link to ${buyerName}. MeridianIQ does not expose it again after you close this window.`
+              ? `Send this one-time link to ${buyerName}. Valo does not expose it again after you close this window.`
               : isReplacement
                 ? `The current link for ${invoiceNumber} will stop working as soon as the replacement is created.`
                 : `Give ${buyerName} one place to inspect, confirm and settle ${invoiceNumber}.`}

@@ -35,63 +35,63 @@ export type PushTemplateKey =
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A filing or payment deadline is approaching. Open the app for details.",
   },
   b2c_window_alert: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A B2C reporting window is about to close. Open the app for details.",
   },
   client_statement_ready: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "Your monthly statement is ready. Open the app to view it.",
   },
   compliance_pack_ready: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "Your monthly compliance pack is ready. Open the app to view it.",
   },
   advisory_brief_ready: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "Your adviser's monthly brief is ready. Open the app to view it.",
   },
   firm_digest_ready: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "Your firm's weekly Clerk digest is ready.",
   },
   automation_paused: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A standing approval was paused and needs attention. Open the app for details.",
   },
   automation_granted: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A standing approval was created for your account. Open the app for details.",
   },
   close_pack_ready: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A month-end close run finished. Review the results in the app.",
   },
   obligation_due_soon: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "An authority notice needs a response soon. Open the app for details.",
   },
   obligation_overdue: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "An authority notice response is overdue. Open the app for details.",
   },
   filing_due_soon: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A statutory return is due to be filed soon. Open the app for details.",
   },
   filing_overdue: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A statutory return filing is overdue. Open the app for details.",
   },
   wht_note_due_soon: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A withholding credit note from a buyer is still outstanding. Open the app for details.",
   },
   wht_note_overdue: {
-    title: "MeridianIQ",
+    title: "Valo",
     body: "A withholding credit note from a buyer is long outstanding. Open the app for details.",
   },
 };

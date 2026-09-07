@@ -138,6 +138,7 @@ export async function renderOnboardingReportPdf(
     info: {
       Title: "Onboarding readiness report",
       Author: theme.brandName,
+      Creator: "Valo",
       CreationDate: input.run.completedAt
         ? new Date(input.run.completedAt)
         : new Date(0),

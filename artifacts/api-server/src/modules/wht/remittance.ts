@@ -10,7 +10,7 @@
 // (settlement events — payables.ts), not a stored payment date, so an
 // issue-date window is the only deterministic, replayable period assignment
 // the platform can make. Evidence-only posture: the platform computes what a
-// remittance period looks like; the client (or firm) remits — MeridianIQ
+// remittance period looks like; the client (or firm) remits — Valo
 // never remits or claims anything itself.
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";

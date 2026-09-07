@@ -125,9 +125,9 @@ test("generated secrets are 20 bytes of base32; the otpauth URI carries the app'
   assert.match(secret, /^[A-Z2-7]{32}$/, "20 bytes → 32 base32 chars, no padding");
   assert.equal(base32Decode(secret).length, 20);
   const uri = buildOtpauthUri("ada@firm.ng", secret);
-  assert.ok(uri.startsWith("otpauth://totp/MeridianIQ%3Aada%40firm.ng?"));
+  assert.ok(uri.startsWith("otpauth://totp/Valo%3Aada%40firm.ng?"));
   assert.ok(uri.includes(`secret=${secret}`));
-  assert.ok(uri.includes("issuer=MeridianIQ"));
+  assert.ok(uri.includes("issuer=Valo"));
   assert.ok(uri.includes(`period=${TOTP_STEP_SECONDS}`));
 });
 

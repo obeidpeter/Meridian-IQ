@@ -75,6 +75,11 @@ separate legal, security and operational release decision.
 
 These checks cannot be truthfully completed by source code alone:
 
+The [Valo external rollout checklist](valo-rebrand.md#external-rollout-checklist)
+also requires deployment-owner verification. Keep `meridian-iq.replit.app` and
+`advisory@meridianiq.com` until the user supplies verified replacements; neither
+is changed or newly verified by the cosmetic rebrand.
+
 1. Verify that mail sent to `advisory@meridianiq.com` is received, triaged, and
    answered. Set `ADVISORY_INBOX_VERIFIED_AT` to that test's ISO timestamp.
    Repeat within 90 days and after any mail-provider change.

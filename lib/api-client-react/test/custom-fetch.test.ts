@@ -105,8 +105,11 @@ test("customFetch scopes credentials and CSRF markers to unsafe API calls", asyn
       "Bearer mobile-secret",
     );
     assert.equal(observed[1].headers.get("x-meridian-csrf"), "1");
+    assert.equal(observed[1].headers.get("x-valo-csrf"), "1");
+    assert.equal(observed[0].headers.has("x-valo-csrf"), false);
     assert.equal(observed[2].headers.has("authorization"), false);
     assert.equal(observed[2].headers.has("x-meridian-csrf"), false);
+    assert.equal(observed[2].headers.has("x-valo-csrf"), false);
     assert.equal(observed[2].credentials, "omit");
     assert.equal(tokenReads, 2);
   } finally {
@@ -133,6 +136,35 @@ test("customFetch timeout also bounds a stalled auth token getter", async () => 
     assert.equal(fetchCalled, false);
   } finally {
     setAuthTokenGetter(null);
+    setBaseUrl(null);
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("customFetch bridges both header names without concealing conflicting values", async () => {
+  const originalFetch = globalThis.fetch;
+  let observed = new Headers();
+  globalThis.fetch = async (_input, init) => {
+    observed = new Headers(init?.headers);
+    return new Response(null, { status: 204 });
+  };
+  setBaseUrl("https://api.example.test");
+  try {
+    for (const suffix of ["csrf", "workspace", "client"]) {
+      const current = `x-valo-${suffix}`;
+      const legacy = `x-meridian-${suffix}`;
+      for (const supplied of [current, legacy]) {
+        await customFetch("/api/test", { headers: { [supplied]: "value" } });
+        assert.equal(observed.get(current), "value");
+        assert.equal(observed.get(legacy), "value");
+      }
+      await customFetch("/api/test", {
+        headers: { [current]: "current", [legacy]: "legacy" },
+      });
+      assert.equal(observed.get(current), "current");
+      assert.equal(observed.get(legacy), "legacy");
+    }
+  } finally {
     setBaseUrl(null);
     globalThis.fetch = originalFetch;
   }

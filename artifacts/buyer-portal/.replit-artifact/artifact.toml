@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/buyer/"
-title = "MeridianIQ Buyer Rails"
+title = "Valo Buyer Rails"
 version = "1.0.0"
 id = "artifacts/buyer-portal"
 router = "path"

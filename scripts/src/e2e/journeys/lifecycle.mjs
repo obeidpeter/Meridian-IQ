@@ -260,7 +260,7 @@ async function journeyPasswordRoundTrip(page, BASE, check) {
     timeout: 10000,
   });
   const oldPw = await page.request.post(BASE + "/api/auth/login", {
-    data: { email: "demo.staff@meridianiq.example", password: DEMO_PASSWORD },
+    data: { email: "demo.staff@valo.example", password: DEMO_PASSWORD },
     headers: CSRF,
   });
   check("old password rejected after change", oldPw.status() === 401);
@@ -282,14 +282,14 @@ async function journeyPasswordRoundTrip(page, BASE, check) {
 // change-password journey: demo.staff's password is temporarily different
 // mid-journey (restored before it returns).
 async function journeyPasswordReset(page, BASE, check) {
-  const STAFF = "demo.staff@meridianiq.example";
+  const STAFF = "demo.staff@valo.example";
 
   // Sign in as the operator and issue a reset link for the staff account.
   // (Raw login posts, not apiLogin: this tail journey deliberately skips the
   // logout-first and signs the operator in over whatever session the
   // change-password journey left behind.)
   await page.request.post(BASE + "/api/auth/login", {
-    data: { email: "ops@meridianiq.example", password: DEMO_PASSWORD },
+    data: { email: "ops@valo.example", password: DEMO_PASSWORD },
     headers: CSRF,
   });
   const issued = await page.request.post(BASE + "/api/password-resets", {
@@ -337,7 +337,7 @@ async function journeyPasswordReset(page, BASE, check) {
 
   // Restore the demo password via a second reset so reruns start clean.
   await page.request.post(BASE + "/api/auth/login", {
-    data: { email: "ops@meridianiq.example", password: DEMO_PASSWORD },
+    data: { email: "ops@valo.example", password: DEMO_PASSWORD },
     headers: CSRF,
   });
   const restore = await page.request.post(BASE + "/api/password-resets", {

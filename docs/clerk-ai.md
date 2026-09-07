@@ -1,6 +1,6 @@
 # Clerk AI — guardrails & module guide
 
-Clerk is MeridianIQ's AI intake assistant. The one principle everything below
+Clerk is Valo's AI intake assistant. The one principle everything below
 serves: **Clerk never files anything** — extraction proposes, a human
 disposes, and approval creates a DRAFT invoice only. Facts are computed in
 SQL; the model classifies or phrases; deterministic template fallbacks always

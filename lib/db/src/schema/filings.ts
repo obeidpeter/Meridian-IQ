@@ -14,7 +14,7 @@ import { createdAt, id, updatedAt } from "./columns.ts";
 // Filing Desk (Phase 1): the statutory returns register — one row per
 // client × tax type × period, minted DETERMINISTICALLY from the statutory
 // calendar (never by hand and never by a model), then walked through its
-// lifecycle by the firm. Evidence-only posture throughout: MeridianIQ
+// lifecycle by the firm. Evidence-only posture throughout: Valo
 // records that a return was prepared and filed (date + acknowledgment
 // reference), it never files anything with an authority itself.
 //

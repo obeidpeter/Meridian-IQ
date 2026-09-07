@@ -184,7 +184,7 @@ test("setup returns secret + otpauth URI + recovery codes once; only hashes stor
     recoveryCodes: string[];
   };
   assert.match(body.secret, /^[A-Z2-7]{32}$/);
-  assert.ok(body.otpauthUri.includes("issuer=MeridianIQ"));
+  assert.ok(body.otpauthUri.includes("issuer=Valo"));
   assert.equal(body.recoveryCodes.length, 8);
 
   const [row] = await getDb()

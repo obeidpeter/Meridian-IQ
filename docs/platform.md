@@ -64,13 +64,19 @@ every add and removal is an audit event.
   `/auth/reset-password`; the landing page's "Forgot your password?" routes
   there. The link's origin is `PUBLIC_APP_URL` (must be https in
   production; the deployed app URL when unset).
-- CSRF: a custom-header guard on cookie-authenticated state-changing
-  requests (`middleware/principal.ts`); the session cookie is
+- CSRF: the `x-valo-csrf` custom-header guard (legacy `x-meridian-csrf`
+  remains accepted) on cookie-authenticated state-changing requests
+  (`middleware/principal.ts`); the session cookie is
   `SameSite=None` for the preview iframe, so the frontends set a CSP
   `frame-ancestors` allowlist (vite preview / e2e serve layer) rather than
   `X-Frame-Options`. The allowlist is the build-time `FRAME_ANCESTORS` env
   (`lib/web-config`), defaulting to `'self'` plus the Replit preview and
   app domains.
+- Client and workspace headers use `x-valo-client` and `x-valo-workspace`;
+  `x-meridian-client` and `x-meridian-workspace` remain accepted aliases.
+  For each of these pairs and the CSRF pair, sending both names with
+  different values fails with `BAD_REQUEST`. Authentication and membership
+  checks are unchanged; see [rebrand compatibility](valo-rebrand.md).
 - **Self-serve invites (IDN-01).** A firm_admin onboards teammates/clients
   into its own firm without operator provisioning
   (`modules/auth/invitations.ts`, `routes/invitations.ts`). The invite
@@ -95,6 +101,9 @@ every add and removal is an audit event.
   redeems token + code (or a sha256-stored recovery code, burned on use) for
   the ordinary login tail. Setup/activate/disable are self-service on the
   landing portal's security card; activate/disable bump `session_epoch`.
+  New setup links use issuer **Valo**. Existing **MeridianIQ** authenticator
+  entries still generate valid codes; the rename changes neither stored
+  secrets nor recovery codes and does not require re-enrolment.
   `TOTP_REQUIRED_ROLES` env (dark by default) hard-gates named roles once a
   deployment has rolled enrolment out. The e2e harness mints real codes
   (`scripts/src/e2e/totp.mjs`).
@@ -136,9 +145,9 @@ inventory lives in the code, not here: grep `registerSweep(` for the
 authoritative list (43 sweeps at R107).
 
 **Sweep hygiene (R101).** Every sweep is named, and the name is the label:
-`meridian_sweep_errors_total{sweep,kind}` counts each failure as `error` or
-`timeout`, `meridian_sweep_last_success_by_sweep_timestamp_seconds{sweep}`
-says when each sweep last completed, `meridian_sweep_duration_seconds` times
+`valo_sweep_errors_total{sweep,kind}` counts each failure as `error` or
+`timeout`, `valo_sweep_last_success_by_sweep_timestamp_seconds{sweep}`
+says when each sweep last completed, `valo_sweep_duration_seconds` times
 each one, and the log line names it. Each sweep runs under a per-sweep
 timeout (`SWEEP_TIMEOUT_MS`, default 120 s, or the registration's own) so a
 hung sweep cannot pin the pass — and with it every later minute tick, which
@@ -146,8 +155,10 @@ the reentrancy guard would skip forever; a timed-out promise is abandoned,
 not cancelled, and the pass moves on. A failure of the pass itself (lock
 acquisition or release) is counted under `sweep="pass"` and never escapes
 the interval as an unhandled rejection. The pass-level
-`meridian_sweep_runs_total` / `meridian_sweep_last_success_timestamp_seconds`
-pair is unchanged (loop liveness, all-green pass).
+`valo_sweep_runs_total` / `valo_sweep_last_success_timestamp_seconds`
+pair retains the same meaning (loop liveness, all-green pass). Corresponding
+`meridian_*` metric names remain available as compatibility aliases with
+identical labels and values; do not aggregate both names for one measurement.
 
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). The decision is captured on a client user's FIRST
@@ -195,7 +206,7 @@ One deployment gotcha: Node's global `fetch` ignores `HTTPS_PROXY` /
 `NODE_USE_ENV_PROXY=1`. Behind an egress proxy, without it, every call is a
 network error (`RAIL_UNAVAILABLE`) however correct the URL and token are.
 
-The wire is the provisional **MeridianIQ access-point profile v0** — the
+The wire is the provisional **Valo access-point profile v0** — the
 shape a real access point will be adapted to in one file, not a claim about
 its API. Every request is JSON, with `authorization: Bearer <token>` when a
 token is set. A submit is `POST {base}/v0/submissions` with
@@ -1106,7 +1117,7 @@ as a consent oracle; the ask itself is audited pointer-only
 - **Monthly platform-billing statement**
   (`modules/invoice/billing-statement.ts`, `GET /billing/statement` + CSV at
   `GET /billing/statement/export`, `console.portfolio.read` + firm scope,
-  card on the console portfolio page): what MeridianIQ's own bill for a
+  card on the console portfolio page): what Valo's own bill for a
   closed month is made of, shown to the firm that pays it — the vat-pack
   posture exactly (deterministic, computed on demand, nothing stored, month
   from the closed-Lagos-months option list). Two meters, two calendars —
@@ -1260,8 +1271,10 @@ failed` transition, idempotent on replay, pointer-only audit. Subscription
   pre-charged claim (`FOR UPDATE SKIP LOCKED`, attempts + backoff advanced
   before network I/O), a 5s `AbortSignal` timeout, `redirect: "manual"` +
   https/public-host SSRF guards, a pointer-only body (SEC-12) and an
-  `X-Meridian-Signature` HMAC-SHA256 keyed by the sha256 of the shown-once
-  `whsec_` secret; five failures dead-letter the delivery. Per-firm delivery
+  `x-valo-signature` HMAC-SHA256 keyed by the sha256 of the shown-once
+  `whsec_` secret. Each delivery also carries the identical legacy
+  `x-meridian-signature`; `x-valo-event` and `x-meridian-event` carry the same
+  event type. Five failures dead-letter the delivery. Per-firm delivery
   logs are the firm's own audit of what left, and a dead delivery can be
   re-queued for a fresh attempt cycle
   (`POST /firm-webhooks/{id}/deliveries/{deliveryId}/retry`, firm_admin): a
@@ -1401,14 +1414,15 @@ legacy header still admitted).
 - `GET /api/metrics` — Prometheus text: request-duration histogram
   (method/route/status, id segments collapsed), process health (event-loop
   lag, RSS, heap, uptime), and sweep liveness — pass-level
-  (`meridian_sweep_runs_total`, `meridian_sweep_last_success_timestamp_seconds`)
-  and per named sweep (`meridian_sweep_errors_total{sweep,kind}`,
-  `meridian_sweep_last_success_by_sweep_timestamp_seconds{sweep}`,
-  `meridian_sweep_duration_seconds{sweep,outcome}`), and outbox depth
-  (`meridian_outbox_events{state}` for pending / parked / processing / dead,
-  `meridian_outbox_oldest_pending_age_seconds`, set by the `pipeline.gauges`
-  sweep). Hand-rolled in
-  `lib/metrics.ts` (a metrics lib would fork drizzle via
+  (`valo_sweep_runs_total`, `valo_sweep_last_success_timestamp_seconds`)
+  and per named sweep (`valo_sweep_errors_total{sweep,kind}`,
+  `valo_sweep_last_success_by_sweep_timestamp_seconds{sweep}`,
+  `valo_sweep_duration_seconds{sweep,outcome}`), and outbox depth
+  (`valo_outbox_events{state}` for pending / parked / processing / dead,
+  `valo_outbox_oldest_pending_age_seconds`, set by the `pipeline.gauges`
+  sweep). The corresponding `meridian_*` names remain exported as aliases;
+  use one naming family per dashboard query to avoid double-counting.
+  Hand-rolled in `lib/metrics.ts` (a metrics lib would fork drizzle via
   `@opentelemetry/api`).
 - `GET /operator/rails` reports, per rail, the breaker (`state`,
   `failureCount`, `retryAt`) and the rail transport in use — `transport`

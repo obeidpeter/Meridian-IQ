@@ -263,7 +263,7 @@ test("unstamped invoice: clear watermark line, no stamp reference", async () => 
   assert.ok(text.includes("DRAFT"), "draft wording present");
   assert.ok(!text.includes(IRN), "no IRN on unstamped paper");
   // Theme absent: sensible defaults still render.
-  assert.ok(text.includes("MeridianIQ"), "default brand");
+  assert.ok(text.includes("Valo"), "default brand");
 });
 
 test("deterministic: identical inputs render byte-identical buffers", async () => {

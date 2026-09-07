@@ -43,7 +43,7 @@ const ROUTE_GROUPS = [
     ],
   },
   {
-    identity: "demo.admin@meridianiq.example",
+    identity: "demo.admin@valo.example",
     routes: [
       "/console/",
       "/console/notifications",
@@ -69,7 +69,7 @@ const ROUTE_GROUPS = [
     ],
   },
   {
-    identity: "ops@meridianiq.example",
+    identity: "ops@valo.example",
     routes: [
       "/console/operator-queue",
       "/console/parties",
@@ -87,7 +87,7 @@ const ROUTE_GROUPS = [
       "/console/clerk/health",
     ],
   },
-  { identity: "audit@meridianiq.example", routes: ["/console/audit"] },
+  { identity: "audit@valo.example", routes: ["/console/audit"] },
   {
     identity: "finance@zenithretail.example",
     routes: [

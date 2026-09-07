@@ -61,7 +61,19 @@ test("registry exposition includes process and app series", async () => {
   assert.match(text, /nodejs_eventloop_lag_seconds/);
   assert.match(text, /http_request_duration_seconds/);
   assert.match(text, /meridian_sweep_last_success_timestamp_seconds/);
+  assert.match(text, /valo_sweep_last_success_timestamp_seconds/);
   assert.equal(registry.contentType.includes("text/plain"), true);
+});
+
+test("Valo metrics have byte-equivalent legacy aliases without duplicating other series", async () => {
+  const lines = (await registry.metrics()).trim().split("\n");
+  const current = lines.filter((line) => /^(?:# (?:HELP|TYPE) )?valo_/.test(line));
+  assert.ok(current.length > 20);
+  for (const line of current) {
+    const legacy = line.replace(/^((?:# (?:HELP|TYPE) )?)valo_/, "$1meridian_");
+    assert.equal(lines.filter((entry) => entry === legacy).length, 1);
+  }
+  assert.equal(lines.filter((line) => line.startsWith("process_uptime_seconds ")).length, 1);
 });
 
 // The route label must stay bounded under hostile traffic: matched routes

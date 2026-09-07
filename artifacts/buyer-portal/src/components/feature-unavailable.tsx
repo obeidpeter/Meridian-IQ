@@ -13,7 +13,7 @@ export function FeatureUnavailable({ feature }: { feature: string }) {
           <div>
             <p className="font-medium">{feature} is not yet enabled</p>
             <p className="text-sm text-muted-foreground mt-1">
-              This feature appears when the MeridianIQ rollout and your
+              This feature appears when the Valo rollout and your
               supplier&apos;s account both enable it. Contact the
               supplier&apos;s finance team if you expected access.
             </p>

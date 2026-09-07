@@ -338,7 +338,7 @@ export function ClientImport() {
               variant="ghost"
               onClick={() =>
                 downloadBlob(
-                  "meridianiq-clients-template.csv",
+                  "valo-clients-template.csv",
                   TEMPLATE,
                   "text/csv",
                 )
@@ -493,7 +493,7 @@ export function ClientImport() {
         >
           <p className="font-semibold">The import may have completed.</p>
           <p className="mt-1">
-            The connection ended before MeridianIQ answered. Check the{" "}
+            The connection ended before Valo answered. Check the{" "}
             <Link
               href="/portfolio?view=clients"
               className="font-semibold underline"

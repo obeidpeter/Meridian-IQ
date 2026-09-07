@@ -76,7 +76,7 @@ async function open(t, width, workspace) {
             : workspace === "console"
               ? "firm_admin"
               : "client_user",
-        email: "usability@meridianiq.example",
+        email: "usability@valo.example",
         fullName: "Local usability fixture",
         workspaceName: "Example Business",
         capabilities: [
@@ -91,7 +91,7 @@ async function open(t, width, workspace) {
         consentCaptured: true,
         releaseTag: "R4",
       });
-    if (path === "/api/healthz") return reply({ contractVersion: "0.99.0" });
+    if (path === "/api/healthz") return reply({ contractVersion: "0.100.0" });
     if (path === "/api/notifications")
       return reply({ items: [], unreadCount: 0, nextCursor: null });
     if (path === "/api/workspace/today")
@@ -186,6 +186,8 @@ for (const width of [320, 768, 1024, 1440]) {
           exact: true,
         })
         .waitFor();
+      assert.match(await page.title(), /Valo/);
+      assert.doesNotMatch(await page.locator("body").innerText(), /MeridianIQ|Meridian Today/);
       assert.equal(
         await page
           .getByRole("button", {

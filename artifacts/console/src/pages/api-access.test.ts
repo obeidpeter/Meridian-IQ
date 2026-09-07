@@ -57,6 +57,7 @@ describe("SIGNATURE_NOTE", () => {
       "HMAC-SHA256 of the body keyed by sha256 of your secret",
     );
     expect(SIGNATURE_NOTE).toContain("X-Meridian-Signature");
+    expect(SIGNATURE_NOTE).toContain("X-Valo-Signature");
   });
 });
 

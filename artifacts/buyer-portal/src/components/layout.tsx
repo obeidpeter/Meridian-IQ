@@ -1,3 +1,4 @@
+import { ValoMark } from "@workspace/web-ui";
 import { customFetch } from "@workspace/api-client-react";
 import {
   signOutAndRedirect,
@@ -9,7 +10,6 @@ import { Link, useLocation } from "wouter";
 import {
   CircleUserRound,
   ClipboardCheck,
-  FileCheck2,
   Grid2x2,
   Inbox,
   LockKeyhole,
@@ -53,7 +53,7 @@ function accountInitials(
   name: string | null | undefined,
   email: string | null | undefined,
 ) {
-  const source = name?.trim() || email?.split("@")[0] || "MI";
+  const source = name?.trim() || email?.split("@")[0] || "V";
   return source
     .split(/\s+/)
     .filter(Boolean)
@@ -66,11 +66,11 @@ function BrandMark() {
   return (
     <span className="flex items-center gap-2.5">
       <span className="grid size-9 place-items-center rounded-md bg-cyan-200 text-[#0b2030]">
-        <FileCheck2 className="size-5" aria-hidden="true" />
+        <ValoMark className="size-5" aria-hidden="true" />
       </span>
       <span>
         <span className="block text-base font-extrabold leading-none text-white">
-          MeridianIQ
+          Valo
         </span>
         <span className="mt-1 block text-xs font-semibold text-white/75">
           Buyer Rails

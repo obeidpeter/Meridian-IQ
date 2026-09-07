@@ -29,7 +29,7 @@ const me = {
   clientPartyId: "22222222-2222-4222-8222-222222222222",
   buyerPartyId: null,
   role: "firm_staff",
-  email: "demo.staff@meridianiq.example",
+  email: "demo.staff@valo.example",
   fullName: "Demo staff",
   capabilities: ["invoice.read", "invoice.write", "invoice.submit"],
   features: ["invoice_lifecycle"],
@@ -78,7 +78,7 @@ function fixtureApi() {
           signedIn ? me : { error: "UNAUTHORIZED" },
         );
       if (pathname === "/api/healthz")
-        return reply(200, { contractVersion: "0.99.0" });
+        return reply(200, { contractVersion: "0.100.0" });
       if (pathname === "/api/notifications")
         return reply(200, { items: [], unreadCount: 0, nextCursor: null });
       if (pathname === "/api/invoice-drafts")

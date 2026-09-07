@@ -98,7 +98,7 @@ export function Analytics() {
         <WorkspaceHeader
           eyebrow="Performance"
           title="Analytics"
-          description="Track operating outcomes from the records already in MeridianIQ."
+          description="Track operating outcomes from the records already in Valo."
         />
         <QueryError
           thing="your analytics"

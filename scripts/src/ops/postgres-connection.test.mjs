@@ -22,6 +22,8 @@ test("PostgreSQL credentials move from URL arguments to child environment", () =
   );
   const output = psql(raw, "SELECT 1", (command, args, options) => {
     assert.equal(command, "psql");
+    assert.deepEqual(args.slice(0, 2), ["--dbname", connection.url]);
+    assert.deepEqual(args.slice(-2), ["-c", "SELECT 1"]);
     assert.ok(args.includes("-w"));
     assert.ok(args.includes(connection.url));
     assert.ok(!JSON.stringify(args).includes("p%40ss"));

@@ -1,4 +1,4 @@
-# MeridianIQ — engineering guide
+# Valo — engineering guide
 
 Nigeria-first e-invoicing **compliance** platform: accounting firms and their
 SME clients prepare, validate, stamp (via FIRS/MBS rails), and reconcile
@@ -52,7 +52,13 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.99.0`).
+contract change (it is currently `0.100.0`).
+
+The Valo rebrand is additive at compatibility boundaries. See
+[`docs/valo-rebrand.md`](docs/valo-rebrand.md) for retained identifiers, header
+and metric aliases, TOTP continuity, PWA cache cleanup, and external rollout
+checks. Do not rename persisted identifiers or invent replacement domains
+and mailboxes as part of a product-copy change.
 
 ## Clerk AI — the principles (details: docs/clerk-ai.md)
 

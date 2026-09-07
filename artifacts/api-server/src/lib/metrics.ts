@@ -183,26 +183,26 @@ const httpDuration = new Histogram(
 // last-success timestamp far in the past is the alert condition (the overnight
 // Autoscale-freeze failure the external /internal/sweep trigger guards against).
 export const sweepRunsTotal = new Counter(
-  "meridian_sweep_runs_total",
+  "valo_sweep_runs_total",
   "Compliance sweep passes completed.",
 );
 export const sweepErrorsTotal = new Counter(
-  "meridian_sweep_errors_total",
+  "valo_sweep_errors_total",
   "Failures of individual compliance sweeps within a pass, by sweep name and kind (error|timeout).",
 );
 export const sweepLastSuccess = new Gauge(
-  "meridian_sweep_last_success_timestamp_seconds",
+  "valo_sweep_last_success_timestamp_seconds",
   "Unix time of the last compliance sweep pass in which every sweep succeeded.",
 );
 // Per-sweep hygiene (R101): which named sweep last succeeded when, and how
 // long each takes — the series an alert on "clerk.digests has not succeeded
 // in a day" needs, which the pass-level gauge above cannot answer.
 export const sweepLastSuccessBySweep = new LabeledGauge(
-  "meridian_sweep_last_success_by_sweep_timestamp_seconds",
+  "valo_sweep_last_success_by_sweep_timestamp_seconds",
   "Unix time each named compliance sweep last completed without error.",
 );
 export const sweepDurationSeconds = new Histogram(
-  "meridian_sweep_duration_seconds",
+  "valo_sweep_duration_seconds",
   "Duration of each named compliance sweep, by sweep and outcome (ok|error|timeout).",
   [0.1, 0.5, 1, 5, 15, 60, 120],
 );
@@ -210,7 +210,7 @@ export const sweepDurationSeconds = new Histogram(
 // how a persistent claim failure (permissions regression, schema drift)
 // surfaces instead of the pipeline silently processing nothing.
 export const outboxClaimFailuresTotal = new Counter(
-  "meridian_outbox_claim_failures_total",
+  "valo_outbox_claim_failures_total",
   "Errors thrown while claiming the next outbox event.",
 );
 // Outbox depth and age (R96), set by the pipeline.gauges sweep: `pending` is
@@ -219,15 +219,15 @@ export const outboxClaimFailuresTotal = new Counter(
 // the "rail outage in progress" shape; a growing dead count is the "operator
 // needed" shape.
 export const outboxEvents = new LabeledGauge(
-  "meridian_outbox_events",
+  "valo_outbox_events",
   "Outbox events by state (pending, parked, processing, dead).",
 );
 export const outboxOldestPendingAgeSeconds = new Gauge(
-  "meridian_outbox_oldest_pending_age_seconds",
+  "valo_outbox_oldest_pending_age_seconds",
   "Age of the oldest pending outbox event, in seconds (0 when none).",
 );
 export const usabilityEventsTotal = new Counter(
-  "meridian_usability_events_total",
+  "valo_usability_events_total",
   "Privacy-safe aggregate product usability events by closed event and surface.",
 );
 
@@ -245,17 +245,17 @@ const METRICS: Metric[] = [
 ];
 
 export const auditLockWaitSeconds = new Histogram(
-  "meridian_audit_lock_wait_seconds", "Time waiting for the global audit chain lock.",
+  "valo_audit_lock_wait_seconds", "Time waiting for the global audit chain lock.",
   [0.001, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
 );
 export const auditLockFailures = new Counter(
-  "meridian_audit_lock_failures_total", "Audit lock acquisition failures; no event was appended.",
+  "valo_audit_lock_failures_total", "Audit lock acquisition failures; no event was appended.",
 );
 export const webhookFanoutOldestAge = new LabeledGauge(
-  "meridian_webhook_fanout_oldest_age_seconds", "Age of the oldest eligible event in the latest bounded fanout batch.",
+  "valo_webhook_fanout_oldest_age_seconds", "Age of the oldest eligible event in the latest bounded fanout batch.",
 );
 export const clerkAdmissionRejected = new Counter(
-  "meridian_clerk_admission_rejected_total", "Clerk admissions refused before provider execution.",
+  "valo_clerk_admission_rejected_total", "Clerk admissions refused before provider execution.",
 );
 METRICS.push(auditLockWaitSeconds, auditLockFailures, webhookFanoutOldestAge, clerkAdmissionRejected);
 
@@ -271,7 +271,7 @@ function poolMetrics(): string {
     ["acquisitionSeconds", "acquisition_seconds_total", "counter"],
   ] as const;
   return fields.map(([key, suffix, type]) => {
-    const metric = `meridian_pg_pool_${suffix}`;
+    const metric = `valo_pg_pool_${suffix}`;
     return [`# HELP ${metric} PostgreSQL pool ${suffix}.`, `# TYPE ${metric} ${type}`,
       ...pools.map((entry) => `${metric}{pool="${entry.name}"} ${entry[key]}`)].join("\n");
   }).join("\n");
@@ -311,9 +311,14 @@ function processMetrics(): string {
 export const registry = {
   contentType: CONTENT_TYPE,
   async metrics(): Promise<string> {
-    return (
-      [processMetrics(), poolMetrics(), ...METRICS.map((m) => m.expose())].join("\n") + "\n"
-    );
+    const current = [processMetrics(), poolMetrics(), ...METRICS.map((m) => m.expose())].join("\n");
+    // Preserve existing dashboards and alerts while new integrations adopt Valo.
+    // Alias metric identifiers only, never labels or arbitrary help text.
+    const legacy = current.split("\n")
+      .filter((line) => /^(?:# (?:HELP|TYPE) )?valo_/.test(line))
+      .map((line) => line.replace(/^((?:# (?:HELP|TYPE) )?)valo_/, "$1meridian_"))
+      .join("\n");
+    return current + "\n" + legacy + "\n";
   },
 };
 

@@ -1,13 +1,13 @@
 # Workspace and provider readiness
 
-This document is the operating contract for Meridian Today, universal search,
+This document is the operating contract for Valo Today, universal search,
 collaborative work, Invoice Room, the R3 credit evidence perimeter, and the
 production provider relays (first available in API contract `0.98.0`; the
 current contract is `info.version` in `lib/api-spec/openapi.yaml`).
 
 ## User-facing workspace
 
-### Meridian Today
+### Valo Today
 
 `GET /api/workspace/today` builds a role-aware, bounded priority view from the
 authoritative records already in the platform:
@@ -131,7 +131,7 @@ bank-transfer instructions.
 
 ### ERP relay protocol
 
-MeridianIQ sends `POST` with JSON and `x-op-token` to `ERP_CONNECTOR_URL`.
+Valo sends `POST` with JSON and `x-op-token` to `ERP_CONNECTOR_URL`.
 
 Authentication request:
 
@@ -182,7 +182,7 @@ Response rows use canonical string fields:
 
 ### Bank relay protocol
 
-MeridianIQ uses the same transport headers at `BANK_FEED_URL`.
+Valo uses the same transport headers at `BANK_FEED_URL`.
 
 Authentication uses `kind: "bank_authenticate"` with the connection `config`.
 A pull uses `kind: "bank_pull_lines"`, `config`, `cursor` and `limit` and returns:
@@ -233,7 +233,7 @@ accepted only inside `OP_SIGNATURE_WINDOW_SECONDS` (default 300). The body is:
 ```
 
 The provider must deliver at least once and reuse `reference` on a retry.
-MeridianIQ durably records before returning `202 {"received":true}`; a replay
+Valo durably records before returning `202 {"received":true}`; a replay
 does not create a second settlement. Unknown, inactive and mismatched account
 references receive the same acknowledgement and no invoice detail. Raw payloads
 and credentials are not logged. The executable profile and version are visible

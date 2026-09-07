@@ -268,7 +268,7 @@ export function CommandMenu({
   trigger,
   open: controlledOpen,
   onOpenChange,
-  title = "Search MeridianIQ",
+  title = "Search Valo",
   placeholder = "Search pages and actions",
   emptyText = "No matching pages or actions.",
   remoteSearch,

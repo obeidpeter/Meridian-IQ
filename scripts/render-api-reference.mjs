@@ -286,7 +286,7 @@ const key = createHash("sha256").update(process.env.WEBHOOK_SECRET).digest("hex"
 
 function verify(rawBody, signatureHeader) {
   const expected = createHmac("sha256", key).update(rawBody).digest("hex");
-  return expected === signatureHeader; // x-meridian-signature
+  return expected === signatureHeader; // x-valo-signature
 }`);
 
   return `<!-- GENERATED FILE — do not hand-edit.
@@ -299,7 +299,7 @@ function verify(rawBody, signatureHeader) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v${esc(version)}</title>
+<title>Valo API reference — v${esc(version)}</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -365,7 +365,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 </head>
 <body>
 <main>
-<h1>MeridianIQ API reference</h1>
+<h1>Valo API reference</h1>
 <p><span class="pill">contract v${esc(version)}</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
@@ -390,7 +390,8 @@ another credential.</li>
 <li><strong>Sessions (the web apps &amp; mobile)</strong> — an HttpOnly cookie (or the same
 signed token as <code>Authorization: Bearer</code> on mobile). All browser-facing
 <em>state-changing</em> requests must also send the CSRF header
-<code>x-meridian-csrf: 1</code>, whether they use cookies or Bearer authentication.
+<code>x-valo-csrf: 1</code>, whether they use cookies or Bearer authentication.
+The legacy <code>x-meridian-csrf</code> name is also accepted during the rebrand.
 Only dedicated machine webhooks are exempt.</li>
 </ul>
 </div>
@@ -400,7 +401,9 @@ Only dedicated machine webhooks are exempt.</li>
 <p>A firm admin registers HTTPS endpoints (<code>POST /api/firm-webhooks</code>) against a
 closed event catalogue: <code>invoice.stamped</code>, <code>invoice.settled</code>,
 <code>statement.reconciled</code>. Each delivery is a JSON <code>POST</code> carrying the event in
-<code>x-meridian-event</code> and a signature in <code>x-meridian-signature</code>.</p>
+<code>x-valo-event</code> and a signature in <code>x-valo-signature</code>.
+Matching <code>x-meridian-event</code> and <code>x-meridian-signature</code>
+headers remain available for existing receivers.</p>
 <p><strong>Signature scheme</strong> — the signing secret (<code>whsec_…</code>) is shown once at
 registration; the HMAC key is its <strong>SHA-256 hash as lowercase hex</strong>, not the
 secret itself. Verify: <code>HMAC-SHA256(rawBody, sha256hex(secret))</code>, hex-encoded,

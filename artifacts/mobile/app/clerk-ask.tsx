@@ -330,7 +330,7 @@ function AnswerCard({
                 {s.action ? (
                   <View testID={`text-action-web-only-${i}`}>
                     <AppText variant="caption" color={colors.mutedForeground}>
-                      To approve and run this proposal, open MeridianIQ on
+                      To approve and run this proposal, open Valo on
                       the web — approvals are not available in the mobile
                       app yet.
                     </AppText>

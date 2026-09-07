@@ -1,6 +1,6 @@
-# MeridianIQ
+# Valo
 
-MeridianIQ is a Nigeria-first e-invoicing compliance platform. Accounting
+Valo is a Nigeria-first e-invoicing compliance platform. Accounting
 firms and their clients prepare, validate, stamp, reconcile, and evidence
 invoices through a shared API, role-specific web applications, and the Clerk
 AI assistant.
@@ -83,6 +83,7 @@ files by hand.
 - [Operations and rollback](docs/operations.md)
 - [Clerk AI boundaries](docs/clerk-ai.md)
 - [Release readiness](docs/release-readiness.md)
+- [Valo rebrand and compatibility](docs/valo-rebrand.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Architecture decisions](docs/adr/README.md)
 - [Maintainability report](docs/maintainability/final-report.md)
