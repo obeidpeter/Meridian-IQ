@@ -110,9 +110,11 @@ export const productionPilotOperatorDependencies: PilotOperatorDependencies = {
       await getDb().execute(
         sql`SELECT pg_advisory_xact_lock(${PILOT_OPERATOR_LOCK_ID})`,
       );
+      // The advisory lock serializes claim access. Keep the immutable claims
+      // table out of this stronger lock because meridian_app intentionally has
+      // only SELECT/INSERT privileges on it.
       await getDb().execute(
-        sql`LOCK TABLE users, memberships, production_bootstrap_claims
-            IN SHARE ROW EXCLUSIVE MODE`,
+        sql`LOCK TABLE users, memberships IN SHARE ROW EXCLUSIVE MODE`,
       );
       return fn();
     }),
