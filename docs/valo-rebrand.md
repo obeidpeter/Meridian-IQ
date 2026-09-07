@@ -64,10 +64,10 @@ This cache cleanup is not a session or persisted-work reset.
 - **Repository identity:** `obeidpeter/Meridian-IQ` and its existing repository
   URLs remain unchanged. A GitHub display-name/description update does not
   authorize renaming the repository slug or rewriting links.
-- **Existing external destinations:** `meridian-iq.replit.app` and
-  `advisory@meridianiq.com` remain pending user-supplied, verified replacements.
-  Do not infer a new domain or mailbox from the Valo name, and do not use
-  `valo.example` as a production destination.
+- **External destinations:** the project owner selected `valo.replit.app` as
+  the replacement application domain. `advisory@meridianiq.com` remains pending
+  a user-supplied, verified replacement. Do not infer a new mailbox from the
+  Valo name, and do not use `valo.example` as a production destination.
 - **Database contracts:** retain `meridian_app`, `meridian_tenant_isolation`,
   `meridian_append_only`, `meridian_block_mutations`, `meridian_purge_expired`,
   migration names/numbers, and other applied SQL identifiers. Disposable
@@ -106,13 +106,11 @@ This cache cleanup is not a session or persisted-work reset.
 These steps require deployment-owner action and evidence. They are not
 completed by source edits or documentation checks.
 
-- [ ] Update the GitHub project/repository display description and Replit app
-  display name to Valo, while retaining `obeidpeter/Meridian-IQ` and existing
-  links. Verify the displayed name separately from repository identity.
-- [ ] Keep the existing Replit public domain until the user supplies a verified
-  replacement. Before any separately approved cutover, verify ownership,
+- [ ] Update the GitHub project/repository display description while retaining
+  `obeidpeter/Meridian-IQ`. The Replit project display name is Valo.
+- [ ] Publish the renamed project so `valo.replit.app` becomes live. Verify
   routing, TLS, redirects, app links, allowed origins, and mobile API targets;
-  coordinate `PUBLIC_APP_URL` and deployment settings without inventing URLs.
+  coordinate `PUBLIC_APP_URL` and deployment settings with that selected URL.
 - [ ] Keep `advisory@meridianiq.com` until a replacement is supplied and verified.
   Coordinate email/DNS and sender display names with the mailbox owner, check
   SPF/DKIM/DMARC and delivery/reply handling, retain continuity for old mail,

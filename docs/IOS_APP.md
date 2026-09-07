@@ -73,11 +73,11 @@ eas submit --platform ios
 ```
 
 EAS uploads the build to App Store Connect; add testers under TestFlight. The
-production build talks to the deployed API at `meridian-iq.replit.app`, so make sure
+production build talks to the deployed API at `valo.replit.app`, so make sure
 the project is published.
 
-That existing domain remains in use pending a user-supplied, verified
-replacement; the product rename does not establish a new public URL.
+The Valo project rename establishes the target public URL; publish the renamed
+project before distributing a build that uses this API target.
 
 ## Verifying push notifications on iPhone
 

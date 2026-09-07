@@ -22,7 +22,7 @@ test("Valo display branding preserves installed-app and deployment identities", 
   for (const profile of ["development", "preview", "production"]) {
     assert.equal(
       eas.build[profile].env.EXPO_PUBLIC_DOMAIN,
-      "meridian-iq.replit.app",
+      "valo.replit.app",
     );
   }
 });
