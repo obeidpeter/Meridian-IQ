@@ -117,7 +117,7 @@ if (
   try {
     const url = new URL(
       process.env.SWEEP_URL ??
-        "https://meridian-iq.replit.app/api/internal/sweep",
+        "https://valo.replit.app/api/internal/sweep",
     );
     const result = await pingSweep(url, signingKey());
     console.log(`${P}: completed`, JSON.stringify(result));
