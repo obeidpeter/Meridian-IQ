@@ -1,8 +1,8 @@
 /**
- * MeridianIQ public penalty estimator — pure calculation core.
+ * Valo public penalty estimator — pure calculation core.
  *
  * This module is fully self-contained: no network, no persistence, no PII.
- * It encodes MeridianIQ's published interpretation of two e-invoicing
+ * It encodes Valo's published interpretation of two e-invoicing
  * enforcement provisions so that a taxpayer can estimate their exposure
  * before engaging an advisor.
  *
@@ -15,7 +15,7 @@
  *           turnover band.
  *
  * The statutory instrument publishes no monetary figures, so the amounts
- * below are MeridianIQ's stated model. They are surfaced to the user as an
+ * below are Valo's stated model. They are surfaced to the user as an
  * estimate, not legal or tax advice.
  */
 

@@ -201,7 +201,7 @@ export function Suppliers() {
               </p>
               <p className="text-sm text-muted-foreground">
                 Suppliers appear here once they address invoices to your
-                organization on MeridianIQ.
+                organization on Valo.
               </p>
             </div>
           ) : (

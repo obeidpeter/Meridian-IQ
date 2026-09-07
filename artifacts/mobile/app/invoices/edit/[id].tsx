@@ -613,7 +613,7 @@ export default function FixInvoiceScreen() {
           <Card>
             <AppText variant="body" color={colors.mutedForeground}>
               This invoice has already been transmitted and can no longer be
-              edited. To correct it, issue a credit note from the MeridianIQ web
+              edited. To correct it, issue a credit note from the Valo web
               console.
             </AppText>
           </Card>

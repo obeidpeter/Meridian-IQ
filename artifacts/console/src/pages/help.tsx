@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { CircleHelp, Mail } from "lucide-react";
+import { ADVISORY_EMAIL } from "@workspace/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -38,7 +39,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "invite-links",
     title: "How invite links work",
     summary:
-      "MeridianIQ never emails invites — you create a one-time link and share it yourself.",
+      "Valo never emails invites — you create a one-time link and share it yourself.",
     steps: [
       '"Create invite link" makes a link that works exactly once and expires after a while.',
       "Copy it before dismissing the card — it cannot be shown again.",
@@ -107,10 +108,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "audit-evidence",
     title: "Audit records and exports",
     summary:
-      "Everything material is recorded permanently and can be exported and verified outside MeridianIQ.",
+      "Everything material is recorded permanently and can be exported and verified outside Valo.",
     steps: [
       "Audit & evidence lists the recorded events; nothing there can be edited or deleted.",
-      "Export bundles are hash-chained — an auditor can verify them without a MeridianIQ account.",
+      "Export bundles are hash-chained — an auditor can verify them without a Valo account.",
       'A client\'s own data exports live on their client page ("Export data").',
     ],
   },
@@ -208,10 +209,10 @@ export function Help() {
         Something these don't cover? Write to&nbsp;
         <a
           className="font-bold text-primary underline underline-offset-2"
-          href="mailto:advisory@meridianiq.com"
+          href={`mailto:${ADVISORY_EMAIL}`}
           data-testid="link-help-contact"
         >
-          advisory@meridianiq.com
+          Valo support
         </a>
         .
       </p>

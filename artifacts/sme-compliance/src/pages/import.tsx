@@ -109,7 +109,7 @@ async function downloadExcelTemplate() {
     "NGN",
   ].map((value) => ({ value, type: String }));
   await writeXlsxFile([header, example], { sheet: "Invoices" }).toFile(
-    "meridianiq-template.xlsx",
+    "valo-template.xlsx",
   );
 }
 
@@ -664,7 +664,7 @@ export function Import() {
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => download("meridianiq-template.csv", TEMPLATE)}
+                onClick={() => download("valo-template.csv", TEMPLATE)}
               >
                 <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV
                 template

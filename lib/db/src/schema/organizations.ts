@@ -74,7 +74,7 @@ export const roleEnum = pgEnum("role", [
   "auditor",
 ]);
 
-// A user's role binding. firm-scoped roles carry a firmId; MeridianIQ staff
+// A user's role binding. firm-scoped roles carry a firmId; Valo staff
 // (operator, auditor) and bank users are cross-tenant and may have a null firmId.
 // client_user additionally scopes to a single client Party; buyer_user scopes to
 // a single buyer Party (Buyer Rails) and carries no firm.

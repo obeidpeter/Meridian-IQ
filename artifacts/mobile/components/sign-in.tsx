@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useLogin, useTotpChallenge } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
 import React, { useState } from "react";
@@ -7,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { AppButton, AppText, Card, TextField } from "@/components/ui";
+import { ValoMark } from "@/components/valo-mark";
 import { useColors } from "@/hooks/useColors";
 import {
   apiErrorMessage,
@@ -26,12 +26,12 @@ function errorMessage(error: unknown): string {
   );
 }
 
-// The X-Meridian-Client header tells the API this is a native client that
+// The X-Valo-Client header tells the API this is a native client that
 // cannot use HttpOnly cookies, so login AND the TOTP challenge include the
 // bearer token in the body. Browser web apps never send it and stay
-// cookie-only.
+// cookie-only. customFetch also emits the legacy header for older servers.
 const MOBILE_CLIENT_REQUEST = {
-  headers: { "X-Meridian-Client": "mobile" },
+  headers: { "X-Valo-Client": "mobile" },
 } as const;
 
 export function SignIn() {
@@ -158,21 +158,16 @@ export function SignIn() {
         bottomOffset={24}
       >
         <View style={styles.hero}>
-          {/* The same lime document mark used by the web workspaces. */}
           <View
             style={[
               styles.logo,
-              {
-                backgroundColor:
-                  colors.scheme === "dark" ? "#dff5a8" : "#bef264",
-              },
               colors.scheme === "light" ? styles.logoShadow : null,
             ]}
           >
-            <Feather name="file-text" size={28} color="#071a1c" />
+            <ValoMark width={44} height={44} />
           </View>
           <AppText variant="display" style={{ marginTop: 18 }}>
-            MeridianIQ
+            Valo
           </AppText>
           <AppText
             variant="body"
@@ -303,12 +298,13 @@ const styles = StyleSheet.create({
   logo: {
     width: 72,
     height: 72,
+    backgroundColor: "#0f766e",
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   logoShadow: {
-    shadowColor: "#0b6653",
+    shadowColor: "#0f766e",
     shadowOpacity: 0.25,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },

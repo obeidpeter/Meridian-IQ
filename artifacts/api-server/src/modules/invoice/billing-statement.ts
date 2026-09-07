@@ -1,4 +1,4 @@
-// Monthly platform-billing statement (round-15): what MeridianIQ's own bill
+// Monthly platform-billing statement (round-15): what Valo's own bill
 // for a closed month is made of, shown to the firm that pays it. The
 // vat-pack posture exactly — deterministic, computed on demand, nothing
 // stored — pointed at the platform's two meters:

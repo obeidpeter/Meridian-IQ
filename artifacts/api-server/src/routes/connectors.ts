@@ -132,7 +132,7 @@ const readinessEntries = () => [
     label: "ERP relay",
     category: "accounting" as const,
     configured: CONNECTORS["meridian-relay"].isConfigured(),
-    note: "Live accounting packages connect through the canonical MeridianIQ adapter protocol.",
+    note: "Live accounting packages connect through the canonical Valo adapter protocol.",
   },
 ];
 

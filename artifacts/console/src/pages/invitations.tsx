@@ -575,7 +575,7 @@ export function Invitations() {
                 {create.isPending ? "Creating…" : "Create invite link"}
               </Button>
               <p className="text-xs text-muted-foreground">
-                MeridianIQ does not email the invite — you copy the one-time
+                Valo does not email the invite — you copy the one-time
                 link and share it yourself.
               </p>
             </div>

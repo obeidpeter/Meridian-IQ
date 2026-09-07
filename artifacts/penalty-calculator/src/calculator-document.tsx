@@ -1,5 +1,8 @@
 /** @jsxRuntime automatic */
-import { ArrowLeft, FileCheck2, Grid2x2 } from "lucide-react";
+// This document also runs inside Vite's Node config; import the standalone mark,
+// not the browser UI barrel with hooks and extensionless runtime imports.
+import { ValoMark } from "../../../lib/web-ui/src/valo-mark";
+import { ArrowLeft, Grid2x2 } from "lucide-react";
 import { CalculatorLoading } from "./calculator-loading";
 
 const FOCUS_RING =
@@ -19,14 +22,14 @@ export function CalculatorDocument() {
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-4 sm:gap-3 sm:px-6">
           <a
             href="/"
-            aria-label="MeridianIQ home"
+            aria-label="Valo home"
             className={`inline-flex items-center gap-3 rounded-md ${FOCUS_RING}`}
           >
             <div className="rounded-md bg-lime-300 p-1.5 text-[#071a1c]">
-              <FileCheck2 className="h-5 w-5" aria-hidden="true" />
+              <ValoMark className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-base font-bold leading-none">MeridianIQ</p>
+              <p className="text-base font-bold leading-none">Valo</p>
               <p className="text-xs leading-tight text-white/70">
                 Compliance planning tools
               </p>
@@ -69,7 +72,7 @@ export function CalculatorDocument() {
       <footer className="border-t border-border">
         <div className="mx-auto max-w-6xl px-4 py-6 pb-20 text-xs text-muted-foreground sm:px-6 lg:pb-6">
           &copy; <span id="copyright-year">{new Date().getFullYear()}</span>{" "}
-          MeridianIQ. Estimates only - not legal or tax advice.
+          Valo. Estimates only - not legal or tax advice.
         </div>
       </footer>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { CircleHelp, Mail } from "lucide-react";
+import { ADVISORY_EMAIL } from "@workspace/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -102,7 +103,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "Check the existing result before starting again, so you do not create a duplicate.",
     steps: [
-      'If creation is not confirmed, select "Retry original invoice" on the same device. MeridianIQ checks the original request without creating a second invoice.',
+      'If creation is not confirmed, select "Retry original invoice" on the same device. Valo checks the original request without creating a second invoice.',
       'Use Operation history to check whether recent work completed. "View invoice" returns you to the invoice or unfinished form.',
       "If the original request is unavailable on this device, check Invoices and Operation history, or ask your accountant, before creating a replacement.",
       'For conflicting edits, compare your version with the saved version. Reload the account version, or save your unfinished edits as a new draft. For an existing invoice, "Keep my edits" keeps them in the form for review; it does not save them yet.',
@@ -145,7 +146,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "first-sign-in-consent",
     title: "Your first sign-in: the consent step",
     summary:
-      "The first time the business's own account signs in, you choose what MeridianIQ may do before the workspace opens.",
+      "The first time the business's own account signs in, you choose what Valo may do before the workspace opens.",
     steps: [
       'Answer "Allow" or "Not now" for layers 1 and 2. Credit readiness is a separate, optional Layer 3 choice you can review from Consent after setup.',
       'Both answers are recorded — including "Not now" — so the step never comes back.',
@@ -259,10 +260,10 @@ export function Help() {
         to&nbsp;
         <a
           className="font-bold text-teal-800 underline underline-offset-2"
-          href="mailto:advisory@meridianiq.com"
+          href={`mailto:${ADVISORY_EMAIL}`}
           data-testid="link-help-contact"
         >
-          advisory@meridianiq.com
+          Valo support
         </a>
         .
       </p>

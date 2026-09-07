@@ -98,6 +98,9 @@ async function openPage(t, viewport, route) {
   await page.goto(new URL(route, base).href);
   await page.getByRole("heading", { level: 1 }).waitFor();
   await page.evaluate(() => document.fonts.ready);
+  assert.match(await page.title(), /Valo/);
+  assert.doesNotMatch(await page.locator("body").innerText(), /MeridianIQ|Meridian Today/);
+  assert.ok(await page.getByRole("link", { name: "Valo home", exact: true }).count());
   return { page, state };
 }
 
@@ -169,7 +172,7 @@ for (const [name, viewport] of viewports) {
         .getByRole("main")
         .getByRole("heading", { level: 1 })
         .textContent(),
-      "MeridianIQ",
+      "Valo",
     );
     await audit(page, `landing-${name}`, true);
 
@@ -238,7 +241,7 @@ for (const [name, viewport] of viewports) {
     await page.reload();
     await page
       .getByRole("alert")
-      .filter({ hasText: "We can't reach MeridianIQ right now." })
+      .filter({ hasText: "We can't reach Valo right now." })
       .waitFor();
     await audit(page, `login-outage-${name}`);
   });

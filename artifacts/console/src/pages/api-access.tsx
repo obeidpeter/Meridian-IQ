@@ -118,7 +118,7 @@ export const WEBHOOK_EVENT_OPTIONS = [
  * genuine delivery.
  */
 export const SIGNATURE_NOTE =
-  "Each delivery carries an X-Meridian-Signature header: HMAC-SHA256 of the body keyed by sha256 of your secret (hash your stored secret once, then verify each request body against the header).";
+  "Each delivery carries an X-Valo-Signature header: HMAC-SHA256 of the body keyed by sha256 of your secret (hash your stored secret once, then verify each request body against the header). The legacy X-Meridian-Signature header remains available for existing integrations.";
 
 /** Toggle one value in a selection list, preserving first-picked order. */
 export function toggleListValue(list: string[], value: string): string[] {
@@ -977,7 +977,7 @@ function WebhooksCard() {
                     type="url"
                     value={url}
                     maxLength={500}
-                    placeholder="https://example.com/hooks/meridian"
+                    placeholder="https://example.com/hooks/valo"
                     onChange={(e) => setUrl(e.target.value)}
                     onBlur={() => setUrlTouched(true)}
                     aria-invalid={urlTouched && !!urlProblem}

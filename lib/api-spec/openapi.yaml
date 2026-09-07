@@ -6,8 +6,15 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.99.0
-  description: MeridianIQ platform API — data spine, compliance rails and consent.
+  version: 0.100.0
+  description: >-
+    Valo platform API — data spine, compliance rails and consent.
+    Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained
+    for compatibility). Native clients identify with x-valo-client, and buyer
+    membership selection uses x-valo-workspace; their legacy x-meridian names
+    remain accepted. Supplying conflicting aliases is rejected. Webhook
+    deliveries include matching x-valo-signature/x-meridian-signature and
+    x-valo-event/x-meridian-event headers during the rebrand transition.
 servers:
   - url: /api
     description: Base API path

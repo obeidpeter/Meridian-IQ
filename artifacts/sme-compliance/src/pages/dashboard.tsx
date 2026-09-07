@@ -1083,7 +1083,7 @@ export function MonthlyAutomationStrip({
 }
 
 // Penalty exposure (round 18): what the overdue paper could cost under
-// MeridianIQ's published s.104 model. Renders only when something is
+// Valo's published s.104 model. Renders only when something is
 // overdue; always the SMALL-band floor ("at least"), never a scare figure —
 // and the fix is stated: submit the paper, the exposure goes away.
 function PenaltyExposureCard({ clientPartyId }: { clientPartyId: string }) {
@@ -1139,7 +1139,7 @@ function PenaltyExposureCard({ clientPartyId }: { clientPartyId: string }) {
           Submitting the overdue invoices removes this exposure.
         </p>
         <p className="text-xs">
-          An estimate under MeridianIQ&apos;s published penalty model — not
+          An estimate under Valo&apos;s published penalty model — not
           legal or tax advice. As of {formatDate(exposure.asOf)}.
         </p>
       </CardContent>

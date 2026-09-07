@@ -178,7 +178,7 @@ export function MonthEnd() {
         data-testid="text-close-explainer"
       >
         {vatMonthLabel(close.asOf)} checks — when every check below is clear,
-        you can treat the month&apos;s books as complete. MeridianIQ records
+        you can treat the month&apos;s books as complete. Valo records
         the checks; a human closes the month.
       </p>
 

@@ -1,3 +1,4 @@
+import { ValoMark } from "@workspace/web-ui";
 import { customFetch } from "@workspace/api-client-react";
 import {
   signOutAndRedirect,
@@ -16,7 +17,6 @@ import {
   ChevronDown,
   CircleHelp,
   CircleUserRound,
-  Compass,
   FilePlus,
   FileText,
   Grid2x2,
@@ -235,7 +235,7 @@ function accountInitials(
   name: string | null | undefined,
   email: string | null | undefined,
 ) {
-  const source = name?.trim() || email?.split("@")[0] || "MI";
+  const source = name?.trim() || email?.split("@")[0] || "V";
   return source
     .split(/\s+/)
     .filter(Boolean)
@@ -250,13 +250,13 @@ function BrandMark({ onNavigate }: { onNavigate?: () => void }) {
       href="/"
       onClick={onNavigate}
       className="mi-brand"
-      aria-label="MeridianIQ — go to Today"
+      aria-label="Valo — go to Today"
     >
       <span className="mi-brand__mark">
-        <Compass aria-hidden="true" />
+        <ValoMark aria-hidden="true" />
       </span>
       <span>
-        <span className="mi-brand__name">MeridianIQ</span>
+        <span className="mi-brand__name">Valo</span>
         <span className="mi-brand__caption">Compliance Workspace</span>
       </span>
     </Link>

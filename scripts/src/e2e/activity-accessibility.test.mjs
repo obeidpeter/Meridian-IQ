@@ -22,7 +22,7 @@ const me = {
   clientPartyId: null,
   buyerPartyId: null,
   role: "firm_admin",
-  email: "demo.admin@meridianiq.example",
+  email: "demo.admin@valo.example",
   fullName: "Demo administrator",
   capabilities: ["invoice.read", "invoice.write"],
   features: ["invoice_lifecycle"],
@@ -78,7 +78,7 @@ for (const [name, viewport] of [
         if (!url.pathname.startsWith("/api/")) return route.continue();
         const fixtures = {
           "/api/me": me,
-          "/api/healthz": { contractVersion: "0.99.0" },
+          "/api/healthz": { contractVersion: "0.100.0" },
           "/api/notifications": { items: [], unreadCount: 0, nextCursor: null },
           "/api/operations": { operations, nextCursor: null },
         };

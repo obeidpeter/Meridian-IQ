@@ -317,7 +317,7 @@ async function seedDemo(): Promise<void> {
       {
         id: DEMO.firmPartyId,
         type: "firm",
-        legalName: "Meridian Advisory Partners",
+        legalName: "Valo Advisory Partners",
         tin: "10000000-0001",
         tinValidated: true,
         countryCode: "NG",
@@ -371,8 +371,8 @@ async function seedDemo(): Promise<void> {
     .insert(firmsTable)
     .values({
       id: DEMO.firmId,
-      name: "Meridian Advisory Partners",
-      subdomain: "meridian-demo",
+      name: "Valo Advisory Partners",
+      subdomain: "valo-demo",
       partyId: DEMO.firmPartyId,
     })
     .onConflictDoNothing({ target: firmsTable.id });
@@ -381,7 +381,7 @@ async function seedDemo(): Promise<void> {
     .insert(usersTable)
     .values({
       id: DEMO.userId,
-      email: "demo.staff@meridianiq.example",
+      email: "demo.staff@valo.example",
       fullName: "Demo Staff",
     })
     .onConflictDoNothing({ target: usersTable.id });
@@ -470,7 +470,7 @@ async function seedDemo(): Promise<void> {
       invoiceId: "aaaa1003-0000-4000-8000-000000001003",
       irn: "IRN-DEMO-1003",
       csid: "CSID-DEMO-1003",
-      qrPayload: "https://verify.meridianiq.example/IRN-DEMO-1003",
+      qrPayload: "https://verify.valo.example/IRN-DEMO-1003",
       signedArtifactRef: "artifact://demo/INV-1003.xml",
       rail: "rail_primary",
     })
@@ -631,7 +631,7 @@ async function seedCpdCourses(): Promise<void> {
         key: "mbs-onboarding-101",
         title: "MBS Onboarding Essentials",
         summary:
-          "The mandatory e-invoicing model, IRN/CSID stamping, and how to move a client book onto MeridianIQ.",
+          "The mandatory e-invoicing model, IRN/CSID stamping, and how to move a client book onto Valo.",
         cpdHours: 2,
         sortOrder: 1,
         modules: [
@@ -729,17 +729,17 @@ async function seedConsoleDemo(): Promise<void> {
     .values([
       {
         id: CONSOLE.adminUserId,
-        email: "demo.admin@meridianiq.example",
+        email: "demo.admin@valo.example",
         fullName: "Amaka Okonkwo",
       },
       {
         id: CONSOLE.operatorUserId,
-        email: "ops@meridianiq.example",
+        email: "ops@valo.example",
         fullName: "Compliance Desk Operator",
       },
       {
         id: CONSOLE.auditorUserId,
-        email: "audit@meridianiq.example",
+        email: "audit@valo.example",
         fullName: "Read-only Auditor",
       },
       // The client persona (Appendix C): the SME owner herself — the account
@@ -1286,7 +1286,7 @@ async function seedClerkDemo(): Promise<void> {
     .insert(usersTable)
     .values({
       id: CLERK.approverUserId,
-      email: "claims.approver@meridianiq.example",
+      email: "claims.approver@valo.example",
       fullName: "Claims Approver",
     })
     .onConflictDoNothing({ target: usersTable.id });

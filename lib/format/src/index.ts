@@ -36,6 +36,7 @@ export {
 
 // One public contact address across the landing, recovery and calculator
 // surfaces. Its operational verification is tracked by Release Readiness.
+// Retain the existing mailbox until the owner verifies a Valo replacement.
 export const ADVISORY_EMAIL = "advisory@meridianiq.com";
 
 // Intl formatter construction is expensive (locale-data setup) and these run

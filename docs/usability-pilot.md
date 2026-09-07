@@ -10,7 +10,7 @@ do not record passwords, authentication codes or real customer data.
 
 ## Tasks
 
-1. Explain who MeridianIQ is for, request access, then find sign-in as a returning user.
+1. Explain who Valo is for, request access, then find sign-in as a returning user.
 2. Find password recovery without requesting a reset for another person's account.
 3. Find today's most important work and identify completed and outstanding setup steps.
 4. Create an unfinished invoice with a missing price, explain the checklist, then correct it.

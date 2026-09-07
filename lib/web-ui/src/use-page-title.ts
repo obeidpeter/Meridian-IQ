@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 
-/** Sets the document title to "{Page} · MeridianIQ" for the current route. */
+/** Sets the document title to "{Page} · Valo" for the current route. */
 export function usePageTitle(title: string) {
   useEffect(() => {
-    document.title = `${title} · MeridianIQ`;
+    document.title = `${title} · Valo`;
     return () => {
-      document.title = "MeridianIQ";
+      document.title = "Valo";
     };
   }, [title]);
 }

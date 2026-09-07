@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/penalty-calculator/"
-title = "MeridianIQ Penalty Calculator"
+title = "Valo Penalty Calculator"
 version = "1.0.0"
 id = "artifacts/penalty-calculator"
 router = "path"

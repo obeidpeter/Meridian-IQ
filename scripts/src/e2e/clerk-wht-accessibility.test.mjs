@@ -23,7 +23,7 @@ const me = {
   clientPartyId: "00000000-0000-4000-8000-000000000003",
   buyerPartyId: null,
   role: "firm_staff",
-  email: "fixture@meridianiq.example",
+  email: "fixture@valo.example",
   fullName: "Local fixture",
   capabilities: ["invoice.read", "clerk.ask", "clerk.use", "claims.read"],
   features: ["clerk_ai", "invoice_lifecycle"],
@@ -63,7 +63,7 @@ const metrics = {
 };
 const fixtures = new Map([
   ["/api/me", me],
-  ["/api/healthz", { contractVersion: "0.99.0" }],
+  ["/api/healthz", { contractVersion: "0.100.0" }],
   ["/api/notifications", { items: [], unreadCount: 0, nextCursor: null }],
   ["/api/feature-flags", [{ key: "clerk_ai", enabled: true }]],
   ["/api/firms", []],

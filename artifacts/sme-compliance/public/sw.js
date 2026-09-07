@@ -1,5 +1,6 @@
-const CACHE = "meridianiq-sme-static-v4";
-const OWNED_PREFIX = "meridianiq-sme-static-";
+const CACHE = "valo-sme-static-v5";
+const OWNED_PREFIX = "valo-sme-static-";
+const PREVIOUS_PREFIX = "meridianiq-sme-static-";
 const LEGACY_CACHE = /^meridianiq-v\d+$/;
 const scope = new URL(self.registration.scope);
 
@@ -35,6 +36,7 @@ self.addEventListener("activate", (event) => {
             .filter(
               (key) =>
                 LEGACY_CACHE.test(key) ||
+                key.startsWith(PREVIOUS_PREFIX) ||
                 (key.startsWith(OWNED_PREFIX) && key !== CACHE),
             )
             .map((key) => caches.delete(key)),

@@ -89,7 +89,7 @@ export function errorDescription(error: unknown): string {
   if (status === 409)
     return "This invoice was already responded to — refresh to see the latest state.";
   if (status !== undefined && status >= 500)
-    return "MeridianIQ had a problem recording this. Try again in a moment.";
+    return "Valo had a problem recording this. Try again in a moment.";
   const message = error instanceof Error ? error.message : undefined;
   return message ?? "Something went wrong — try again.";
 }

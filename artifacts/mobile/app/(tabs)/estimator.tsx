@@ -236,7 +236,7 @@ export default function EstimatorScreen() {
           color={colors.mutedForeground}
           style={{ flex: 1 }}
         >
-          This is MeridianIQ's penalty model, provided as an estimate only —
+          This is Valo's penalty model, provided as an estimate only —
           not tax or legal advice. Actual assessments are made by the tax
           authority.
         </AppText>

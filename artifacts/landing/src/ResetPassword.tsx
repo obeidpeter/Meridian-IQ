@@ -135,7 +135,7 @@ export function ResetPassword() {
                 className="mt-2 text-sm text-muted-foreground"
                 data-testid="text-reset-guidance"
               >
-                Enter the email address on your MeridianIQ account. We will send
+                Enter the email address on your Valo account. We will send
                 a one-time link if the account exists.
               </p>
               <form onSubmit={onRequestReset} className="mt-4 space-y-3">
@@ -200,11 +200,11 @@ export function ResetPassword() {
           <Button asChild variant="outline" className="mt-2 w-full">
             <a
               href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
-                "MeridianIQ password reset request",
+                "Valo password reset request",
               )}`}
               data-testid="link-guidance-support"
             >
-              Contact MeridianIQ support
+              Contact Valo support
             </a>
           </Button>
         </Card>
@@ -244,7 +244,7 @@ export function ResetPassword() {
       <Card className="p-6 shadow-sm">
         <h1 className="text-lg font-semibold">Choose a new password</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This one-time link sets a new password for your MeridianIQ account.
+          This one-time link sets a new password for your Valo account.
         </p>
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <div className="space-y-1.5">

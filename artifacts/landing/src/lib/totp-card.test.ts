@@ -8,7 +8,7 @@ import {
 
 const material: TotpSetup = {
   secret: "JBSWY3DPEHPK3PXP",
-  otpauthUri: "otpauth://totp/MeridianIQ:user?secret=JBSWY3DPEHPK3PXP",
+  otpauthUri: "otpauth://totp/Valo:user?secret=JBSWY3DPEHPK3PXP",
   recoveryCodes: ["aaaa-bbbb", "cccc-dddd"],
 };
 

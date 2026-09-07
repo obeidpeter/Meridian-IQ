@@ -84,7 +84,7 @@ function groupByMonth(deadlines: ComplianceDeadline[]): MonthGroup[] {
   return order.map((k) => groups[k]);
 }
 
-// What the overdue paper could cost under MeridianIQ's published s.104
+// What the overdue paper could cost under Valo's published s.104
 // model (the SME dashboard card, ported). Renders only when the query
 // succeeded AND something is overdue — a failure or a dark flag adds no
 // noise to the calendar, and the headline is always the small-band floor

@@ -79,7 +79,7 @@ router.get("/audit/export/csv", async (req, res): Promise<void> => {
   res.setHeader("X-Audit-Last-Seq", lastSeq === null ? "" : String(lastSeq));
   sendCsvAttachment(
     res,
-    `meridianiq-audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
+    `valo-audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
     csv,
   );
 });

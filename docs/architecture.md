@@ -1,4 +1,4 @@
-# MeridianIQ — architecture guidebook
+# Valo — architecture guidebook
 
 The visual maps and the decision log: the two things `docs/platform.md` and
 `docs/clerk-ai.md` (deep prose) and `CLAUDE.md` (the lean index) don't carry.
@@ -12,7 +12,7 @@ package must be named here, and the structural sections below must exist.
 Adding a package or making a significant decision means updating this file in
 the same change — the suite fails otherwise.
 
-## Context — MeridianIQ and its world
+## Context — Valo and its world
 
 ```mermaid
 flowchart TB
@@ -20,7 +20,7 @@ flowchart TB
     firm["Accounting firm staff<br/>admin, staff, operator, auditor"]
     buyer["Buyer finance user"]
 
-    miq["MeridianIQ<br/>Nigeria-first e-invoicing<br/>compliance platform"]
+    miq["Valo<br/>Nigeria-first e-invoicing<br/>compliance platform"]
 
     rails["FIRS/MBS access-point rails<br/>rail_primary + rail_secondary<br/>simulated in-code by default,<br/>HTTP transport bound when RAIL_*_URL is lit"]
     model["OpenAI-compatible model provider<br/>env-provisioned base URL + key"]
@@ -503,7 +503,7 @@ later change to the pipeline's concurrency.
 Context: each role had capable domain pages but no single answer to "what needs
 attention now", global search stopped at page names, and coordination escaped
 into messages with no tenant-scoped owner, deadline or decision history.
-Decision: compose Meridian Today at request time from the authoritative invoice,
+Decision: compose Valo Today at request time from the authoritative invoice,
 filing, obligation and work ledgers; keep universal search role- and tenant-
 scoped in SQL; persist human coordination in `work_items` and append-only
 `work_item_comments` with idempotent creates and optimistic versions. Client

@@ -1,3 +1,4 @@
+import { ValoMark } from "@workspace/web-ui";
 import {
   useEffect,
   useRef,
@@ -51,7 +52,7 @@ import { serverErrorFrom } from "@/lib/errors";
 // The inbox is shared by every public surface; deployment readiness tracks
 // when its delivery path was last verified.
 const CONTACT_MAILTO = `mailto:${ADVISORY_EMAIL}?subject=${encodeURIComponent(
-  "MeridianIQ access request",
+  "Valo access request",
 )}`;
 
 const trackLandingCta = () => trackUsabilityEvent("landing_cta", "landing");
@@ -294,7 +295,7 @@ function BrandLockup({ inverted = false }: { inverted?: boolean }) {
     <a
       href="/"
       className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
-      aria-label="MeridianIQ home"
+      aria-label="Valo home"
     >
       <span
         className={
@@ -302,7 +303,7 @@ function BrandLockup({ inverted = false }: { inverted?: boolean }) {
           (inverted ? "bg-lime-300 text-[#071a1c]" : "bg-teal-700 text-white")
         }
       >
-        <FileCheck2 className="size-5" aria-hidden="true" />
+        <ValoMark className="size-5" aria-hidden="true" />
       </span>
       <span>
         <span
@@ -311,7 +312,7 @@ function BrandLockup({ inverted = false }: { inverted?: boolean }) {
             (inverted ? "text-white" : "text-slate-950")
           }
         >
-          MeridianIQ
+          Valo
         </span>
         <span
           className={
@@ -448,7 +449,7 @@ function PreviewFrame({
         <span className="size-2.5 rounded-full bg-amber-400" />
         <span className="size-2.5 rounded-full bg-emerald-400" />
         <span className="ml-3 truncate text-xs font-semibold text-slate-600">
-          app.meridianiq.com
+          Valo workspace
         </span>
         <span className="ml-auto hidden items-center gap-1.5 text-xs font-semibold text-teal-700 sm:inline-flex">
           <span className="size-1.5 rounded-full bg-teal-500" />
@@ -463,7 +464,7 @@ function PreviewFrame({
 
 function ClerkPreview() {
   return (
-    <PreviewFrame label="MeridianIQ Clerk intake and review workspace">
+    <PreviewFrame label="Valo Clerk intake and review workspace">
       <div className="grid h-full bg-[#f4f7f6] sm:grid-cols-[10.5rem_minmax(0,1fr)]">
         <aside className="hidden border-r border-slate-200 bg-[#0a2425] p-4 text-white sm:flex sm:flex-col">
           <div className="flex items-center gap-2 text-sm font-extrabold">
@@ -628,11 +629,11 @@ function ClerkPreview() {
 
 function SmePreview() {
   return (
-    <PreviewFrame label="MeridianIQ SME Compliance dashboard">
+    <PreviewFrame label="Valo SME Compliance dashboard">
       <div className="flex h-full items-center justify-center bg-white">
         <img
           src="/compliance-dashboard.jpg"
-          alt="MeridianIQ Compliance dashboard showing invoice status, activity and the next filing deadline"
+          alt="Valo Compliance dashboard showing invoice status, activity and the next filing deadline"
           className="h-full w-full object-contain object-top"
         />
       </div>
@@ -648,10 +649,10 @@ function FirmPreview() {
   ];
 
   return (
-    <PreviewFrame label="MeridianIQ accountant portfolio view">
+    <PreviewFrame label="Valo accountant portfolio view">
       <div className="grid h-full bg-[#f4f7f6] sm:grid-cols-[10.5rem_minmax(0,1fr)]">
         <aside className="hidden border-r border-slate-200 bg-white p-4 sm:block">
-          <p className="text-sm font-extrabold text-teal-800">MeridianIQ</p>
+          <p className="text-sm font-extrabold text-teal-800">Valo</p>
           <nav className="mt-7 space-y-1 text-xs font-semibold text-slate-500">
             {["Portfolio", "Clients", "Advisory", "Receivables", "Audit"].map(
               (item, index) => (
@@ -752,7 +753,7 @@ function FirmPreview() {
 
 function BuyerPreview() {
   return (
-    <PreviewFrame label="MeridianIQ Buyer Rails verification queue">
+    <PreviewFrame label="Valo Buyer Rails verification queue">
       <div className="h-full bg-[#f4f7f6] p-4 sm:p-6">
         <header className="flex items-start justify-between gap-4">
           <div>
@@ -1022,7 +1023,7 @@ function HeroWorkspaceEvidence() {
   return (
     <div
       className="hidden border-t border-white/20 pt-5 lg:grid lg:grid-cols-[12rem_repeat(3,minmax(0,1fr))] lg:gap-0"
-      aria-label="Example MeridianIQ Today workspace"
+      aria-label="Example Valo Today workspace"
     >
       <div className="pr-8">
         <p className="text-[10px] font-extrabold uppercase text-lime-200">
@@ -1245,7 +1246,7 @@ function AccessRequest() {
             Tell us what your team needs.
           </h2>
           <p className="mt-5 max-w-lg text-base leading-7 text-slate-600">
-            MeridianIQ is currently invite-led. Share a few details and the
+            Valo is currently invite-led. Share a few details and the
             right person will follow up about a workspace, pilot or partnership.
           </p>
           <div className="mt-8 border-t border-slate-300 pt-5">
@@ -1406,7 +1407,7 @@ function AccessRequest() {
               className="mt-1 size-4 shrink-0 accent-teal-700"
             />
             <span>
-              MeridianIQ may use these details to contact me about this request.
+              Valo may use these details to contact me about this request.
             </span>
           </label>
 
@@ -1463,7 +1464,7 @@ export default function LandingPage() {
                 E-invoicing for Nigerian businesses
               </div>
               <h1 className="landing-display text-5xl font-extrabold leading-none text-white sm:text-7xl lg:text-8xl">
-                MeridianIQ
+                Valo
               </h1>
               <p className="landing-display mt-5 max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl lg:text-5xl">
                 Send correct invoices. Keep the proof.
@@ -1661,7 +1662,7 @@ export default function LandingPage() {
               <p className="mt-5 max-w-xl text-base leading-7 text-white/70">
                 Every decision stays attached to its invoice. Only the right
                 people can see your records — and the history can be checked
-                outside MeridianIQ.
+                outside Valo.
               </p>
 
               <div className="mt-8 grid gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -1853,7 +1854,7 @@ export default function LandingPage() {
             <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
               <div className="max-w-3xl">
                 <p className="text-sm font-extrabold uppercase text-teal-700">
-                  Who uses MeridianIQ
+                  Who uses Valo
                 </p>
                 <h2 className="landing-display mt-4 text-4xl font-bold leading-tight sm:text-5xl">
                   One account. The right workspace for you.
@@ -1913,7 +1914,7 @@ export default function LandingPage() {
             </div>
 
             <p className="mt-8 text-sm leading-6 text-slate-600">
-              No account yet? MeridianIQ works through your accounting firm —
+              No account yet? Valo works through your accounting firm —
               they invite you. Or email{" "}
               <a
                 href={CONTACT_MAILTO}
@@ -2018,7 +2019,7 @@ export default function LandingPage() {
           </nav>
         </div>
         <div className="mx-auto mt-9 flex max-w-7xl flex-col gap-2 border-t border-white/10 px-5 pt-6 text-xs text-white/60 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
-          <span>MeridianIQ, Lagos, Nigeria.</span>
+          <span>Valo, Lagos, Nigeria.</span>
           <span>Correct invoices, from first draft to final payment.</span>
         </div>
       </footer>

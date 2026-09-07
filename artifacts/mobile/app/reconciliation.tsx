@@ -403,7 +403,7 @@ export default function ReconciliationScreen() {
           <EmptyState
             icon="lock"
             title="Reconciliation isn't enabled yet"
-            message="Bank-statement matching is being rolled out gradually. Ask your accounting firm (or MeridianIQ support) to enable it for your business."
+            message="Bank-statement matching is being rolled out gradually. Ask your accounting firm (or Valo support) to enable it for your business."
           />
         ) : statementsQuery.isError ? (
           <ErrorState

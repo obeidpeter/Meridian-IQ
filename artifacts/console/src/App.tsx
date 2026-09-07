@@ -188,7 +188,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// The console front door is role-aware: firm principals land on Meridian
+// The console front door is role-aware: firm principals land on Valo
 // Today, operators on activation evidence, and auditors on the evidence
 // surface they signed in to inspect.
 function Home() {

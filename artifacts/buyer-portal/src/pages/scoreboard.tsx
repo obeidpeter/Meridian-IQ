@@ -176,7 +176,7 @@ export function Scoreboard() {
               </p>
               <p className="text-sm text-muted-foreground">
                 Rankings build up as your suppliers stamp invoices and respond
-                to confirmations on MeridianIQ.
+                to confirmations on Valo.
               </p>
             </div>
           ) : (

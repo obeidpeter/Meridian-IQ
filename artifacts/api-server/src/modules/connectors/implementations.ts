@@ -171,11 +171,11 @@ export const quickliteConnector: Connector = {
   },
 };
 
-// Production adapter protocol. MeridianIQ talks only to a deployment-owned
+// Production adapter protocol. Valo talks only to a deployment-owned
 // relay URL, never a URL supplied by a tenant, which keeps this connector from
 // becoming an SSRF primitive. The relay owns vendor OAuth/token rotation and
 // responds in the canonical field names below; ERP_CONNECTOR_TOKEN authenticates
-// MeridianIQ to that boundary and is never persisted in a connection row.
+// Valo to that boundary and is never persisted in a connection row.
 const RELAY_TIMEOUT_MS = 8_000;
 const MAX_RELAY_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -242,7 +242,7 @@ export const liveErpRelayConnector: Connector = {
   key: "meridian-relay",
   name: "Production ERP relay",
   description:
-    "Live accounting feed through the deployment-owned MeridianIQ adapter protocol.",
+    "Live accounting feed through the deployment-owned Valo adapter protocol.",
   mode: "live",
   isConfigured: liveRelayConfigured,
   configurationFields: [

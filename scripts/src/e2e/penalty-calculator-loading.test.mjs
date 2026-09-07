@@ -213,7 +213,7 @@ describe(
           });
           assert.match(
             await advisoryForm.innerText(),
-            /That sends your email, optional business name, and the estimate summary to the MeridianIQ advisory team/,
+            /That sends your email, optional business name, and the estimate summary to the Valo advisory team/,
           );
           assert.equal(
             await page.locator("#copyright-year").textContent(),

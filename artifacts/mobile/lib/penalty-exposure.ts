@@ -38,5 +38,5 @@ export const PENALTY_EXPOSURE_FIX_LINE =
 
 /** The estimate disclaimer with the server's as-of date already formatted. */
 export function penaltyExposureNote(asOfLabel: string): string {
-  return `An estimate under MeridianIQ's published penalty model — not legal or tax advice. As of ${asOfLabel}.`;
+  return `An estimate under Valo's published penalty model — not legal or tax advice. As of ${asOfLabel}.`;
 }

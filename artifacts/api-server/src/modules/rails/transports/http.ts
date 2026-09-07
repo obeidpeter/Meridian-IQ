@@ -5,7 +5,7 @@ import type { RailTransport, StampResult } from "../contracts";
 import { RailLookupError, sanitiseRejectionCode, type StampFields } from "../faults";
 
 // The HTTP rail transport (R95): the first RailTransport that leaves the
-// process. It speaks the provisional "MeridianIQ access-point profile v0"
+// process. It speaks the provisional "Valo access-point profile v0"
 // (docs/platform.md, "Rail transport & selection") and maps every wire
 // outcome onto the failure-class vocabulary in modules/errors.ts, so the
 // pipeline's park / retry / dead dispositions never see HTTP. Bound only

@@ -18,7 +18,8 @@
     "quality:secrets": "node src/quality/secrets.mjs",
     "quality:metrics": "node src/quality/maintainability.mjs",
     "quality:complexity": "node src/quality/complexity.mjs",
-    "quality:docs": "node src/quality/docs.mjs"
+    "quality:docs": "node src/quality/docs.mjs",
+    "quality:brand": "node src/quality/brand.mjs"
   },
   "devDependencies": {
     "axe-core": "^4.10.3",

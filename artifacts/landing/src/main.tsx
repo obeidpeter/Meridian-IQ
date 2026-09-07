@@ -45,14 +45,14 @@ const client = new QueryClient({
 });
 document.title =
   pathname === "/invoice-room"
-    ? "Secure Invoice Room | MeridianIQ"
+    ? "Secure Invoice Room | Valo"
     : pathname === "/accept-invite"
-      ? "Accept invitation | MeridianIQ"
+      ? "Accept invitation | Valo"
       : pathname === "/reset-password"
-        ? "Reset password | MeridianIQ"
+        ? "Reset password | Valo"
         : pathname === "/login"
-          ? "Sign in | MeridianIQ"
-          : "MeridianIQ | Turn every invoice into evidence";
+          ? "Sign in | Valo"
+          : "Valo | Turn every invoice into evidence";
 void clearLegacySessionCaches();
 
 // Register the self-healing root service worker. Its only job is to evict any

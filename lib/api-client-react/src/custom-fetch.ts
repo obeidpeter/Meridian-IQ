@@ -472,9 +472,10 @@ export async function customFetch<T = unknown>(
   if (
     apiTarget &&
     !SAFE_METHODS.has(method) &&
-    !headers.has("x-meridian-csrf")
+    !headers.has("x-meridian-csrf") &&
+    !headers.has("x-valo-csrf")
   ) {
-    headers.set("x-meridian-csrf", "1");
+    headers.set("x-valo-csrf", "1");
   }
 
   // A user can hold several platform memberships. Buyer Rails has no firm id,
@@ -484,7 +485,8 @@ export async function customFetch<T = unknown>(
   if (
     apiTarget &&
     typeof window !== "undefined" &&
-    !headers.has("x-meridian-workspace")
+    !headers.has("x-meridian-workspace") &&
+    !headers.has("x-valo-workspace")
   ) {
     const path = window.location.pathname;
     const requested = new URLSearchParams(window.location.search).get(
@@ -495,7 +497,21 @@ export async function customFetch<T = unknown>(
       path.startsWith("/buyer/") ||
       requested?.startsWith("/buyer/")
     ) {
-      headers.set("x-meridian-workspace", "buyer");
+      headers.set("x-valo-workspace", "buyer");
+    }
+  }
+
+  // Send both names during the transition so a cached app can still talk to
+  // either API revision. Do not forward first-party headers to external hosts.
+  if (apiTarget) {
+    for (const suffix of ["csrf", "workspace", "client"]) {
+      const current = `x-valo-${suffix}`;
+      const legacy = `x-meridian-${suffix}`;
+      const value = headers.get(current) ?? headers.get(legacy);
+      if (value !== null) {
+        if (!headers.has(current)) headers.set(current, value);
+        if (!headers.has(legacy)) headers.set(legacy, value);
+      }
     }
   }
 

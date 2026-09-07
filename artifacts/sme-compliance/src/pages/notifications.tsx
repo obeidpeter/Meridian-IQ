@@ -100,7 +100,7 @@ export function Notifications() {
       <WorkspaceHeader
         eyebrow="Inbox"
         title="Notifications"
-        description="Every alert MeridianIQ sent, with its delivery channel, read state and related record."
+        description="Every alert Valo sent, with its delivery channel, read state and related record."
         actions={
           query.data?.unreadCount && upToCreatedAt ? (
             <Button

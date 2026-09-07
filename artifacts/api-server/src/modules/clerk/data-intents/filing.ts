@@ -108,7 +108,7 @@ export const FILING_INTENTS: readonly DataIntent[] = [
       return {
         text:
           `${plural(exposure.overdueCount, "invoice")}${forClient(params)} ${isAre(exposure.overdueCount)} past the submission window and still unsubmitted. ` +
-          `Estimated s.104 exposure under MeridianIQ's published model: NGN ${exposure.exposure.small} (small turnover band) to NGN ${exposure.exposure.large} (large band). ` +
+          `Estimated s.104 exposure under Valo's published model: NGN ${exposure.exposure.small} (small turnover band) to NGN ${exposure.exposure.large} (large band). ` +
           `An estimate, not legal or tax advice — submitting the overdue paper removes the exposure.`,
         facts: [
           countFact(

@@ -157,7 +157,7 @@ async function journeyPortalAuth(page, BASE, check) {
 
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
 
-  await page.getByTestId("input-email").fill("ops@meridianiq.example");
+  await page.getByTestId("input-email").fill("ops@valo.example");
   await page.getByTestId("input-password").fill("wrong-password");
   await page.getByTestId("button-sign-in").click();
   await page.waitForSelector('[data-testid="text-login-error"]');
@@ -454,10 +454,10 @@ async function journeyFirstLandingConsent(page, BASE, check) {
 const KANO = "cb000002-0000-4000-8000-0000000000b2";
 const PHARMA = "cb000003-0000-4000-8000-0000000000b3";
 async function journeyClientAssignment(page, BASE, check) {
-  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@valo.example");
   const team = await (await page.request.get(BASE + "/api/console/team")).json();
-  const staff = team.find((m) => m.email === "demo.staff@meridianiq.example");
-  const admin = team.find((m) => m.email === "demo.admin@meridianiq.example");
+  const staff = team.find((m) => m.email === "demo.staff@valo.example");
+  const admin = team.find((m) => m.email === "demo.admin@valo.example");
   check("firm team lists the demo admin and staff", !!staff && !!admin);
   const assign = async (clientId, userIds) => {
     const current = await (
@@ -482,7 +482,7 @@ async function journeyClientAssignment(page, BASE, check) {
   const outsider = await assign(KANO, [staff.userId, "00000000-0000-4000-8000-000000000000"]);
   check("an assignee outside the firm is refused — status 400", outsider.status() === 400);
   // Staff may read the register but not write it.
-  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+  await apiLogin(page, BASE, "demo.staff@valo.example");
   const staffWrite = await assign(KANO, []);
   check("staff cannot rewrite assignments — status 403", staffWrite.status() === 403);
   await apiLogout(page, BASE);
@@ -553,10 +553,10 @@ async function journeyAccessReview(page, BASE, check) {
     await page.request.get(BASE + "/api/console/access-register")
   ).json();
   const staff = register.members.find(
-    (m) => m.email === "demo.staff@meridianiq.example",
+    (m) => m.email === "demo.staff@valo.example",
   );
   const admin = register.members.find(
-    (m) => m.email === "demo.admin@meridianiq.example",
+    (m) => m.email === "demo.admin@valo.example",
   );
   check(
     "access register lists the firm's members with roles",
@@ -589,7 +589,7 @@ async function journeyAccessReview(page, BASE, check) {
   const csv = await page.request.get(BASE + "/api/console/access-register/csv");
   check(
     "access register downloads as CSV",
-    csv.status() === 200 && (await csv.text()).includes("demo.staff@meridianiq.example"),
+    csv.status() === 200 && (await csv.text()).includes("demo.staff@valo.example"),
   );
   await signOutFromApp(page, BASE);
 }

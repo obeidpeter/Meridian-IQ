@@ -1,3 +1,4 @@
+import { ValoMark } from "@workspace/web-ui";
 import {
   useEffect,
   useReducer,
@@ -59,7 +60,6 @@ import {
   ReceiptText,
   ScanLine,
   UsersRound,
-  Compass,
   Landmark,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -205,7 +205,7 @@ function loginErrorMessage(err: unknown): string {
   if (status !== undefined) {
     return serverError ?? "Sign-in failed. Please try again.";
   }
-  return "We can't reach MeridianIQ right now. Check your internet connection and try again.";
+  return "We can't reach Valo right now. Check your internet connection and try again.";
 }
 
 function AppCard({
@@ -1016,7 +1016,7 @@ function TotpSecurityCard() {
     if (!material) return;
     const blob = new Blob(
       [
-        "MeridianIQ two-factor recovery codes\n",
+        "Valo two-factor recovery codes\n",
         "Store these securely. Each code works once.\n\n",
         material.recoveryCodes.join("\n"),
         "\n",
@@ -1026,7 +1026,7 @@ function TotpSecurityCard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "meridianiq-recovery-codes.txt";
+    link.download = "valo-recovery-codes.txt";
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -1133,7 +1133,7 @@ function TotpSecurityCard() {
                 src={qrDataUrl}
                 width={192}
                 height={192}
-                alt="QR code for adding MeridianIQ to an authenticator app"
+                alt="QR code for adding Valo to an authenticator app"
                 data-testid="image-totp-qr"
               />
             </div>
@@ -1653,7 +1653,7 @@ const ACCESS_PATHS = [
     tone: "bg-cyan-200 text-[#0e4c45]",
   },
   {
-    title: "MeridianIQ staff",
+    title: "Valo staff",
     detail: "Support, checks and reviews",
     icon: Headphones,
     tone: "bg-amber-200 text-[#0e4c45]",
@@ -1680,14 +1680,14 @@ function AccessStory() {
         <a
           href="/"
           className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78] focus-visible:ring-offset-4 focus-visible:ring-offset-[#0e4c45]"
-          aria-label="MeridianIQ home"
+          aria-label="Valo home"
         >
           <span className="grid size-10 place-items-center rounded-md bg-white/10 text-[#e9cf78]">
-            <Compass className="size-5" aria-hidden="true" />
+            <ValoMark className="size-5" aria-hidden="true" />
           </span>
           <span>
             <span className="block text-lg font-extrabold leading-none">
-              MeridianIQ
+              Valo
             </span>
             <span className="mt-1 block text-[11px] font-semibold text-white/65">
               Invoicing, done right
@@ -1795,13 +1795,13 @@ function AccessPortal({
           <a
             href="/"
             className="inline-flex items-center gap-2.5"
-            aria-label="MeridianIQ home"
+            aria-label="Valo home"
           >
             <span className="grid size-9 place-items-center rounded-md bg-[#0f5c52] text-white">
-              <Compass className="size-4" aria-hidden="true" />
+              <ValoMark className="size-4" aria-hidden="true" />
             </span>
             <span className="text-base font-extrabold text-slate-950">
-              MeridianIQ
+              Valo
             </span>
           </a>
           <a
@@ -1829,7 +1829,7 @@ function AccessPortal({
                     className="mt-0.5 size-4 shrink-0"
                     aria-hidden="true"
                   />
-                  We can&apos;t reach MeridianIQ right now.
+                  We can&apos;t reach Valo right now.
                 </span>
                 <Button size="sm" variant="outline" onClick={onRetry}>
                   Retry
@@ -2000,7 +2000,7 @@ function Portal() {
 
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-xs text-muted-foreground">
           <p>
-            MeridianIQ — Lagos, Nigeria. The Penalty Calculator is free for
+            Valo — Lagos, Nigeria. The Penalty Calculator is free for
             everyone; the other workspaces need a sign-in.
           </p>
           <nav className="flex items-center gap-4" aria-label="Footer">
@@ -2030,14 +2030,14 @@ export default function App() {
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
   const pageTitle =
     pathname === "/invoice-room"
-      ? "Secure Invoice Room | MeridianIQ"
+      ? "Secure Invoice Room | Valo"
       : pathname === "/login"
-        ? "Sign in | MeridianIQ"
+        ? "Sign in | Valo"
         : pathname === "/reset-password"
-          ? "Reset password | MeridianIQ"
+          ? "Reset password | Valo"
           : pathname === "/accept-invite"
-            ? "Accept invitation | MeridianIQ"
-            : "MeridianIQ | Turn every invoice into evidence";
+            ? "Accept invitation | Valo"
+            : "Valo | Turn every invoice into evidence";
 
   useEffect(() => {
     document.title = pageTitle;

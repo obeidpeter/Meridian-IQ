@@ -166,7 +166,7 @@ export function AcceptInvite() {
             data-testid="text-missing-token"
           >
             This page does not contain an invitation token. Ask the person who
-            invited you to copy and share a new MeridianIQ invitation link.
+            invited you to copy and share a new Valo invitation link.
           </p>
           <Button asChild variant="outline" className="mt-4 w-full">
             <a href="/login" data-testid="link-missing-token-sign-in">
@@ -278,7 +278,7 @@ export function AcceptInvite() {
       <Card className="p-6 shadow-sm">
         <h1 className="text-lg font-semibold">Activate your account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Set a password to finish setting up your MeridianIQ account.
+          Set a password to finish setting up your Valo account.
         </p>
         <dl
           className="mt-4 divide-y rounded-md border bg-muted/25 px-3 text-sm"

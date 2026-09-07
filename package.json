@@ -14,8 +14,9 @@
     "maintainability:report": "pnpm --filter @workspace/scripts quality:metrics",
     "complexity:report": "pnpm --filter @workspace/scripts quality:complexity",
     "docs:check": "pnpm --filter @workspace/scripts quality:docs",
+    "brand:check": "pnpm --filter @workspace/scripts quality:brand",
     "test:unit": "pnpm --filter @workspace/api-errors --filter @workspace/format --filter @workspace/web-config --filter @workspace/web-ui --filter @workspace/mobile --filter @workspace/landing --filter @workspace/console --filter @workspace/sme-compliance --filter @workspace/buyer-portal --filter @workspace/penalty-calculator run test && pnpm --filter @workspace/api-server run test:pure",
-    "check": "pnpm run architecture:check && pnpm run security:secrets && pnpm run docs:check && pnpm run typecheck && pnpm run lint && pnpm run test:unit"
+    "check": "pnpm run architecture:check && pnpm run security:secrets && pnpm run docs:check && pnpm run brand:check && pnpm run typecheck && pnpm run lint && pnpm run test:unit"
   },
   "engines": {
     "node": ">=22 <25",

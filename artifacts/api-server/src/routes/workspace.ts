@@ -855,7 +855,7 @@ router.get("/workspace/search", async (req, res): Promise<void> => {
         id: `firm:${firm.id}`,
         kind: "firm",
         label: firm.name,
-        description: "MeridianIQ workspace",
+        description: "Valo workspace",
         group: "Firms",
         href: role === "operator" ? "/control-centre/activation" : "/audit",
       });

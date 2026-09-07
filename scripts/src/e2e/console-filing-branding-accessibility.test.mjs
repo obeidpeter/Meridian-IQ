@@ -25,9 +25,9 @@ const me = {
   clientPartyId: clientId,
   buyerPartyId: null,
   role: "firm_admin",
-  email: "demo.admin@meridianiq.example",
+  email: "demo.admin@valo.example",
   fullName: "Demo admin",
-  workspaceName: "Meridian Advisory Partners",
+  workspaceName: "Valo Advisory Partners",
   capabilities: ["console.portfolio.read", "filing.read", "theme.write"],
   features: [],
   consentCaptured: true,
@@ -181,7 +181,7 @@ test(
                   capabilities: ["credit.data_room.read"],
                 }
               : me,
-            "/api/healthz": { contractVersion: "0.99.0" },
+            "/api/healthz": { contractVersion: "0.100.0" },
             "/api/notifications": {
               items: [],
               unreadCount: 0,

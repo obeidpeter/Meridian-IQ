@@ -14,12 +14,12 @@ function Harness({ title }: { title: string }) {
 describe("usePageTitle", () => {
   test("sets the branded title and restores the default on unmount", () => {
     const { rerender, unmount } = render(<Harness title="Invoices" />);
-    expect(document.title).toBe("Invoices · MeridianIQ");
+    expect(document.title).toBe("Invoices · Valo");
 
     rerender(<Harness title="Settings" />);
-    expect(document.title).toBe("Settings · MeridianIQ");
+    expect(document.title).toBe("Settings · Valo");
 
     unmount();
-    expect(document.title).toBe("MeridianIQ");
+    expect(document.title).toBe("Valo");
   });
 });

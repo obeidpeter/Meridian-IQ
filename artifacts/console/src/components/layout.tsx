@@ -1,3 +1,5 @@
+import { ValoMark } from "@workspace/web-ui";
+import { Compass } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import {
   signOutAndRedirect,
@@ -33,7 +35,6 @@ import {
   UserCheck,
   ChevronDown,
   CircleUserRound,
-  Compass,
   KeyRound,
   Inbox,
   CalendarCheck2,
@@ -367,7 +368,7 @@ function accountInitials(
   name: string | null | undefined,
   email: string | null | undefined,
 ) {
-  const source = name?.trim() || email?.split("@")[0] || "MI";
+  const source = name?.trim() || email?.split("@")[0] || "V";
   const parts = source.split(/\s+/).filter(Boolean);
   return parts
     .slice(0, 2)
@@ -387,13 +388,13 @@ function BrandMark({
       href="/"
       onClick={onNavigate}
       className="mi-brand"
-      aria-label="MeridianIQ — go to the console home"
+      aria-label="Valo — go to the console home"
     >
       <span className="mi-brand__mark">
-        <Compass aria-hidden="true" />
+        <ValoMark aria-hidden="true" />
       </span>
       <span>
-        <span className="mi-brand__name">MeridianIQ</span>
+        <span className="mi-brand__name">Valo</span>
         <span className="mi-brand__caption">{caption}</span>
       </span>
     </Link>

@@ -33,7 +33,7 @@ export const billingTiersTable = pgTable("billing_tiers", {
   key: tierKeyEnum("key").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
-  // Monthly subscription MeridianIQ charges the firm, in naira.
+  // Monthly subscription Valo charges the firm, in naira.
   monthlyPrice: numeric("monthly_price").notNull(),
   // Invoices included per month before overage pricing applies.
   includedInvoices: integer("included_invoices").notNull(),

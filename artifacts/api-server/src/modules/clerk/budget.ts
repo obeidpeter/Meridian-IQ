@@ -188,7 +188,7 @@ export async function assertFirmClerkBudget(firmId: string): Promise<void> {
   if (usage.usedTokens >= usage.budgetTokens) {
     throw new DomainError(
       "CLERK_BUDGET_EXHAUSTED",
-      "Your firm has used its Clerk allowance for this month. Manual workflows are unaffected; contact MeridianIQ to raise the allowance.",
+      "Your firm has used its Clerk allowance for this month. Manual workflows are unaffected; contact Valo to raise the allowance.",
       429,
     );
   }

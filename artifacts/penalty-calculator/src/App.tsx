@@ -296,7 +296,7 @@ export default function App() {
 
   const summaryText = useMemo(() => {
     return [
-      "MeridianIQ e-invoicing penalty estimate",
+      "Valo e-invoicing penalty estimate",
       hasTurnover
         ? `Annual turnover: ${formatNaira(turnoverParsed.value)} (${BAND_LABELS[result.band]} band)`
         : "Annual turnover: not provided",
@@ -322,7 +322,7 @@ export default function App() {
   };
 
   const mailtoHref = useMemo(() => {
-    const subject = "MeridianIQ compliance review request";
+    const subject = "Valo compliance review request";
     const body = [
       summaryText,
       "",
@@ -343,7 +343,7 @@ export default function App() {
     if (!contactConsent) {
       setAdvisoryStatus("error");
       setAdvisoryError(
-        "Confirm that MeridianIQ may contact you about this estimate.",
+        "Confirm that Valo may contact you about this estimate.",
       );
       return;
     }
@@ -532,7 +532,7 @@ export default function App() {
                 className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
                 data-testid="notice-model-basis"
               >
-                <p className="font-semibold">MeridianIQ planning model</p>
+                <p className="font-semibold">Valo planning model</p>
                 <p className="mt-1">
                   These amounts are planning assumptions, not an official
                   statutory tariff, legal advice, tax advice, or an authority
@@ -547,7 +547,7 @@ export default function App() {
                 data-testid="link-product-cta"
                 className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 ${FOCUS_RING}`}
               >
-                See how MeridianIQ keeps you compliant
+                See how Valo keeps you compliant
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
               <p className="mt-3 text-center text-xs text-muted-foreground">
@@ -575,7 +575,7 @@ export default function App() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Calculator entries stay on your device unless you press Request
                 review. That sends your email, optional business name, and the
-                estimate summary to the MeridianIQ advisory team.
+                estimate summary to the Valo advisory team.
               </p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -633,7 +633,7 @@ export default function App() {
                   htmlFor="advisor-consent"
                   className="text-sm leading-5 text-muted-foreground"
                 >
-                  MeridianIQ may use my email, business name, and estimate to
+                  Valo may use my email, business name, and estimate to
                   contact me about this review.
                 </label>
               </div>
@@ -797,7 +797,7 @@ export default function App() {
         <section className="mt-12 rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
           <h2 className="text-base font-semibold">How this is calculated</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            The monetary constants below are MeridianIQ planning assumptions,
+            The monetary constants below are Valo planning assumptions,
             not an official tariff. They are deliberately shown so an advisor
             can replace them with the current authoritative amounts when
             reviewing your circumstances. Basis last reviewed{" "}

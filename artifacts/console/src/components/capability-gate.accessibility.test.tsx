@@ -22,7 +22,7 @@ beforeEach(() => {
   harness.mount.mockClear();
   harness.me = {
     role: "firm_admin",
-    email: "demo.admin@meridianiq.example",
+    email: "demo.admin@valo.example",
     capabilities: [],
   } as unknown as Me;
 });

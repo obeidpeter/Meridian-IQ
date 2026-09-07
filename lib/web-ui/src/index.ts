@@ -129,3 +129,4 @@ export {
   type ReadinessStep,
 } from "./readiness";
 export { NavigationSection } from "./navigation-section";
+export { ValoMark } from "./valo-mark";

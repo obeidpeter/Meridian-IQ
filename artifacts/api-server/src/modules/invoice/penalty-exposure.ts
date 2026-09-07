@@ -10,7 +10,7 @@ import {
 import { RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Penalty exposure (round-18 idea #2). The public penalty calculator
-// (artifacts/penalty-calculator/src/lib/penalty.ts) encodes MeridianIQ's
+// (artifacts/penalty-calculator/src/lib/penalty.ts) encodes Valo's
 // published interpretation of the s.104 per-invoice administrative charge
 // for failing to issue a compliant electronic invoice, scaled by turnover
 // band. This module points that model at the client's OWN overdue paper:
@@ -130,7 +130,7 @@ export async function computePenaltyExposure(
       daysOverdue: Number(r.days_overdue),
     })),
     note:
-      `Estimated s.104 exposure under MeridianIQ's published penalty model: each invoice past the ${SUBMISSION_WINDOW_DAYS}-day submission window and still unsubmitted, ` +
+      `Estimated s.104 exposure under Valo's published penalty model: each invoice past the ${SUBMISSION_WINDOW_DAYS}-day submission window and still unsubmitted, ` +
       `times the per-invoice administrative charge for the turnover band. The platform does not hold the business's turnover, so all three bands are shown — ` +
       `single-figure summaries use the small band (the floor). s.103 access-denial charges are not platform-observable and are excluded. An estimate, not legal or tax advice.`,
   };

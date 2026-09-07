@@ -1,6 +1,6 @@
-import { Compass } from "lucide-react";
+import { ValoMark } from "@workspace/web-ui";
 
-// The shared portal chrome: header shell + MeridianIQ brand mark, with the
+// The shared portal chrome: header shell + Valo brand mark, with the
 // page-specific element (session badge, sign-in shortcut, …) in the right slot.
 // LandingPage keeps its own dark BrandLockup on purpose.
 export function PortalHeader({ right }: { right?: React.ReactNode }) {
@@ -10,13 +10,13 @@ export function PortalHeader({ right }: { right?: React.ReactNode }) {
         <a
           href="/"
           className="flex items-center gap-2.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label="MeridianIQ home"
+          aria-label="Valo home"
         >
           <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
-            <Compass className="h-5 w-5" aria-hidden="true" />
+            <ValoMark className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <p className="text-base font-bold leading-none">MeridianIQ</p>
+            <p className="text-base font-bold leading-none">Valo</p>
             <p className="text-xs text-muted-foreground">
               Compliance & verified receivables
             </p>

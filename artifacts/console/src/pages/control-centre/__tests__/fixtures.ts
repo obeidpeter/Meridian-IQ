@@ -9,7 +9,7 @@ import type {
 
 const generatedAt = "2026-09-05T00:00:00Z";
 const firmName = "Control Centre fixture practice";
-const clientName = "Meridian Regional Distribution and Logistics Limited";
+const clientName = "Valo Regional Distribution and Logistics Limited";
 
 export const activation: GateMetrics = {
   subscribedFirms: 75,
