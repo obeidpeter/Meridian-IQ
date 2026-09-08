@@ -30,15 +30,23 @@ test("Valo display branding preserves installed-app and deployment identities", 
 test("public Replit defaults match the reviewed mobile production domain", () => {
   const eas = JSON.parse(read("eas.json"));
   const origin = `https://${eas.build.production.env.EXPO_PUBLIC_DOMAIN}`;
-  for (const file of [
-    "artifacts/api-server/src/routes/auth.ts",
-    "scripts/src/ops/sweep-ping.mjs",
-  ]) {
-    const source = readFileSync(join(repoRoot, file), "utf8");
-    const origins = source.match(/https:\/\/[a-z0-9-]+\.replit\.app\b/g) ?? [];
-    assert.ok(origins.length > 0, `${file}: public URL default is present`);
-    assert.deepEqual(new Set(origins), new Set([origin]), file);
-  }
+  const publicOrigins = (file: string) =>
+    readFileSync(join(repoRoot, file), "utf8").match(
+      /https:\/\/[a-z0-9-]+\.replit\.app\b/g,
+    ) ?? [];
+  // The one reviewed default left in the repository is the sweep-ping target.
+  const sweepPing = "scripts/src/ops/sweep-ping.mjs";
+  const origins = publicOrigins(sweepPing);
+  assert.ok(origins.length > 0, `${sweepPing}: public URL default is present`);
+  assert.deepEqual(new Set(origins), new Set([origin]), sweepPing);
+  // The API builds every link it sends on PUBLIC_APP_URL and carries no
+  // default (R112): production holds readiness until the setting is safe,
+  // and its architecture test refuses any deployment hostname literal.
+  assert.deepEqual(
+    publicOrigins("artifacts/api-server/src/routes/auth.ts"),
+    [],
+    "the API carries no public URL default",
+  );
 });
 
 test("installed Expo iOS transform registers both old and new deep links", () => {
