@@ -67,6 +67,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
+import "@/auth.css";
 import { serverErrorFrom } from "@/lib/errors";
 import { mfaChallengeDisposition, mfaExpiryHint } from "@/lib/mfa";
 import { TOTP_CARD_INITIAL, totpCardTransition } from "@/lib/totp-card";
@@ -305,7 +306,7 @@ function RedirectingPanel({
   }, []);
 
   return (
-    <Card className="p-6 shadow-sm" data-testid="panel-redirecting">
+    <Card className="auth-redirecting p-6 shadow-sm" data-testid="panel-redirecting">
       <div className="flex items-center gap-2">
         <Loader2
           className="h-5 w-5 animate-spin text-primary"
@@ -495,28 +496,28 @@ function SignInPanel() {
 
   if (mfa) {
     return (
-      <div className="w-full" data-testid="panel-totp-challenge">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase text-teal-800">
-          <span className="grid size-8 place-items-center rounded-md bg-teal-100">
+      <div className="auth-panel" data-testid="panel-totp-challenge">
+        <div className="auth-eyebrow">
+          <span className="auth-step-icon">
             <ShieldCheck className="size-4" aria-hidden="true" />
           </span>
           Two-step verification
         </div>
 
-        <h1 className="landing-display mt-6 text-4xl font-bold text-slate-950 sm:text-5xl">
+        <h1 className="auth-title">
           Enter your code
         </h1>
-        <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
-          <span className="font-semibold text-slate-900">{email}</span> has an
+        <p className="auth-intro">
+          <span className="auth-account-email">{email}</span> has an
           extra security step. Type the 6-digit code from your authenticator
           app, or use one of your saved recovery codes.
         </p>
 
-        <form onSubmit={onVerifyCode} className="mt-8 space-y-5">
+        <form onSubmit={onVerifyCode} className="auth-form">
           <div className="space-y-2">
             <Label
               htmlFor="totp-code"
-              className="text-sm font-bold text-slate-800"
+              className="auth-label"
             >
               Authentication code
             </Label>
@@ -534,10 +535,10 @@ function SignInPanel() {
               maxLength={32}
               aria-invalid={totpError ? true : undefined}
               aria-describedby={totpError ? "totp-error" : "totp-help"}
-              className="h-12 border-slate-300 bg-white px-4 font-mono text-lg tracking-[0.25em] shadow-sm"
+              className="auth-input auth-code-input"
               data-testid="input-totp-code"
             />
-            <p id="totp-help" className="text-xs text-slate-600">
+            <p id="totp-help" className="auth-help">
               Your app shows a new code every 30 seconds. A recovery code also
               works here. For security this step expires five minutes after you
               entered your password (
@@ -563,7 +564,7 @@ function SignInPanel() {
           )}
           <Button
             type="submit"
-            className="min-h-12 w-full bg-[#0f5c52] text-base font-bold text-white shadow-sm hover:bg-[#0e4c45]"
+            className="auth-submit"
             disabled={pending !== null || totpCode.trim().length < 6}
             data-testid="button-totp-verify"
           >
@@ -580,7 +581,7 @@ function SignInPanel() {
         <button
           type="button"
           onClick={restartSignIn}
-          className="mt-5 inline-flex items-center gap-1.5 rounded-sm text-sm font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+          className="auth-text-link auth-restart"
           data-testid="button-totp-restart"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
@@ -591,18 +592,18 @@ function SignInPanel() {
   }
 
   return (
-    <div className="w-full" data-testid="panel-sign-in">
-      <div className="flex items-center gap-2 text-xs font-bold uppercase text-teal-800">
-        <span className="grid size-8 place-items-center rounded-md bg-teal-100">
+    <div className="auth-panel" data-testid="panel-sign-in">
+      <div className="auth-eyebrow">
+        <span className="auth-step-icon">
           <LockKeyhole className="size-4" aria-hidden="true" />
         </span>
         Secure sign-in
       </div>
 
-      <h1 className="landing-display mt-6 text-4xl font-bold text-slate-950 sm:text-5xl">
+      <h1 className="auth-title">
         Welcome back
       </h1>
-      <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
+      <p className="auth-intro">
         Sign in and we&apos;ll take you straight to your workspace.
       </p>
 
@@ -619,9 +620,9 @@ function SignInPanel() {
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-5">
+      <form onSubmit={onSubmit} className="auth-form">
         <div className="space-y-2">
-          <Label htmlFor="email" className="text-sm font-bold text-slate-800">
+          <Label htmlFor="email" className="auth-label">
             Work email
           </Label>
           <Input
@@ -635,21 +636,21 @@ function SignInPanel() {
             required
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "login-error" : undefined}
-            className="h-12 border-slate-300 bg-white px-4 text-base shadow-sm"
+            className="auth-input"
             data-testid="input-email"
           />
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="auth-label-row">
             <Label
               htmlFor="password"
-              className="text-sm font-bold text-slate-800"
+              className="auth-label"
             >
               Password
             </Label>
             <a
               href="/reset-password"
-              className="inline-flex min-h-6 items-center text-xs font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              className="auth-text-link auth-forgot-link"
               data-testid="link-forgot-password"
             >
               Forgot your password?
@@ -666,14 +667,15 @@ function SignInPanel() {
               required
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? "login-error" : undefined}
-              className="h-12 border-slate-300 bg-white px-4 pr-12 text-base shadow-sm"
+              className="auth-input auth-password-input"
               data-testid="input-password"
             />
             <button
               type="button"
               onClick={() => setPasswordVisible((visible) => !visible)}
               aria-label={passwordVisible ? "Hide password" : "Show password"}
-              className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-md text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-700"
+              title={passwordVisible ? "Hide password" : "Show password"}
+              className="auth-password-toggle"
               data-testid="button-toggle-password"
             >
               {passwordVisible ? (
@@ -700,7 +702,7 @@ function SignInPanel() {
         )}
         <Button
           type="submit"
-          className="min-h-12 w-full bg-[#0f5c52] text-base font-bold text-white shadow-sm hover:bg-[#0e4c45]"
+          className="auth-submit"
           disabled={pending !== null || !email.trim() || !password}
           data-testid="button-sign-in"
         >
@@ -714,21 +716,21 @@ function SignInPanel() {
         </Button>
       </form>
 
-      <div className="mt-4 flex items-center gap-2 text-xs text-slate-600">
-        <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
-        Your connection is secure. You only see what your account allows.
+      <div className="auth-account-note">
+        <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+        <span>Your connection is secure. You only see what your account allows.</span>
       </div>
-      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-4 text-xs">
+      <div className="auth-support-links">
         <a
           href="/#request-access"
-          className="inline-flex min-h-6 items-center font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+          className="auth-text-link"
           data-testid="link-request-access"
         >
           Need an invitation?
         </a>
         <a
           href="/#trust"
-          className="inline-flex min-h-6 items-center font-bold text-slate-600 hover:text-slate-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+          className="auth-text-link auth-muted-link"
         >
           Security and service status
         </a>
@@ -1603,7 +1605,7 @@ function SignedInPanel({ me }: { me: Me }) {
 // layout barely shifts when /me resolves.
 function SessionSkeleton() {
   return (
-    <Card className="min-h-[34rem] p-6 shadow-sm" role="status">
+    <Card className="auth-session-skeleton" role="status">
       <span className="sr-only">Checking your session…</span>
       <div className="animate-pulse space-y-4" aria-hidden="true">
         <div className="h-6 w-24 rounded-md bg-muted" />
@@ -1617,7 +1619,6 @@ function SessionSkeleton() {
           <div className="h-9 w-full rounded-md bg-muted" />
         </div>
         <div className="h-9 w-full rounded-md bg-muted" />
-        <div className="h-56 w-full rounded-lg bg-muted/60" />
       </div>
     </Card>
   );
@@ -1644,128 +1645,67 @@ const ACCESS_PATHS = [
     title: "Business owners",
     detail: "Create invoices, submit and get paid",
     icon: ReceiptText,
-    tone: "bg-white/10 text-[#e9cf78]",
   },
   {
     title: "Accounting firms",
     detail: "Manage every client's compliance",
     icon: UsersRound,
-    tone: "bg-cyan-200 text-[#0e4c45]",
   },
   {
     title: "Valo staff",
     detail: "Support, checks and reviews",
     icon: Headphones,
-    tone: "bg-amber-200 text-[#0e4c45]",
   },
   {
     title: "Bank reviewers",
     detail: "Review protected portfolio cohorts",
     icon: Landmark,
-    tone: "bg-emerald-200 text-[#0e4c45]",
   },
 ];
 
 function AccessStory() {
   return (
-    <aside
-      aria-labelledby="access-story-title"
-      className="relative hidden min-h-screen overflow-hidden bg-[#0e4c45] text-white lg:flex lg:flex-col"
-    >
-      <div
-        className="absolute inset-y-0 right-0 w-px bg-[#c9a227]/60"
-        aria-hidden="true"
-      />
-      <div className="flex items-center justify-between px-10 py-8 xl:px-14">
-        <a
-          href="/"
-          className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78] focus-visible:ring-offset-4 focus-visible:ring-offset-[#0e4c45]"
-          aria-label="Valo home"
-        >
-          <span className="grid size-10 place-items-center rounded-md bg-white/10 text-[#e9cf78]">
-            <ValoMark className="size-5" aria-hidden="true" />
-          </span>
-          <span>
-            <span className="block text-lg font-extrabold leading-none">
-              Valo
-            </span>
-            <span className="mt-1 block text-[11px] font-semibold text-white/65">
-              Invoicing, done right
-            </span>
-          </span>
-        </a>
-        <a
-          href="/"
-          className="inline-flex items-center gap-2 rounded-md border border-white/30 px-3.5 py-2 text-sm font-bold text-white/90 transition-colors hover:border-[#e9cf78] hover:bg-white/5 hover:text-[#e9cf78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78]"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Back to website
-        </a>
-      </div>
-
-      <div className="flex flex-1 flex-col justify-center px-10 py-10 xl:px-14">
-        <div className="max-w-xl">
-          <p className="text-xs font-extrabold uppercase text-[#e9cf78]">
-            One sign-in for everything
-          </p>
-          <h2
-            id="access-story-title"
-            className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl"
-          >
+    <aside aria-labelledby="access-story-title" className="auth-story">
+      <div className="auth-story-inner">
+        <div>
+          <p className="auth-eyebrow">One sign-in for everything</p>
+          <h2 id="access-story-title" className="auth-story-title">
             One account. The right workspace.
           </h2>
-          <p className="mt-6 max-w-lg text-base leading-7 text-white/65">
+          <p className="auth-intro">
             Everyone works from the same records. Each person sees only what
             their role needs.
           </p>
         </div>
 
-        <div className="mt-12 max-w-xl border-y border-white/10">
-          {ACCESS_PATHS.map(({ title, detail, icon: Icon, tone }, index) => (
-            <div
-              key={title}
-              className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-4 py-4 ${
-                index > 0 ? "border-t border-white/10" : ""
-              }`}
-            >
-              <span
-                className={`grid size-10 place-items-center rounded-md ${tone}`}
-              >
+        <ul className="auth-role-list">
+          {ACCESS_PATHS.map(({ title, detail, icon: Icon }) => (
+            <li key={title} className="auth-role">
+              <span className="auth-role-icon">
                 <Icon className="size-4" aria-hidden="true" />
               </span>
               <span>
-                <span className="block text-sm font-extrabold">{title}</span>
-                <span className="mt-0.5 block text-xs text-white/65">
-                  {detail}
-                </span>
+                <span className="auth-role-title">{title}</span>
+                <span className="auth-role-detail">{detail}</span>
               </span>
-              <ArrowRight className="size-4 text-white/25" aria-hidden="true" />
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
 
-        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/65">
+        <div className="auth-principles">
           <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="size-4 text-[#e9cf78]" aria-hidden="true" />
+            <ShieldCheck className="size-4" aria-hidden="true" />
             Access by role
           </span>
           <span className="inline-flex items-center gap-2">
-            <ScanLine className="size-4 text-cyan-200" aria-hidden="true" />
+            <ScanLine className="size-4" aria-hidden="true" />
             AI checked by people
           </span>
           <span className="inline-flex items-center gap-2">
-            <CheckCircle2
-              className="size-4 text-amber-200"
-              aria-hidden="true"
-            />
+            <CheckCircle2 className="size-4" aria-hidden="true" />
             Proof you can check
           </span>
         </div>
-      </div>
-
-      <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/65 xl:px-14">
-        <span>Lagos, Nigeria</span>
-        <span>Made for Nigerian invoicing</span>
       </div>
     </aside>
   );
@@ -1781,75 +1721,65 @@ function AccessPortal({
   onRetry: () => void;
 }) {
   return (
-    <div className="min-h-screen bg-[#f3f6f5] lg:grid lg:grid-cols-[minmax(25rem,0.85fr)_minmax(39rem,1.15fr)]">
+    <div className="valo-auth auth-portal">
       <a
         href="#login-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[#e9cf78] focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#0e4c45]"
+        className="auth-skip-link sr-only focus:not-sr-only"
       >
         Skip to sign in
       </a>
+      <header className="auth-header">
+        <a href="/" className="auth-brand" aria-label="Valo home">
+          <span className="auth-brand-mark">
+            <ValoMark className="size-5" aria-hidden="true" />
+          </span>
+          <span className="auth-brand-name">Valo</span>
+        </a>
+        <a href="/" className="auth-text-link auth-back-link">
+          <ArrowLeft className="size-3.5" aria-hidden="true" />
+          Back to website
+        </a>
+      </header>
+
+      <main
+        id="login-content"
+        tabIndex={-1}
+        className="auth-main focus:outline-none"
+      >
+        <div className="auth-main-inner">
+          {outage && (
+            <div
+              role="alert"
+              className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5"
+            >
+              <span className="flex items-start gap-2 text-sm font-medium text-amber-900">
+                <AlertCircle
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                We can&apos;t reach Valo right now.
+              </span>
+              <Button size="sm" variant="outline" onClick={onRetry}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {children}
+        </div>
+      </main>
+
       <AccessStory />
 
-      <div className="flex min-h-screen flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
-          <a
-            href="/"
-            className="inline-flex items-center gap-2.5"
-            aria-label="Valo home"
-          >
-            <span className="grid size-9 place-items-center rounded-md bg-[#0f5c52] text-white">
-              <ValoMark className="size-4" aria-hidden="true" />
-            </span>
-            <span className="text-base font-extrabold text-slate-950">
-              Valo
-            </span>
-          </a>
-          <a
-            href="/"
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:border-slate-950 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f5c52]"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden="true" />
-            Back to website
-          </a>
-        </header>
-
-        <main
-          id="login-content"
-          tabIndex={-1}
-          className="flex flex-1 items-center justify-center px-5 py-10 focus:outline-none sm:px-10 sm:py-14 xl:px-16"
+      <footer className="auth-footer">
+        <span>Lagos, Nigeria</span>
+        <span>Sign-in protected. Access by role.</span>
+        <a
+          className="auth-text-link auth-muted-link"
+          href="/penalty-calculator/"
         >
-          <div className="w-full max-w-2xl">
-            {outage && (
-              <div
-                role="alert"
-                className="mb-6 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5"
-              >
-                <span className="flex items-start gap-2 text-sm font-medium text-amber-900">
-                  <AlertCircle
-                    className="mt-0.5 size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                  We can&apos;t reach Valo right now.
-                </span>
-                <Button size="sm" variant="outline" onClick={onRetry}>
-                  Retry
-                </Button>
-              </div>
-            )}
-            {children}
-          </div>
-        </main>
-
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-600 sm:px-10 xl:px-16">
-          <span>Sign-in protected. Access by role.</span>
-          <a
-            className="inline-flex min-h-6 items-center font-bold hover:text-slate-900"
-            href="/penalty-calculator/"
-          >
-            Penalty calculator
-          </a>
-        </footer>
-      </div>
+          Penalty calculator
+        </a>
+      </footer>
     </div>
   );
 }

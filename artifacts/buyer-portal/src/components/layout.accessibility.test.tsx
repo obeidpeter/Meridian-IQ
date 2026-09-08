@@ -81,17 +81,13 @@ test("mobile workspace context is named without changing the content landmark", 
 test("the whole buyer shell pairs its surface with theme-aware content", async () => {
   await renderShell();
   const shell = container.querySelector(".min-h-screen")!;
-  expect(shell.classList.contains("bg-[#f3f6f7]")).toBe(true);
-  expect(shell.classList.contains("dark:bg-background")).toBe(true);
+  expect(shell.classList.contains("mi-platform")).toBe(true);
+  expect(shell.classList.contains("bg-[var(--mi-canvas)]")).toBe(true);
   expect(shell.contains(container.querySelector("main"))).toBe(true);
-  const desktopHeader = container.querySelector("header.hidden")!;
-  expect(desktopHeader.classList.contains("bg-white/95")).toBe(true);
-  expect(desktopHeader.classList.contains("dark:bg-white")).toBe(true);
-  expect(desktopHeader.classList.contains("dark:text-slate-900")).toBe(true);
-  expect(
-    desktopHeader.classList.contains("dark:[&_button:hover]:bg-slate-100"),
-  ).toBe(true);
-  expect(
-    desktopHeader.classList.contains("dark:[&_button:hover]:text-slate-900"),
-  ).toBe(true);
+  const desktopHeader = container.querySelector("header.mi-topbar")!;
+  expect(desktopHeader).not.toBeNull();
+  expect(container.querySelector("header.mi-mobilebar")).not.toBeNull();
+  expect(container.querySelector("nav.mi-sidebar")).not.toBeNull();
+  expect(container.querySelectorAll("nav a.mi-nav__link").length).toBe(6);
+  expect(desktopHeader.className).not.toMatch(/white|slate|cyan/);
 });

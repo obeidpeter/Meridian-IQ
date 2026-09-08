@@ -293,7 +293,7 @@ export function CommandMenu({
   >("idle");
   const inputRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const restoreOnCloseRef = useRef(true);
   const open = controlledOpen ?? internalOpen;
 
   const setOpen = useCallback(
@@ -317,7 +317,6 @@ export function CommandMenu({
   }, [items, query, remoteItems]);
 
   const show = useCallback(() => {
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setOpen(true);
   }, [setOpen]);
 
@@ -325,7 +324,6 @@ export function CommandMenu({
     setOpen(false);
     setQuery("");
     setActiveIndex(0);
-    window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
   }, [setOpen]);
 
   useEffect(() => {
@@ -342,11 +340,34 @@ export function CommandMenu({
 
   useEffect(() => {
     if (!open) return;
+    // External controlled triggers bypass show(); capture before focusing input.
+    const initiatingElement = document.activeElement;
+    const section = sectionRef.current;
+    restoreOnCloseRef.current = true;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.setTimeout(() => inputRef.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => {
+      const activeElement = document.activeElement;
+      if (
+        activeElement === initiatingElement ||
+        activeElement === document.body
+      ) {
+        inputRef.current?.focus();
+      }
+    }, 0);
     return () => {
+      window.clearTimeout(focusTimer);
       document.body.style.overflow = previousOverflow;
+      const activeElement = document.activeElement;
+      if (
+        restoreOnCloseRef.current &&
+        initiatingElement instanceof HTMLElement &&
+        initiatingElement.isConnected &&
+        !section?.contains(initiatingElement) &&
+        (activeElement === document.body || section?.contains(activeElement))
+      ) {
+        initiatingElement.focus({ preventScroll: true });
+      }
     };
   }, [open]);
 
@@ -387,6 +408,8 @@ export function CommandMenu({
   }, [filtered.length]);
 
   const choose = (item: CommandItem) => {
+    // Navigation or another action owns focus after a command is selected.
+    restoreOnCloseRef.current = false;
     hide();
     item.onSelect();
   };

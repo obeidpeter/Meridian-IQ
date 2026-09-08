@@ -164,12 +164,16 @@ const routes = [
 
 async function assertVisibleFocus(locator) {
   assert.ok(
-    await locator.evaluate(
-      (element) =>
+    await locator.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return (
         element === document.activeElement &&
         element.matches(":focus-visible") &&
-        getComputedStyle(element).boxShadow !== "none",
-    ),
+        (style.boxShadow !== "none" ||
+          (style.outlineStyle !== "none" &&
+            Number.parseFloat(style.outlineWidth) >= 2))
+      );
+    }),
     "keyboard focus is visibly indicated",
   );
 }
@@ -202,16 +206,19 @@ test(
       headless: true,
       executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     });
-    for (const width of [320, 390, 1360]) {
+    for (const { width, theme } of [320, 390, 1360].flatMap((width) =>
+      ["light", "dark"].map((theme) => ({ width, theme })),
+    )) {
       for (const scenario of routes) {
         await t.test(
-          `${scenario.path} at ${width}px`,
+          `${scenario.path} ${theme} at ${width}px`,
           { timeout: 30_000 },
           async () => {
-            const name = `${scenario.path.replaceAll("/", "_")}-${width}`;
+            const name = `${scenario.path.replaceAll("/", "_")}-${theme}-${width}`;
             const context = await browser.newContext({
               viewport: { width, height: 900 },
               serviceWorkers: "block",
+              colorScheme: theme,
             });
             let page;
             let axe;
@@ -247,6 +254,12 @@ test(
               page.on("pageerror", (error) => pageErrors.push(error.message));
               await page.goto(`${origin}${scenario.path}`);
               await scenario.ready(page).waitFor({ state: "visible" });
+              await page.evaluate((theme) => {
+                document.documentElement.classList.toggle(
+                  "dark",
+                  theme === "dark",
+                );
+              }, theme);
               assert.equal(await page.getByRole("main").count(), 1);
               assert.equal(
                 await page.getByRole("heading", { level: 1 }).count(),
@@ -354,6 +367,57 @@ test(
               );
               assert.deepEqual(pageErrors, []);
               assert.deepEqual(unknownRequests, []);
+              if (scenario.path === "/app/wht") {
+                const trigger = page.getByTestId("button-clerk-dock");
+                await trigger.click();
+                const dialog = page.getByRole("dialog", { name: "Clerk AI" });
+                await dialog.waitFor();
+                await page.waitForFunction(() =>
+                  document
+                    .querySelector('[role="dialog"]')
+                    ?.getAnimations({ subtree: true })
+                    .every((animation) => animation.playState !== "running"),
+                );
+                const bounds = await dialog.boundingBox();
+                assert.ok(
+                  bounds.x >= -1 && bounds.x + bounds.width <= width + 1,
+                  `Clerk dock must fit the viewport: ${JSON.stringify(bounds)}`,
+                );
+                const dockAxe = await collectAxeResults(page);
+                assert.deepEqual(dockAxe.violations, []);
+                const controls = await dialog
+                  .getByRole("button")
+                  .evaluateAll((buttons) =>
+                    buttons.map((button) => ({
+                      name: button.textContent,
+                      height: button.getBoundingClientRect().height,
+                    })),
+                  );
+                assert.deepEqual(
+                  controls.filter(({ height }) => height < 44),
+                  [],
+                );
+                assert.equal(
+                  await dialog.evaluate(
+                    (element) => element.scrollWidth > element.clientWidth,
+                  ),
+                  false,
+                );
+                await page.screenshot({
+                  path: path.join(evidence, `${name}-dock.png`),
+                });
+                await writeFile(
+                  path.join(evidence, `${name}-dock.json`),
+                  JSON.stringify({ axe: dockAxe, controls }, null, 2),
+                );
+                await page.keyboard.press("Escape");
+                await dialog.waitFor({ state: "hidden" });
+                await page.waitForFunction(
+                  () =>
+                    document.activeElement ===
+                    document.querySelector('[data-testid="button-clerk-dock"]'),
+                );
+              }
             } finally {
               try {
                 if (page) {

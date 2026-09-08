@@ -3,46 +3,51 @@
 @source "./";
 
 :root {
-  /* R69 design tokens — the deep teal / gold / off-white system of the
-     August 2026 UI direction. Every shell and shared component reads these;
-     the apps' Tailwind themes mirror the same values in HSL. */
-  --mi-ink: #142524;
-  --mi-teal: #0f5c52;
-  --mi-teal-soft: #e6f2ef;
-  --mi-sidebar: #0e4c45;
-  --mi-sidebar-ink: rgb(255 255 255 / 74%);
+  /* Semantic workspace palette. Retain the teal/gold names for callers;
+     brand accents now resolve to olive/sage, independently of status tones. */
+  --mi-ink: #262925;
+  --mi-teal: #536149;
+  --mi-teal-soft: #edf0e9;
+  --mi-primary-ink: #ffffff;
+  --mi-sidebar: #252b24;
+  --mi-sidebar-ink: #dce1d7;
+  --mi-sidebar-active: #3c4537;
+  --mi-sidebar-accent: #c6d1b9;
   --mi-sidebar-line: rgb(255 255 255 / 12%);
-  --mi-gold: #c9a227;
-  --mi-gold-bright: #e9cf78;
-  --mi-gold-soft: #f8f1dc;
-  /* Legacy alias: the pre-R69 lime accent now resolves to gold. */
+  --mi-gold: #8d9c7e;
+  --mi-gold-bright: #c6d1b9;
+  --mi-gold-soft: #e5e9df;
+  /* Legacy accent alias. */
   --mi-lime: var(--mi-gold);
   --mi-paper: #ffffff;
-  --mi-canvas: #f3f6f5;
-  --mi-line: #dde7e4;
-  --mi-muted: #5f6f6c;
+  --mi-canvas: #f5f6f3;
+  --mi-line: #d5d8d0;
+  --mi-input-line: #7e8776;
+  --mi-muted: #60655d;
   --mi-critical: #b42318;
   --mi-critical-soft: #fde8e6;
-  --mi-warning: #9a5309;
+  --mi-warning: #8d4b08;
   --mi-warning-soft: #fdf1dd;
   --mi-positive: #087a50;
   --mi-positive-soft: #e3f5ec;
   --mi-info: #1f5fbf;
   --mi-info-soft: #e5eefb;
-  --mi-radius: 0.75rem;
-  --mi-shadow: 0 10px 30px rgb(14 76 69 / 8%);
+  --mi-radius: 0.5rem;
+  --mi-shadow: 0 8px 24px rgb(38 41 37 / 12%);
 }
 
 .dark {
-  --mi-ink: #f3faf8;
-  --mi-paper: #111f21;
-  --mi-canvas: #0a1416;
-  --mi-line: #263638;
-  --mi-muted: #9eb0ae;
-  --mi-teal: #2bb3ae;
-  --mi-teal-soft: #123331;
-  --mi-sidebar: #0a3a35;
-  --mi-gold-soft: #3a3116;
+  --mi-ink: #f1f3ee;
+  --mi-paper: #242725;
+  --mi-canvas: #1b1d1c;
+  --mi-line: #454b44;
+  --mi-input-line: #8a9283;
+  --mi-muted: #aab2a5;
+  --mi-teal: #bbc6ac;
+  --mi-teal-soft: #30362c;
+  --mi-primary-ink: #262925;
+  --mi-sidebar: #20241f;
+  --mi-gold-soft: #30362c;
   --mi-critical: #f97066;
   --mi-critical-soft: #3a1a17;
   --mi-warning: #fdb022;
@@ -66,12 +71,110 @@
   border: 0;
 }
 
+/* Opt-in signed-in surface. Match the existing button/input/card primitive
+   contracts without recoloring semantic badges, charts, or status rows. */
+.mi-platform {
+  color: var(--mi-ink);
+  color-scheme: light;
+}
+
+.dark .mi-platform {
+  color-scheme: dark;
+}
+
+.mi-platform :where(button, a, label).inline-flex.justify-center {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25rem;
+  box-shadow: none;
+}
+
+.mi-platform :where(button, a, label).inline-flex.justify-center:focus-visible {
+  outline: 2px solid var(--mi-control-focus, var(--mi-teal));
+  outline-offset: 2px;
+}
+
+.mi-platform :where(input, textarea, [role="combobox"]).border-input {
+  min-height: 2.75rem;
+  box-shadow: none;
+}
+
+.mi-platform
+  :where(input, textarea, [role="combobox"]).border-input:focus-visible {
+  outline: 2px solid var(--mi-teal);
+  outline-offset: 2px;
+}
+
+.mi-platform .border-card-border {
+  box-shadow: none;
+}
+
+.mi-platform :where(table.w-full) {
+  font-variant-numeric: tabular-nums;
+}
+
+.mi-platform :where(table.w-full thead) {
+  background: var(--mi-canvas);
+}
+
+.mi-platform :where(table.w-full th) {
+  height: 2.75rem;
+  color: var(--mi-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.mi-platform [role="tablist"][data-orientation="horizontal"] {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding: 0.25rem;
+  border-bottom: 1px solid var(--mi-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.mi-platform [role="tab"][data-orientation="horizontal"] {
+  min-height: 2.75rem;
+  flex-shrink: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--mi-muted);
+  box-shadow: none;
+}
+
+.mi-platform [role="tab"][data-orientation="horizontal"][data-state="active"] {
+  border-bottom-color: var(--mi-teal);
+  color: var(--mi-ink);
+}
+
+.mi-platform [role="tab"][data-orientation="horizontal"]:hover:not(:disabled) {
+  background: var(--mi-teal-soft);
+}
+
+.mi-mobilebar button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+.mi-mobilebar button:focus-visible {
+  outline: 2px solid var(--mi-sidebar-accent);
+  outline-offset: 2px;
+}
+
 .mi-workspace-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 1.5rem;
-  padding-bottom: 1.5rem;
+  gap: 1rem;
+  padding-bottom: 1.125rem;
   border-bottom: 1px solid var(--mi-line);
 }
 
@@ -84,7 +187,7 @@
   margin: 0;
   color: var(--mi-teal);
   font-size: 0.6875rem;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1rem;
   text-transform: uppercase;
 }
@@ -100,9 +203,10 @@
 .mi-workspace-header h1 {
   margin: 0;
   color: var(--mi-ink);
-  font-size: clamp(1.75rem, 2.4vw, 2.25rem);
-  font-weight: 700;
-  line-height: 1.15;
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
   letter-spacing: 0;
 }
 
@@ -126,13 +230,13 @@
   /* --mi-metric-count is set inline by MetricStrip from its child count, so
      strips with three or five metrics still get one column per metric. */
   grid-template-columns: repeat(var(--mi-metric-count, 4), minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.75rem;
   /* A value wider than its tile must never widen the page (WCAG 1.4.10
      reflow at 200%): wrap first (below), clip as the last resort. */
   overflow: hidden;
 }
 
-/* A tile: tinted circular icon on the left, the numeral and its label on
+/* A tile: compact tinted icon on the left, the numeral and its label on
    the right, any detail/action beneath. The markup (topline → label + icon,
    value, footer) is unchanged; `display: contents` lets the topline's
    children take their own grid areas. */
@@ -145,9 +249,9 @@
     "icon value"
     "icon label"
     "footer footer";
-  column-gap: 1rem;
+  column-gap: 0.75rem;
   align-items: center;
-  padding: 1.125rem 1.25rem;
+  padding: 1rem;
   border: 1px solid var(--mi-line);
   border-radius: var(--mi-radius);
   background: var(--mi-paper);
@@ -195,10 +299,10 @@
 .mi-metric__icon {
   grid-area: icon;
   display: grid;
-  width: 3rem;
-  height: 3rem;
+  width: 2.5rem;
+  height: 2.5rem;
   place-items: center;
-  border-radius: 999px;
+  border-radius: 0.375rem;
   background: var(--mi-teal-soft);
   color: var(--mi-teal);
 }
@@ -216,7 +320,7 @@
   margin: 0;
   color: var(--mi-ink);
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 2rem;
   font-variant-numeric: tabular-nums;
 }
@@ -264,7 +368,7 @@
 
 .mi-segmented__item {
   display: inline-flex;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -276,7 +380,7 @@
   color: var(--mi-muted);
   font: inherit;
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -391,8 +495,8 @@
   top: 0.875rem;
   right: 0.875rem;
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   border: 0;
   border-radius: 0.375rem;
@@ -431,7 +535,7 @@
 }
 .mi-help-search input {
   min-width: 0;
-  height: 2rem;
+  height: 2.75rem;
   border: 0;
   outline: 0;
   background: transparent;
@@ -447,8 +551,8 @@
 }
 .mi-help-search button {
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   border: 0;
   border-radius: 0.375rem;
@@ -501,7 +605,7 @@
 .mi-help-feedback button {
   display: inline-flex;
   min-width: 4rem;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
@@ -632,7 +736,7 @@
   font-size: 0.75rem;
 }
 .mi-activity button {
-  min-height: 2rem;
+  min-height: 2.75rem;
   border: 0;
   border-radius: 0.375rem;
   background: transparent;
@@ -650,7 +754,7 @@
   opacity: 0.65;
 }
 .mi-activity__toolbar button[aria-label] {
-  width: 2rem;
+  width: 2.75rem;
   flex: none;
 }
 .mi-activity > [role="status"],
@@ -681,7 +785,7 @@
 }
 .mi-activity__actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
   width: 100%;
   max-width: 20rem;
   align-items: center;
@@ -709,7 +813,7 @@
 }
 .mi-activity__actions .mi-activity__dismiss {
   grid-column: 3;
-  width: 2rem;
+  width: 2.75rem;
   padding: 0;
   justify-content: center;
   color: var(--mi-muted);
@@ -827,7 +931,7 @@
 .mi-work-item {
   position: relative;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
   min-height: 4.5rem;
@@ -893,6 +997,19 @@
   flex: none;
 }
 
+.mi-work-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.625rem;
+  row-gap: 0.125rem;
+}
+
+@media (min-width: 641px) {
+  .mi-work-item:has(.mi-work-item__icon) {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+}
+
 .mi-work-queue__empty {
   padding: 2.5rem 1rem;
   text-align: center;
@@ -928,7 +1045,7 @@
   width: min(42rem, 100%);
   overflow: hidden;
   border: 1px solid var(--mi-line);
-  border-radius: 0.625rem;
+  border-radius: var(--mi-radius);
   background: var(--mi-paper);
   box-shadow: var(--mi-shadow);
 }
@@ -972,8 +1089,8 @@
 }
 
 .mi-command__close {
-  min-width: 2.5rem;
-  min-height: 2rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0.25rem 0.5rem;
   border: 1px solid var(--mi-line);
   border-radius: 0.375rem;
@@ -1231,7 +1348,7 @@
   .mi-command {
     width: 100%;
     max-height: 90vh;
-    border-radius: 0.625rem 0.625rem 0 0;
+    border-radius: 0.5rem 0.5rem 0 0;
   }
   .mi-command__group {
     display: none;
@@ -1263,8 +1380,8 @@
 
 .mi-today__open {
   display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   border: 1px solid var(--mi-line);
   border-radius: 5px;
@@ -1292,7 +1409,7 @@
 
 .mi-today__text-action {
   display: inline-flex;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   align-items: center;
   gap: 0.35rem;
   border: 0;
@@ -1387,6 +1504,7 @@
 
 .mi-today__setup-list button {
   min-width: 0;
+  min-height: 2.75rem;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1438,20 +1556,29 @@
 .mi-button-quiet,
 .mi-icon-button {
   display: inline-flex;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
   border-radius: 5px;
   font-size: 0.8125rem;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .mi-button-primary {
   padding: 0 0.9rem;
   border: 1px solid var(--mi-teal);
   background: var(--mi-teal);
-  color: var(--mi-paper);
+  color: var(--mi-primary-ink);
+}
+
+.mi-button-primary:hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.mi-button-quiet:hover:not(:disabled),
+.mi-icon-button:hover:not(:disabled) {
+  background: var(--mi-teal-soft);
 }
 
 .mi-button-quiet {
@@ -1873,8 +2000,8 @@
 }
 
 .mi-icon-button {
-  width: 2.25rem;
-  min-height: 2.25rem;
+  width: 2.75rem;
+  min-height: 2.75rem;
   flex: 0 0 auto;
   border: 1px solid var(--mi-line);
   background: transparent;
@@ -1894,7 +2021,7 @@
 
 .mi-work-dialog input,
 .mi-work-dialog select {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   margin-top: 0.35rem;
   padding: 0 0.65rem;
 }
@@ -1994,6 +2121,7 @@
 
 .mi-brand {
   display: flex;
+  min-height: 2.75rem;
   align-items: center;
   gap: 0.625rem;
   padding: 0 0.5rem;
@@ -2006,9 +2134,9 @@
   height: 2.25rem;
   flex: none;
   place-items: center;
-  border-radius: 0.625rem;
+  border-radius: 0.375rem;
   background: rgb(255 255 255 / 8%);
-  color: var(--mi-gold-bright);
+  color: var(--mi-sidebar-accent);
 }
 .mi-brand__mark svg {
   width: 1.375rem;
@@ -2023,7 +2151,7 @@
 .mi-brand__caption {
   display: block;
   margin-top: 0.125rem;
-  color: rgb(255 255 255 / 70%);
+  color: var(--mi-sidebar-ink);
   font-size: 0.6875rem;
   font-weight: 600;
   line-height: 0.875rem;
@@ -2060,11 +2188,10 @@
 .mi-nav__title {
   margin: 0 0 0.375rem;
   padding: 0 0.75rem;
-  /* 70% white on the sidebar teal is 5.9:1 (AA for 11px bold); 55% was 4.2. */
-  color: rgb(255 255 255 / 70%);
+  color: var(--mi-sidebar-ink);
   font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 .mi-nav__link {
@@ -2076,11 +2203,11 @@
   gap: 0.75rem;
   padding: 0.5rem 0.75rem 0.5rem 1rem;
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: 0.375rem;
   background: transparent;
   color: var(--mi-sidebar-ink);
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 500;
   text-align: left;
   text-decoration: none;
@@ -2108,43 +2235,41 @@
   cursor: default;
   opacity: 0.5;
 }
-.mi-nav__link[aria-current="page"] {
-  background: rgb(255 255 255 / 12%);
-  color: var(--mi-gold-bright);
+.mi-nav__link[aria-current="page"],
+.mi-nav__link--active {
+  background: var(--mi-sidebar-active);
+  color: var(--mi-sidebar-accent);
   font-weight: 600;
 }
-.mi-nav__link[aria-current="page"]::before {
+.mi-nav__link[aria-current="page"]::before,
+.mi-nav__link--active::before {
   position: absolute;
   top: 0.5rem;
   bottom: 0.5rem;
   left: 0;
-  width: 0.25rem;
-  border-radius: 999px;
-  background: var(--mi-gold);
+  width: 0.1875rem;
+  border-radius: 0.125rem;
+  background: var(--mi-sidebar-accent);
   content: "";
 }
 .mi-nav__link:focus-visible,
 .mi-brand:focus-visible {
-  outline: 2px solid var(--mi-gold-bright);
+  outline: 2px solid var(--mi-sidebar-accent);
   outline-offset: 2px;
 }
 .mi-nav__more {
   position: absolute;
   inset: auto 0 0;
   display: flex;
-  height: 2.5rem;
-  align-items: flex-end;
+  height: 2.75rem;
+  align-items: center;
   justify-content: center;
   gap: 0.25rem;
   padding-bottom: 0.25rem;
   border: 0;
-  background: linear-gradient(
-    to top,
-    var(--mi-sidebar),
-    rgb(14 76 69 / 95%),
-    transparent
-  );
-  color: var(--mi-gold-bright);
+  border-top: 1px solid var(--mi-sidebar-line);
+  background: var(--mi-sidebar);
+  color: var(--mi-sidebar-accent);
   font: inherit;
   font-size: 0.6875rem;
   font-weight: 700;
@@ -2185,7 +2310,7 @@
 }
 .mi-nav__account-role {
   margin-top: 0.125rem;
-  color: rgb(255 255 255 / 70%);
+  color: var(--mi-sidebar-ink);
   font-size: 0.75rem;
 }
 
@@ -2195,12 +2320,12 @@
   height: 2.5rem;
   flex: none;
   place-items: center;
-  border-radius: 999px;
+  border-radius: 0.375rem;
   background: var(--mi-sidebar);
   color: #fff;
   font-size: 0.875rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 .mi-avatar--inverse {
   background: rgb(255 255 255 / 12%);
@@ -2212,6 +2337,7 @@
 }
 
 .mi-mobilebar {
+  --mi-control-focus: var(--mi-sidebar-accent);
   position: sticky;
   top: 0;
   z-index: 30;
@@ -2258,17 +2384,13 @@
      on the element would tie with these single-class rules and lose to
      source order. */
   display: none;
-  min-height: 4.25rem;
+  min-height: 4rem;
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
   padding: 0 2rem;
   border-bottom: 1px solid var(--mi-line);
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(8px);
-}
-.dark .mi-topbar {
-  background: rgb(17 31 33 / 92%);
+  background: var(--mi-paper);
 }
 .mi-topbar__lead {
   display: flex;
@@ -2282,12 +2404,9 @@
   max-width: 20rem;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.5rem 0.875rem;
-  border: 1px solid var(--mi-line);
-  border-radius: 0.625rem;
-  background: var(--mi-paper);
+  padding: 0.5rem 0;
   color: var(--mi-ink);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 .mi-workspace-chip svg {
@@ -2306,7 +2425,7 @@
   padding-left: 1rem;
   border-left: 1px solid var(--mi-line);
   color: var(--mi-muted);
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   white-space: nowrap;
 }
 .mi-topbar__actions {
@@ -2326,16 +2445,17 @@
   height: 2.25rem;
   align-items: center;
   padding: 0 0.875rem;
-  border-radius: 0.5rem;
-  background: var(--mi-sidebar);
-  color: #fff;
-  font-size: 0.875rem;
+  border: 1px solid var(--mi-line);
+  border-radius: 0.375rem;
+  background: var(--mi-canvas);
+  color: var(--mi-muted);
+  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .mi-topbar__action {
   display: inline-flex;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   align-items: center;
   gap: 0.5rem;
   padding: 0 0.75rem;
@@ -2344,7 +2464,7 @@
   background: transparent;
   color: var(--mi-ink);
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
@@ -2378,7 +2498,7 @@
   gap: 0.375rem;
   padding: 0.25rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0.375rem;
   background: transparent;
   color: var(--mi-muted);
   cursor: pointer;
@@ -2424,7 +2544,7 @@
 .mi-account-menu__item {
   display: flex;
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   align-items: center;
   gap: 0.625rem;
   padding: 0.375rem 0.5rem;

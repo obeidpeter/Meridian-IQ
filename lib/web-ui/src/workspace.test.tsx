@@ -7,11 +7,13 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+import { StrictMode, useState } from "react";
 import { CommandMenu, SegmentedControl, type CommandItem } from "./workspace";
 
 // RTL's auto-cleanup needs framework globals, which stay off here.
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -19,6 +21,219 @@ const items: CommandItem[] = [
   { id: "cmd-one", label: "One", onSelect: () => {} },
   { id: "cmd-two", label: "Two", onSelect: () => {} },
 ];
+
+function ControlledMenu({
+  commands = items,
+  mounted = true,
+  showDesktopTrigger = true,
+}: {
+  commands?: CommandItem[];
+  mounted?: boolean;
+  showDesktopTrigger?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      {showDesktopTrigger && (
+        <button onClick={() => setOpen(true)}>Search desktop</button>
+      )}
+      <button onClick={() => setOpen(true)}>Search mobile</button>
+      <button onClick={() => setOpen(false)}>External close</button>
+      <main tabIndex={-1}>Navigation destination</main>
+      {mounted && (
+        <CommandMenu items={commands} open={open} onOpenChange={setOpen} />
+      )}
+    </>
+  );
+}
+
+function openControlledMenu(name = "Search desktop") {
+  const trigger = screen.getByRole("button", { name });
+  trigger.focus();
+  fireEvent.click(trigger);
+  return trigger;
+}
+
+function focusMenuInput() {
+  act(() => vi.runOnlyPendingTimers());
+  const input = screen.getByRole("searchbox");
+  expect(document.activeElement).toBe(input);
+  return input;
+}
+
+test("controlled Search click and Escape restore the initiating button in StrictMode", () => {
+  vi.useFakeTimers();
+  render(
+    <StrictMode>
+      <ControlledMenu />
+    </StrictMode>,
+  );
+  const trigger = openControlledMenu();
+  const input = focusMenuInput();
+
+  fireEvent.keyDown(input, { key: "Escape" });
+
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  act(() => vi.runOnlyPendingTimers());
+  expect(document.activeElement).toBe(trigger);
+});
+
+test("each controlled opening captures its own trigger instead of a stale target", () => {
+  vi.useFakeTimers();
+  render(<ControlledMenu />);
+  for (const name of ["Search desktop", "Search mobile", "Search desktop"]) {
+    const trigger = openControlledMenu(name);
+    fireEvent.keyDown(focusMenuInput(), { key: "Escape" });
+    expect(document.activeElement).toBe(trigger);
+  }
+});
+
+test.each(["ctrlKey", "metaKey"])(
+  "%s+K opening and closing restore the focused trigger",
+  (modifier) => {
+    vi.useFakeTimers();
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole("button", { name: "Search mobile" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "k", [modifier]: true });
+    fireEvent.keyDown(focusMenuInput(), { key: "k", [modifier]: true });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  },
+);
+
+test("an uncontrolled render-prop trigger retains focus restoration", () => {
+  vi.useFakeTimers();
+  render(
+    <CommandMenu
+      items={items}
+      trigger={(show) => <button onClick={show}>Search desktop</button>}
+    />,
+  );
+  const trigger = openControlledMenu();
+  fireEvent.keyDown(focusMenuInput(), { key: "Escape" });
+  expect(document.activeElement).toBe(trigger);
+});
+
+test.each(["close", "unmount"])(
+  "external %s before input focus cancels the pending timer and scroll lock",
+  (action) => {
+    vi.useFakeTimers();
+    const view = render(<ControlledMenu />);
+    const previousOverflow = document.body.style.overflow;
+    const trigger = openControlledMenu();
+    const input = screen.getByRole("searchbox");
+    const focus = vi.spyOn(input, "focus");
+    const cancelFocus = vi.spyOn(window, "clearTimeout");
+    expect(document.body.style.overflow).toBe("hidden");
+
+    if (action === "close") {
+      fireEvent.click(screen.getByRole("button", { name: "External close" }));
+    } else {
+      view.rerender(<ControlledMenu mounted={false} />);
+    }
+    expect(cancelFocus).toHaveBeenCalled();
+    act(() => vi.runOnlyPendingTimers());
+    expect(focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe(previousOverflow);
+  },
+);
+
+test("external close restores focus when the menu owned it", () => {
+  vi.useFakeTimers();
+  render(<ControlledMenu />);
+  const trigger = openControlledMenu();
+  focusMenuInput();
+  fireEvent.click(screen.getByRole("button", { name: "External close" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+test("external close preserves focus already assigned to navigation", () => {
+  vi.useFakeTimers();
+  render(<ControlledMenu />);
+  const trigger = openControlledMenu();
+  focusMenuInput();
+  const restore = vi.spyOn(trigger, "focus");
+  const destination = screen.getByRole("main");
+  destination.focus();
+  fireEvent.click(screen.getByRole("button", { name: "External close" }));
+  act(() => vi.runOnlyPendingTimers());
+  expect(document.activeElement).toBe(destination);
+  expect(restore).not.toHaveBeenCalled();
+});
+
+test("a pending opening timer does not take focus back from another destination", () => {
+  vi.useFakeTimers();
+  render(<ControlledMenu />);
+  openControlledMenu();
+  const input = screen.getByRole("searchbox");
+  const focus = vi.spyOn(input, "focus");
+  const destination = screen.getByRole("main");
+  destination.focus();
+  act(() => vi.runOnlyPendingTimers());
+  expect(document.activeElement).toBe(destination);
+  expect(focus).not.toHaveBeenCalled();
+});
+
+test("choosing a command leaves focus to its navigation without restoring the opener", () => {
+  vi.useFakeTimers();
+  render(
+    <ControlledMenu
+      commands={[
+        {
+          id: "navigate",
+          label: "Open destination",
+          onSelect: () =>
+            window.setTimeout(() => screen.getByRole("main").focus(), 0),
+        },
+      ]}
+    />,
+  );
+  const trigger = openControlledMenu();
+  const input = focusMenuInput();
+  const restore = vi.spyOn(trigger, "focus");
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(restore).not.toHaveBeenCalled();
+  act(() => vi.runOnlyPendingTimers());
+  expect(document.activeElement).toBe(screen.getByRole("main"));
+  expect(restore).not.toHaveBeenCalled();
+});
+
+test("closing never focuses a removed opener", () => {
+  vi.useFakeTimers();
+  const view = render(<ControlledMenu />);
+  const trigger = openControlledMenu();
+  const input = focusMenuInput();
+  const restore = vi.spyOn(trigger, "focus");
+  view.rerender(<ControlledMenu showDesktopTrigger={false} />);
+  expect(trigger.isConnected).toBe(false);
+  fireEvent.keyDown(input, { key: "Escape" });
+  act(() => vi.runOnlyPendingTimers());
+  expect(restore).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(document.body);
+});
+
+test.each(["menu", "shell"])(
+  "unmounting the %s restores only a still-connected opener",
+  (scope) => {
+    vi.useFakeTimers();
+    const view = render(<ControlledMenu />);
+    const trigger = openControlledMenu();
+    focusMenuInput();
+    const restore = vi.spyOn(trigger, "focus");
+    if (scope === "menu") view.rerender(<ControlledMenu mounted={false} />);
+    else view.unmount();
+    act(() => vi.runOnlyPendingTimers());
+    expect(document.activeElement).toBe(
+      scope === "menu" ? trigger : document.body,
+    );
+    expect(restore).toHaveBeenCalledTimes(scope === "menu" ? 1 : 0);
+  },
+);
 
 test("Escape closes the command menu from any focused child, not just the input", () => {
   const onOpenChange = vi.fn();
@@ -91,12 +306,12 @@ test("remote command search aborts a stale request before showing new results", 
   fireEvent.change(input, { target: { value: "second" } });
   expect(pending.get("first")?.signal.aborted).toBe(true);
   await act(async () => vi.advanceTimersByTime(220));
-  pending.get("first")?.resolve([
-    { id: "stale", label: "Stale result", onSelect: () => {} },
-  ]);
-  pending.get("second")?.resolve([
-    { id: "fresh", label: "Fresh result", onSelect: () => {} },
-  ]);
+  pending
+    .get("first")
+    ?.resolve([{ id: "stale", label: "Stale result", onSelect: () => {} }]);
+  pending
+    .get("second")
+    ?.resolve([{ id: "fresh", label: "Fresh result", onSelect: () => {} }]);
   await act(async () => Promise.resolve());
 
   expect(screen.getByRole("option", { name: /Fresh result/ })).toBeTruthy();

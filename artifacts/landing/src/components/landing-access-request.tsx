@@ -103,7 +103,7 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
     <form
       onSubmit={submit}
       className="editorial-enquiry"
-      aria-label="Talk to us"
+      aria-label="Request a demo"
       aria-busy={status === "sending"}
       aria-describedby={error ? "access-request-error" : "access-required"}
     >
@@ -242,7 +242,7 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
         type="submit"
         disabled={status === "sending" || !form.consent}
       >
-        {status === "sending" ? "Sending request…" : "Talk to us"}
+        {status === "sending" ? "Sending request…" : "Request a demo"}
         <ArrowUpRight size={18} aria-hidden="true" />
       </button>
     </form>

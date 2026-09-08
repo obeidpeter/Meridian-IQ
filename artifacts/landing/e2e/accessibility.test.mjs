@@ -203,7 +203,7 @@ for (const [name, viewport] of viewports) {
         .getByRole("main")
         .getByRole("heading", { level: 1 })
         .textContent(),
-      "E-invoicing.Evidence in order.",
+      "Invoices in order.Evidence at hand.",
     );
     await audit(page, `landing-${name}`, true);
 
@@ -234,6 +234,15 @@ for (const [name, viewport] of viewports) {
         "Audience changes keep the example frame stable",
       );
       await audit(page, `landing-${view}-${name}`, true);
+      for (const recordView of ["evidence", "history", "overview"]) {
+        await page.locator(`#sample-${view}-tab-${recordView}`).click();
+        assert.equal(
+          (await page.locator(".editorial-demo").boundingBox()).height,
+          exampleHeight,
+          "Record views keep the example frame stable",
+        );
+        await audit(page, `landing-${view}-${recordView}-${name}`);
+      }
     }
     if (viewport.width < 1024) {
       await page.getByRole("button", { name: "Open navigation" }).click();
@@ -315,6 +324,29 @@ test("editorial navigation, meaningful audience tabs, images and destinations", 
       .evaluate((el) => el === document.activeElement),
     true,
   );
+  const recordTab = page.locator("#sample-firm-tab-overview");
+  await recordTab.focus();
+  for (const [key, view] of [
+    ["ArrowRight", "evidence"],
+    ["End", "history"],
+    ["ArrowRight", "overview"],
+    ["ArrowLeft", "history"],
+    ["Home", "overview"],
+  ]) {
+    await page.keyboard.press(key);
+    const selected = page.locator(`#sample-firm-tab-${view}`);
+    assert.equal(await selected.getAttribute("aria-selected"), "true");
+    assert.equal(
+      await selected.evaluate((el) => el === document.activeElement),
+      true,
+    );
+    assert.equal(
+      await page
+        .locator(`#sample-firm-panel-${view}`)
+        .getAttribute("aria-hidden"),
+      "false",
+    );
+  }
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page
     .getByRole("navigation", { name: "Mobile navigation" })
@@ -345,7 +377,7 @@ test("editorial navigation, meaningful audience tabs, images and destinations", 
         (img) =>
           img.complete &&
           img.naturalWidth > 0 &&
-          img.currentSrc.endsWith("/valo-records-mobile.webp"),
+          img.currentSrc.endsWith("/valo-workspace-mobile.webp"),
       ),
   );
   assert.equal(
@@ -370,10 +402,36 @@ test("editorial navigation, meaningful audience tabs, images and destinations", 
   );
 });
 
+test("short portrait screens retain the product image and a hint of the next section", async (t) => {
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 375, height: 667 },
+    { width: 740, height: 731 },
+    { width: 1000, height: 800 },
+    { width: 1920, height: 800 },
+  ]) {
+    const { page } = await openPage(t, viewport, "/");
+    const hero = await page.locator(".editorial-hero").boundingBox();
+    assert.ok(
+      hero.y + hero.height < viewport.height - 24,
+      `${viewport.width}x${viewport.height}: the next section should start within the viewport`,
+    );
+    assert.ok(
+      await page
+        .locator(".editorial-hero-image img")
+        .evaluate((img) => img.complete && img.naturalWidth > 0),
+    );
+    await audit(page, `landing-short-${viewport.width}`, true);
+  }
+});
+
 test("enquiry preserves values on failure, prevents concurrent submits and restores focus", async (t) => {
   const { page, state } = await openPage(t, { width: 390, height: 844 }, "/");
-  const form = page.getByRole("form", { name: "Talk to us" });
-  const send = form.getByRole("button", { name: "Talk to us", exact: true });
+  const form = page.getByRole("form", { name: "Request a demo" });
+  const send = form.getByRole("button", {
+    name: "Request a demo",
+    exact: true,
+  });
   assert.equal(await send.isDisabled(), true);
   await page
     .getByLabel("Your name", { exact: true })
