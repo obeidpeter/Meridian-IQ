@@ -17,6 +17,7 @@ import { seedPlatform } from "./bootstrap/seed";
 import { disableProductionDemoIdentities } from "./bootstrap/security";
 import { provisionProductionPilotOperator } from "./bootstrap/pilot-operator";
 import { assertSessionSigningConfigured } from "./modules/auth/session";
+import { assertPublicAppUrlConfigured } from "./lib/public-app-url";
 import { markReady, markUnready } from "./lib/readiness";
 import { installGracefulShutdown } from "./lib/shutdown";
 
@@ -237,6 +238,11 @@ async function bootstrapApplication(isProduction: boolean): Promise<void> {
   // Apply the guardrail migrations first (idempotent, advisory-locked), then
   // run the read-only verification so the deploy logs state the final truth.
   await assertSessionSigningConfigured();
+  // R112: the links the platform sends (password recovery, Invoice Room) are
+  // built on PUBLIC_APP_URL and on nothing else, so production holds
+  // readiness until a safe origin is configured — the rollout's /api/readyz
+  // probe fails rather than mailing links to a hostname in the code.
+  assertPublicAppUrlConfigured();
   await ensureRlsRoleAssumable();
   await applyProductionGuardrails();
   await verifyProductionGuardrails();

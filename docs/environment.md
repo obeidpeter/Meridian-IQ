@@ -12,7 +12,7 @@ fail closed unless a section below says otherwise.
 | `NODE_ENV`            | `development`, `test`, or `production`; production enables strict startup and readiness behavior. |
 | `DATABASE_URL`        | PostgreSQL 16 connection string. Required by the API, migrations, and DB tests.                   |
 | `PORT`                | Process/dev-server port. Web apps have checked-in local defaults.                                 |
-| `PUBLIC_APP_URL`      | Canonical public origin used for links and redirects.                                             |
+| `PUBLIC_APP_URL`      | Canonical public https origin for the links the platform sends (password recovery, Invoice Room). Required in production: boot holds readiness until it is set and safe, and no hostname in the code stands in for it (R112). |
 | `BASE_PATH`           | Web bundle mount path; must start and end with `/`.                                               |
 | `API_URL`             | E2E/mobile API origin override.                                                                   |
 | `LOG_LEVEL`           | Structured server log level.                                                                      |

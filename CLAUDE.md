@@ -143,7 +143,7 @@ pnpm --filter @workspace/scripts run test:accessibility   # axe engine + keyboar
 # web builds use checked-in defaults; deployment may override BASE_PATH + PORT
 pnpm run build
 # then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 424 checks vs real builds + DB (standard seed run)
+pnpm --filter @workspace/scripts run e2e        # 433 checks vs real builds + DB (standard seed run)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above plus the release

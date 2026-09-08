@@ -62,8 +62,9 @@ every add and removal is an audit event.
   (`identity.write`) issues a single-use 24h link (sha256-only stored,
   migration 0012 keeps the table bypass-only) redeemed at the public
   `/auth/reset-password`; the landing page's "Forgot your password?" routes
-  there. The link's origin is `PUBLIC_APP_URL` (must be https in
-  production; the deployed app URL when unset).
+  there. The link's origin is `PUBLIC_APP_URL` and nothing else (R112):
+  production holds readiness until a safe https origin is configured, and
+  outside production an unset value points at the local Vite origin.
 - CSRF: the `x-valo-csrf` custom-header guard (legacy `x-meridian-csrf`
   remains accepted) on cookie-authenticated state-changing requests
   (`middleware/principal.ts`); the session cookie is

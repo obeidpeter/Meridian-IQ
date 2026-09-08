@@ -23,6 +23,7 @@
 //                    Clerk automation (proposals + standing approvals)
 //   lifecycle.mjs    credit note + workflow, the two password journeys
 //   integration.mjs  API keys, webhooks, the rail's rejected path, payments
+//   brand.mjs        header aliases, conflict refusal, metric twins (R112)
 
 import {
   journeyPortalAuth,
@@ -55,6 +56,7 @@ import {
   journeyPasswordReset,
 } from "./lifecycle.mjs";
 import { journeyIntegrationLayer } from "./integration.mjs";
+import { journeyBrandCompatibility } from "./brand.mjs";
 import { journeyAccessibilityMatrix } from "./accessibility.mjs";
 import { reliabilityJourneys } from "./reliability.mjs";
 import { mkdirSync } from "node:fs";
@@ -171,6 +173,9 @@ export async function runJourneys(
     fakeRailUrl,
     fakeRailToken,
   );
+  // Read-only apart from its own sign-ins (R112): both header spellings, the
+  // conflict refusal and the metric twins against the built server.
+  await journeyBrandCompatibility(page, BASE, check);
   // End with a read-only WCAG smoke across every static route and role. It
   // runs after stateful journeys so it cannot perturb their load-bearing order.
   await journeyAccessibilityMatrix(page, BASE, check);

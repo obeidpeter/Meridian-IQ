@@ -6,6 +6,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { DomainError } from "../errors";
+import { publicAppLink, publicAppUrl } from "../../lib/public-app-url";
 
 export const ROOM_SESSION_TTL_MS = 30 * 60 * 1000;
 export const ROOM_OTP_TTL_MS = 10 * 60 * 1000;
@@ -37,28 +38,6 @@ function decodeEncryptionKey(value: string | undefined): Buffer | null {
   return key.length === 32 ? key : null;
 }
 
-function configuredPublicBaseUrl(): URL | null {
-  const configured = process.env.PUBLIC_APP_URL?.trim();
-  if (!configured) return null;
-  try {
-    const url = new URL(configured);
-    const localHttp =
-      process.env.NODE_ENV !== "production" &&
-      url.protocol === "http:" &&
-      (url.hostname === "localhost" || url.hostname === "127.0.0.1");
-    if (
-      (!localHttp && url.protocol !== "https:") ||
-      url.username ||
-      url.password
-    ) {
-      return null;
-    }
-    return url;
-  } catch {
-    return null;
-  }
-}
-
 export function invoiceRoomSecurityConfiguration(): {
   encryptionKeyConfigured: boolean;
   publicUrlConfigured: boolean;
@@ -67,7 +46,7 @@ export function invoiceRoomSecurityConfiguration(): {
     encryptionKeyConfigured: Boolean(
       decodeEncryptionKey(process.env.INVOICE_ROOM_ENCRYPTION_KEY),
     ),
-    publicUrlConfigured: Boolean(configuredPublicBaseUrl()),
+    publicUrlConfigured: Boolean(publicAppUrl()),
   };
 }
 
@@ -138,26 +117,21 @@ export function decryptRoomToken(value: string): string {
   }
 }
 
-function publicBaseUrl(): URL {
-  const configured = configuredPublicBaseUrl();
-  if (configured) return configured;
-  if (process.env.NODE_ENV === "production") {
+// The bearer stays after '#', which browsers do not send in HTTP requests,
+// access logs or Referer headers. The landing app exchanges it from the body
+// and immediately clears the fragment. The origin is PUBLIC_APP_URL and
+// nothing else (lib/public-app-url.ts, R112): production fails closed here
+// when it is unset or unsafe.
+export function invoiceRoomLink(token: string): string {
+  const link = publicAppLink("/invoice-room", { token });
+  if (!link) {
     throw new DomainError(
       "INVOICE_ROOM_CONFIGURATION",
       "Invoice Room public URL is not configured correctly",
       503,
     );
   }
-  return new URL("http://localhost:5173");
-}
-
-// The bearer stays after '#', which browsers do not send in HTTP requests,
-// access logs or Referer headers. The landing app exchanges it from the body
-// and immediately clears the fragment.
-export function invoiceRoomLink(token: string): string {
-  const url = new URL("/invoice-room", publicBaseUrl());
-  url.hash = `token=${encodeURIComponent(token)}`;
-  return url.toString();
+  return link;
 }
 
 export function maskEmail(email: string | null): string | null {

@@ -63,6 +63,7 @@ import { sendRawToRelay } from "../modules/messaging/messaging";
 import { logger } from "../lib/logger";
 import { recordUsabilityEvent } from "../lib/metrics";
 import { brandHeader } from "../lib/brand-headers";
+import { publicAppLink } from "../lib/public-app-url";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly session cookie;
 // the principal middleware resolves it on subsequent requests. Login/logout
@@ -70,22 +71,6 @@ import { brandHeader } from "../lib/brand-headers";
 // must work even with an expired session); change-password is authenticated.
 
 const router: IRouter = Router();
-
-function resetLink(token: string): string {
-  const configured = process.env.PUBLIC_APP_URL?.trim();
-  let base: URL;
-  try {
-    base = new URL(configured || "https://valo-platform.replit.app");
-    if (base.protocol !== "https:" && process.env.NODE_ENV === "production") {
-      throw new Error("production app URL must use https");
-    }
-  } catch {
-    base = new URL("https://valo-platform.replit.app");
-  }
-  const link = new URL("/reset-password", base);
-  link.hash = `token=${encodeURIComponent(token)}`;
-  return link.toString();
-}
 
 function cookieOptions(req: {
   secure?: boolean;
@@ -922,10 +907,17 @@ router.post("/auth/request-password-reset", async (req, res): Promise<void> => {
   }
   const issued = await requestPasswordReset(parsed.email);
   if (issued) {
-    const delivery = await sendRawToRelay("password_reset", {
-      email: issued.email,
-      resetUrl: resetLink(issued.token),
-    });
+    // The recovery link's origin is PUBLIC_APP_URL and nothing else (R112):
+    // production holds readiness until a safe origin is configured, so a
+    // missing one here is dark delivery — the same 202, nothing sent, the gap
+    // logged — never a link minted on a hostname baked into the code.
+    const resetUrl = publicAppLink("/reset-password", { token: issued.token });
+    const delivery = resetUrl
+      ? await sendRawToRelay("password_reset", {
+          email: issued.email,
+          resetUrl,
+        })
+      : { ok: false, error: "public origin not configured" };
     if (!delivery.ok) {
       logger.warn(
         { reason: delivery.error ?? "unknown" },

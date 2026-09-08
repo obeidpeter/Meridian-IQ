@@ -29,6 +29,10 @@ The API accepts either name. When both names for one header are present,
 their values must match; conflicting values fail with `BAD_REQUEST` rather
 than selecting an ambiguous value. These headers do not replace credentials
 or grant access. Existing clients can continue using the legacy names.
+The e2e harness sends the Valo spelling on every fixture call, and its
+brand-compatibility journey pins the retained aliases, the conflict refusal,
+the webhook header parity and the metric twins against the built server
+(R112).
 
 ### Outbound webhooks and metrics
 
@@ -160,7 +164,9 @@ not provide an automatic redirect from the old hostname.
 Reuse the existing production database and its enforced geography. Never delete
 the retained database to satisfy the new-publish form, create a substitute, or
 copy development data over production. Preserve credentials and relative Clerk
-proxy paths. Set `PUBLIC_APP_URL` and `RELEASE_BASE_URL` to the selected origin;
+proxy paths. Set `PUBLIC_APP_URL` and `RELEASE_BASE_URL` to the selected origin
+(since R112 the API holds readiness until `PUBLIC_APP_URL` is a safe https
+origin; no hostname in the code stands in for it);
 check any explicit `SWEEP_URL` and external provider callbacks/allowlists.
 
 Finalize the trusted `RELEASE_MANIFEST_SHA256` setting and verify its actual
