@@ -113,8 +113,9 @@ export function startStaticServer({ port, apiPort, root = ROOT }) {
 
 // Local webhook receiver (startStaticServer's factory/lifecycle shape: a
 // node:http server, promise resolves once listening, the caller closes it in
-// its finally). Records every POST — path, the x-meridian-signature /
-// x-meridian-event headers, and the RAW utf-8 body (byte-exact, so the
+// its finally). Records every POST — path, the x-valo-signature / x-valo-event
+// headers and their retained x-meridian-* aliases (one delivery, two names —
+// R112 pins their parity), and the RAW utf-8 body (byte-exact, so the
 // journey can recompute the HMAC over exactly what was signed) — into the
 // `deliveries` array the resolved handle exposes. Always answers 200 so the
 // dispatcher marks the delivery delivered on the first attempt.
@@ -129,6 +130,8 @@ export function startWebhookReceiver({ port }) {
         path: new URL(req.url, "http://localhost").pathname,
         signature: req.headers["x-meridian-signature"] ?? null,
         event: req.headers["x-meridian-event"] ?? null,
+        valoSignature: req.headers["x-valo-signature"] ?? null,
+        valoEvent: req.headers["x-valo-event"] ?? null,
         body: Buffer.concat(chunks).toString("utf8"),
       });
       res.writeHead(200, { "content-type": "application/json" });

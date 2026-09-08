@@ -88,6 +88,34 @@ test("the provider client is imported only by the Clerk provider layer (D8)", ()
   );
 });
 
+test("no api-server source carries a deployment hostname (R112)", () => {
+  // The links the platform sends ride PUBLIC_APP_URL (lib/public-app-url.ts).
+  // A hostname in the code outlives a domain move and would mail recovery or
+  // Invoice Room links to the wrong origin; production holds readiness until
+  // the setting is present instead. Tests are exempt (they name example
+  // hosts on purpose).
+  const offenders: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (
+        /\.m?ts$/.test(entry.name) &&
+        !/\.test\.m?ts$/.test(entry.name) &&
+        /[a-z0-9-]+\.replit\.(?:app|dev)\b/i.test(readFileSync(p, "utf8"))
+      ) {
+        offenders.push(p);
+      }
+    }
+  };
+  walk(import.meta.dirname);
+  assert.deepEqual(
+    offenders,
+    [],
+    "links are built on PUBLIC_APP_URL, never on a hostname in the code",
+  );
+});
+
 test("shared usability surfaces do not drift back into app-local copies", () => {
   const localShortcutDialogs = [
     join(

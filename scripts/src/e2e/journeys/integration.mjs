@@ -255,6 +255,15 @@ async function journeyIntegrationLayer(
       payload?.entityId === invoiceId &&
       leakFields.every((f) => !(f in (payload ?? {}))),
   );
+  // R112: one delivery, two header names — the Valo spelling and the retained
+  // alias carry the same signature and event, so a receiver verifying either
+  // sees identical bytes (docs/valo-rebrand.md § Outbound webhooks).
+  check(
+    "delivery carries matching x-valo-* and legacy x-meridian-* signature and event headers",
+    Boolean(delivery) &&
+      delivery?.valoSignature === expectedSig &&
+      delivery?.valoEvent === "invoice.stamped",
+  );
 
   // Delivery history shows the delivered attempt; disable stops the endpoint
   // (rerun hygiene: the receiver dies with this process).

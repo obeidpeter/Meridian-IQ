@@ -3,4 +3,4 @@
 // fails when CLAUDE.md, replit.md or the user manual state another number —
 // so the figure in the docs can no longer go stale silently. Update this
 // constant and the three documents together when journeys are added.
-export const EXPECTED_E2E_CHECKS = 424;
+export const EXPECTED_E2E_CHECKS = 433;

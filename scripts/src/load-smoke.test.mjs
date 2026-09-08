@@ -9,7 +9,7 @@ test("command fixtures issue unique keys and preserve an explicit replay key", (
   const first = commandHeaders();
   assert.notEqual(commandHeaders()["x-idempotency-key"], first["x-idempotency-key"]);
   assert.deepEqual(commandHeaders(first["x-idempotency-key"]), first);
-  assert.equal(first["x-meridian-csrf"], "1");
+  assert.equal(first["x-valo-csrf"], "1");
 });
 
 async function probe(status) {
@@ -19,8 +19,8 @@ async function probe(status) {
     if (req.url === "/api/auth/login") {
       logins++;
       if (
-        req.headers["x-meridian-csrf"] !== "1" ||
-        req.headers["x-meridian-client"] !== "mobile"
+        req.headers["x-valo-csrf"] !== "1" ||
+        req.headers["x-valo-client"] !== "mobile"
       ) {
         res.writeHead(403);
         res.end();

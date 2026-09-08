@@ -15,7 +15,7 @@ import {
   PRODUCTION_DEMO_EMAILS,
 } from "../modules/auth/session";
 
-const PILOT_OPERATOR_LOCK_ID = 748_201;
+export const PILOT_OPERATOR_LOCK_ID = 748_201;
 const PILOT_OPERATOR_CLAIM = "first-production-operator";
 const MIN_PASSWORD_LENGTH = 16;
 
@@ -126,18 +126,26 @@ function discardProcessPassword(env: PilotOperatorEnvironment): void {
   if (env === process.env) delete process.env.PILOT_OPERATOR_PASSWORD;
 }
 
+/** The serialization every bootstrap runs under, on the ambient transaction:
+ *  the advisory transaction lock queues concurrent boots, and SHARE ROW
+ *  EXCLUSIVE on users and memberships means no operator can appear between
+ *  the claim check and the insert. The immutable claims table stays outside
+ *  the table lock because meridian_app intentionally holds only SELECT and
+ *  INSERT on it. Exported so the integration test can take the same locks
+ *  inside a transaction it rolls back (R112). */
+export async function acquirePilotOperatorLocks(): Promise<void> {
+  await getDb().execute(
+    sql`SELECT pg_advisory_xact_lock(${PILOT_OPERATOR_LOCK_ID})`,
+  );
+  await getDb().execute(
+    sql`LOCK TABLE users, memberships IN SHARE ROW EXCLUSIVE MODE`,
+  );
+}
+
 export const productionPilotOperatorDependencies: PilotOperatorDependencies = {
   withLock: (fn) =>
     runInBypassContext(async () => {
-      await getDb().execute(
-        sql`SELECT pg_advisory_xact_lock(${PILOT_OPERATOR_LOCK_ID})`,
-      );
-      // The advisory lock serializes claim access. Keep the immutable claims
-      // table out of this stronger lock because meridian_app intentionally has
-      // only SELECT/INSERT privileges on it.
-      await getDb().execute(
-        sql`LOCK TABLE users, memberships IN SHARE ROW EXCLUSIVE MODE`,
-      );
+      await acquirePilotOperatorLocks();
       return fn();
     }),
   async isConsumed() {

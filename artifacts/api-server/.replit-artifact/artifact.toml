@@ -34,6 +34,9 @@ RELEASE_PROFILE = "pilot"
 # migrations (RLS, append-only triggers) before readiness. Never a dev-data
 # overwrite. Do not set SEED_DEMO: production must never create
 # known-password accounts.
+# PUBLIC_APP_URL (deployment settings) is required: boot holds readiness until
+# it names a safe https origin, because every link the platform sends is built
+# on it and on nothing else (R112).
 
 # Readiness, not liveness: /api/healthz answers 200 while the guardrail pass is
 # still failing, so a rollout probed there would "succeed" and serve 503.
