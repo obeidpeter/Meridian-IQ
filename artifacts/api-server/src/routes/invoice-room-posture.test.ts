@@ -82,9 +82,14 @@ test("the payment callback is public only because it fails closed before lookup"
 });
 
 test("share credentials are fragment-only and public actions verify contact identity", () => {
+  // R112: the link is built by lib/public-app-url.ts (one home for the public
+  // origin); the credential must still ride the fragment, never the query.
   const security = src("modules/invoice-room/security.ts");
-  assert.ok(security.includes("url.hash ="));
+  assert.ok(security.includes('publicAppLink("/invoice-room"'));
   assert.ok(!security.includes("searchParams.set"));
+  const publicUrl = src("lib/public-app-url.ts");
+  assert.ok(publicUrl.includes("link.hash ="));
+  assert.ok(!publicUrl.includes("searchParams"));
   // R109 split the service by flow; each verified action lives in its module.
   for (const [fn, file] of [
     ["respondInInvoiceRoom", "buyer"],
