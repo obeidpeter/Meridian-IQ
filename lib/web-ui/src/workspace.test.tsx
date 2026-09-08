@@ -61,6 +61,17 @@ function focusMenuInput() {
   return input;
 }
 
+test("opening focuses the dialog before timers so immediate Escape can close it", () => {
+  vi.useFakeTimers();
+  render(<ControlledMenu />);
+  const trigger = openControlledMenu();
+  const input = screen.getByRole("searchbox");
+  expect(document.activeElement).toBe(input);
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
 test("controlled Search click and Escape restore the initiating button in StrictMode", () => {
   vi.useFakeTimers();
   render(
@@ -117,7 +128,7 @@ test("an uncontrolled render-prop trigger retains focus restoration", () => {
 });
 
 test.each(["close", "unmount"])(
-  "external %s before input focus cancels the pending timer and scroll lock",
+  "immediate external %s restores focus and scroll lock without deferred refocus",
   (action) => {
     vi.useFakeTimers();
     const view = render(<ControlledMenu />);
@@ -125,7 +136,7 @@ test.each(["close", "unmount"])(
     const trigger = openControlledMenu();
     const input = screen.getByRole("searchbox");
     const focus = vi.spyOn(input, "focus");
-    const cancelFocus = vi.spyOn(window, "clearTimeout");
+    expect(document.activeElement).toBe(input);
     expect(document.body.style.overflow).toBe("hidden");
 
     if (action === "close") {
@@ -133,7 +144,6 @@ test.each(["close", "unmount"])(
     } else {
       view.rerender(<ControlledMenu mounted={false} />);
     }
-    expect(cancelFocus).toHaveBeenCalled();
     act(() => vi.runOnlyPendingTimers());
     expect(focus).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(trigger);
@@ -165,7 +175,7 @@ test("external close preserves focus already assigned to navigation", () => {
   expect(restore).not.toHaveBeenCalled();
 });
 
-test("a pending opening timer does not take focus back from another destination", () => {
+test("opening never schedules a delayed focus that can steal it from navigation", () => {
   vi.useFakeTimers();
   render(<ControlledMenu />);
   openControlledMenu();

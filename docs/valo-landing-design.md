@@ -54,11 +54,12 @@ Default theme changes do not remove firm-specific theme overrides.
 Operations, permissions, destinations, API handling and Clerk's human-review
 boundaries are unchanged.
 
-Workspace search now captures its opening control for both controlled click
-triggers and keyboard shortcuts. Closing restores focus only to a still-connected
-opener; timers are cleaned up, and command selection does not steal focus from
-the destination action. Regression tests cover repeated opens, external close,
-removed controls and unmounting.
+Workspace search captures its opening control for both controlled click triggers
+and keyboard shortcuts, then focuses the input before paint so immediate Escape
+reaches the dialog. Closing restores focus only to a still-connected opener;
+command selection does not steal focus from the destination action. Regression
+tests cover immediate keyboard input, repeated opens, external close, removed
+controls and unmounting.
 
 ## Landing Interactions
 
