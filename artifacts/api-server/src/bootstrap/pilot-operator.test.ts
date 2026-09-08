@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  checkPilotOperatorSettings,
   provisionProductionPilotOperator,
   type PilotOperatorDependencies,
   type PilotOperatorEnvironment,
@@ -50,28 +51,50 @@ test("is inert outside production and when bootstrap settings are absent", async
   );
 });
 
-test("rejects partial, weak and historical demo credentials", async () => {
-  await assert.rejects(
-    provisionProductionPilotOperator(
-      { NODE_ENV: "production", PILOT_OPERATOR_EMAIL: "pilot@example.com" },
-      dependencies(),
-    ),
-    /requires email, full name and password together/,
-  );
-  await assert.rejects(
-    provisionProductionPilotOperator(
-      { ...validEnv, PILOT_OPERATOR_PASSWORD: "too-short" },
-      dependencies(),
-    ),
-    /at least 16 characters/,
-  );
-  await assert.rejects(
-    provisionProductionPilotOperator(
-      { ...validEnv, PILOT_OPERATOR_EMAIL: "ops@valo.example" },
-      dependencies(),
-    ),
-    /historical demo identities/,
-  );
+test("rejects partial, weak and historical demo credentials without throwing (R111)", async () => {
+  // A settings problem must never reach the boot retry loop: the result is a
+  // verdict, not an exception, and no credential work happens.
+  for (const env of [
+    { NODE_ENV: "production", PILOT_OPERATOR_EMAIL: "pilot@example.com" },
+    { ...validEnv, PILOT_OPERATOR_PASSWORD: "too-short" },
+    { ...validEnv, PILOT_OPERATOR_EMAIL: "ops@valo.example" },
+    { ...validEnv, PILOT_OPERATOR_EMAIL: "not-an-address" },
+    { ...validEnv, PILOT_OPERATOR_FULL_NAME: "   " },
+  ] satisfies PilotOperatorEnvironment[]) {
+    const result = await provisionProductionPilotOperator(
+      env,
+      dependencies({
+        hashPassword: async () => {
+          throw new Error("must not hash a rejected password");
+        },
+        createOperator: async () => {
+          throw new Error("must not create an operator");
+        },
+      }),
+    );
+    assert.equal(result, "rejected");
+  }
+});
+
+test("settings verdicts are stable phrases that never carry a value", () => {
+  const secret = "a-unique-password-1234";
+  const cases: [PilotOperatorEnvironment, RegExp][] = [
+    [{ NODE_ENV: "production", PILOT_OPERATOR_EMAIL: "pilot@example.com" }, /set together/],
+    [{ ...validEnv, PILOT_OPERATOR_PASSWORD: "too-short" }, /at least 16 characters/],
+    [{ ...validEnv, PILOT_OPERATOR_EMAIL: "ops@valo.example" }, /historical demo identities/],
+    [{ ...validEnv, PILOT_OPERATOR_PASSWORD: "PILOT@EXAMPLE.COM", PILOT_OPERATOR_EMAIL: "pilot@example.com" }, /must not equal the email/],
+  ];
+  for (const [env, expected] of cases) {
+    const verdict = checkPilotOperatorSettings(env);
+    assert.equal(verdict.ok, false);
+    if (!verdict.ok) {
+      assert.match(verdict.reason, expected);
+      assert.doesNotMatch(verdict.reason, /example\.com|pilot@|too-short/i);
+      assert.equal(verdict.reason.includes(secret), false);
+    }
+  }
+  const valid = checkPilotOperatorSettings(validEnv);
+  assert.equal(valid.ok, true);
 });
 
 test("a consumed claim makes even partial retained settings inert", async () => {
@@ -125,16 +148,20 @@ test("an existing real operator permanently consumes the bootstrap", async () =>
   ]);
 });
 
-test("refuses to elevate an existing non-operator user", async () => {
-  await assert.rejects(
-    provisionProductionPilotOperator(
-      validEnv,
-      dependencies({
-        findUserByEmail: async () => ({ id: "existing-user" }),
-      }),
-    ),
-    /already belongs to a non-operator account/,
+test("refuses to elevate an existing non-operator user, without throwing", async () => {
+  let created = false;
+  const result = await provisionProductionPilotOperator(
+    validEnv,
+    dependencies({
+      findUserByEmail: async () => ({ id: "existing-user" }),
+      createOperator: async () => {
+        created = true;
+        return { id: "never" };
+      },
+    }),
   );
+  assert.equal(result, "rejected");
+  assert.equal(created, false);
 });
 
 test("creates and audits exactly one operator inside the lock", async () => {

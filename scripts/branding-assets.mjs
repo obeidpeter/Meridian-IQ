@@ -440,7 +440,11 @@ function fixtureResponses(contractVersion) {
   };
 }
 
-async function generateDashboard(browser, fonts, outputs) {
+// R111: the landing render smoke that used to double as the source of
+// `compliance-dashboard.jpg`. No page referenced that image, so the screenshot
+// is gone and the smoke keeps only its assertions (Valo copy present, no
+// legacy name, no horizontal overflow) against the synthetic API fixtures.
+async function smokeTestLanding(browser, fonts) {
   const temp = await mkdtemp(path.join(tmpdir(), "valo-branding-"));
   let vite;
   let server;
@@ -573,14 +577,6 @@ async function generateDashboard(browser, fonts, outputs) {
       ),
       false,
     );
-    outputs.set(
-      "artifacts/landing/public/compliance-dashboard.jpg",
-      await page.screenshot({
-        type: "jpeg",
-        quality: 94,
-        animations: "disabled",
-      }),
-    );
   } finally {
     await context?.close();
     await vite?.close();
@@ -677,14 +673,6 @@ async function validate(page, outputs) {
       `${file}: Valo olive`,
     );
   }
-  const dashboard = await inspectImage(
-    page,
-    outputs.get("artifacts/landing/public/compliance-dashboard.jpg"),
-    "image/jpeg",
-  );
-  assert.equal(dashboard.width, 1440);
-  assert.equal(dashboard.height, 1000);
-  assert.ok(dashboard.white > 1440 * 1000 * 0.2, "Dashboard is nonblank");
 }
 
 const args = process.argv.slice(2);
@@ -716,7 +704,6 @@ try {
     const files = [
       ...icons.map((icon) => `${iconDir}/${icon.name}`),
       ...social.map((item) => `artifacts/${item.app}/public/opengraph.jpg`),
-      "artifacts/landing/public/compliance-dashboard.jpg",
     ];
     for (const file of files)
       outputs.set(file, await readFile(path.join(root, file)));
@@ -747,7 +734,7 @@ try {
     const fonts = await fontCss();
     await generateIcons(page, outputs);
     await generateSocial(page, fonts, outputs);
-    await generateDashboard(browser, fonts, outputs);
+    await smokeTestLanding(browser, fonts);
     await generateLogoPreviews(page, vectors, outputs);
     for (const [file, bytes] of vectors) outputs.set(file, bytes);
   }

@@ -30,8 +30,14 @@ args = ["node", "--enable-source-maps", "scripts/src/ops/replit-promote.mjs", "s
 PORT = "8080"
 NODE_ENV = "production"
 RELEASE_PROFILE = "pilot"
-# Production uses reviewed versioned migrations, never a dev-data overwrite.
-# Do not set SEED_DEMO: production must never create known-password accounts.
+# Replit's Publish diff owns production tables; boot re-applies the guardrail
+# migrations (RLS, append-only triggers) before readiness. Never a dev-data
+# overwrite. Do not set SEED_DEMO: production must never create
+# known-password accounts.
 
+# Readiness, not liveness: /api/healthz answers 200 while the guardrail pass is
+# still failing, so a rollout probed there would "succeed" and serve 503.
+# /api/readyz turns 200 only once the guardrails verified and the database
+# answers (R111).
 [services.production.health.startup]
-path = "/api/healthz"
+path = "/api/readyz"

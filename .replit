@@ -58,5 +58,6 @@ SEED_DEMO = "true"
 
 [userenv.production]
 RELEASE_PROFILE = "pilot"
-PILOT_OPERATOR_EMAIL = "obeidpeter1@gmail.com"
-PILOT_OPERATOR_FULL_NAME = "Obeid Peter"
+# The one-time PILOT_OPERATOR_* bootstrap settings belong in the deployment's
+# secret store, never here: a tracked value keeps the bootstrap armed on every
+# boot and identifies the operator in the repository (docs/environment.md).

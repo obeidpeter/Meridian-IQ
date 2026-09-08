@@ -734,7 +734,11 @@ test("seven production descriptors use verified promotion and preserve developme
       // rollback revision, no governed evidence in the descriptor.
       assert.equal(production.match(/RELEASE_PROFILE = "pilot"/g)?.length, 2);
       assert.doesNotMatch(production, /RELEASE_RUNTIME_STATE|RELEASE_ROLLBACK_REVISION|--hold/);
-      assert.ok(production.includes('path = "/api/healthz"'));
+      // R111: the startup probe is readiness, not liveness — /api/healthz
+      // answers 200 while the guardrail pass is still failing, so a rollout
+      // probed there would "succeed" and serve 503.
+      assert.ok(production.includes('path = "/api/readyz"'));
+      assert.ok(!production.includes('path = "/api/healthz"'));
     } else {
       assert.match(
         production,

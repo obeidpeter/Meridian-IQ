@@ -160,16 +160,21 @@ that Publish later consumes.
   build|start api-server` against the exact immutable CI artifact
   (`release/build-manifest.json` + its `.sha256` sidecar + the seven `dist`
   trees); it never rebuilds or installs. Under the default **pilot profile**
-  (`RELEASE_PROFILE=pilot`, ADR 0004) the API build syncs the target schema —
-  plain `push`, which fails the build on a destructive diff, then the
-  guardrail migrations — and the API starts as RUN; `RELEASE_RUNTIME_STATE=
-  HOLD` is a plain maintenance switch. The **governed profile** keeps the
+  (`RELEASE_PROFILE=pilot`, ADR 0004) the builds perform no database
+  mutation: Replit's native Publish flow compares the development and
+  production schemas and applies only the confirmed diff, the API starts as
+  RUN, and boot re-applies the guardrail migrations (RLS policies, append-only
+  triggers) idempotently under an advisory lock before it reports ready;
+  `RELEASE_RUNTIME_STATE=HOLD` is a plain maintenance switch. The **governed profile** keeps the
   HOLD-by-default, permit-bound RUN ceremony with `ops:release` as its
   read-only preflight. `ops:postdeploy` is the after-the-fact parity check in
   both.
-- A destructive schema change never reaches production by push: it needs a
-  reviewed versioned migration. The boot-time guardrail re-assertion (D5)
-  still runs, and the stale-build banner clears once the promoted API reports
+- A destructive schema change is surfaced by the Publish diff for explicit
+  confirmation and still warrants a reviewed versioned migration. The
+  boot-time guardrail re-assertion (D5) is what gives a new table its policy,
+  so the deployment's startup probe is `/api/readyz` (a failed guardrail
+  migration fails the rollout instead of serving 503 behind a green liveness
+  check), and the stale-build banner clears once the promoted API reports
   the contract version the web bundles were built with.
 - `FRAME_ANCESTORS` env overrides the clickjacking allowlist per deployment
   (defaults to `'self'` + the Replit preview domains).

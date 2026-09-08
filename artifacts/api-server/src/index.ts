@@ -254,6 +254,10 @@ async function bootstrapApplication(isProduction: boolean): Promise<void> {
     );
   } else if (pilotOperator === "already-provisioned") {
     logger.info("Individual production operator already provisioned");
+  } else if (pilotOperator === "rejected") {
+    logger.error(
+      "Pilot operator bootstrap settings were rejected; serving without a bootstrapped operator (R111: not retried)",
+    );
   }
 }
 

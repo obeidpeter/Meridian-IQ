@@ -19,6 +19,21 @@ test("CLAUDE.md, replit.md and the user manual state the enforced e2e check coun
   }
 });
 
+test("CLAUDE.md and ADR 0004 describe the pilot publish path replit-promote.mjs implements (R111)", () => {
+  // be150582 moved every database mutation out of the Publish build; the two
+  // documents that lagged that change are pinned here so they cannot again.
+  for (const file of ["CLAUDE.md", "docs/adr/0004-release-profiles.md"]) {
+    const text = read(file);
+    assert.match(text, /native Publish/, `${file} must say Replit's native Publish diff owns production tables`);
+    assert.doesNotMatch(text, /syncs the target schema/, `${file} must not describe a build-time schema push`);
+  }
+  assert.doesNotMatch(
+    read("scripts/src/ops/replit-promote.mjs"),
+    /pilotSchemaSync|run push|drizzle-kit push/,
+    "the promotion script must not push schema in any profile",
+  );
+});
+
 test("CLAUDE.md states the contract version that lib/api-spec/openapi.yaml carries", () => {
   const version = read("lib/api-spec/openapi.yaml").match(/^ {2}version: (\S+)/m)?.[1];
   assert.ok(version, "openapi.yaml has an info.version");

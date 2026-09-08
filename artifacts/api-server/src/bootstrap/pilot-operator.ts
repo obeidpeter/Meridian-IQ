@@ -8,6 +8,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { appendAudit } from "../modules/audit/audit";
+import { logger } from "../lib/logger";
 import {
   hashPassword,
   normalizeEmail,
@@ -49,7 +50,17 @@ export interface PilotOperatorDependencies {
 export type PilotOperatorProvisioningResult =
   | "disabled"
   | "already-provisioned"
-  | "provisioned";
+  | "provisioned"
+  /** Bootstrap was requested on a database with no operator, but the settings
+   *  are incomplete or invalid, or the email belongs to another account. The
+   *  API starts without an operator and nothing is retried (R111). */
+  | "rejected";
+
+/** The settings verdict, computed before any lock. Reasons are stable phrases
+ *  that never carry a setting's value, so they are safe to log. */
+export type PilotOperatorSettingsCheck =
+  | { ok: true; config: PilotOperatorConfig }
+  | { ok: false; reason: string };
 
 function bootstrapRequested(env: PilotOperatorEnvironment): boolean {
   return [
@@ -59,45 +70,56 @@ function bootstrapRequested(env: PilotOperatorEnvironment): boolean {
   ].some((value) => typeof value === "string" && value.length > 0);
 }
 
-function readConfig(
+export function checkPilotOperatorSettings(
   env: PilotOperatorEnvironment,
-): PilotOperatorConfig {
+): PilotOperatorSettingsCheck {
   const values = [
     env.PILOT_OPERATOR_EMAIL,
     env.PILOT_OPERATOR_FULL_NAME,
     env.PILOT_OPERATOR_PASSWORD,
   ];
-  assert.ok(
-    values.every((value) => typeof value === "string" && value.length > 0),
-    "pilot operator bootstrap requires email, full name and password together",
-  );
+  if (!values.every((value) => typeof value === "string" && value.length > 0)) {
+    return {
+      ok: false,
+      reason: "email, full name and password must be set together",
+    };
+  }
 
   const email = normalizeEmail(env.PILOT_OPERATOR_EMAIL!);
   const fullName = env.PILOT_OPERATOR_FULL_NAME!.trim();
   const password = env.PILOT_OPERATOR_PASSWORD!;
-  assert.match(email, /^[^\s@]+@[^\s@]+\.[^\s@]+$/, "invalid pilot operator email");
-  assert.ok(
-    !PRODUCTION_DEMO_EMAILS.includes(
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, reason: "the email is not a valid address" };
+  }
+  if (
+    PRODUCTION_DEMO_EMAILS.includes(
       email as (typeof PRODUCTION_DEMO_EMAILS)[number],
-    ),
-    "historical demo identities cannot be production operators",
-  );
-  assert.ok(
-    fullName.length > 0 &&
+    )
+  ) {
+    return {
+      ok: false,
+      reason: "historical demo identities cannot be production operators",
+    };
+  }
+  if (
+    !(
+      fullName.length > 0 &&
       fullName.length <= 120 &&
-      !/[\u0000-\u001f\u007f]/.test(fullName),
-    "pilot operator full name is invalid",
-  );
-  assert.ok(
-    password.length >= MIN_PASSWORD_LENGTH,
-    `pilot operator password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-  );
-  assert.notEqual(
-    password.toLowerCase(),
-    email.toLowerCase(),
-    "pilot operator password must not equal the email",
-  );
-  return { email, fullName, password };
+      !/[\u0000-\u001f\u007f]/.test(fullName)
+    )
+  ) {
+    return { ok: false, reason: "the full name is invalid" };
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return {
+      ok: false,
+      reason: `the password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+    };
+  }
+  if (password.toLowerCase() === email.toLowerCase()) {
+    return { ok: false, reason: "the password must not equal the email" };
+  }
+  return { ok: true, config: { email, fullName, password } };
 }
 
 function discardProcessPassword(env: PilotOperatorEnvironment): void {
@@ -204,6 +226,14 @@ export async function provisionProductionPilotOperator(
     return "disabled";
   }
 
+  // R111: the settings are checked BEFORE any lock and a problem with them is
+  // never thrown. A throw here would put the boot into its retry loop with the
+  // API unready while the liveness probe stayed green; a settings problem is
+  // not transient, so it is logged once and the API starts without an
+  // operator. A provisioned database ignores the settings entirely — the
+  // claim decides — so the verdict only matters once no operator exists.
+  const settings = checkPilotOperatorSettings(env);
+
   return dependencies.withLock(async () => {
     if (await dependencies.isConsumed()) {
       discardProcessPassword(env);
@@ -217,12 +247,20 @@ export async function provisionProductionPilotOperator(
       return "already-provisioned";
     }
 
-    const config = readConfig(env);
-    assert.equal(
-      await dependencies.findUserByEmail(config.email),
-      null,
-      "pilot operator email already belongs to a non-operator account",
-    );
+    if (!settings.ok) {
+      logger.error(
+        { reason: settings.reason },
+        "Pilot operator bootstrap rejected; the API starts without an operator — fix the PILOT_OPERATOR_* settings and restart",
+      );
+      return "rejected";
+    }
+    const { config } = settings;
+    if (await dependencies.findUserByEmail(config.email)) {
+      logger.error(
+        "Pilot operator bootstrap rejected; the email already belongs to a non-operator account",
+      );
+      return "rejected";
+    }
     const passwordHash = await dependencies.hashPassword(config.password);
     const user = await dependencies.createOperator({
       email: config.email,
