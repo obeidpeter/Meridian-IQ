@@ -188,12 +188,14 @@
 }
 .editorial-brand span {
   font-size: 32px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
 }
 .editorial-brand svg {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  color: var(--ed-olive);
 }
 .valo-editorial .editorial-brand:hover {
   text-decoration: none;
@@ -1465,8 +1467,8 @@
     font-size: 29px;
   }
   .editorial-brand svg {
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
   }
   .editorial-hero-content {
     padding-block: 26px 16px;

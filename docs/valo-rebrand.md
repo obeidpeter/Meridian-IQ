@@ -1,6 +1,8 @@
 # Valo rebrand
 
 Valo is the current product name; Valo Today is the role-aware workspace.
+The current folded-ribbon logo, downloadable files and regeneration checks are
+documented in [Valo Logo](valo-logo.md).
 Current product copy, mobile display names, and the UI V mark replace the
 MeridianIQ / Meridian Today branding. Product demo addresses use
 `@valo.example`; these are synthetic fixtures, not public contact addresses.

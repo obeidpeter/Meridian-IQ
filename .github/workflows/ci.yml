@@ -278,6 +278,9 @@ jobs:
       - name: Install Playwright chromium
         run: pnpm --filter @workspace/scripts exec playwright install --with-deps chromium
 
+      - name: Verify Valo vector and raster branding
+        run: node scripts/branding-assets.mjs --check
+
       - name: Build api-server
         run: pnpm --filter @workspace/api-server run build
 

@@ -20,10 +20,7 @@ test("Valo display branding preserves installed-app and deployment identities", 
   assert.deepEqual(config.scheme, ["mobile", "valo"]);
   const eas = JSON.parse(read("eas.json"));
   for (const profile of ["development", "preview", "production"]) {
-    assert.equal(
-      eas.build[profile].env.EXPO_PUBLIC_DOMAIN,
-      "valo.replit.app",
-    );
+    assert.equal(eas.build[profile].env.EXPO_PUBLIC_DOMAIN, "valo.replit.app");
   }
 });
 
@@ -73,7 +70,7 @@ test("installed Expo Android transform adds valo without duplicating the legacy 
   );
 });
 
-test("native sign-in uses the web V geometry and Valo native-client header", () => {
+test("native sign-in uses the shared ribbon geometry and Valo native-client header", () => {
   const native = read("components/valo-mark.tsx");
   const web = readFileSync(
     join(repoRoot, "lib/web-ui/src/valo-mark.tsx"),
@@ -81,14 +78,13 @@ test("native sign-in uses the web V geometry and Valo native-client header", () 
   );
   assert.equal(native.match(/d="([^"]+)"/)?.[1], web.match(/d="([^"]+)"/)?.[1]);
   assert.match(native, /from "react-native-svg"/);
-  assert.match(native, /stroke="currentColor"/);
-  assert.match(native, /strokeWidth=\{4\.5\}/);
-  assert.match(native, /strokeLinecap="round"/);
-  assert.match(native, /strokeLinejoin="round"/);
+  assert.ok(web.match(/d="([^"]+)"/)?.[1]?.includes("M22.4 3"));
+  assert.match(native, /fill="currentColor"/);
+  assert.doesNotMatch(native, /strokeWidth/);
   assert.match(native, /accessible=\{false\}/);
   const signIn = read("components/sign-in.tsx");
   assert.match(signIn, /<ValoMark width=\{44\} height=\{44\}/);
-  assert.match(signIn, /backgroundColor: "#0f766e"/);
+  assert.match(signIn, /backgroundColor: "#536149"/);
   assert.doesNotMatch(signIn, /<Feather|lime document mark/);
   assert.match(signIn, /headers: \{ "X-Valo-Client": "mobile" \}/);
   assert.match(signIn, /useLogin\(\{ request: MOBILE_CLIENT_REQUEST \}\)/);
@@ -110,8 +106,8 @@ test("launcher, adaptive, splash and notification assets have dedicated valid PN
     [notification.icon, 96],
   ];
   assert.equal(new Set(images.map(([file]) => file)).size, 4);
-  assert.equal(config.android.adaptiveIcon.backgroundColor, "#0f766e");
-  assert.equal(notification.color, "#0f766e");
+  assert.equal(config.android.adaptiveIcon.backgroundColor, "#536149");
+  assert.equal(notification.color, "#536149");
   for (const [file, size] of images) {
     const png = readFileSync(join(mobileRoot, file));
     assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a", file);

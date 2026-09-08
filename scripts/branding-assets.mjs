@@ -5,11 +5,13 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { chromium } from "playwright";
+const { chromium } = createRequire(new URL("./package.json", import.meta.url))(
+  "playwright",
+);
 
 const root = path.resolve(import.meta.dirname, "..");
 const mobileRequire = createRequire(
@@ -18,9 +20,19 @@ const mobileRequire = createRequire(
 const webRequire = createRequire(
   path.join(root, "lib/web-config/package.json"),
 );
-const MARK = "M6 7 16 25 26 7";
-const TEAL = "#0f766e";
+const MARK =
+  "M2.8 5H9.6L15 15.8L11.6 22.6Z M22.4 3H29.2L16.8 27.8C16.4 28.6 15.2 28.6 14.8 27.8L12.8 23.8Z";
+const OLIVE = "#536149";
+const INK = "#252a24";
 const WHITE = "#ffffff";
+const webApps = [
+  "landing",
+  "console",
+  "sme-compliance",
+  "buyer-portal",
+  "penalty-calculator",
+];
+const brandDir = "artifacts/landing/public/brand";
 const illustrationLabel =
   "Illustrative preview | Synthetic data | Not a live account";
 const iconDir = "artifacts/mobile/assets/images";
@@ -30,7 +42,7 @@ const icons = [
     size: 1024,
     markSize: 640,
     color: WHITE,
-    background: TEAL,
+    background: OLIVE,
   },
   {
     name: "adaptive-icon.png",
@@ -43,7 +55,7 @@ const icons = [
     name: "splash-icon.png",
     size: 1024,
     markSize: 448,
-    color: TEAL,
+    color: OLIVE,
     background: "transparent",
   },
   {
@@ -78,7 +90,205 @@ const social = [
 ];
 
 function mark(size, color) {
-  return `<svg width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" style="color:${color}" xmlns="http://www.w3.org/2000/svg"><path d="${MARK}" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 32 32" fill="${color}" xmlns="http://www.w3.org/2000/svg"><path d="${MARK}"/></svg>`;
+}
+
+async function generateVectors(outputs) {
+  for (const file of [
+    "lib/web-ui/src/valo-mark.tsx",
+    "artifacts/mobile/components/valo-mark.tsx",
+  ]) {
+    assert.ok(
+      (await readFile(path.join(root, file), "utf8")).includes(`d="${MARK}"`),
+      `${file}: shared ribbon geometry`,
+    );
+  }
+  const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${OLIVE}"/><path d="${MARK}" transform="translate(3 3) scale(.8125)" fill="#fff"/></svg>\n`;
+  for (const app of webApps)
+    outputs.set(`artifacts/${app}/public/favicon.svg`, Buffer.from(favicon));
+
+  // Outline the installed OFL-licensed Inter face: exported logos need no fonts.
+  const apiRequire = createRequire(
+    path.join(root, "artifacts/api-server/package.json"),
+  );
+  const fontkit = createRequire(apiRequire.resolve("pdfkit/package.json"))(
+    "fontkit",
+  );
+  const font = fontkit.create(
+    await readFile(
+      mobileRequire.resolve(
+        "@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf",
+      ),
+    ),
+  );
+  const run = font.layout("Valo", { kern: false });
+  let advance = 0;
+  const letters = run.glyphs
+    .map((glyph, index) => {
+      const position = run.positions[index];
+      const letter = `<path transform="translate(${advance + position.xOffset} ${position.yOffset})" d="${glyph.path.toSVG()}"/>`;
+      advance += position.xAdvance;
+      return letter;
+    })
+    .join("");
+  const scale = 34 / font.unitsPerEm;
+  const width = Math.ceil(43 + advance * scale);
+  for (const [name, symbol, type] of [
+    ["valo-logo", OLIVE, INK],
+    ["valo-logo-white", WHITE, WHITE],
+    ["valo-logo-mono", INK, INK],
+  ]) {
+    outputs.set(
+      `${brandDir}/${name}.svg`,
+      Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 36" role="img" aria-labelledby="title"><title id="title">Valo</title><path transform="translate(0 2)" d="${MARK}" fill="${symbol}"/><g fill="${type}" transform="translate(42 29) scale(${scale} ${-scale})">${letters}</g></svg>\n`,
+      ),
+    );
+  }
+  outputs.set(
+    `${brandDir}/valo-mark.svg`,
+    Buffer.from(
+      mark(32, OLIVE).replace(
+        "><path",
+        ' role="img" aria-labelledby="title"><title id="title">Valo</title><path',
+      ) + "\n",
+    ),
+  );
+  outputs.set(
+    `${brandDir}/Inter-LICENSE.txt`,
+    Buffer.from(
+      (
+        await readFile(
+          mobileRequire.resolve("@expo-google-fonts/inter/LICENSE_FONT"),
+          "utf8",
+        )
+      )
+        .replaceAll("\r\n", "\n")
+        .replace(/[\t ]+$/gm, ""),
+    ),
+  );
+}
+
+async function generateLogoPreviews(page, vectors, outputs) {
+  for (const [file, bytes] of vectors) {
+    if (!file.startsWith(brandDir) || !file.endsWith(".svg")) continue;
+    const svg = bytes.toString("utf8");
+    const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+    assert.ok(viewBox);
+    const width = Number(viewBox[1]) * 10;
+    const height = Number(viewBox[2]) * 10;
+    await page.setViewportSize({ width, height });
+    await page.setContent(
+      `<style>html,body{margin:0;background:transparent}svg{display:block;width:100%;height:100%}</style>${svg}`,
+    );
+    outputs.set(
+      file.replace(/\.svg$/, ".png"),
+      await page.screenshot({ omitBackground: true }),
+    );
+  }
+}
+
+async function assertRasterMatch(page, actual, expected, file) {
+  const difference = await page.evaluate(
+    async ({ actual, expected }) => {
+      async function pixels(data) {
+        const image = new Image();
+        image.src = `data:image/png;base64,${data}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0);
+        return {
+          width: image.width,
+          height: image.height,
+          data: context.getImageData(0, 0, image.width, image.height).data,
+        };
+      }
+      const a = await pixels(actual);
+      const b = await pixels(expected);
+      if (a.width !== b.width || a.height !== b.height) return 1;
+      // Chromium's platform rasterizers differ at edges. Permit interpolation
+      // within one pixel, symmetrically, without relaxing solid color/geometry.
+      function withinEdgeRange(from, to, index) {
+        const x = (index / 4) % from.width;
+        const y = Math.floor(index / 4 / from.width);
+        for (let channel = 0; channel < 4; channel++) {
+          let min = 255;
+          let max = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (
+                x + dx < 0 ||
+                x + dx >= to.width ||
+                y + dy < 0 ||
+                y + dy >= to.height
+              )
+                continue;
+              const value =
+                to.data[((y + dy) * to.width + x + dx) * 4 + channel];
+              min = Math.min(min, value);
+              max = Math.max(max, value);
+            }
+          }
+          const value = from.data[index + channel];
+          if (value < min - 12 || value > max + 12) return false;
+        }
+        return true;
+      }
+      let different = 0;
+      for (let i = 0; i < a.data.length; i += 4) {
+        if (
+          [0, 1, 2, 3].some(
+            (channel) =>
+              Math.abs(a.data[i + channel] - b.data[i + channel]) > 12,
+          ) &&
+          !(withinEdgeRange(a, b, i) && withinEdgeRange(b, a, i))
+        )
+          different++;
+      }
+      return different / (a.width * a.height);
+    },
+    {
+      actual: actual.toString("base64"),
+      expected: expected.toString("base64"),
+    },
+  );
+  assert.ok(
+    difference < 0.002,
+    `${file}: raster does not match current ribbon/vector (${difference})`,
+  );
+}
+
+async function verifyRasterRejections(page, expected) {
+  const fixtures = await page.evaluate(async (data) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${data}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d");
+    const blank = canvas.toDataURL().split(",")[1];
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(image, 0, 0);
+    const mirrored = canvas.toDataURL().split(",")[1];
+    context.resetTransform();
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0);
+    context.globalCompositeOperation = "source-in";
+    context.fillStyle = "#ff0000";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return { blank, mirrored, recolored: canvas.toDataURL().split(",")[1] };
+  }, expected.toString("base64"));
+  for (const [name, bytes] of Object.entries(fixtures))
+    await assert.rejects(
+      assertRasterMatch(page, Buffer.from(bytes, "base64"), expected, name),
+      /raster does not match/,
+      `must reject ${name} logo`,
+    );
 }
 
 async function fontCss() {
@@ -119,12 +329,12 @@ async function generateSocial(page, fonts, outputs) {
   for (const item of social) {
     await page.setContent(`<html lang="en"><head><style>${fonts}
       *{box-sizing:border-box;letter-spacing:0}body{margin:0;font-family:Inter,sans-serif;color:#172126;background:#fff}
-      header{height:374px;background:${TEAL};padding:64px 72px;color:white}
-      .brand{display:flex;align-items:center;gap:32px}.brand span{font-size:128px;font-weight:700;line-height:1.1}
+      header{height:374px;background:${OLIVE};padding:64px 72px;color:white}
+      .brand{display:flex;align-items:center;gap:32px}.brand span{font-size:128px;font-weight:600;line-height:1.1}
       .category{margin:32px 0 0;font-size:24px;font-weight:600;color:#fff}
       main{padding:38px 72px 0}h1{font-size:40px;line-height:1.2;margin:0;font-weight:700}
       p{font-size:24px;line-height:1.5;margin:16px 0 0;color:#52615d}
-      footer{position:absolute;bottom:0;left:0;width:100%;height:10px;background:#bef264}
+      footer{position:absolute;bottom:0;left:0;width:100%;height:10px;background:${INK}}
       </style></head><body><header><div class="brand">${mark(148, WHITE)}<span>Valo</span></div>
       <div class="category">NIGERIAN INVOICING &amp; COMPLIANCE</div></header>
       <main><h1>${item.title}</h1><p>${item.subtitle}</p></main><footer></footer></body></html>`);
@@ -435,23 +645,13 @@ async function validate(page, outputs) {
       assert.ok(
         actual.visible > icon.size ** 2 * 0.02 &&
           actual.visible < icon.size ** 2 * 0.35,
-        `${file}: nonblank V silhouette`,
+        `${file}: nonblank ribbon silhouette`,
       );
     } else {
       assert.deepEqual(
         actual.corner,
-        [15, 118, 110, 255],
-        `${file}: full-bleed teal`,
-      );
-      assert.deepEqual(
-        actual.centre,
-        [15, 118, 110, 255],
-        `${file}: open V centre`,
-      );
-      assert.deepEqual(
-        actual.tip,
-        [255, 255, 255, 255],
-        `${file}: white V tip`,
+        [83, 97, 73, 255],
+        `${file}: full-bleed olive`,
       );
       assert.ok(
         actual.white > icon.size ** 2 * 0.05,
@@ -471,10 +671,10 @@ async function validate(page, outputs) {
     assert.equal(actual.height, 630, file);
     assert.ok(actual.white > 1200 * 630 * 0.2, `${file}: visible content band`);
     assert.ok(
-      Math.abs(actual.corner[0] - 15) < 4 &&
-        Math.abs(actual.corner[1] - 118) < 4 &&
-        Math.abs(actual.corner[2] - 110) < 4,
-      `${file}: Valo teal`,
+      Math.abs(actual.corner[0] - 83) < 4 &&
+        Math.abs(actual.corner[1] - 97) < 4 &&
+        Math.abs(actual.corner[2] - 73) < 4,
+      `${file}: Valo olive`,
     );
   }
   const dashboard = await inspectImage(
@@ -510,6 +710,8 @@ try {
   await context.route("**/*", (route) => route.abort());
   const page = await context.newPage();
   const outputs = new Map();
+  const vectors = new Map();
+  await generateVectors(vectors);
   if (check) {
     const files = [
       ...icons.map((icon) => `${iconDir}/${icon.name}`),
@@ -518,16 +720,43 @@ try {
     ];
     for (const file of files)
       outputs.set(file, await readFile(path.join(root, file)));
+    for (const [file, bytes] of vectors)
+      assert.equal(
+        (await readFile(path.join(root, file), "utf8")).replaceAll(
+          "\r\n",
+          "\n",
+        ),
+        bytes.toString("utf8").replaceAll("\r\n", "\n"),
+        `${file}: vector drift`,
+      );
+    const expected = new Map();
+    await generateIcons(page, expected);
+    await generateLogoPreviews(page, vectors, expected);
+    await verifyRasterRejections(
+      page,
+      expected.get(`${brandDir}/valo-logo.png`),
+    );
+    for (const [file, bytes] of expected)
+      await assertRasterMatch(
+        page,
+        await readFile(path.join(root, file)),
+        bytes,
+        file,
+      );
   } else {
     const fonts = await fontCss();
     await generateIcons(page, outputs);
     await generateSocial(page, fonts, outputs);
     await generateDashboard(browser, fonts, outputs);
+    await generateLogoPreviews(page, vectors, outputs);
+    for (const [file, bytes] of vectors) outputs.set(file, bytes);
   }
   await validate(page, outputs);
   if (!check)
-    for (const [file, bytes] of outputs)
+    for (const [file, bytes] of outputs) {
+      await mkdir(path.dirname(path.join(root, file)), { recursive: true });
       await writeFile(path.join(root, file), bytes);
+    }
   for (const [file, bytes] of outputs)
     console.log(
       `${check ? "Verified" : "Generated"} ${file} (${bytes.length} bytes)`,

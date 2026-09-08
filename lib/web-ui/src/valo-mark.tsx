@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-/** Valo's V mark. The adjacent wordmark supplies the accessible name. */
+/** Two folded ribbons form the V; negative space stays open at small sizes. */
 export function ValoMark(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -12,11 +12,8 @@ export function ValoMark(props: SVGProps<SVGSVGElement>) {
       {...props}
     >
       <path
-        d="M6 7 16 25 26 7"
-        stroke="currentColor"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M2.8 5H9.6L15 15.8L11.6 22.6Z M22.4 3H29.2L16.8 27.8C16.4 28.6 15.2 28.6 14.8 27.8L12.8 23.8Z"
+        fill="currentColor"
       />
     </svg>
   );
