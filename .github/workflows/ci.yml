@@ -72,6 +72,11 @@ jobs:
       - name: Documentation inventory
         run: pnpm run docs:check
 
+      # The source-copy brand gate (product name, favicon mark, manifests); the
+      # asset-integrity check further down covers the generated images.
+      - name: Brand copy gate
+        run: pnpm run brand:check
+
       # Supply-chain gate: fail the build on a HIGH/CRITICAL advisory in a
       # production dependency so a new CVE cannot land silently. Scoped to
       # --prod (build/dev tooling is not shipped) and --audit-level=high so

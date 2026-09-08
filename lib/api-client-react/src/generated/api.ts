@@ -30265,7 +30265,7 @@ export const getReconcileClerkReservationUrl = (id: string,) => {
 }
 
 /**
- * Requires an authenticated operator with operator.queue.act and the normal x-meridian-csrf header. The operator must confirm provider execution has stopped and supply an audit reason. Charges at least the reserved amount, appends audit evidence and settles atomically. Never refunds uncertain spend. Repeated reconciliation returns the existing inferenceCallId with replayed=true; subsequent input cannot change the recorded charge. A later provider result charges only excess usage not already charged in the same UTC budget month.
+ * Requires an authenticated operator with operator.queue.act and the normal x-valo-csrf header (the legacy x-meridian-csrf alias is still accepted). The operator must confirm provider execution has stopped and supply an audit reason. Charges at least the reserved amount, appends audit evidence and settles atomically. Never refunds uncertain spend. Repeated reconciliation returns the existing inferenceCallId with replayed=true; subsequent input cannot change the recorded charge. A later provider result charges only excess usage not already charged in the same UTC budget month.
  */
 export const reconcileClerkReservation = async (id: string,
     clerkReservationReconcileInput: ClerkReservationReconcileInput, options?: RequestInit): Promise<ClerkReservationReconcileResult> => {

@@ -105,8 +105,9 @@ Project assets:
 - `artifacts/landing/public/valo-workspace-mobile.webp`: 1200 x 600,
   66,890 bytes.
 
-Earlier `valo-records-*` assets and the social image remain for compatibility;
-the landing hero now uses the new workspace image pair.
+The earlier `valo-records-*` assets and the generated `compliance-dashboard.jpg`
+were removed in R111 (nothing referenced them); the landing hero uses the
+workspace image pair and the social card is `opengraph.jpg`.
 
 Desktop generation prompt:
 

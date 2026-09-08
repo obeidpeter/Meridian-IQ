@@ -143,12 +143,12 @@ export function EvidenceVaultWorkspace() {
           ))}
         </section>
 
-        <section className="flex min-h-[20rem] flex-col justify-between rounded-lg border border-slate-200 bg-[#082f31] p-5 text-white">
+        <section className="flex min-h-[20rem] flex-col justify-between rounded-lg border border-slate-200 bg-[var(--mi-sidebar)] p-5 text-white">
           <div>
-            <span className="grid size-10 place-items-center rounded-md bg-[#c9a227] text-[#0e2f2a]">
+            <span className="grid size-10 place-items-center rounded-md bg-[var(--mi-sidebar-accent)] text-[var(--mi-sidebar)]">
               <ShieldCheck className="size-5" aria-hidden="true" />
             </span>
-            <p className="mt-6 text-xs font-bold uppercase text-[#e9cf78]">
+            <p className="mt-6 text-xs font-bold uppercase text-[var(--mi-sidebar-accent)]">
               Auditor package
             </p>
             <h2 className="mt-2 text-xl font-extrabold">
@@ -161,7 +161,7 @@ export function EvidenceVaultWorkspace() {
           </div>
           <Button
             asChild
-            className="mt-6 w-full bg-[#c9a227] text-[#0e2f2a] hover:bg-[#d9b543]"
+            className="mt-6 w-full bg-[var(--mi-sidebar-accent)] text-[var(--mi-sidebar)] hover:bg-[var(--mi-sidebar-ink)]"
           >
             <a href="/api/audit/export/csv">
               <Download className="size-4" aria-hidden="true" /> Export audit

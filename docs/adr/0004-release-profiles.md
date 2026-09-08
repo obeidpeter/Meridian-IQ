@@ -21,8 +21,10 @@ The promotion adapter has two profiles selected by `RELEASE_PROFILE`:
 - **pilot** (the default): Publish verifies the staged CI artifact (source
   tree, tracked-source and schema hashes, the complete seven-app asset
   inventory, the manifest checksum from CI's sidecar or an explicit value),
-  the API build syncs the target schema — plain `push`, which fails closed on a
-  destructive diff, then the guardrail migrations — and the API starts as RUN.
+  the builds perform no database mutation — Replit's native Publish flow
+  applies the confirmed schema diff, then the API starts as RUN and boot
+  re-applies the guardrail migrations before readiness (amended on
+  2026-09-07, when the build-time `push` was removed).
   `RELEASE_RUNTIME_STATE=HOLD` is a plain maintenance switch. No recovery
   plan, activation permit, held evidence or drained-traffic attestation is
   read. `ops:postdeploy` remains the after-the-fact parity check.
@@ -40,8 +42,11 @@ drill run in CI on every merge.
 - A merge to main deploys with one Publish and no evidence files. The
   stale-build banner clears when the promoted API reports the contract version
   the web bundles were built with.
-- A destructive schema change stops the Publish build; it needs a reviewed
-  versioned migration (or the governed profile's offline bootstrap).
+- A destructive schema change is surfaced by the Publish diff for explicit
+  confirmation and still warrants a reviewed versioned migration (or the
+  governed profile's offline bootstrap). Because a new table gets its RLS
+  policy only from the boot-time guardrail pass, the deployment's startup
+  probe is `/api/readyz`: a failed guardrail migration fails the rollout.
 - Switching to `governed` is a configuration change once a live tenant base
   justifies the ceremony; the R198 records under `docs/history/2026-09-r198/`
   describe its evidence contracts.

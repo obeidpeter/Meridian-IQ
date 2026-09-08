@@ -63,12 +63,17 @@ The `*_TEST_*` variables are test-only. Never configure them as production
 credentials.
 
 The three `PILOT_OPERATOR_*` settings are an exceptional production-bootstrap
-path for a deployment with no real operator. Configure all three together,
-publish once, confirm the individual operator can sign in, then remove all three
+path for a deployment with no real operator. Configure all three together in
+the deployment's secret store — never in `.replit` or any tracked file — publish
+once, confirm the individual operator can sign in, then remove all three
 settings and restart. The database permanently records consumption in the same
 transaction as the user, membership, and audit event; retained or restored
 settings cannot create another operator or reset the first operator's password.
-Historical demo addresses are rejected.
+Historical demo addresses are rejected. Incomplete or invalid settings on a
+database with no operator are rejected with one error log line and the API
+starts without an operator (R111); they never hold readiness. A restore to a
+snapshot taken before the claim row re-arms the bootstrap, so remove the
+settings before any such restore.
 
 ## Clerk AI
 
