@@ -213,6 +213,8 @@ test(
                   '[data-testid="button-notifications"]:visible',
                 );
                 assert.equal(await trigger.count(), 1);
+                const bounds = await trigger.boundingBox();
+                assert.ok(bounds && bounds.width >= 44 && bounds.height >= 44);
                 const icon = trigger.locator("svg");
                 const header = trigger.locator("xpath=ancestor::header");
                 for (const state of ["default", "hover", "focus"]) {
@@ -222,12 +224,18 @@ test(
                     if (state === "focus") {
                       await tabTo(page, trigger);
                       assert.ok(
-                        await trigger.evaluate(
-                          (element) =>
+                        await trigger.evaluate((element) => {
+                          const style = getComputedStyle(element);
+                          const indicator =
+                            style.boxShadow !== "none" ||
+                            (style.outlineStyle !== "none" &&
+                              Number.parseFloat(style.outlineWidth) >= 2);
+                          return (
                             element === document.activeElement &&
                             element.matches(":focus-visible") &&
-                            getComputedStyle(element).boxShadow !== "none",
-                        ),
+                            indicator
+                          );
+                        }),
                       );
                     }
                   }

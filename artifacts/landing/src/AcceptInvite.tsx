@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
 import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
+import "@/auth.css";
 
 // Map the accept-invite failure to a friendly line. `showSignIn` decides
 // whether we surface a "go to sign in" link (the account already exists).
@@ -53,13 +54,13 @@ function acceptError(err: unknown): { message: string; showSignIn: boolean } {
 
 function InviteShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-muted/40 to-background">
+    <div className="valo-auth auth-flow">
       {/* The brand mark + a sign-in shortcut, mirroring the Portal header. */}
       <PortalHeader
         right={
           <a
             href="/login"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+            className="auth-text-link"
             data-testid="link-header-sign-in"
           >
             Sign in
@@ -69,7 +70,7 @@ function InviteShell({ children }: { children: React.ReactNode }) {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10 focus:outline-none sm:px-6"
+        className="auth-flow-main focus:outline-none"
       >
         {children}
       </main>
@@ -151,7 +152,7 @@ export function AcceptInvite() {
   if (!token) {
     return (
       <InviteShell>
-        <Card className="p-6 shadow-sm" data-testid="card-invite-missing-token">
+        <Card className="auth-flow-panel" data-testid="card-invite-missing-token">
           <div className="flex items-center gap-2">
             <AlertCircle
               className="h-5 w-5 text-destructive"
@@ -168,7 +169,7 @@ export function AcceptInvite() {
             This page does not contain an invitation token. Ask the person who
             invited you to copy and share a new Valo invitation link.
           </p>
-          <Button asChild variant="outline" className="mt-4 w-full">
+          <Button asChild variant="outline" className="auth-secondary mt-4">
             <a href="/login" data-testid="link-missing-token-sign-in">
               Go to sign in
             </a>
@@ -182,7 +183,7 @@ export function AcceptInvite() {
     return (
       <InviteShell>
         <Card
-          className="p-6 shadow-sm"
+          className="auth-flow-panel"
           aria-live="polite"
           data-testid="card-invite-checking"
         >
@@ -206,7 +207,7 @@ export function AcceptInvite() {
   if (preview.isError) {
     return (
       <InviteShell>
-        <Card className="p-6 shadow-sm" data-testid="card-invite-preview-error">
+        <Card className="auth-flow-panel" data-testid="card-invite-preview-error">
           <div className="flex items-start gap-2">
             <AlertCircle
               className="mt-0.5 h-5 w-5 shrink-0 text-destructive"
@@ -222,14 +223,14 @@ export function AcceptInvite() {
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
-              className="flex-1"
+              className="auth-submit flex-1"
               onClick={() => preview.mutate({ data: { token } })}
               disabled={preview.isPending}
               data-testid="button-retry-invite-preview"
             >
               Try again
             </Button>
-            <Button asChild variant="outline" className="flex-1">
+            <Button asChild variant="outline" className="auth-secondary flex-1">
               <a href="/login">Go to sign in</a>
             </Button>
           </div>
@@ -242,7 +243,7 @@ export function AcceptInvite() {
   if (accept.isSuccess) {
     return (
       <InviteShell>
-        <Card className="p-6 shadow-sm" data-testid="card-invite-success">
+        <Card className="auth-flow-panel" data-testid="card-invite-success">
           <div className="flex items-center gap-2">
             <CheckCircle2
               className="h-5 w-5 text-emerald-600 dark:text-emerald-400"
@@ -257,7 +258,7 @@ export function AcceptInvite() {
             </span>{" "}
             and the password you just chose.
           </p>
-          <Button asChild className="mt-4 w-full">
+          <Button asChild className="auth-submit mt-4">
             <a href="/login" data-testid="link-continue-sign-in">
               Continue to sign in
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -275,13 +276,13 @@ export function AcceptInvite() {
 
   return (
     <InviteShell>
-      <Card className="p-6 shadow-sm">
+      <Card className="auth-flow-panel">
         <h1 className="text-lg font-semibold">Activate your account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Set a password to finish setting up your Valo account.
         </p>
         <dl
-          className="mt-4 divide-y rounded-md border bg-muted/25 px-3 text-sm"
+          className="auth-invite-context mt-4 divide-y border text-sm"
           data-testid="invite-context"
         >
           <div className="flex gap-3 py-2.5">
@@ -426,7 +427,7 @@ export function AcceptInvite() {
 
           <Button
             type="submit"
-            className="w-full"
+            className="auth-submit"
             disabled={
               accept.isPending || password.length < 8 || !passwordsMatch
             }

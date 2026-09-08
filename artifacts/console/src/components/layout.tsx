@@ -842,7 +842,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen overflow-x-clip bg-[var(--mi-canvas)] lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="mi-platform min-h-screen overflow-x-clip bg-[var(--mi-canvas)] lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -858,7 +858,7 @@ export function Layout({ children }: { children: ReactNode }) {
       />
       <a
         href="#main-content"
-        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--mi-gold-bright)] focus:px-4 focus:py-2 focus:font-bold focus:text-[var(--mi-ink)] ${FOCUS_RING}`}
+        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:min-h-11 focus:rounded-md focus:bg-[var(--mi-sidebar-accent)] focus:px-4 focus:py-3 focus:font-bold focus:text-[#262925] ${FOCUS_RING}`}
         data-testid="link-skip-to-content"
       >
         Skip to content
@@ -946,7 +946,9 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
             {/* Recent-notification inbox — render-on-success, so a server
                 without the feed endpoint shows no bell at all. */}
-            {!bankWorkspace && <NotificationBell />}
+            {!bankWorkspace && (
+              <NotificationBell triggerClassName="text-foreground hover:text-foreground focus-visible:text-foreground" />
+            )}
             <span className="mi-topbar__divider" aria-hidden="true" />
             <SessionOperationRecovery
               me={me}

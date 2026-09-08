@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
+import "@/auth.css";
 
 // The platform's one public contact address (the penalty calculator's
 // advisory desk) — reused here so a locked-out firm admin, who has no
@@ -30,12 +31,12 @@ const SUPPORT_EMAIL = ADVISORY_EMAIL;
 
 function ResetShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-muted/40 to-background">
+    <div className="valo-auth auth-flow">
       <PortalHeader
         right={
           <a
             href="/login"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+            className="auth-text-link"
             data-testid="link-header-sign-in"
           >
             Sign in
@@ -45,7 +46,7 @@ function ResetShell({ children }: { children: React.ReactNode }) {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-10 focus:outline-none sm:px-6"
+        className="auth-flow-main focus:outline-none"
       >
         {children}
       </main>
@@ -105,7 +106,7 @@ export function ResetPassword() {
   if (!token) {
     return (
       <ResetShell>
-        <Card className="p-6 shadow-sm" data-testid="card-reset-guidance">
+        <Card className="auth-flow-panel" data-testid="card-reset-guidance">
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-primary" aria-hidden="true" />
             <h1 className="text-lg font-semibold">Reset your password</h1>
@@ -170,7 +171,7 @@ export function ResetPassword() {
                 )}
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="auth-submit"
                   disabled={requestReset.isPending || !email.trim()}
                   data-testid="button-request-reset"
                 >
@@ -192,12 +193,12 @@ export function ResetPassword() {
               </form>
             </>
           )}
-          <Button asChild variant="outline" className="mt-4 w-full">
+          <Button asChild variant="outline" className="auth-secondary mt-4">
             <a href="/login" data-testid="link-guidance-sign-in">
               Back to sign in
             </a>
           </Button>
-          <Button asChild variant="outline" className="mt-2 w-full">
+          <Button asChild variant="outline" className="auth-secondary mt-2">
             <a
               href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
                 "Valo password reset request",
@@ -216,7 +217,7 @@ export function ResetPassword() {
   if (reset.isSuccess) {
     return (
       <ResetShell>
-        <Card className="p-6 shadow-sm" data-testid="card-reset-success">
+        <Card className="auth-flow-panel" data-testid="card-reset-success">
           <div className="flex items-center gap-2">
             <CheckCircle2
               className="h-5 w-5 text-emerald-600 dark:text-emerald-400"
@@ -228,7 +229,7 @@ export function ResetPassword() {
             Your new password is set and any previous sessions have been signed
             out. Sign in to continue.
           </p>
-          <Button asChild className="mt-4 w-full">
+          <Button asChild className="auth-submit mt-4">
             <a href="/login" data-testid="link-reset-continue-sign-in">
               Continue to sign in
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -241,7 +242,7 @@ export function ResetPassword() {
 
   return (
     <ResetShell>
-      <Card className="p-6 shadow-sm">
+      <Card className="auth-flow-panel">
         <h1 className="text-lg font-semibold">Choose a new password</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           This one-time link sets a new password for your Valo account.
@@ -319,7 +320,7 @@ export function ResetPassword() {
           )}
           <Button
             type="submit"
-            className="w-full"
+            className="auth-submit"
             disabled={reset.isPending || password.length < 8 || !passwordsMatch}
             data-testid="button-set-password"
           >

@@ -169,3 +169,116 @@ test("contrast calculation rejects the original small warning text", () => {
   expect(contrast("#b5620a", "#ffffff")).toBeCloseTo(4.45273, 5);
   expect(contrast("#b5620a", "#fdf1dd")).toBeCloseTo(3.98683, 5);
 });
+
+test.each(["light", "dark"])(
+  "%s workspace text, navigation and control boundaries retain AA contrast",
+  (theme) => {
+    document.documentElement.className = theme === "dark" ? "dark" : "";
+    for (const surface of ["paper", "canvas", "teal-soft"]) {
+      for (const foreground of ["ink", "muted", "teal"]) {
+        expect(
+          contrast(token(foreground), token(surface)),
+          `${theme} ${foreground} on ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(
+        contrast(token("input-line"), token(surface)),
+      ).toBeGreaterThanOrEqual(3);
+      expect(contrast(token("teal"), token(surface))).toBeGreaterThanOrEqual(3);
+    }
+    expect(
+      contrast(token("primary-ink"), token("teal")),
+    ).toBeGreaterThanOrEqual(4.5);
+    for (const surface of ["sidebar", "sidebar-active"]) {
+      for (const foreground of ["sidebar-ink", "sidebar-accent"]) {
+        expect(
+          contrast(token(foreground), token(surface)),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  },
+);
+
+test("the light workspace uses the agreed reference palette", () => {
+  document.documentElement.className = "";
+  expect(token("teal")).toBe("#536149");
+  expect(token("canvas")).toBe("#f5f6f3");
+  expect(token("paper")).toBe("#ffffff");
+  expect(token("ink")).toBe("#262925");
+  expect(token("muted")).toBe("#60655d");
+  expect(token("line")).toBe("#d5d8d0");
+  expect(token("sidebar")).toBe("#252b24");
+});
+
+test("workspace controls keep 44px targets without expanding status labels", () => {
+  for (const selector of [
+    ".mi-segmented__item",
+    ".mi-command__close",
+    ".mi-nav__link",
+    ".mi-topbar__action",
+    ".mi-account-menu__item",
+    ".mi-icon-button",
+    ".mi-platform :where(button, a, label).inline-flex.justify-center",
+    '.mi-platform :where(input, textarea, [role="combobox"]).border-input',
+    '.mi-platform [role="tab"][data-orientation="horizontal"]',
+  ]) {
+    expect(declaration(selector, "min-height"), selector).toBe("2.75rem");
+  }
+  expect(declaration(".mi-mobilebar button", "min-width")).toBe("2.75rem");
+  expect(declaration(".mi-nav__more", "background")).toBe("var(--mi-sidebar)");
+  expect(declaration(".mi-topbar", "background")).toBe("var(--mi-paper)");
+  expect(declaration(".mi-workspace-header h1", "font-size")).toBe("1.75rem");
+  expect(declaration(":root", "--mi-radius")).toBe("0.5rem");
+});
+
+test.each(["console", "sme-compliance", "buyer-portal"])(
+  "%s Tailwind tokens match the shared palette in both themes",
+  (app) => {
+    const css = readFileSync(
+      resolve(import.meta.dirname, `../../../artifacts/${app}/src/index.css`),
+      "utf8",
+    );
+    const appStyles = document.createElement("style");
+    appStyles.textContent = css.slice(
+      css.indexOf(":root {"),
+      css.indexOf("@layer base"),
+    );
+    document.head.append(appStyles);
+    try {
+      const pairs = {
+        background: "canvas",
+        foreground: "ink",
+        card: "paper",
+        "card-foreground": "ink",
+        "card-border": "line",
+        popover: "paper",
+        "popover-foreground": "ink",
+        "popover-border": "line",
+        primary: "teal",
+        "primary-foreground": "primary-ink",
+        "muted-foreground": "muted",
+        border: "line",
+        input: "input-line",
+        ring: "teal",
+      };
+      for (const theme of ["", "dark"]) {
+        document.documentElement.className = theme;
+        const computed = getComputedStyle(document.documentElement);
+        for (const [appToken, sharedToken] of Object.entries(pairs)) {
+          const probe = document.createElement("span");
+          const hsl = computed.getPropertyValue(`--${appToken}`).trim();
+          probe.style.color = `hsl(${hsl})`;
+          document.body.append(probe);
+          const actual = getComputedStyle(probe).color;
+          probe.style.color = token(sharedToken);
+          expect(actual, `${app} ${theme || "light"} ${appToken}`).toBe(
+            getComputedStyle(probe).color,
+          );
+          probe.remove();
+        }
+      }
+    } finally {
+      appStyles.remove();
+    }
+  },
+);

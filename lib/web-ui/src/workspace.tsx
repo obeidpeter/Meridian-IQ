@@ -2,6 +2,7 @@ import {
   Children,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -293,7 +294,8 @@ export function CommandMenu({
   >("idle");
   const inputRef = useRef<HTMLInputElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const initiatingElementRef = useRef<Element | null>(null);
+  const restoreOnCloseRef = useRef(true);
   const open = controlledOpen ?? internalOpen;
 
   const setOpen = useCallback(
@@ -317,7 +319,6 @@ export function CommandMenu({
   }, [items, query, remoteItems]);
 
   const show = useCallback(() => {
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setOpen(true);
   }, [setOpen]);
 
@@ -325,7 +326,6 @@ export function CommandMenu({
     setOpen(false);
     setQuery("");
     setActiveIndex(0);
-    window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
   }, [setOpen]);
 
   useEffect(() => {
@@ -340,13 +340,32 @@ export function CommandMenu({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, hide, show]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    // Capture external triggers and focus before paint, so immediate keys reach the dialog.
+    initiatingElementRef.current = document.activeElement;
+    restoreOnCloseRef.current = true;
+    inputRef.current?.focus({ preventScroll: true });
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
+    const initiatingElement = initiatingElementRef.current;
+    const section = sectionRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       document.body.style.overflow = previousOverflow;
+      const activeElement = document.activeElement;
+      if (
+        restoreOnCloseRef.current &&
+        initiatingElement instanceof HTMLElement &&
+        initiatingElement.isConnected &&
+        !section?.contains(initiatingElement) &&
+        (activeElement === document.body || section?.contains(activeElement))
+      ) {
+        initiatingElement.focus({ preventScroll: true });
+      }
     };
   }, [open]);
 
@@ -387,6 +406,8 @@ export function CommandMenu({
   }, [filtered.length]);
 
   const choose = (item: CommandItem) => {
+    // Navigation or another action owns focus after a command is selected.
+    restoreOnCloseRef.current = false;
     hide();
     item.onSelect();
   };

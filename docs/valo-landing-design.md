@@ -1,152 +1,163 @@
-# Valo Public Landing Page
+# Valo Web Design Refinement
 
 ## Scope
 
-An editorial redesign of the public landing page only, prepared on
-`agent/valo-editorial-landing` from main `60bb3eba3`. No production deployment,
-database change, authentication change, or staged-release modification.
+Prepared on `agent/valo-reference-refinement` from merged main
+`fe60aebb5b4b6ce46381e8d9d16379f4ae68ac94` on 8 September 2026.
+This extends the previous public landing redesign to sign-in and the shared
+signed-in web experience: Accountant Console, business compliance workspace
+and Buyer Rails, including the separate Clerk shell and floating Clerk panel.
+The native mobile application is unchanged.
 
-The existing React/Vite stack, shared Valo mark, invitation routes, generated
-enquiry API client, consent and honeypot fields, aggregate analytics, support
-mailbox and public calculator route are retained.
+No API, schema, authentication logic, role, tenancy, release flag or deployment
+configuration changes. No new dependencies. Existing enquiry consent, honeypot,
+generated API client, aggregate analytics, invitation routes and approved
+support mailbox are retained.
 
-## Design Direction
+The supplied Valo reference image informed the compact editorial structure,
+visible product scene, thin rules, olive actions and evidence presentation.
+The implementation uses the existing Valo mark and original generated
+photography; it does not reproduce fictitious authority stamps or invent
+legal destinations from the reference.
 
-Quiet order: a full-width original desk photograph, live HTML proposition,
-ruled editorial sections, a readable invoice example and distinct accountant
-view, followed by one dark evidence section. There are no carousel, animation,
-font or application dependencies added.
+## Design System
 
-The reference was [Aesop's official site](https://www.aesop.com/), interpreted
-as restraint, material attention and editorial hierarchy. No Aesop asset,
-logo, copy or photograph is used.
+| Surface              | Treatment                                                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Landing              | Near-white paper, compact benefit strip, full-width audience tabs, interactive illustrative record and dark evidence section |
+| Sign-in and recovery | White form-first layout, clear labels, quieter role information and consistent invitation/recovery screens                   |
+| Signed-in web apps   | Neutral canvas, white work surfaces, graphite/olive navigation, tighter headings, restrained metrics, ruled tables and tabs  |
+| Dark mode            | Neutral graphite surfaces with sage accents; meaningful blue, amber, green and red states retained                           |
 
-Tokens are scoped to `.valo-editorial` in
-[`landing.css`](../artifacts/landing/src/landing.css). The paper is refined
-to a near-white `#f8f8f4`, balanced with a soft botanical-grey outcome band,
-charcoal, a stone contact band and semantic blue, amber and green statuses.
-This keeps warmth without making the platform a one-colour beige template.
+| Token                   | Value                                                        |
+| ----------------------- | ------------------------------------------------------------ |
+| Landing paper           | #f7f8f5                                                      |
+| Workspace canvas        | #f5f6f3                                                      |
+| Work surface            | #ffffff                                                      |
+| Primary ink             | #262925                                                      |
+| Muted ink               | #60655d                                                      |
+| Decorative rule         | #d5d8d0                                                      |
+| Primary action          | #536149                                                      |
+| Sidebar / evidence band | #252b24                                                      |
+| Typography              | Existing Inter with system fallbacks; fixed breakpoint sizes |
+| Landing hero            | 52px desktop, 36px mobile, 32px narrow, 30px short portrait  |
+| Landing sections        | 64px desktop, 40px mobile                                    |
+| Corners                 | 4px public controls; shared workspace corners at most 8px    |
 
-| Token                  | Value                                                 |
-| ---------------------- | ----------------------------------------------------- |
-| Paper                  | #f8f8f4                                               |
-| Stone                  | #e9e6dd                                               |
-| Primary text           | #2e2c27                                               |
-| Secondary text         | #655f54                                               |
-| Dividing rule          | #cbc4b6                                               |
-| Accent                 | #626a50                                               |
-| Evidence background    | #282b25                                               |
-| Typography             | Existing Inter; system fallbacks; no new font request |
-| Desktop hero           | 60px, medium, fixed breakpoint sizes                  |
-| Mobile hero            | 38px; 34px at narrow reflow widths                    |
-| Section spacing        | 104px desktop, 80px tablet, 64px mobile               |
-| Corners                | 2px                                                   |
-| Interaction transition | 180ms; none with reduced motion                       |
-| Action targets         | At least 44px; primary buttons 48px                   |
+Public styles are scoped to `.valo-editorial`; auth uses `.valo-auth`.
+The three signed-in shells opt into `.mi-platform` and use shared semantic
+tokens from `lib/web-ui/src/styles.css`. Legacy teal/gold token names are
+retained as compatibility aliases for existing components. Status colors are
+independent of brand accents.
 
-Audience examples share a stable grid track. The inactive example remains
-in layout but is visually hidden and excluded from the accessibility tree.
-Mobile navigation is an in-flow disclosure, not a modal or overlay; Escape
-restores focus to its trigger. Tabs support arrows, Home and End.
-The enquiry retains values on error, locks fields during submission, blocks
-concurrent submits and focuses the result or reset field after rendering.
+Default theme changes do not remove firm-specific theme overrides.
+Operations, permissions, destinations, API handling and Clerk's human-review
+boundaries are unchanged.
+
+Workspace search captures its opening control for both controlled click triggers
+and keyboard shortcuts, then focuses the input before paint so immediate Escape
+reaches the dialog. Closing restores focus only to a still-connected opener;
+command selection does not steal focus from the destination action. Regression
+tests cover immediate keyboard input, repeated opens, external close, removed
+controls and unmounting.
+
+## Landing Interactions
+
+Business and accountant views share a stable frame. Each has functional
+Overview, Evidence and History tabs, with arrow, Home and End keyboard support.
+Inactive panels retain their layout track but are hidden visually and from
+assistive technology. Sample filenames are not fake download controls.
+
+Mobile navigation remains an in-flow disclosure. Escape restores focus to the
+trigger. Short portrait screens use compact spacing while retaining the complete
+laptop and a hint of the next section. Sign-in remains available in navigation
+when its duplicate hero link is hidden.
+
+The primary action is consistently **Request a demo**, routed to the existing
+enquiry form. This requests contact; it does not create an account or book a
+guaranteed appointment. The form retains values on failure, prevents concurrent
+submissions, and moves focus to the result or reset field.
 
 ## Copy And Availability
 
-Source checks:
+The release flag catalogue, engineering guide and platform/Clerk documentation
+remain the source of truth for capability descriptions. The R0 invoice core is
+distinguished from firm-activated capabilities and planned Buyer Rails.
 
-- [Release flag catalogue](../artifacts/api-server/src/modules/flags/releases.ts):
-  only the R0 invoice, engagement and consent core is enabled by default.
-- [Engineering guide](../CLAUDE.md): access boundaries, supported submission,
-  retained evidence and bounded Clerk intake with human review.
-- [Platform documentation](platform.md) and [Clerk documentation](clerk-ai.md).
-- [Existing contact configuration](../lib/format/src/index.ts): the approved
-  mailbox remains unchanged.
+All sample invoice, client, evidence and activity content is illustrative.
+Internal checks are not authority approvals. No official seal, guarantee,
+customer statistic, certification or launch date is invented. Recording
+payment evidence does not imply custody or guaranteed payment.
 
-Extended capabilities are labelled as rolling out or planned, with firm
-activation caveats. Internal review is never portrayed as authority approval.
-All fictional invoice, client and history data are visibly labelled
-**Illustrative example**. No official seal, guarantee, customer statistic,
-certification or launch date is invented. Payment evidence does not imply
-funds custody or guaranteed payment.
-
-No public privacy or terms destinations were found in the current application.
-No dead links or invented legal policies were added; approved public policies
-remain a separate owner/legal follow-up.
+The approved support mailbox is retained. No public privacy or terms pages
+were invented; approved public legal policies remain a separate owner/legal
+follow-up.
 
 ## Photography
 
-Mode: built-in image generation, new original image; no external image inputs.
-The generated original is preserved outside the repository. Sharp was used
-only for responsive resizing and format optimisation.
+Generated with the built-in image tool. Original PNGs are preserved outside
+the repository. Sharp was used only for resizing and WebP format optimisation.
 
 Project assets:
 
-- [Desktop WebP](../artifacts/landing/public/valo-records-hero.webp):
-  1942 x 809, 83,138 bytes.
-- [Mobile WebP](../artifacts/landing/public/valo-records-mobile.webp):
-  800 x 333, 11,274 bytes.
-- [Social JPEG](../artifacts/landing/public/valo-records-social.jpg):
-  1200 x 630, 75,895 bytes.
+- `artifacts/landing/public/valo-workspace-hero.webp`: 1942 x 809,
+  91,120 bytes.
+- `artifacts/landing/public/valo-workspace-mobile.webp`: 1200 x 600,
+  66,890 bytes.
 
-Generation prompt:
+Earlier `valo-records-*` assets and the social image remain for compatibility;
+the landing hero now uses the new workspace image pair.
 
-> Create one original photorealistic editorial photograph for Valo, a Nigerian
-> invoicing software brand, as an ultra-wide landscape website hero background
-> approximately 2.4:1. Premium architectural editorial photography, thoughtful
-> working desk, tactile but modern. Camera 35-degree overhead oblique view.
-> A very pale neutral grey limestone work surface fills the image edge to edge,
-> subtle natural texture, soft late morning directional window light. Critical
-> composition: left 53 percent completely empty pale stone with very even light
-> and no objects or strong shadows, reserved for dark HTML headline overlay.
-> On the right 47 percent: a neatly aligned stack of two ivory invoice sheets
-> with tiny abstract grey document rules but no readable text, one slim dark
-> graphite pen parallel to the papers, and upper far right corner a restrained
-> cropped silver laptop keyboard and small screen edge. The actual readable
-> software interface will be separate HTML; do not draw a dashboard or add any
-> readable labels. Paper and pen are the main subject, elegantly arranged not
-> scattered. Subtle shadow runs to lower right only. Warm natural light balanced
-> with cool neutral stone and black objects, not orange or sepia. Sharp useful
-> objects, no blur or vignette. Serious digital business, quiet order. No people,
-> plants, skincare, bottles, logos, money, decorative objects, government seals,
-> watermarks, text or typography. The photograph itself fills the canvas,
-> no frames or borders.
+Desktop generation prompt:
 
-## Verification And Preview
+> Create one original photorealistic product editorial photograph for the Valo invoicing software website, very wide landscape 2.4:1. A continuous pale neutral-grey limestone desk and softly lit wall fill the entire canvas. Critical website composition: the left 48 percent is evenly lit EMPTY pale grey wall/desk with no objects and no shadows, reserved for a live dark HTML headline. On the RIGHT half is a complete open thin graphite laptop, photographed almost front-on at a slight three-quarter angle, fully visible with screen and keyboard, occupying about 40 percent of total canvas width. Its screen displays a crisp restrained modern invoice workspace: white background, thin grey rules, narrow pale sidebar, small wordmark 'Valo', heading 'Invoices', four rows of fictional invoices for 'Ade Studio', 'Northline Trading', 'Kola Works', 'Ife Design', labelled 'Draft', 'Needs review', 'Checked', 'Draft' with subtle blue, amber and green status labels. No official approvals, tax authority stamps, seals, promises, or real client data. The screen is the main subject and must be recognisably software, sharp not blurred; it is an illustrative product scene. To the right foreground one simple neutral grey notebook and black pen, behind the laptop a small sprig of olive leaves in a matte pale ceramic vase. Understated sunlight, very soft natural shadows, authentic materials, refined Nigerian business workspace with quiet order. Balanced neutral-white, graphite, restrained olive with a tiny blue UI accent. NOT warm sepia, beige-dominated, dark, glossy CGI, stock office boardroom, bokeh, gradients, or decorative orbs. No text anywhere outside the laptop screen, no headline, no watermarks, no frames, no borders, no collage. Leave the complete left half calm and empty for website content; photograph fills the canvas.
 
-The browser suite lives in
-[`accessibility.test.mjs`](../artifacts/landing/e2e/accessibility.test.mjs).
-It covers the landing page and unchanged login at 320, 390, 768, 1440 and
-1920 px, default and alternative audience views, the mobile menu, readiness
-failure, keyboard navigation, enquiry failure/retry/concurrency/success and
-long contact details. API responses are intercepted locally; no live user
-data or live enquiry submissions are involved.
+Mobile image-edit prompt, using the generated desktop original as reference:
 
-Generated screenshots and axe reports are ignored under
-`artifacts/landing/tmp/accessibility/`. Automated axe and reflow checks
-support the WCAG 2.2 AA target; they are not a conformance certification or
-a substitute for assistive-technology testing with users.
+> Create a responsive mobile hero variant of this original photograph, aspect ratio 2:1 landscape. Preserve the exact photo style, neutral grey stone, graphite laptop, illustrative Valo invoice screen, notebook, pen and olive sprig. Reframe tightly around the COMPLETE laptop, showing its whole screen and whole keyboard without clipping, with some vase on the right and notebook in foreground. Remove almost all of the empty left half; the laptop should occupy about 70 percent of the width, centered. No headline, no extra text, no borders, no extra devices or people. Keep screen data fictitious and no government approvals. Same bright neutral exposure, not sepia or blurry. This is the mobile version of the same photographed workspace, not a webpage mockup.
 
-The localhost-only preview serves the landing, existing login and unchanged
-calculator builds. Its API deliberately returns an unavailable response:
-login cannot authenticate and enquiries cannot be delivered in this preview.
-This is separate from production availability. Browser tests exercise those
-UI states using explicit local fixtures. Mail links remain real destinations.
+## Verification
 
-Production integration tests and the immutable seven-app release pipeline must
-run when this work is reviewed and approved for release. The current staged
-artifact is not reused or changed by this design work.
+Automated checks use synthetic local fixtures, not real user data or live
+enquiry submissions. Browser screenshots and axe reports are ignored under
+`artifacts/landing/tmp/accessibility/` and `tmp/platform-refinement/`.
 
-Completed locally on 8 September 2026:
+- `pnpm run check`: architecture, secrets, docs, brand, workspace typechecks,
+  lint and unit/pure API tests. Two existing hook-dependency warnings remain in
+  the unchanged SME invoice-draft helper.
+- Landing browser suite: public and login layouts at 320, 390, 768, 1440 and
+  1920 px; both audiences and all record views; keyboard focus, mobile menu,
+  readiness failure, enquiry failure/retry/concurrency/success and long inputs.
+- Additional short-window checks: 320 x 568, 375 x 667, 740 x 731,
+  1000 x 800 and 1920 x 800.
+- Shared platform browser matrix: Console, SME and Buyer Today views at 320,
+  768 and 1360 px in light and dark themes; reflow, focus and control dimensions.
+- Existing fixture suites cover activity, Clerk/WHT, filing/branding,
+  notification controls, usability and customer recovery.
 
-- `pnpm run check`: passed (two existing hook-dependency warnings in the
-  unchanged SME invoice-draft helper).
-- Landing production build: passed. The existing label component produces
-  a non-blocking sourcemap warning.
-- Landing browser matrix: 12 tests passed with no reported accessibility issues.
-- Actual localhost calculator and login destinations checked; the direct
-  accountant anchor selects the correct view.
-- Screenshot inspection: desktop, tablet, mobile, navigation and product states.
+Completed locally on 8 September 2026: the full quality gate and all five web
+builds passed. Public/login browser checks passed 13 tests; the signed-in visual
+matrix passed all 18 scenarios; the expanded Clerk/WHT matrix passed 36 scenarios
+in both themes, including the floating panel. Activity, recovery, usability,
+notification, filing/branding and calculator-loading regressions also passed.
+Screenshot review covered landing, auth, all three workspace shells, Clerk and
+the dock. Dock screenshots are taken after the opening animation settles, with
+an explicit viewport-boundary assertion.
 
-The full DB-backed and production integration suite was not run for this
-public-page-only preview.
+Axe and reflow checks support WCAG 2.2 AA expectations but are not a
+conformance certification or a substitute for testing with assistive
+technology users. The complete database-backed and production integration
+suite must run through CI before publishing this source.
+
+## Local Preview And Release
+
+The localhost-only preview serves the new landing and sign-in bundles. Its
+API deliberately returns an unavailable response: login cannot authenticate
+and enquiries cannot be delivered from this design preview. This is separate
+from production availability. Browser fixtures exercise signed-in views
+without real accounts; they are not an authentication bypass in the application.
+
+Production and Replit's staged release are untouched. A subsequent approved
+release must use a fresh immutable seven-app CI artifact for the exact merged
+source, including its new manifest and sidecar. Locally rebuilt bundles must
+not be substituted into the previously staged artifact.

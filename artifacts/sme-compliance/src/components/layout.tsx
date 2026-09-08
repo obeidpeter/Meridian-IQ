@@ -725,7 +725,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--mi-canvas)] lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="mi-platform min-h-screen bg-[var(--mi-canvas)] lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
       <CommandMenu
         items={commandItems}
         open={commandOpen}
@@ -741,7 +741,7 @@ export function Layout({ children }: { children: ReactNode }) {
       />
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--mi-gold-bright)] focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[var(--mi-ink)]"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:min-h-11 focus:rounded-md focus:bg-[var(--mi-sidebar-accent)] focus:px-4 focus:py-3 focus:text-sm focus:font-bold focus:text-[#262925]"
       >
         Skip to content
       </a>
@@ -818,7 +818,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <CircleHelp aria-hidden="true" />
               <span>Help</span>
             </Link>
-            <NotificationBell />
+            <NotificationBell triggerClassName="text-foreground hover:text-foreground focus-visible:text-foreground" />
             <span className="mi-topbar__divider" aria-hidden="true" />
             <SessionOperationRecovery
               me={me}

@@ -13,13 +13,10 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
 
-// The Clerk product shell: Clerk pages render full-bleed inside this dark rail
-// instead of the standard console Layout, so the AI workspace reads as its own
-// focused surface (matching the product design). The rail is deliberately
-// dark-on-teal in BOTH color schemes; content inherits the app theme.
+// Clerk keeps its own navigation and identity within the shared platform palette.
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9cf78] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e4c45]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mi-sidebar-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mi-sidebar)]";
 
 const NAV = [
   { href: "/clerk", label: "Intake queue", icon: ListChecks },
@@ -47,11 +44,10 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
           href={href}
           aria-current={isActive(href) ? "page" : undefined}
           data-testid={`clerk-nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
-          className={`flex min-h-10 snap-start items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${FOCUS_RING} ${
-            isActive(href)
-              ? "bg-[#c9a227] font-bold text-[#0e2f2a]"
-              : "font-medium text-white/68 hover:bg-white/8 hover:text-white"
-          }`}
+          className="mi-nav__link snap-start whitespace-nowrap"
+          style={
+            orientation === "row" ? { width: "auto", flexShrink: 0 } : undefined
+          }
         >
           <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
           {label}
@@ -63,17 +59,13 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5 px-2">
-      <span className="grid size-9 place-items-center rounded-md bg-[#c9a227] text-[#0e2f2a]">
+    <div className="mi-brand">
+      <span className="mi-brand__mark">
         <FileCheck2 className="size-5" aria-hidden="true" />
       </span>
       <span>
-        <span className="block text-base font-extrabold leading-none text-white">
-          Clerk AI
-        </span>
-        <span className="mt-1 block text-xs font-semibold text-white/75">
-          Governed operations
-        </span>
+        <span className="mi-brand__name block">Clerk AI</span>
+        <span className="mi-brand__caption">Governed operations</span>
       </span>
     </div>
   );
@@ -81,40 +73,41 @@ function Brand() {
 
 export function ClerkShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f3f6f5] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="mi-platform min-h-screen bg-[var(--mi-canvas)] md:grid md:grid-cols-[17rem_minmax(0,1fr)]">
       <a
         href="#clerk-main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:min-h-11 focus:rounded-md focus:bg-primary focus:px-4 focus:py-3 focus:text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mi-teal)]"
       >
         Skip to content
       </a>
 
       {/* Mobile: compact top bar with horizontal nav. */}
-      <header className="bg-[#0e4c45] md:hidden">
+      <header className="bg-[var(--mi-sidebar)] md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <Brand />
           <Link
             href="/"
-            className={`grid size-9 place-items-center rounded-md border border-white/15 text-white/75 hover:bg-white/8 hover:text-white ${FOCUS_RING}`}
+            className={`grid size-11 shrink-0 place-items-center rounded-md text-[var(--mi-sidebar-ink)] hover:bg-[var(--mi-sidebar-active)] hover:text-[var(--mi-sidebar-accent)] ${FOCUS_RING}`}
             aria-label="Back to console"
+            title="Back to console"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
           </Link>
         </div>
-        <div className="border-t border-white/10 px-3 py-2">
+        <div className="border-t border-[var(--mi-sidebar-line)] px-3 py-2">
           <NavLinks orientation="row" />
         </div>
       </header>
 
       {/* Desktop rail. */}
-      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col bg-[#0e4c45] px-3 py-5 md:flex">
+      <aside className="sticky top-0 hidden h-screen min-h-screen flex-col bg-[var(--mi-sidebar)] px-3 py-5 md:flex">
         <div>
           <Brand />
-          <div className="mt-5 border-l-2 border-[#c9a227] pl-3">
-            <p className="text-xs font-bold text-white">
+          <div className="mt-5 border-l-2 border-[var(--mi-sidebar-accent)] pl-3">
+            <p className="text-xs font-semibold text-[var(--mi-sidebar-accent)]">
               AI operations workspace
             </p>
-            <p className="mt-1 text-xs leading-4 text-white/75">
+            <p className="mt-1 text-xs leading-5 text-[var(--mi-sidebar-ink)]">
               Intake, evidence and governed review
             </p>
           </div>
@@ -122,14 +115,14 @@ export function ClerkShell({ children }: { children: ReactNode }) {
         <div className="mt-7 min-h-0 flex-1 overflow-y-auto">
           <NavLinks orientation="column" />
         </div>
-        <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
-          <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-[#e9cf78]">
+        <div className="mt-auto space-y-2 border-t border-[var(--mi-sidebar-line)] pt-4">
+          <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--mi-sidebar-accent)]">
             <ShieldCheck className="size-4" aria-hidden="true" />
             Human review on
           </div>
           <Link
             href="/"
-            className={`flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white ${FOCUS_RING}`}
+            className="mi-nav__link"
             data-testid="clerk-back-to-console"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -139,14 +132,14 @@ export function ClerkShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 hidden min-h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-8 backdrop-blur md:flex lg:px-10">
+        <header className="sticky top-0 z-20 hidden min-h-16 flex-wrap items-center justify-between gap-3 border-b border-[var(--mi-line)] bg-[var(--mi-paper)] px-8 py-3 md:flex lg:px-10">
           <div>
-            <p className="text-[11px] font-bold text-teal-700">Clerk AI</p>
-            <p className="mt-0.5 text-sm font-extrabold text-slate-950">
+            <p className="mi-eyebrow">Clerk AI</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--mi-ink)]">
               Governed operations
             </p>
           </div>
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--mi-positive)] bg-[var(--mi-positive-soft)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--mi-positive)]">
             <ShieldCheck className="size-3.5" aria-hidden="true" />
             Human reviewed
           </span>
@@ -183,8 +176,8 @@ export function ClerkDisabledBanner({ children }: { children: ReactNode }) {
 }
 
 /**
- * The shared page header: tracked teal eyebrow over the title, with an
- * optional right-hand slot (the Guardrails pill on the intake page).
+ * Clerk's page header follows workspace typography and keeps its optional
+ * right-hand slot (the Guardrails pill on the intake page).
  */
 export function ClerkPageHeader({
   eyebrow,
@@ -200,22 +193,19 @@ export function ClerkPageHeader({
   right?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <p className="text-xs font-bold text-primary">{eyebrow}</p>
-        <h1
-          className="mt-1 text-2xl font-extrabold md:text-3xl"
-          data-testid={titleTestId}
-        >
-          {title}
-        </h1>
+    <div className="mi-workspace-header flex-wrap">
+      <div className="mi-workspace-header__copy">
+        <p className="mi-eyebrow">{eyebrow}</p>
+        <div className="mi-workspace-header__title-row">
+          <h1 data-testid={titleTestId}>{title}</h1>
+        </div>
         {description ? (
-          <p className="mt-1.5 text-sm text-muted-foreground max-w-xl">
-            {description}
-          </p>
+          <p className="mi-workspace-header__description">{description}</p>
         ) : null}
       </div>
-      {right}
+      {right ? (
+        <div className="mi-workspace-header__actions">{right}</div>
+      ) : null}
     </div>
   );
 }

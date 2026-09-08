@@ -211,6 +211,8 @@ try {
           ];
           if (routeName === "clerk")
             focusTargets.push(
+              page.getByRole("link", { name: "Open review queue", exact: true }),
+              page.getByRole("link", { name: "Detailed health", exact: true }),
               page.getByRole("link", { name: "Open", exact: true }).first(),
             );
           for (const [index, target] of focusTargets.entries()) {
@@ -250,8 +252,17 @@ try {
                   );
               };
               const ring = style.getPropertyValue("--tw-ring-color").trim();
+              const outline = {
+                style: style.outlineStyle,
+                color: style.outlineColor,
+                width: Number.parseFloat(style.outlineWidth),
+                offset: Number.parseFloat(style.outlineOffset),
+              };
+              const hasOutline =
+                outline.style === "solid" && outline.width >= 2;
+              const indicatorColor = hasOutline ? outline.color : ring;
               const background = getComputedStyle(surface).backgroundColor;
-              const levels = [luminance(ring), luminance(background)];
+              const levels = [luminance(indicatorColor), luminance(background)];
               return {
                 text: element.textContent.trim(),
                 focused:
@@ -259,6 +270,9 @@ try {
                   element.matches(":focus-visible"),
                 shadow: style.boxShadow,
                 ring,
+                outline,
+                hasOutline,
+                indicatorColor,
                 background,
                 contrast:
                   (Math.max(...levels) + 0.05) / (Math.min(...levels) + 0.05),
@@ -267,8 +281,8 @@ try {
             focusStates.push(state);
             if (
               !state.focused ||
-              state.shadow === "none" ||
-              !state.ring ||
+              (!state.hasOutline && state.shadow === "none") ||
+              !state.indicatorColor ||
               state.contrast < 3
             )
               issues.push(`Focus indicator: ${JSON.stringify(state)}`);

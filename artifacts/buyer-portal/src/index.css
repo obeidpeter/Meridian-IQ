@@ -44,76 +44,56 @@
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
 }
 
 :root {
-  --background: 210 20% 98%;
-  --foreground: 216 34% 12%;
-
+  --background: 80 14.285714% 95.882353%;
+  --foreground: 105 5.128205% 15.294118%;
   --card: 0 0% 100%;
-  --card-foreground: 216 34% 12%;
-  --card-border: 212 20% 88%;
-
+  --card-foreground: 105 5.128205% 15.294118%;
+  --card-border: 82.5 9.302326% 83.137255%;
   --popover: 0 0% 100%;
-  --popover-foreground: 216 34% 12%;
-  --popover-border: 212 20% 88%;
-
-  --primary: 205 74% 36%;
+  --popover-foreground: 105 5.128205% 15.294118%;
+  --popover-border: 82.5 9.302326% 83.137255%;
+  --primary: 95 14.117647% 33.333333%;
   --primary-foreground: 0 0% 100%;
-
-  --secondary: 210 18% 94%;
-  --secondary-foreground: 216 34% 12%;
-
-  --muted: 210 18% 94%;
-  --muted-foreground: 215 14% 40%;
-
-  --accent: 190 60% 90%;
-  --accent-foreground: 205 74% 26%;
-
+  --secondary: 85.714286 18.918919% 92.745098%;
+  --secondary-foreground: 105 5.128205% 15.294118%;
+  --muted: 85.714286 18.918919% 92.745098%;
+  --muted-foreground: 97.5 4.123711% 38.039216%;
+  --accent: 84 18.518519% 89.411765%;
+  --accent-foreground: 105 5.128205% 15.294118%;
   --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
-
-  --border: 212 20% 88%;
-  --input: 212 20% 84%;
-  --ring: 205 74% 38%;
-
+  --border: 82.5 9.302326% 83.137255%;
+  --input: 91.764706 6.719368% 49.607843%;
+  --ring: 95 14.117647% 33.333333%;
   --radius: 0.5rem;
 }
 
 .dark {
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
-
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
-
-  /* Bold deliberate color: the buyer portal's corporate sky blue,
-     hue-aligned with the light-mode primary (205) and lifted for dark
-     surfaces */
-  --primary: 205 74% 52%;
-  --primary-foreground: 222 47% 11%;
-
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 98%;
-
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 65%;
-
-  --accent: 205 74% 22%;
-  --accent-foreground: 190 60% 90%;
-
+  --background: 150 3.571429% 10.980392%;
+  --foreground: 84 17.241379% 94.313725%;
+  --card: 140 4% 14.705882%;
+  --card-foreground: 84 17.241379% 94.313725%;
+  --card-border: 111.428571 4.895105% 28.039216%;
+  --popover: 140 4% 14.705882%;
+  --popover-foreground: 84 17.241379% 94.313725%;
+  --popover-border: 111.428571 4.895105% 28.039216%;
+  --primary: 85.384615 18.571429% 72.54902%;
+  --primary-foreground: 105 5.128205% 15.294118%;
+  --secondary: 96 10.204082% 19.215686%;
+  --secondary-foreground: 84 17.241379% 94.313725%;
+  --muted: 96 10.204082% 19.215686%;
+  --muted-foreground: 96.923077 7.784431% 67.254902%;
+  --accent: 96 10.204082% 19.215686%;
+  --accent-foreground: 85.384615 18.571429% 72.54902%;
   --destructive: 0 62% 30%;
-  --destructive-foreground: 210 40% 98%;
-
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 205 74% 52%;
+  --destructive-foreground: 84 17.241379% 94.313725%;
+  --border: 111.428571 4.895105% 28.039216%;
+  --input: 92 6.437768% 54.313725%;
+  --ring: 85.384615 18.571429% 72.54902%;
 }
 
 @layer base {
