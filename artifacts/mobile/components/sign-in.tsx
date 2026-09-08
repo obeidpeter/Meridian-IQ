@@ -298,13 +298,13 @@ const styles = StyleSheet.create({
   logo: {
     width: 72,
     height: 72,
-    backgroundColor: "#0f766e",
+    backgroundColor: "#536149",
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   logoShadow: {
-    shadowColor: "#0f766e",
+    shadowColor: "#536149",
     shadowOpacity: 0.25,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },

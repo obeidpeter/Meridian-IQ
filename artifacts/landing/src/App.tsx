@@ -1731,7 +1731,7 @@ function AccessPortal({
       <header className="auth-header">
         <a href="/" className="auth-brand" aria-label="Valo home">
           <span className="auth-brand-mark">
-            <ValoMark className="size-5" aria-hidden="true" />
+            <ValoMark className="size-8" aria-hidden="true" />
           </span>
           <span className="auth-brand-name">Valo</span>
         </a>

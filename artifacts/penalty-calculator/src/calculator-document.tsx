@@ -25,11 +25,11 @@ export function CalculatorDocument() {
             aria-label="Valo home"
             className={`inline-flex items-center gap-3 rounded-md ${FOCUS_RING}`}
           >
-            <div className="rounded-md bg-lime-300 p-1.5 text-[#071a1c]">
-              <ValoMark className="h-5 w-5" aria-hidden="true" />
+            <div className="text-white">
+              <ValoMark className="h-8 w-8" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-base font-bold leading-none">Valo</p>
+              <p className="text-base font-semibold leading-none">Valo</p>
               <p className="text-xs leading-tight text-white/70">
                 Compliance planning tools
               </p>
