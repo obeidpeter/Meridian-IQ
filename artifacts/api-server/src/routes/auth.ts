@@ -75,12 +75,12 @@ function resetLink(token: string): string {
   const configured = process.env.PUBLIC_APP_URL?.trim();
   let base: URL;
   try {
-    base = new URL(configured || "https://valo.replit.app");
+    base = new URL(configured || "https://valo-platform.replit.app");
     if (base.protocol !== "https:" && process.env.NODE_ENV === "production") {
       throw new Error("production app URL must use https");
     }
   } catch {
-    base = new URL("https://valo.replit.app");
+    base = new URL("https://valo-platform.replit.app");
   }
   const link = new URL("/reset-password", base);
   link.hash = `token=${encodeURIComponent(token)}`;

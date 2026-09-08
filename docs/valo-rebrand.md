@@ -66,8 +66,9 @@ This cache cleanup is not a session or persisted-work reset.
 - **Repository identity:** `obeidpeter/Meridian-IQ` and its existing repository
   URLs remain unchanged. A GitHub display-name/description update does not
   authorize renaming the repository slug or rewriting links.
-- **External destinations:** the project owner selected `valo.replit.app` as
-  the replacement application domain. `advisory@meridianiq.com` remains pending
+- **External destinations:** the project owner selected `valo-platform.replit.app`
+  as the replacement application domain after the shorter name was unavailable.
+  `advisory@meridianiq.com` remains pending
   a user-supplied, verified replacement. Do not infer a new mailbox from the
   Valo name, and do not use `valo.example` as a production destination.
 - **Database contracts:** retain `meridian_app`, `meridian_tenant_isolation`,
@@ -110,7 +111,7 @@ completed by source edits or documentation checks.
 
 - [ ] Update the GitHub project/repository display description while retaining
   `obeidpeter/Meridian-IQ`. The Replit project display name is Valo.
-- [ ] Publish the renamed project so `valo.replit.app` becomes live. Verify
+- [ ] Publish the renamed project so `valo-platform.replit.app` becomes live. Verify
   routing, TLS, redirects, app links, allowed origins, and mobile API targets;
   coordinate `PUBLIC_APP_URL` and deployment settings with that selected URL.
 - [ ] Keep `advisory@meridianiq.com` until a replacement is supplied and verified.
@@ -143,6 +144,37 @@ completed by source edits or documentation checks.
 
 For local documentation validation, run `pnpm run docs:check`. Application,
 integration, and deployment checks remain separate release evidence.
+
+### Replit hostname cutover
+
+The generated hostname is separate from the project display name. Replit's
+initial publishing form reported `valo-platform.replit.app` available on
+2026-09-08 in an empty, unpublished temporary project. Availability is not a
+reservation; recheck it before the approved production cutover.
+
+Prepare a fresh seven-app CI artifact for the exact merged revision before
+unpublishing the existing deployment. Preserve its verified package and release
+evidence. Shutdown removes the saved hostname and deployment history; it does
+not provide an automatic redirect from the old hostname.
+
+Reuse the existing production database and its enforced geography. Never delete
+the retained database to satisfy the new-publish form, create a substitute, or
+copy development data over production. Preserve credentials and relative Clerk
+proxy paths. Set `PUBLIC_APP_URL` and `RELEASE_BASE_URL` to the selected origin;
+check any explicit `SWEEP_URL` and external provider callbacks/allowlists.
+
+Finalize the trusted `RELEASE_MANIFEST_SHA256` setting and verify its actual
+workspace-sync behavior before staging. Settings changes can restart development
+workflows and regenerate ignored build output. Stop all seven workflows, replace
+all seven complete `dist` trees and the manifest/sidecar with the exact CI archive,
+and rerun all artifact-only gates immediately before publication. Do not rebuild
+locally, bypass the gates, or rely on a failed publish to retain edited settings.
+
+Verify health, readiness, all public asset hashes, routing, allowed origins and
+database continuity at the new hostname. Host-only browser sessions do not move
+between hostnames; users must sign in again. Installed native builds and external
+bookmarks/callbacks also require deliberate updates. Keep the external checklist
+open until those checks have supporting evidence.
 
 ## Local verification (2026-09-07)
 
