@@ -209,13 +209,42 @@ async function assertRasterMatch(page, actual, expected, file) {
       const a = await pixels(actual);
       const b = await pixels(expected);
       if (a.width !== b.width || a.height !== b.height) return 1;
+      // Chromium's platform rasterizers differ at edges. Permit interpolation
+      // within one pixel, symmetrically, without relaxing solid color/geometry.
+      function withinEdgeRange(from, to, index) {
+        const x = (index / 4) % from.width;
+        const y = Math.floor(index / 4 / from.width);
+        for (let channel = 0; channel < 4; channel++) {
+          let min = 255;
+          let max = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (
+                x + dx < 0 ||
+                x + dx >= to.width ||
+                y + dy < 0 ||
+                y + dy >= to.height
+              )
+                continue;
+              const value =
+                to.data[((y + dy) * to.width + x + dx) * 4 + channel];
+              min = Math.min(min, value);
+              max = Math.max(max, value);
+            }
+          }
+          const value = from.data[index + channel];
+          if (value < min - 12 || value > max + 12) return false;
+        }
+        return true;
+      }
       let different = 0;
       for (let i = 0; i < a.data.length; i += 4) {
         if (
           [0, 1, 2, 3].some(
             (channel) =>
               Math.abs(a.data[i + channel] - b.data[i + channel]) > 12,
-          )
+          ) &&
+          !(withinEdgeRange(a, b, i) && withinEdgeRange(b, a, i))
         )
           different++;
       }
@@ -230,6 +259,36 @@ async function assertRasterMatch(page, actual, expected, file) {
     difference < 0.002,
     `${file}: raster does not match current ribbon/vector (${difference})`,
   );
+}
+
+async function verifyRasterRejections(page, expected) {
+  const fixtures = await page.evaluate(async (data) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${data}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d");
+    const blank = canvas.toDataURL().split(",")[1];
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
+    context.drawImage(image, 0, 0);
+    const mirrored = canvas.toDataURL().split(",")[1];
+    context.resetTransform();
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0);
+    context.globalCompositeOperation = "source-in";
+    context.fillStyle = "#ff0000";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return { blank, mirrored, recolored: canvas.toDataURL().split(",")[1] };
+  }, expected.toString("base64"));
+  for (const [name, bytes] of Object.entries(fixtures))
+    await assert.rejects(
+      assertRasterMatch(page, Buffer.from(bytes, "base64"), expected, name),
+      /raster does not match/,
+      `must reject ${name} logo`,
+    );
 }
 
 async function fontCss() {
@@ -673,6 +732,10 @@ try {
     const expected = new Map();
     await generateIcons(page, expected);
     await generateLogoPreviews(page, vectors, expected);
+    await verifyRasterRejections(
+      page,
+      expected.get(`${brandDir}/valo-logo.png`),
+    );
     for (const [file, bytes] of expected)
       await assertRasterMatch(
         page,
