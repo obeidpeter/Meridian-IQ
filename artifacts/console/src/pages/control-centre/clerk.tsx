@@ -77,7 +77,7 @@ export function ClerkAssuranceWorkspace() {
         />
       </MetricStrip>
 
-      <section className="grid gap-5 rounded-lg border border-emerald-800 bg-emerald-900 px-5 py-5 text-white lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
+      <section className="grid gap-5 rounded-lg border border-emerald-800 bg-emerald-900 px-5 py-5 text-white [--mi-control-focus:#c6d1b9] lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
         <span className="grid size-11 place-items-center rounded-md bg-[#c9a227] text-[#0e2f2a]">
           <ShieldCheck className="size-5" aria-hidden="true" />
         </span>
@@ -99,7 +99,7 @@ export function ClerkAssuranceWorkspace() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_20rem]">
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white [--mi-control-focus:#536149]">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-extrabold text-slate-950">
