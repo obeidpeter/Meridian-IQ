@@ -77,7 +77,9 @@ These checks cannot be truthfully completed by source code alone:
 
 The [Valo external rollout checklist](valo-rebrand.md#external-rollout-checklist)
 also requires deployment-owner verification. The project owner selected
-`valo.replit.app` as the replacement application domain. Keep
+`valo-platform.replit.app` as the replacement application domain. Replit's
+publishing form confirmed availability on 2026-09-08; this is not a reservation
+or evidence that the hostname cutover is complete. Keep
 `advisory@meridianiq.com` until the user supplies a verified mailbox replacement.
 
 1. Verify that mail sent to `advisory@meridianiq.com` is received, triaged, and

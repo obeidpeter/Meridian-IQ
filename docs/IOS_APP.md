@@ -73,11 +73,13 @@ eas submit --platform ios
 ```
 
 EAS uploads the build to App Store Connect; add testers under TestFlight. The
-production build talks to the deployed API at `valo.replit.app`, so make sure
+production build talks to the deployed API at `valo-platform.replit.app`, so make sure
 the project is published.
 
-The Valo project rename establishes the target public URL; publish the renamed
-project before distributing a build that uses this API target.
+Renaming the Replit project does not rename its published hostname. Confirm
+`valo-platform.replit.app` is live and verified before distributing a build
+that uses this API target. Existing installed native builds retain their compiled
+API target until an appropriate native update is distributed.
 
 ## Verifying push notifications on iPhone
 

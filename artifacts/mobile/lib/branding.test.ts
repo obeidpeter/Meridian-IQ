@@ -20,7 +20,24 @@ test("Valo display branding preserves installed-app and deployment identities", 
   assert.deepEqual(config.scheme, ["mobile", "valo"]);
   const eas = JSON.parse(read("eas.json"));
   for (const profile of ["development", "preview", "production"]) {
-    assert.equal(eas.build[profile].env.EXPO_PUBLIC_DOMAIN, "valo.replit.app");
+    assert.equal(
+      eas.build[profile].env.EXPO_PUBLIC_DOMAIN,
+      "valo-platform.replit.app",
+    );
+  }
+});
+
+test("public Replit defaults match the reviewed mobile production domain", () => {
+  const eas = JSON.parse(read("eas.json"));
+  const origin = `https://${eas.build.production.env.EXPO_PUBLIC_DOMAIN}`;
+  for (const file of [
+    "artifacts/api-server/src/routes/auth.ts",
+    "scripts/src/ops/sweep-ping.mjs",
+  ]) {
+    const source = readFileSync(join(repoRoot, file), "utf8");
+    const origins = source.match(/https:\/\/[a-z0-9-]+\.replit\.app\b/g) ?? [];
+    assert.ok(origins.length > 0, `${file}: public URL default is present`);
+    assert.deepEqual(new Set(origins), new Set([origin]), file);
   }
 });
 
