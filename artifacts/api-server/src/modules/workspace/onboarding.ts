@@ -61,7 +61,16 @@ export async function firstInvoiceSetup(
   const firmId = requireFirmScope(principal);
   const clientId = clientPartyScope(principal);
   // A single deterministic supplier/invoice anchors the journey. Different
-  // clients' records must never combine into one apparently completed setup.
+  // clients' records must never combine into one apparently completed setup,
+  // and both roles anchor only to a client this firm still engages: an
+  // archived client cannot supply setup proof for a firm user or for its own
+  // client user (R114 aligned the client branch with the firm branch).
+  const liveEngagement = sql`exists (
+        select 1 from ${engagementsTable}
+        where ${engagementsTable.firmId} = ${firmId}
+          and ${engagementsTable.clientPartyId} = ${partiesTable.id}
+          and ${engagementsTable.status} <> 'archived'
+      )`;
   const [supplier] = await getDb()
     .select({
       id: partiesTable.id,
@@ -77,13 +86,8 @@ export async function firstInvoiceSetup(
         isNull(partiesTable.mergedIntoId),
         eq(partiesTable.type, "client_business"),
         clientId
-          ? eq(partiesTable.id, clientId)
-          : sql`exists (
-        select 1 from ${engagementsTable}
-        where ${engagementsTable.firmId} = ${firmId}
-          and ${engagementsTable.clientPartyId} = ${partiesTable.id}
-          and ${engagementsTable.status} <> 'archived'
-      )`,
+          ? and(eq(partiesTable.id, clientId), liveEngagement)
+          : liveEngagement,
       ),
     )
     .orderBy(asc(partiesTable.createdAt), asc(partiesTable.id))

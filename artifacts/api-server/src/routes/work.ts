@@ -23,6 +23,7 @@ import {
   UpdateWorkItemResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { pageBounds } from "../lib/page";
 import { isUuid } from "../lib/uuid";
 import {
   assertCan,
@@ -120,9 +121,13 @@ router.get("/work-items", async (req, res): Promise<void> => {
 router.get("/work-items/page", async (req, res): Promise<void> => {
   assertCan(req.principal, "work.read");
   const query = parseOrThrow(ListWorkItemsPageQueryParams, req.query);
+  // Bounded read (R114): the contract's default and ceiling are restated
+  // through the one home for list bounds, so lib/page.ts governs this route
+  // like every other list.
+  const { limit } = pageBounds(query, { defaultLimit: 50, maxLimit: 100 });
   res.json(
     ListWorkItemsPageResponse.parse(
-      await listWorkItemPage(req.principal, query),
+      await listWorkItemPage(req.principal, { ...query, limit }),
     ),
   );
 });

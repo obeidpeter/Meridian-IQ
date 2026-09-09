@@ -6,14 +6,29 @@
  * OpenAPI spec version: 0.102.0
  */
 
+/**
+ * Counts over the caller's whole scoped population, computed in SQL before the ranked list is limited, so they are independent of how many items the response carries and of the limit requested. The buckets overlap: an item can be both urgent and blocked.
+ */
 export interface WorkspaceTodaySummary {
-  /** @minimum 0 */
+  /**
+     * Every open item in scope across all sources, not the length of items.
+     * @minimum 0
+     */
   total: number;
-  /** @minimum 0 */
+  /**
+     * Items at the top rank: failed submissions and overdue deadlines, plus work marked urgent.
+     * @minimum 0
+     */
   urgent: number;
-  /** @minimum 0 */
+  /**
+     * Items due within the next three days (Lagos calendar), including today.
+     * @minimum 0
+     */
   dueSoon: number;
-  /** @minimum 0 */
+  /**
+     * Items whose status is blocked or failed. A failed item is counted here and in urgent.
+     * @minimum 0
+     */
   blocked: number;
   /** @minimum 0 */
   completedSetupSteps: number;
