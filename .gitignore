@@ -51,3 +51,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# api-server coverage output (R118); the floors file beside it is tracked
+artifacts/api-server/coverage/

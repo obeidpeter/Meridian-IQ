@@ -1,0 +1,55 @@
+{
+  "areas": {
+    "auth": {
+      "paths": [
+        "src/modules/auth/**",
+        "src/middleware/principal.ts",
+        "src/middleware/rate-limit.ts",
+        "src/middleware/request-policy.ts",
+        "src/lib/op-token.ts"
+      ],
+      "floors": {
+        "lines": 96,
+        "branches": 84
+      }
+    },
+    "tenancy": {
+      "paths": ["src/app.ts", "src/lib/client-scope.ts", "src/lib/page.ts"],
+      "floors": {
+        "lines": 91,
+        "branches": 78
+      }
+    },
+    "money": {
+      "paths": [
+        "src/lib/money.ts",
+        "src/modules/invoice/**",
+        "src/modules/billing/**"
+      ],
+      "floors": {
+        "lines": 95,
+        "branches": 85
+      }
+    },
+    "clerk-gateway": {
+      "paths": [
+        "src/modules/clerk/gateway.ts",
+        "src/modules/clerk/provider.ts",
+        "src/modules/clerk/budget.ts",
+        "src/modules/clerk/budget-recovery.ts",
+        "src/modules/clerk/sweep-budget.ts"
+      ],
+      "floors": {
+        "lines": 92,
+        "branches": 84
+      }
+    },
+    "pipeline": {
+      "paths": ["src/modules/pipeline/**"],
+      "floors": {
+        "lines": 91,
+        "branches": 76
+      }
+    }
+  }
+}
