@@ -1,3 +1,9 @@
+// The SME invoice detail page (R120 split the 2,157-line file into this
+// shell, one module per card, the adjust dialog, the status meta and the
+// pure helpers). The route (App.tsx) and the unit suite
+// (invoice-detail.test.tsx) keep importing "@/pages/invoice-detail" /
+// "./invoice-detail": this module is the page's surface.
+
 import { useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import {
@@ -13,10 +19,6 @@ import {
   useSubmitInvoice,
   useUpdateInvoice,
   useExplainInvoiceFailure,
-  useDraftPaymentChaser,
-  useRecordChaseReminder,
-  useListPaymentBehaviour,
-  getListPaymentBehaviourQueryKey,
   useEscalateInvoice,
   useCancelInvoice,
   useCreditNoteInvoice,
@@ -35,32 +37,14 @@ import {
   getListConfirmationsQueryKey,
   getListSettlementsQueryKey,
   getGetInvoiceStatusLightQueryKey,
-} from "@workspace/api-client-react";
-import type {
-  Confirmation,
-  Escalation,
-  FieldError as ApiFieldError,
-  Invoice,
-  SettlementEvent,
-  StatusLight,
-  StatusLightLight,
-  SubmissionAttempt,
+  type FieldError as ApiFieldError,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,23 +71,14 @@ import {
   storedInvoiceDraftHasWork,
   type DraftState,
 } from "@/lib/invoice-draft";
-import { LineItemRow } from "@/components/line-item-row";
-import { FieldError } from "@/components/field-error";
+import { FixInvoiceForm, type FixDraft } from "./fix-form";
 import { InvoiceRoomCard } from "@/components/invoice-room-card";
-import { InvoiceConflict } from "@/components/invoice-conflict";
 import { ApprovalsCard } from "@/components/invoice-approvals";
-export {
-  ApprovalsCard,
-  canApproveInvoice,
-} from "@/components/invoice-approvals";
 import {
   emptyLine,
-  lineTotals,
   invoiceLineErrors,
   todayIsoDate,
   toInvoiceLineInputs,
-  updateLineAt,
-  type LineDraft,
 } from "@/lib/invoice-lines";
 import { ERROR_FOCUS } from "@/lib/error-focus";
 import { invoicePdfFilename, triggerDownload } from "@/lib/download";
@@ -121,696 +96,38 @@ import {
   AlertTriangle,
   Download,
   LifeBuoy,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  MailCheck,
-  Banknote,
   Ban,
   Undo2,
   FileQuestion,
   FilePlus,
   Sparkles,
   Wrench,
-  Plus,
   Pin,
 } from "lucide-react";
 import { whtCategoryLabel } from "@workspace/format/wht-copy";
 import { nairaApproxLine } from "@/pages/invoices";
 import {
-  formatNaira,
   formatAmount,
   formatDate,
-  formatDateTime,
   formatPct,
   statusLabel,
   badgeClasses,
   statusTone,
-  humanize,
   pillClasses,
-  confirmationLabel,
-  confirmationBadgeClasses,
   IRN_EXPANSION,
   CSID_EXPANSION,
 } from "@/lib/format";
-
-// AI Feature Brief §3.3: deterministic green/amber/red light with plain-language
-// reasons and ONE recommended action. Icon + word pair with the colour so the
-// colour is never the only signal.
-const LIGHT_META: Record<
-  StatusLightLight,
-  {
-    label: string;
-    Icon: typeof CheckCircle2;
-    dot: string;
-    text: string;
-  }
-> = {
-  green: {
-    label: "Green",
-    Icon: CheckCircle2,
-    dot: "bg-emerald-500",
-    text: "text-emerald-700 dark:text-emerald-400",
-  },
-  amber: {
-    label: "Amber",
-    Icon: AlertTriangle,
-    dot: "bg-amber-500",
-    text: "text-amber-700 dark:text-amber-400",
-  },
-  red: {
-    label: "Red",
-    Icon: XCircle,
-    dot: "bg-red-500",
-    text: "text-red-700 dark:text-red-400",
-  },
-};
-
-const SETTLEMENT_SOURCE_LABELS: Record<string, string> = {
-  statement_match: "Statement match",
-  buyer_flag: "Buyer flag",
-  collection_account: "Collection account",
-  uploaded_evidence: "Uploaded evidence",
-};
-
-// Deterministic status-light card: skeleton while loading, the light with its
-// reasons and recommended action once it resolves, nothing on failure.
-function ComplianceStatusCard({
-  statusLight,
-  isLoading,
-}: {
-  statusLight: StatusLight | undefined;
-  isLoading: boolean;
-}) {
-  const lightMeta = statusLight ? LIGHT_META[statusLight.light] : null;
-  const LightIcon = lightMeta?.Icon;
-
-  if (isLoading) {
-    return (
-      <Card data-testid="card-compliance-status">
-        <CardHeader>
-          <CardTitle className="text-base">Compliance status</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-4 w-72 max-w-full" />
-          <Skeleton className="h-4 w-56 max-w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (statusLight && lightMeta && LightIcon) {
-    return (
-      <Card data-testid="card-compliance-status">
-        <CardHeader>
-          <CardTitle className="text-base">Compliance status</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${lightMeta.dot}`}
-              aria-hidden="true"
-            />
-            <LightIcon
-              className={`w-4 h-4 ${lightMeta.text}`}
-              aria-hidden="true"
-            />
-            <span
-              className={`font-semibold ${lightMeta.text}`}
-              data-testid="text-status-light"
-            >
-              {lightMeta.label}
-            </span>
-          </div>
-          {statusLight.reasons.length > 0 && (
-            <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-              {statusLight.reasons.map((r, i) => (
-                <li key={i}>{r}</li>
-              ))}
-            </ul>
-          )}
-          <p data-testid="text-recommended-action">
-            <span className="font-medium">Recommended action:</span>{" "}
-            <span className="text-muted-foreground">
-              {statusLight.recommendedAction}
-            </span>
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return null;
-}
-
-// Reason-first cancel / credit-note dialog. Controlled by the parent, which
-// owns the kind/reason state, the mutations, and their toasts/invalidations.
-function AdjustDialog({
-  kind,
-  reason,
-  onReasonChange,
-  onClose,
-  onConfirm,
-  isPending,
-}: {
-  kind: "cancel" | "credit" | null;
-  reason: string;
-  onReasonChange: (reason: string) => void;
-  onClose: () => void;
-  onConfirm: () => void;
-  isPending: boolean;
-}) {
-  return (
-    <Dialog
-      open={kind !== null}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {kind === "cancel" ? "Cancel this invoice" : "Issue a credit note"}
-          </DialogTitle>
-          <DialogDescription>
-            {kind === "cancel"
-              ? "Cancellation is a recorded lifecycle event. A cancelled invoice can never be presented as eligible again."
-              : "A credit note referencing this invoice is created and submitted for stamping. Once stamped, this invoice becomes Credited — a terminal, recorded state."}
-          </DialogDescription>
-        </DialogHeader>
-        <div>
-          <Label htmlFor="adjust-reason" className="sr-only">
-            Reason
-          </Label>
-          <Textarea
-            id="adjust-reason"
-            placeholder="Reason (required — it is recorded on the ledger)"
-            value={reason}
-            onChange={(e) => onReasonChange(e.target.value)}
-            data-testid="input-adjust-reason"
-          />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Keep invoice
-          </Button>
-          <Button
-            variant={kind === "cancel" ? "destructive" : "default"}
-            disabled={!reason.trim() || isPending}
-            onClick={onConfirm}
-            data-testid="button-confirm-adjust"
-          >
-            {isPending
-              ? "Working…"
-              : kind === "cancel"
-                ? "Cancel invoice"
-                : "Issue credit note"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Buyer-confirmation card: request button plus the confirmation timeline. The
-// parent keeps the mutation and the can-request lifecycle predicate.
-function ConfirmationCard({
-  invoice,
-  timeline,
-  featureDisabled,
-  canRequest,
-  onRequest,
-  isPending,
-}: {
-  invoice: Invoice;
-  timeline: Confirmation[];
-  featureDisabled: boolean;
-  canRequest: boolean;
-  onRequest: () => void;
-  isPending: boolean;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer
-          confirmation
-        </CardTitle>
-        {canRequest && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onRequest}
-            disabled={isPending}
-          >
-            <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-            {isPending ? "Requesting…" : "Request confirmation"}
-          </Button>
-        )}
-      </CardHeader>
-      <CardContent>
-        {featureDisabled ? (
-          <p className="text-sm text-muted-foreground">
-            Buyer confirmations are not yet switched on for your business. Ask
-            your accounting firm about switching it on.
-          </p>
-        ) : timeline.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No confirmation activity yet.
-            {invoice.status === "stamped"
-              ? " Request a confirmation so your customer acknowledges this invoice."
-              : " Confirmations open up once the invoice is stamped."}
-          </p>
-        ) : (
-          <div>
-            {timeline.map((c, i) => (
-              <div key={c.id} className="relative pl-6 pb-4 last:pb-0">
-                {i < timeline.length - 1 && (
-                  <span className="absolute left-[5px] top-4 bottom-0 w-px bg-border" />
-                )}
-                <span
-                  className={`absolute left-0 top-1.5 w-3 h-3 rounded-full border-2 border-background ${
-                    c.state === "confirmed"
-                      ? "bg-emerald-500"
-                      : c.state === "rejected"
-                        ? "bg-red-500"
-                        : c.state === "queried"
-                          ? "bg-blue-500"
-                          : "bg-amber-500"
-                  }`}
-                />
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className={confirmationBadgeClasses(c.state)}>
-                    {confirmationLabel(c.state)}
-                  </span>
-                  {c.method && (
-                    <span className="text-xs text-muted-foreground">
-                      via {humanize(c.method)}
-                    </span>
-                  )}
-                  {c.noSetOff && (
-                    <span className={pillClasses("slate")}>No set-off</span>
-                  )}
-                </div>
-                {c.note && (
-                  <p className="text-sm text-muted-foreground mt-1">{c.note}</p>
-                )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatDateTime(c.createdAt)}
-                  {c.confirmingUserId && (
-                    <>
-                      {" "}
-                      · by{" "}
-                      <span className="font-mono">{c.confirmingUserId}</span>
-                    </>
-                  )}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SettlementsCard({ settlements }: { settlements: SettlementEvent[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Banknote className="w-4 h-4" aria-hidden="true" /> Settlement events
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {settlements.map((s) => (
-          <div key={s.id} className="text-sm border rounded-md px-3 py-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={pillClasses("slate")}>
-                  {SETTLEMENT_SOURCE_LABELS[s.source] || humanize(s.source)}
-                </span>
-                {s.paymentStatus && (
-                  <span
-                    className={pillClasses(
-                      s.paymentStatus === "paid" ? "emerald" : "amber",
-                    )}
-                  >
-                    {humanize(s.paymentStatus)}
-                  </span>
-                )}
-              </div>
-              <span className="font-semibold tabular-nums">
-                {formatNaira(s.amount)}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {formatDateTime(s.occurredAt)}
-            </p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SubmissionTimeline({ attempts }: { attempts: SubmissionAttempt[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Submission timeline</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {[...attempts]
-          .sort((a, b) => a.attemptNo - b.attemptNo)
-          .map((a) => (
-            <div key={a.id} className="flex items-start gap-3 text-sm">
-              {a.status === "rejected" || a.status === "error" ? (
-                <XCircle
-                  className="w-4 h-4 text-destructive mt-0.5"
-                  aria-hidden="true"
-                />
-              ) : a.status === "accepted" ? (
-                <CheckCircle2
-                  className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Clock
-                  className="w-4 h-4 text-muted-foreground mt-0.5"
-                  aria-hidden="true"
-                />
-              )}
-              <div>
-                <p>
-                  Attempt {a.attemptNo} · {humanize(a.status)}{" "}
-                  <span className="text-muted-foreground uppercase text-xs">
-                    ({a.rail})
-                  </span>
-                </p>
-                {a.errorCode && (
-                  <p className="text-xs text-destructive font-mono">
-                    {a.errorCode}
-                  </p>
-                )}
-                {a.correlationId && (
-                  <p className="break-all font-mono text-[11px] text-muted-foreground">
-                    Support reference {a.correlationId}
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(a.createdAt)}
-                </p>
-              </div>
-            </div>
-          ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Escalations</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {escalations.map((e) => (
-          <div key={e.id} className="text-sm border rounded-md px-3 py-2">
-            <div className="flex justify-between">
-              <span className="font-medium">{humanize(e.status)}</span>
-              <span className="text-xs text-muted-foreground">
-                {formatDate(e.createdAt)}
-              </span>
-            </div>
-            <p className="text-muted-foreground">{e.reason}</p>
-            {e.operatorReply && (
-              <div
-                className="mt-2 rounded-md bg-muted/60 px-3 py-2"
-                data-testid={`escalation-reply-${e.id}`}
-              >
-                <p className="text-xs font-medium text-muted-foreground">
-                  Compliance Desk replied
-                  {e.repliedAt ? ` · ${formatDate(e.repliedAt)}` : ""}
-                </p>
-                <p className="mt-1 whitespace-pre-wrap">{e.operatorReply}</p>
-              </div>
-            )}
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Payment-chaser draft (round-9 idea #2): a "chase this" button on an
-// outstanding receivable. The letter is drafted server-side from stored
-// facts (digest posture — template always answers) and NEVER sent by the
-// platform: the client copies it into their own email. The buyer's mined
-// payment rhythm renders alongside so the client knows whether this buyer is
-// late for THEM before chasing at all. Exported for the component tests
-// (copy-logs-once is a ladder invariant: stage escalation keys off the row
-// count, so a double log falsely hardens the next reminder's tone).
-export function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
-  const [copied, setCopied] = useState(false);
-  const draft = useDraftPaymentChaser();
-  // Chase ladder (round-14 idea #3): copying the draft records it as a SENT
-  // reminder, so the NEXT draft escalates its tone. Logged on copy only —
-  // drafting alone records nothing.
-  const logReminder = useRecordChaseReminder();
-  const [loggedStage, setLoggedStage] = useState<number | null>(null);
-  const { data: behaviour } = useListPaymentBehaviour(
-    { clientPartyId: invoice.supplierPartyId },
-    {
-      query: {
-        queryKey: getListPaymentBehaviourQueryKey({
-          clientPartyId: invoice.supplierPartyId,
-        }),
-        staleTime: 5 * 60_000,
-        retry: false,
-      },
-    },
-  );
-  const buyerBehaviour = behaviour?.find(
-    (b) => b.buyerPartyId === invoice.buyerPartyId,
-  );
-
-  const copyDraft = async () => {
-    if (!draft.data) return;
-    try {
-      await navigator.clipboard.writeText(
-        `${draft.data.subject}\n\n${draft.data.body}`,
-      );
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      // Best-effort ladder log: a failure here never blocks the copy. Only
-      // the first copy of a given draft logs — loggedStage guards repeats
-      // after the log lands, and isPending guards rapid re-copies while the
-      // first log is still in flight (loggedStage only updates onSuccess, so
-      // without it a double-click would double-log and falsely escalate the
-      // ladder).
-      if (loggedStage !== draft.data.stage && !logReminder.isPending) {
-        logReminder.mutate(
-          { invoiceId: invoice.id },
-          { onSuccess: (s) => setLoggedStage(s.stage) },
-        );
-      }
-    } catch {
-      // Clipboard denied: the text stays on screen to copy by hand.
-    }
-  };
-
-  return (
-    <Card data-testid="payment-reminder">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Send className="w-4 h-4" aria-hidden="true" /> Awaiting payment
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {buyerBehaviour && (
-          <p className="text-muted-foreground" data-testid="payment-rhythm">
-            {buyerBehaviour.buyerName} usually pays in about{" "}
-            {buyerBehaviour.medianDaysToPay} day(s) (from{" "}
-            {buyerBehaviour.settledCount} matched payments).
-          </p>
-        )}
-        {draft.data ? (
-          <div className="rounded-lg border bg-background p-3 space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium">{draft.data.subject}</p>
-              <span
-                className={pillClasses(
-                  draft.data.source === "clerk" ? "blue" : "slate",
-                )}
-              >
-                {draft.data.source === "clerk" ? "Clerk-phrased" : "Template"}
-              </span>
-              <span className={pillClasses("slate")} data-testid="chaser-stage">
-                Reminder #{draft.data.stage}
-              </span>
-            </div>
-            {draft.data.previousReminders.count > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {draft.data.previousReminders.count} earlier reminder
-                {draft.data.previousReminders.count === 1 ? "" : "s"} logged
-                {draft.data.previousReminders.lastAt
-                  ? ` — last on ${formatDate(draft.data.previousReminders.lastAt)}`
-                  : ""}
-                .
-              </p>
-            )}
-            <p className="whitespace-pre-wrap text-muted-foreground">
-              {draft.data.body}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyDraft}
-                data-testid="button-copy-chaser"
-              >
-                {copied ? "Copied" : "Copy to clipboard"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  draft.mutate({ data: { invoiceId: invoice.id } })
-                }
-                disabled={draft.isPending}
-              >
-                {draft.isPending ? "Redrafting…" : "Redraft"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Review before sending — you send this from your own email; nothing
-              is sent for you.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => draft.mutate({ data: { invoiceId: invoice.id } })}
-              disabled={draft.isPending}
-              data-testid="button-draft-chaser"
-            >
-              <Sparkles className="w-4 h-4 mr-2" aria-hidden="true" />
-              {draft.isPending ? "Drafting…" : "Draft a payment reminder"}
-            </Button>
-            {draft.isError && (
-              <p className="text-xs text-muted-foreground">
-                Couldn&apos;t draft a reminder just now — try again in a moment.
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---- Submission approvals (maker-checker, contract 0.45.0) -----------------
-// A firm can require a second approver before any invoice is submitted for
-// stamping. Approvals are recorded facts, so the card shows them to everyone
-// who can see the invoice; only firm members can RECORD one, and only while
-// the invoice is still submittable (draft/validated, or failed awaiting a
-// retry) — the server stays the authority (its 409 carries the real reason,
-// e.g. the approver matching the eventual submitter).
-
-/**
- * Status-keyed toast title for a failed submit (the billing paymentErrorCopy
- * pattern): a 409 is the server refusing on purpose — an orientation guard
- * or the approval policy — not a transport error, so the title says
- * "blocked" and the description relays the server's own words.
- */
-export function submitErrorTitle(status: number | undefined): string {
-  return status === 409 ? "Submission blocked" : "Submission error";
-}
-
-/**
- * Post-submit toast copy, honest about delivery: only firms with the
- * messaging rail lit are ever notified — for everyone else this page is
- * where the answer lands (it polls while the invoice is pending).
- */
-export function submittedToastDescription(
-  features: string[] | undefined,
-): string {
-  return (features ?? []).includes("messaging_notifications")
-    ? "We'll notify you once it clears the rail."
-    : "Check back here — this page updates automatically once FIRS answers.";
-}
-
-// SME-01 error recovery: a failed draft validation must outlive the toast.
-// The full FieldError list renders as a persistent card (same row recipe as
-// the vault's bulk-submit "Needs attention" list) with the fix path attached.
-// Exported for the component tests, like ApprovalsCard.
-export function ValidationErrorsCard({
-  errors,
-  onFix,
-  showFixButton,
-}: {
-  errors: ApiFieldError[];
-  onFix: () => void;
-  showFixButton: boolean;
-}) {
-  if (errors.length === 0) return null;
-  // buyer.*/supplier.* fields live on the party records, not on this invoice
-  // — the fix form cannot correct them, so say where they are fixed.
-  const partyFieldFlagged = errors.some(
-    (e) => e.field.startsWith("buyer.") || e.field.startsWith("supplier."),
-  );
-  return (
-    <Card
-      className="border-destructive/30 bg-destructive/5"
-      data-testid="card-validation-errors"
-    >
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base text-destructive">
-          <AlertTriangle className="w-4 h-4" aria-hidden="true" /> Validation
-          failed — {errors.length} {errors.length === 1 ? "issue" : "issues"} to
-          fix
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <p className="text-muted-foreground">
-          Nothing was submitted — the invoice stays a draft until every issue
-          below is fixed.
-        </p>
-        <ul className="space-y-2">
-          {errors.map((err, i) => (
-            <li
-              key={`${err.field}-${i}`}
-              className="text-sm border border-destructive/40 bg-destructive/5 rounded-md px-3 py-2"
-              data-testid={`row-validation-error-${i}`}
-            >
-              <p className="text-xs text-destructive">
-                {err.field}: {err.message}
-              </p>
-            </li>
-          ))}
-        </ul>
-        {partyFieldFlagged && (
-          <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
-            Issues with customer or business details live on the customer or
-            business record, not on this invoice — ask your firm to correct the
-            record, then submit again.
-          </p>
-        )}
-        {showFixButton && (
-          <Button size="sm" onClick={onFix} data-testid="button-fix-draft">
-            <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Fix invoice
-            details
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+import { submitErrorTitle, submittedToastDescription } from "./helpers";
+import {
+  EscalationsCard,
+  SettlementsCard,
+  SubmissionTimeline,
+} from "./history-cards";
+import { ComplianceStatusCard } from "./compliance-status-card";
+import { PaymentReminderCard } from "./payment-reminder-card";
+import { ValidationErrorsCard } from "./validation-errors-card";
+import { ConfirmationCard } from "./confirmation-card";
+import { AdjustDialog } from "./adjust-dialog";
 
 export function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
@@ -956,13 +273,7 @@ export function InvoiceDetail() {
   const [showEscalate, setShowEscalate] = useState(false);
   // "Fix & resubmit" (fix-and-retry): an editable copy of the failed
   // invoice's content, seeded when the form opens. Null = form closed.
-  const [fix, setFix] = useState<{
-    expectedRevision: number;
-    invoiceNumber: string;
-    issueDate: string;
-    dueDate: string;
-    lines: LineDraft[];
-  } | null>(null);
+  const [fix, setFix] = useState<FixDraft | null>(null);
   const [fixConflict, setFixConflict] = useState(false);
   const [showFixErrors, setShowFixErrors] = useState(false);
   // Held validation failures from the last submit attempt: the full list
@@ -1440,190 +751,23 @@ export function InvoiceDetail() {
         latestConfirmation.state !== "confirmed"));
 
   const fixForm = fix ? (
-    <div
-      className="rounded-lg border bg-background p-3 space-y-3"
-      data-testid="fix-form"
-    >
-      <p className="font-medium">
-        {tone === "failed"
-          ? "Correct the flagged details, then resubmit"
-          : "Correct the details, then submit"}
-      </p>
-      {fixConflict && (
-        <InvoiceConflict
-          draft={fix}
-          saved={invoice}
-          lines={data?.lines ?? []}
-          onReload={openFix}
-          onKeep={() => {
-            setFix((current) =>
-              current
-                ? { ...current, expectedRevision: invoice.contentRevision }
-                : null,
-            );
-            setFixConflict(false);
-          }}
-        />
-      )}
-      {focus.includes("parties") && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
-          The rail rejected a TIN. TINs live on the business and customer
-          records, not on this invoice — ask your firm to correct the record (or
-          escalate below), then retry the transmission.
-        </p>
-      )}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div>
-          <Label
-            htmlFor="fix-invoice-number"
-            className="flex items-center gap-2"
-          >
-            Invoice number
-            {focus.includes("invoiceNumber") && (
-              <span className={pillClasses("amber")}>flagged</span>
-            )}
-          </Label>
-          <Input
-            id="fix-invoice-number"
-            value={fix.invoiceNumber}
-            onChange={(e) =>
-              setFix((f) => f && { ...f, invoiceNumber: e.target.value })
-            }
-            className="mt-1"
-          />
-          {showFixErrors && fixErrors.invoiceNumber && (
-            <FieldError id="fix-invoice-number-error">
-              {fixErrors.invoiceNumber}
-            </FieldError>
-          )}
-        </div>
-        <div>
-          <Label htmlFor="fix-issue-date" className="flex items-center gap-2">
-            Issue date
-            {focus.includes("invoice") && (
-              <span className={pillClasses("amber")}>flagged</span>
-            )}
-          </Label>
-          <Input
-            id="fix-issue-date"
-            type="date"
-            value={fix.issueDate}
-            onChange={(e) =>
-              setFix((f) => f && { ...f, issueDate: e.target.value })
-            }
-            className="mt-1"
-          />
-          {showFixErrors && fixErrors.issueDate && (
-            <FieldError id="fix-issue-date-error">
-              {fixErrors.issueDate}
-            </FieldError>
-          )}
-        </div>
-        <div>
-          <Label htmlFor="fix-due-date">Due date (optional)</Label>
-          <Input
-            id="fix-due-date"
-            type="date"
-            value={fix.dueDate}
-            onChange={(e) =>
-              setFix((f) => f && { ...f, dueDate: e.target.value })
-            }
-            className="mt-1"
-          />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          Line items
-          {focus.includes("lines") && (
-            <span className={pillClasses("amber")}>flagged</span>
-          )}
-        </p>
-        {fix.lines.map((line, i) => (
-          <LineItemRow
-            key={i}
-            index={i}
-            line={line}
-            onPatch={(patch) =>
-              setFix(
-                (f) =>
-                  f && {
-                    ...f,
-                    lines: updateLineAt(f.lines, i, patch),
-                  },
-              )
-            }
-            removable={fix.lines.length > 1}
-            onRemove={() =>
-              setFix(
-                (f) =>
-                  f && {
-                    ...f,
-                    lines: f.lines.filter((_, j) => j !== i),
-                  },
-              )
-            }
-            errors={
-              showFixErrors
-                ? {
-                    description: fixErrors[`line-${i}-desc`],
-                    quantity: fixErrors[`line-${i}-qty`],
-                    unitPrice: fixErrors[`line-${i}-price`],
-                  }
-                : undefined
-            }
-            showTotal
-          />
-        ))}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            setFix((f) => f && { ...f, lines: [...f.lines, emptyLine()] })
-          }
-        >
-          <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add line
-        </Button>
-        <p className="text-right text-muted-foreground tabular-nums">
-          Total{" "}
-          {formatAmount(
-            lineTotals(fix.lines).net + lineTotals(fix.lines).vat,
-            invoice.currency,
-          )}
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          onClick={handleFixResubmit}
-          disabled={
-            fixConflict ||
-            updateInvoice.isPending ||
-            validate.isPending ||
-            submit.isPending
-          }
-          data-testid="button-fix-resubmit"
-        >
-          {updateInvoice.isPending || validate.isPending || submit.isPending
-            ? tone === "failed"
-              ? "Resubmitting…"
-              : "Submitting…"
-            : tone === "failed"
-              ? "Save & resubmit"
-              : "Save & submit"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setFix(null)}
-          disabled={
-            updateInvoice.isPending || validate.isPending || submit.isPending
-          }
-        >
-          Cancel
-        </Button>
-      </div>
-    </div>
+    <FixInvoiceForm
+      fix={fix}
+      setFix={setFix}
+      invoice={invoice}
+      lines={data?.lines ?? []}
+      tone={tone}
+      fixConflict={fixConflict}
+      setFixConflict={setFixConflict}
+      showFixErrors={showFixErrors}
+      fixErrors={fixErrors}
+      focus={focus}
+      onReload={openFix}
+      onResubmit={handleFixResubmit}
+      pending={
+        updateInvoice.isPending || validate.isPending || submit.isPending
+      }
+    />
   ) : null;
 
   return (
@@ -2155,3 +1299,13 @@ export function InvoiceDetail() {
     </div>
   );
 }
+
+// The unit suite pins these through this module, so the split keeps the
+// page's import path as its surface.
+export { PaymentReminderCard } from "./payment-reminder-card";
+export { ValidationErrorsCard } from "./validation-errors-card";
+export { submitErrorTitle, submittedToastDescription } from "./helpers";
+export {
+  ApprovalsCard,
+  canApproveInvoice,
+} from "@/components/invoice-approvals";
