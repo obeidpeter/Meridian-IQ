@@ -77,6 +77,20 @@ pnpm --filter @workspace/api-server run test
 pnpm --filter @workspace/db run test
 ```
 
+CI runs the api-server suite as `test:coverage` instead: the same tests under
+Node's built-in V8 coverage (tsx's inline source maps carry it back to the
+`.ts` sources), writing `artifacts/api-server/coverage/lcov.info` and
+`summary.json`, then checking the per-area floors in
+`artifacts/api-server/coverage-floors.json` (R118). The areas are auth,
+tenancy, money, the Clerk gateway and the pipeline, each a list of path globs
+with integer line and branch floors. A run below a floor fails; a run that
+clears a floor by five points or more says so, and `test:coverage:write`
+records the measured percentages (rounded down, less a two-point tolerance
+for run-to-run variance) as the new floors, so the ratchet moves up by hand
+and never down by accident. `test:coverage:check`
+re-checks an existing lcov without re-running the suite. The web packages
+have no floors yet; that is the next stage.
+
 Use only a disposable database: the main-app HTTP integration and E2E failure
 fixtures require `E2E_DATABASE_DISPOSABLE=1`. The route fixtures give each test
 file its own loopback source address on Linux, where the whole 127/8 block

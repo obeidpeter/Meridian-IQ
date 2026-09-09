@@ -129,6 +129,7 @@ pnpm dlx pnpm@11 audit --prod --audit-level=high   # supply-chain gate (pnpm 10'
 pnpm --filter @workspace/db run push            # prepare the scratch DB: tables first...
 pnpm --filter @workspace/db run migrate         # ...then guardrail migrations, or the tests hit permission-denied
 E2E_DATABASE_DISPOSABLE=1 pnpm --filter @workspace/api-server run test   # DB-backed; the flag acknowledges meridian_ci is disposable
+E2E_DATABASE_DISPOSABLE=1 pnpm --filter @workspace/api-server run test:coverage   # the same suite under V8 coverage; enforces coverage-floors.json (CI runs this form)
 pnpm --filter @workspace/db run test            # migration rollback (real Postgres)
 pnpm --filter @workspace/scripts run ops:restore-drill   # backup→restore→assert round-trip (needs DRILL_DATABASE_URL scratch target)
 pnpm --filter @workspace/mobile run test
