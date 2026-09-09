@@ -108,7 +108,7 @@ export const GetCreditGovernanceResponse = zod.object({
   "lastAccessAt": zod.coerce.date().nullable()
 }),
   "latestBacktest": zod.union([zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "fromDate": zod.coerce.date(),
   "toDate": zod.coerce.date(),
   "scorecardVersion": zod.string(),
@@ -127,8 +127,8 @@ export const GetCreditGovernanceResponse = zod.object({
  * @summary Append an idempotent, replayable eligibility assessment
  */
 export const RunCreditAssessmentBody = zod.object({
-  "invoiceId": zod.string().uuid(),
-  "idempotencyKey": zod.string().uuid()
+  "invoiceId": zod.uuid(),
+  "idempotencyKey": zod.uuid()
 })
 
 export const runCreditAssessmentResponseScoreMin = 0;
@@ -144,9 +144,9 @@ export const runCreditAssessmentResponseInputHashRegExp = new RegExp('^[a-f0-9]{
 
 
 export const RunCreditAssessmentResponse = zod.object({
-  "id": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "invoiceId": zod.uuid(),
+  "firmId": zod.uuid(),
   "decision": zod.enum(['eligible', 'ineligible', 'manual_review']),
   "score": zod.number().min(runCreditAssessmentResponseScoreMin).max(runCreditAssessmentResponseScoreMax),
   "scorecardVersion": zod.string(),
@@ -189,9 +189,9 @@ export const recordCreditKybCheckBodyEvidenceRefsMax = 20;
 
 
 export const RecordCreditKybCheckBody = zod.object({
-  "firmId": zod.string().uuid(),
-  "partyId": zod.string().uuid(),
-  "idempotencyKey": zod.string().uuid(),
+  "firmId": zod.uuid(),
+  "partyId": zod.uuid(),
+  "idempotencyKey": zod.uuid(),
   "beneficialOwnerCount": zod.number().min(recordCreditKybCheckBodyBeneficialOwnerCountMin).max(recordCreditKybCheckBodyBeneficialOwnerCountMax),
   "ownershipCoverageBps": zod.number().min(recordCreditKybCheckBodyOwnershipCoverageBpsMin).max(recordCreditKybCheckBodyOwnershipCoverageBpsMax),
   "beneficialOwnersVerified": zod.boolean(),
@@ -225,9 +225,9 @@ export const recordCreditKybCheckResponseOneEvidenceRefsMax = 20;
 
 
 export const RecordCreditKybCheckResponse = zod.object({
-  "firmId": zod.string().uuid(),
-  "partyId": zod.string().uuid(),
-  "idempotencyKey": zod.string().uuid(),
+  "firmId": zod.uuid(),
+  "partyId": zod.uuid(),
+  "idempotencyKey": zod.uuid(),
   "beneficialOwnerCount": zod.number().min(recordCreditKybCheckResponseOneBeneficialOwnerCountMin).max(recordCreditKybCheckResponseOneBeneficialOwnerCountMax),
   "ownershipCoverageBps": zod.number().min(recordCreditKybCheckResponseOneOwnershipCoverageBpsMin).max(recordCreditKybCheckResponseOneOwnershipCoverageBpsMax),
   "beneficialOwnersVerified": zod.boolean(),
@@ -241,7 +241,7 @@ export const RecordCreditKybCheckResponse = zod.object({
   "checkedAt": zod.coerce.date(),
   "expiresAt": zod.coerce.date()
 }).and(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "status": zod.enum(['verified', 'review', 'failed', 'expired']),
   "createdAt": zod.coerce.date()
 }))
@@ -258,20 +258,20 @@ export const recordBankDataRoomAccessBodyReasonMax = 500;
 
 
 export const RecordBankDataRoomAccessBody = zod.object({
-  "bankPartyId": zod.string().uuid(),
-  "userId": zod.string().uuid(),
+  "bankPartyId": zod.uuid(),
+  "userId": zod.uuid(),
   "action": zod.enum(['grant', 'suspend', 'revoke']),
   "dpaReference": zod.string().min(1).max(recordBankDataRoomAccessBodyDpaReferenceMax).nullish(),
   "dpaExecutedAt": zod.coerce.date().nullish(),
   "validUntil": zod.coerce.date().nullish(),
   "reason": zod.string().min(recordBankDataRoomAccessBodyReasonMin).max(recordBankDataRoomAccessBodyReasonMax),
-  "idempotencyKey": zod.string().uuid()
+  "idempotencyKey": zod.uuid()
 })
 
 export const RecordBankDataRoomAccessResponse = zod.object({
-  "id": zod.string().uuid(),
-  "bankPartyId": zod.string().uuid(),
-  "userId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "bankPartyId": zod.uuid(),
+  "userId": zod.uuid(),
   "action": zod.enum(['grant', 'suspend', 'revoke']),
   "dpaReference": zod.string().nullable(),
   "dpaExecutedAt": zod.coerce.date().nullable(),
@@ -287,14 +287,14 @@ export const RecordBankDataRoomAccessResponse = zod.object({
 export const RunCreditBacktestBody = zod.object({
   "fromDate": zod.coerce.date(),
   "toDate": zod.coerce.date(),
-  "idempotencyKey": zod.string().uuid()
+  "idempotencyKey": zod.uuid()
 })
 
 export const runCreditBacktestResponseInputHashRegExp = new RegExp('^[a-f0-9]{64}$');
 
 
 export const RunCreditBacktestResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "fromDate": zod.coerce.date(),
   "toDate": zod.coerce.date(),
   "scorecardVersion": zod.string(),
@@ -338,7 +338,7 @@ export const GetBankDataRoomResponse = zod.object({
   "generatedAt": zod.coerce.date(),
   "dataThrough": zod.coerce.date().nullable(),
   "available": zod.boolean(),
-  "accessEventId": zod.string().uuid(),
+  "accessEventId": zod.uuid(),
   "privacy": zod.object({
   "minimumCohortSize": zod.number().min(getBankDataRoomResponsePrivacyMinimumCohortSizeMin),
   "suppressedCells": zod.number(),
@@ -396,8 +396,8 @@ export const ListBankDataRoomAccessQueryParams = zod.object({
 })
 
 export const ListBankDataRoomAccessResponseItem = zod.object({
-  "id": zod.string().uuid(),
-  "userId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "userId": zod.uuid(),
   "action": zod.enum(['overview', 'access_log']),
   "outcome": zod.enum(['served', 'suppressed']),
   "createdAt": zod.coerce.date()
@@ -504,7 +504,7 @@ export const listWorkItemsQueryLimitMax = 100;
 
 export const ListWorkItemsQueryParams = zod.object({
   "status": zod.enum(['open', 'in_progress', 'blocked', 'done']).optional(),
-  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "clientPartyId": zod.uuid().optional(),
   "limit": zod.coerce.number().min(1).max(listWorkItemsQueryLimitMax).default(listWorkItemsQueryLimitDefault)
 })
 
@@ -512,21 +512,21 @@ export const ListWorkItemsQueryParams = zod.object({
 
 
 export const ListWorkItemsResponseItem = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid().nullable(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid().nullable(),
   "clientName": zod.string().nullable(),
   "title": zod.string(),
   "description": zod.string().nullable(),
   "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
   "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
   "dueAt": zod.coerce.date().nullable(),
-  "assignedTo": zod.string().uuid().nullable(),
+  "assignedTo": zod.uuid().nullable(),
   "assignedToName": zod.string().nullable(),
-  "createdBy": zod.string().uuid(),
+  "createdBy": zod.uuid(),
   "createdByName": zod.string().nullable(),
   "entityType": zod.string().nullable(),
-  "entityId": zod.string().uuid().nullable(),
+  "entityId": zod.uuid().nullable(),
   "href": zod.string().nullable(),
   "version": zod.number().min(1),
   "completedAt": zod.coerce.date().nullable(),
@@ -553,15 +553,15 @@ export const createWorkItemBodyHrefRegExp = new RegExp('^');
 
 
 export const CreateWorkItemBody = zod.object({
-  "clientRequestId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid().optional(),
+  "clientRequestId": zod.uuid(),
+  "clientPartyId": zod.uuid().optional(),
   "title": zod.string().min(createWorkItemBodyTitleMin).max(createWorkItemBodyTitleMax),
   "description": zod.string().max(createWorkItemBodyDescriptionMax).optional(),
   "priority": zod.enum(['low', 'normal', 'high', 'urgent']).optional(),
   "dueAt": zod.coerce.date().optional(),
-  "assignedTo": zod.string().uuid().optional(),
+  "assignedTo": zod.uuid().optional(),
   "entityType": zod.string().min(1).max(createWorkItemBodyEntityTypeMax).optional(),
-  "entityId": zod.string().uuid().optional(),
+  "entityId": zod.uuid().optional(),
   "href": zod.string().max(createWorkItemBodyHrefMax).regex(createWorkItemBodyHrefRegExp).optional()
 })
 
@@ -569,21 +569,21 @@ export const CreateWorkItemBody = zod.object({
 
 
 export const CreateWorkItemResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid().nullable(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid().nullable(),
   "clientName": zod.string().nullable(),
   "title": zod.string(),
   "description": zod.string().nullable(),
   "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
   "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
   "dueAt": zod.coerce.date().nullable(),
-  "assignedTo": zod.string().uuid().nullable(),
+  "assignedTo": zod.uuid().nullable(),
   "assignedToName": zod.string().nullable(),
-  "createdBy": zod.string().uuid(),
+  "createdBy": zod.uuid(),
   "createdByName": zod.string().nullable(),
   "entityType": zod.string().nullable(),
-  "entityId": zod.string().uuid().nullable(),
+  "entityId": zod.uuid().nullable(),
   "href": zod.string().nullable(),
   "version": zod.number().min(1),
   "completedAt": zod.coerce.date().nullable(),
@@ -606,7 +606,7 @@ export const listWorkItemsPageQueryLimitMax = 100;
 
 export const ListWorkItemsPageQueryParams = zod.object({
   "view": zod.enum(['active', 'done', 'all']).default(listWorkItemsPageQueryViewDefault),
-  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "clientPartyId": zod.uuid().optional(),
   "cursor": zod.coerce.string().min(1).max(listWorkItemsPageQueryCursorMax).optional(),
   "limit": zod.coerce.number().min(1).max(listWorkItemsPageQueryLimitMax).default(listWorkItemsPageQueryLimitDefault)
 })
@@ -620,21 +620,21 @@ export const listWorkItemsPageResponseTotalMin = 0;
 
 export const ListWorkItemsPageResponse = zod.object({
   "items": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid().nullable(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid().nullable(),
   "clientName": zod.string().nullable(),
   "title": zod.string(),
   "description": zod.string().nullable(),
   "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
   "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
   "dueAt": zod.coerce.date().nullable(),
-  "assignedTo": zod.string().uuid().nullable(),
+  "assignedTo": zod.uuid().nullable(),
   "assignedToName": zod.string().nullable(),
-  "createdBy": zod.string().uuid(),
+  "createdBy": zod.uuid(),
   "createdByName": zod.string().nullable(),
   "entityType": zod.string().nullable(),
-  "entityId": zod.string().uuid().nullable(),
+  "entityId": zod.uuid().nullable(),
   "href": zod.string().nullable(),
   "version": zod.number().min(1),
   "completedAt": zod.coerce.date().nullable(),
@@ -668,28 +668,28 @@ export const UpdateWorkItemBody = zod.object({
   "status": zod.enum(['open', 'in_progress', 'blocked', 'done']).optional(),
   "priority": zod.enum(['low', 'normal', 'high', 'urgent']).optional(),
   "dueAt": zod.coerce.date().nullish(),
-  "assignedTo": zod.string().uuid().nullish()
+  "assignedTo": zod.uuid().nullish()
 })
 
 
 
 
 export const UpdateWorkItemResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid().nullable(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid().nullable(),
   "clientName": zod.string().nullable(),
   "title": zod.string(),
   "description": zod.string().nullable(),
   "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
   "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
   "dueAt": zod.coerce.date().nullable(),
-  "assignedTo": zod.string().uuid().nullable(),
+  "assignedTo": zod.uuid().nullable(),
   "assignedToName": zod.string().nullable(),
-  "createdBy": zod.string().uuid(),
+  "createdBy": zod.uuid(),
   "createdByName": zod.string().nullable(),
   "entityType": zod.string().nullable(),
-  "entityId": zod.string().uuid().nullable(),
+  "entityId": zod.uuid().nullable(),
   "href": zod.string().nullable(),
   "version": zod.number().min(1),
   "completedAt": zod.coerce.date().nullable(),
@@ -706,12 +706,12 @@ export const ListWorkItemCommentsParams = zod.object({
 })
 
 export const ListWorkItemCommentsResponseItem = zod.object({
-  "id": zod.string().uuid(),
-  "workItemId": zod.string().uuid(),
-  "authorId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "workItemId": zod.uuid(),
+  "authorId": zod.uuid(),
   "authorName": zod.string().nullable(),
   "body": zod.string(),
-  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "mentionedUserIds": zod.array(zod.uuid()),
   "createdAt": zod.coerce.date()
 })
 export const ListWorkItemCommentsResponse = zod.array(ListWorkItemCommentsResponseItem)
@@ -731,18 +731,18 @@ export const createWorkItemCommentBodyMentionedUserIdsMax = 20;
 
 
 export const CreateWorkItemCommentBody = zod.object({
-  "clientRequestId": zod.string().uuid(),
+  "clientRequestId": zod.uuid(),
   "body": zod.string().min(1).max(createWorkItemCommentBodyBodyMax),
-  "mentionedUserIds": zod.array(zod.string().uuid()).max(createWorkItemCommentBodyMentionedUserIdsMax).optional()
+  "mentionedUserIds": zod.array(zod.uuid()).max(createWorkItemCommentBodyMentionedUserIdsMax).optional()
 })
 
 export const CreateWorkItemCommentResponse = zod.object({
-  "id": zod.string().uuid(),
-  "workItemId": zod.string().uuid(),
-  "authorId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "workItemId": zod.uuid(),
+  "authorId": zod.uuid(),
   "authorName": zod.string().nullable(),
   "body": zod.string(),
-  "mentionedUserIds": zod.array(zod.string().uuid()),
+  "mentionedUserIds": zod.array(zod.uuid()),
   "createdAt": zod.coerce.date()
 })
 
@@ -989,7 +989,7 @@ export const PreviewInvitationBody = zod.object({
 })
 
 export const PreviewInvitationResponse = zod.object({
-  "email": zod.string().email(),
+  "email": zod.email(),
   "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
   "workspaceName": zod.string(),
   "clientName": zod.string().nullish(),
@@ -1022,7 +1022,7 @@ export const requestPasswordResetBodyEmailMax = 254;
 
 
 export const RequestPasswordResetBody = zod.object({
-  "email": zod.string().email().max(requestPasswordResetBodyEmailMax)
+  "email": zod.email().max(requestPasswordResetBodyEmailMax)
 })
 
 export const RequestPasswordResetResponse = zod.void()
@@ -1040,7 +1040,7 @@ export const requestAdvisoryReviewBodyEstimateSummaryMax = 5000;
 
 
 export const RequestAdvisoryReviewBody = zod.object({
-  "email": zod.string().email().max(requestAdvisoryReviewBodyEmailMax),
+  "email": zod.email().max(requestAdvisoryReviewBodyEmailMax),
   "businessName": zod.string().max(requestAdvisoryReviewBodyBusinessNameMax).optional(),
   "estimateSummary": zod.string().min(1).max(requestAdvisoryReviewBodyEstimateSummaryMax),
   "consent": zod.boolean()
@@ -1079,7 +1079,7 @@ export const requestPlatformAccessBodyWebsiteMax = 200;
 
 export const RequestPlatformAccessBody = zod.object({
   "name": zod.string().min(requestPlatformAccessBodyNameMin).max(requestPlatformAccessBodyNameMax),
-  "email": zod.string().email().max(requestPlatformAccessBodyEmailMax),
+  "email": zod.email().max(requestPlatformAccessBodyEmailMax),
   "businessName": zod.string().min(requestPlatformAccessBodyBusinessNameMin).max(requestPlatformAccessBodyBusinessNameMax),
   "interest": zod.enum(['business', 'accounting_firm', 'buyer', 'partnership']),
   "teamSize": zod.enum(['one', 'two_to_ten', 'eleven_to_fifty', 'over_fifty']).optional(),
@@ -1095,7 +1095,7 @@ export const RequestPlatformAccessResponse = zod.void()
  * @summary Issue a one-time password-reset link for a user (operator support path); returns the token once
  */
 export const CreatePasswordResetBody = zod.object({
-  "email": zod.string().email()
+  "email": zod.email()
 })
 
 export const CreatePasswordResetResponse = zod.object({
@@ -1131,7 +1131,7 @@ export const ListInvitationsResponse = zod.array(ListInvitationsResponseItem)
  * @summary Invite a teammate or client into the caller's firm (operators name a target firm); returns the one-time token
  */
 export const CreateInvitationBody = zod.object({
-  "email": zod.string().email(),
+  "email": zod.email(),
   "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
   "firmId": zod.string().optional(),
   "clientPartyId": zod.string().optional()
@@ -1387,8 +1387,8 @@ export const UpdatePartyResponse = zod.object({
  * @summary What each side of a proposed party merge carries (deterministic counts)
  */
 export const GetMergeImpactQueryParams = zod.object({
-  "survivorId": zod.coerce.string().uuid(),
-  "duplicateId": zod.coerce.string().uuid()
+  "survivorId": zod.uuid(),
+  "duplicateId": zod.uuid()
 })
 
 export const GetMergeImpactResponse = zod.object({
@@ -1474,7 +1474,7 @@ export const ListConsentResponseItem = zod.object({
   "scope": zod.string(),
   "basis": zod.string(),
   "channel": zod.string(),
-  "commandId": zod.string().uuid().nullable(),
+  "commandId": zod.uuid().nullable(),
   "createdAt": zod.coerce.date()
 })
 export const ListConsentResponse = zod.array(ListConsentResponseItem)
@@ -1500,7 +1500,7 @@ export const RecordConsentResponse = zod.object({
   "scope": zod.string(),
   "basis": zod.string(),
   "channel": zod.string(),
-  "commandId": zod.string().uuid().nullable(),
+  "commandId": zod.uuid().nullable(),
   "createdAt": zod.coerce.date()
 })
 
@@ -1519,7 +1519,7 @@ export const captureConsentBodyDecisionsMax = 2;
 
 
 export const CaptureConsentBody = zod.object({
-  "commandId": zod.string().uuid(),
+  "commandId": zod.uuid(),
   "decisions": zod.array(zod.object({
   "layer": zod.union([zod.literal(1),zod.literal(2)]),
   "action": zod.enum(['grant', 'revoke'])
@@ -1532,7 +1532,7 @@ export const captureConsentResponseRecordsMax = 2;
 
 
 export const CaptureConsentResponse = zod.object({
-  "commandId": zod.string().uuid(),
+  "commandId": zod.uuid(),
   "records": zod.array(zod.object({
   "id": zod.string(),
   "partyId": zod.string(),
@@ -1541,7 +1541,7 @@ export const CaptureConsentResponse = zod.object({
   "scope": zod.string(),
   "basis": zod.string(),
   "channel": zod.string(),
-  "commandId": zod.string().uuid().nullable(),
+  "commandId": zod.uuid().nullable(),
   "createdAt": zod.coerce.date()
 })).min(captureConsentResponseRecordsMin).max(captureConsentResponseRecordsMax)
 })
@@ -1888,7 +1888,7 @@ export const GetVatPackResponse = zod.object({
   "monthLabel": zod.string(),
   "months": zod.array(zod.string()),
   "rows": zod.array(zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "acceptedCount": zod.number(),
   "acceptedTotal": zod.string(),
@@ -2188,7 +2188,7 @@ export const GetVatSettlementCheckResponse = zod.object({
   "otherTotal": zod.string(),
   "settledShare": zod.number().nullable(),
   "unsettled": zod.array(zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "clientName": zod.string(),
   "buyerName": zod.string(),
@@ -2227,7 +2227,7 @@ export const GetVatPositionResponse = zod.object({
   "unverifiedVat": zod.string(),
   "netPosition": zod.string(),
   "unverified": zod.array(zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "clientName": zod.string(),
   "supplierName": zod.string(),
@@ -2319,7 +2319,7 @@ export const DraftQuarterlyCoverNoteResponse = zod.object({
  * @summary A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)
  */
 export const ListLineItemSuggestionsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const ListLineItemSuggestionsResponseItem = zod.object({
@@ -2337,11 +2337,11 @@ export const ListLineItemSuggestionsResponse = zod.array(ListLineItemSuggestions
  * @summary Per-buyer days-to-pay medians mined from the client's own accepted reconciliation matches (deterministic — nothing stored, no model)
  */
 export const ListPaymentBehaviourQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const ListPaymentBehaviourResponseItem = zod.object({
-  "buyerPartyId": zod.string().uuid(),
+  "buyerPartyId": zod.uuid(),
   "buyerName": zod.string(),
   "settledCount": zod.number(),
   "medianDaysToPay": zod.number(),
@@ -2354,7 +2354,7 @@ export const ListPaymentBehaviourResponse = zod.array(ListPaymentBehaviourRespon
  * @summary Bank credits with no invoice behind them — potential off-platform sales (deterministic advisory; nothing stored, no model)
  */
 export const GetUnmatchedCreditsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetUnmatchedCreditsResponse = zod.object({
@@ -2363,8 +2363,8 @@ export const GetUnmatchedCreditsResponse = zod.object({
   "count": zod.number(),
   "totalAmount": zod.string(),
   "rows": zod.array(zod.object({
-  "lineId": zod.string().uuid(),
-  "statementId": zod.string().uuid(),
+  "lineId": zod.uuid(),
+  "statementId": zod.uuid(),
   "valueDate": zod.string(),
   "amount": zod.string(),
   "narration": zod.string().nullable(),
@@ -2379,7 +2379,7 @@ export const GetUnmatchedCreditsResponse = zod.object({
  * @summary Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)
  */
 export const GetProjectionAccuracyQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetProjectionAccuracyResponse = zod.object({
@@ -2395,7 +2395,7 @@ export const GetProjectionAccuracyResponse = zod.object({
   "defaultTerms": zod.number()
 }),
   "buyers": zod.array(zod.object({
-  "buyerPartyId": zod.string().uuid(),
+  "buyerPartyId": zod.uuid(),
   "buyerName": zod.string(),
   "settlements": zod.number(),
   "medianErrorDays": zod.number(),
@@ -2410,7 +2410,7 @@ export const GetProjectionAccuracyResponse = zod.object({
  * @summary Chase-ladder reminders joined to observed settlements — did reminded invoices settle, and how fast (correlation only; deterministic, nothing stored)
  */
 export const GetChaseEffectivenessQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetChaseEffectivenessResponse = zod.object({
@@ -2430,7 +2430,7 @@ export const GetChaseEffectivenessResponse = zod.object({
  * @summary Estimated s.104 penalty exposure for invoices past the submission window and still unsubmitted — per turnover band, estimate not advice (deterministic, nothing stored)
  */
 export const GetPenaltyExposureQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetPenaltyExposureResponse = zod.object({
@@ -2447,7 +2447,7 @@ export const GetPenaltyExposureResponse = zod.object({
   "large": zod.string()
 }),
   "sampleInvoices": zod.array(zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "issueDate": zod.string(),
   "daysOverdue": zod.number()
@@ -2460,7 +2460,7 @@ export const GetPenaltyExposureResponse = zod.object({
  * @summary Month-end close checklist — the platform's deterministic advisories composed into one list, each line computed by the same check that powers its own card (nothing stored)
  */
 export const GetMonthEndCloseQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetMonthEndCloseResponse = zod.object({
@@ -2481,11 +2481,11 @@ export const GetMonthEndCloseResponse = zod.object({
  * @summary Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
  */
 export const RecordChaseReminderParams = zod.object({
-  "invoiceId": zod.coerce.string().uuid()
+  "invoiceId": zod.uuid()
 })
 
 export const RecordChaseReminderResponse = zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "count": zod.number(),
   "lastAt": zod.string().nullable(),
   "stage": zod.number()
@@ -3010,8 +3010,8 @@ export const CreateSettlementResponse = zod.object({
  */
 export const ListInvoiceRoomsResponse = zod.object({
   "rooms": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "buyerName": zod.string(),
   "amount": zod.string(),
@@ -3039,8 +3039,8 @@ export const ListInvoiceRoomsForInvoiceParams = zod.object({
 
 export const ListInvoiceRoomsForInvoiceResponse = zod.object({
   "rooms": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "buyerName": zod.string(),
   "amount": zod.string(),
@@ -3076,8 +3076,8 @@ export const createInvoiceRoomBodyExpiresInDaysMax = 90;
 
 
 export const CreateInvoiceRoomBody = zod.object({
-  "clientRequestId": zod.string().uuid(),
-  "recipientEmail": zod.string().email().max(createInvoiceRoomBodyRecipientEmailMax).nullish(),
+  "clientRequestId": zod.uuid(),
+  "recipientEmail": zod.email().max(createInvoiceRoomBodyRecipientEmailMax).nullish(),
   "recipientPhone": zod.string().min(createInvoiceRoomBodyRecipientPhoneMin).max(createInvoiceRoomBodyRecipientPhoneMax).nullish(),
   "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
   "expiresInDays": zod.number().min(1).max(createInvoiceRoomBodyExpiresInDaysMax),
@@ -3088,8 +3088,8 @@ export const CreateInvoiceRoomBody = zod.object({
 
 export const CreateInvoiceRoomResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "buyerName": zod.string(),
   "amount": zod.string(),
@@ -3108,7 +3108,7 @@ export const CreateInvoiceRoomResponse = zod.object({
   "responseState": zod.string().nullable(),
   "paymentStatus": zod.string().nullable()
 }),
-  "url": zod.string().url(),
+  "url": zod.url(),
   "delivery": zod.object({
   "attempted": zod.boolean(),
   "status": zod.enum(['not_requested', 'sent', 'failed']),
@@ -3123,8 +3123,8 @@ export const RevokeInvoiceRoomParams = zod.object({
 
 export const RevokeInvoiceRoomResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "buyerName": zod.string(),
   "amount": zod.string(),
@@ -3160,8 +3160,8 @@ export const replaceInvoiceRoomBodyExpiresInDaysMax = 90;
 
 
 export const ReplaceInvoiceRoomBody = zod.object({
-  "clientRequestId": zod.string().uuid(),
-  "recipientEmail": zod.string().email().max(replaceInvoiceRoomBodyRecipientEmailMax).nullish(),
+  "clientRequestId": zod.uuid(),
+  "recipientEmail": zod.email().max(replaceInvoiceRoomBodyRecipientEmailMax).nullish(),
   "recipientPhone": zod.string().min(replaceInvoiceRoomBodyRecipientPhoneMin).max(replaceInvoiceRoomBodyRecipientPhoneMax).nullish(),
   "deliveryChannel": zod.enum(['email', 'whatsapp', 'copy']),
   "expiresInDays": zod.number().min(1).max(replaceInvoiceRoomBodyExpiresInDaysMax),
@@ -3172,8 +3172,8 @@ export const ReplaceInvoiceRoomBody = zod.object({
 
 export const ReplaceInvoiceRoomResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "buyerName": zod.string(),
   "amount": zod.string(),
@@ -3192,7 +3192,7 @@ export const ReplaceInvoiceRoomResponse = zod.object({
   "responseState": zod.string().nullable(),
   "paymentStatus": zod.string().nullable()
 }),
-  "url": zod.string().url(),
+  "url": zod.url(),
   "delivery": zod.object({
   "attempted": zod.boolean(),
   "status": zod.enum(['not_requested', 'sent', 'failed']),
@@ -3212,7 +3212,7 @@ export const ExchangeInvoiceRoomTokenBody = zod.object({
 
 export const ExchangeInvoiceRoomTokenResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "status": zod.enum(['active', 'expired', 'revoked']),
   "expiresAt": zod.coerce.date(),
   "identityVerified": zod.boolean(),
@@ -3272,12 +3272,12 @@ export const ExchangeInvoiceRoomTokenResponse = zod.object({
   "label": zod.string().nullable()
 }),zod.null()]),
   "requests": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "provider": zod.string(),
   "amount": zod.string(),
   "currency": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
-  "checkoutUrl": zod.string().url().nullable(),
+  "checkoutUrl": zod.url().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "confirmedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
@@ -3290,7 +3290,7 @@ export const ExchangeInvoiceRoomTokenResponse = zod.object({
   "canClaimAccount": zod.boolean()
 }),
   "timeline": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "kind": zod.string(),
   "detail": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date()
@@ -3300,7 +3300,7 @@ export const ExchangeInvoiceRoomTokenResponse = zod.object({
 
 export const GetPublicInvoiceRoomResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "status": zod.enum(['active', 'expired', 'revoked']),
   "expiresAt": zod.coerce.date(),
   "identityVerified": zod.boolean(),
@@ -3360,12 +3360,12 @@ export const GetPublicInvoiceRoomResponse = zod.object({
   "label": zod.string().nullable()
 }),zod.null()]),
   "requests": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "provider": zod.string(),
   "amount": zod.string(),
   "currency": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
-  "checkoutUrl": zod.string().url().nullable(),
+  "checkoutUrl": zod.url().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "confirmedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
@@ -3378,7 +3378,7 @@ export const GetPublicInvoiceRoomResponse = zod.object({
   "canClaimAccount": zod.boolean()
 }),
   "timeline": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "kind": zod.string(),
   "detail": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date()
@@ -3406,7 +3406,7 @@ export const VerifyInvoiceRoomOtpBody = zod.object({
 
 export const VerifyInvoiceRoomOtpResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "status": zod.enum(['active', 'expired', 'revoked']),
   "expiresAt": zod.coerce.date(),
   "identityVerified": zod.boolean(),
@@ -3466,12 +3466,12 @@ export const VerifyInvoiceRoomOtpResponse = zod.object({
   "label": zod.string().nullable()
 }),zod.null()]),
   "requests": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "provider": zod.string(),
   "amount": zod.string(),
   "currency": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
-  "checkoutUrl": zod.string().url().nullable(),
+  "checkoutUrl": zod.url().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "confirmedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
@@ -3484,7 +3484,7 @@ export const VerifyInvoiceRoomOtpResponse = zod.object({
   "canClaimAccount": zod.boolean()
 }),
   "timeline": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "kind": zod.string(),
   "detail": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date()
@@ -3497,7 +3497,7 @@ export const respondInvoiceRoomBodyNoteMax = 2000;
 
 
 export const RespondInvoiceRoomBody = zod.object({
-  "idempotencyKey": zod.string().uuid(),
+  "idempotencyKey": zod.uuid(),
   "state": zod.enum(['confirmed', 'queried', 'rejected']),
   "note": zod.string().max(respondInvoiceRoomBodyNoteMax).nullish(),
   "noSetOff": zod.boolean().optional()
@@ -3505,7 +3505,7 @@ export const RespondInvoiceRoomBody = zod.object({
 
 export const RespondInvoiceRoomResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "status": zod.enum(['active', 'expired', 'revoked']),
   "expiresAt": zod.coerce.date(),
   "identityVerified": zod.boolean(),
@@ -3565,12 +3565,12 @@ export const RespondInvoiceRoomResponse = zod.object({
   "label": zod.string().nullable()
 }),zod.null()]),
   "requests": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "provider": zod.string(),
   "amount": zod.string(),
   "currency": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
-  "checkoutUrl": zod.string().url().nullable(),
+  "checkoutUrl": zod.url().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "confirmedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
@@ -3583,7 +3583,7 @@ export const RespondInvoiceRoomResponse = zod.object({
   "canClaimAccount": zod.boolean()
 }),
   "timeline": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "kind": zod.string(),
   "detail": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date()
@@ -3598,7 +3598,7 @@ export const reportInvoiceRoomPaymentBodyNoteMax = 2000;
 
 
 export const ReportInvoiceRoomPaymentBody = zod.object({
-  "idempotencyKey": zod.string().uuid(),
+  "idempotencyKey": zod.uuid(),
   "amount": zod.string().optional(),
   "paidAt": zod.coerce.date(),
   "reference": zod.string().min(1).max(reportInvoiceRoomPaymentBodyReferenceMax),
@@ -3607,7 +3607,7 @@ export const ReportInvoiceRoomPaymentBody = zod.object({
 
 export const ReportInvoiceRoomPaymentResponse = zod.object({
   "room": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "status": zod.enum(['active', 'expired', 'revoked']),
   "expiresAt": zod.coerce.date(),
   "identityVerified": zod.boolean(),
@@ -3667,12 +3667,12 @@ export const ReportInvoiceRoomPaymentResponse = zod.object({
   "label": zod.string().nullable()
 }),zod.null()]),
   "requests": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "provider": zod.string(),
   "amount": zod.string(),
   "currency": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
-  "checkoutUrl": zod.string().url().nullable(),
+  "checkoutUrl": zod.url().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "confirmedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
@@ -3685,7 +3685,7 @@ export const ReportInvoiceRoomPaymentResponse = zod.object({
   "canClaimAccount": zod.boolean()
 }),
   "timeline": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "kind": zod.string(),
   "detail": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date()
@@ -3694,16 +3694,16 @@ export const ReportInvoiceRoomPaymentResponse = zod.object({
 
 
 export const CreateInvoiceRoomPaymentLinkBody = zod.object({
-  "idempotencyKey": zod.string().uuid()
+  "idempotencyKey": zod.uuid()
 })
 
 export const CreateInvoiceRoomPaymentLinkResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "provider": zod.string(),
   "amount": zod.string(),
   "currency": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'failed', 'expired']),
-  "checkoutUrl": zod.string().url().nullable(),
+  "checkoutUrl": zod.url().nullable(),
   "expiresAt": zod.coerce.date().nullable(),
   "confirmedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
@@ -4528,14 +4528,14 @@ export const CreateRecurringInvoiceResponse = zod.object({
  * @summary Deterministic "make this recurring?" suggestions mined from the client's own invoice history
  */
 export const ListRecurringSuggestionsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional()
+  "clientPartyId": zod.uuid().optional()
 })
 
 
 
 
 export const ListRecurringSuggestionsResponseItem = zod.object({
-  "buyerPartyId": zod.string().uuid(),
+  "buyerPartyId": zod.uuid(),
   "buyerName": zod.string(),
   "currency": zod.string(),
   "count": zod.number(),
@@ -4555,11 +4555,11 @@ export const ListRecurringSuggestionsResponse = zod.array(ListRecurringSuggestio
  * @summary Expected-but-absent invoices mined deterministically from the client's own monthly billing patterns
  */
 export const ListUnbilledIncomeQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional()
+  "clientPartyId": zod.uuid().optional()
 })
 
 export const ListUnbilledIncomeResponseItem = zod.object({
-  "buyerPartyId": zod.string().uuid(),
+  "buyerPartyId": zod.uuid(),
   "buyerName": zod.string(),
   "currency": zod.string(),
   "count": zod.number(),
@@ -4878,12 +4878,12 @@ export const VerifyBillStampResponse = zod.object({
  * @summary Advisory double-payment guard — bills paid twice by the evidence, and unpaid near-duplicate bills that would become one (deterministic, nothing stored)
  */
 export const GetDoublePaymentCheckQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetDoublePaymentCheckResponse = zod.object({
   "multiPaid": zod.array(zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "supplierName": zod.string(),
   "currency": zod.string(),
@@ -4898,12 +4898,12 @@ export const GetDoublePaymentCheckResponse = zod.object({
   "grandTotal": zod.string(),
   "pairKind": zod.enum(['both_unpaid', 'paid_original']),
   "first": zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "issueDate": zod.string()
 }),
   "second": zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "issueDate": zod.string()
 }),
@@ -4917,11 +4917,11 @@ export const GetDoublePaymentCheckResponse = zod.object({
  * @summary Vendors with a monthly capture habit whose bill has not been captured this cycle — the payables mirror of unbilled income (deterministic, nothing stored)
  */
 export const ListMissingRecurringBillsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const ListMissingRecurringBillsResponseItem = zod.object({
-  "supplierPartyId": zod.string().uuid(),
+  "supplierPartyId": zod.uuid(),
   "supplierName": zod.string(),
   "currency": zod.string(),
   "count": zod.number(),
@@ -5030,7 +5030,7 @@ export const GetFirmVatPositionsResponse = zod.object({
   "monthLabel": zod.string(),
   "months": zod.array(zod.string()),
   "rows": zod.array(zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "outputVat": zod.string(),
   "inputVat": zod.string(),
@@ -5067,7 +5067,7 @@ export const GetFilingMatrixResponse = zod.object({
   "wht": zod.string().regex(getFilingMatrixResponseDueDatesWhtRegExp)
 }),
   "rows": zod.array(zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "vat": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable(),
   "paye": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable(),
@@ -5734,7 +5734,7 @@ export const GetComplianceScorecardResponse = zod.object({
   "asOf": zod.string(),
   "windowDays": zod.number(),
   "rows": zod.array(zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "issuedCount": zod.number(),
   "acceptedCount": zod.number(),
@@ -7799,18 +7799,18 @@ export const ListClerkCasesResponseItem = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(listClerkCasesResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(listClerkCasesResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -7965,18 +7965,18 @@ export const CreateClerkCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(createClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(createClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -8114,18 +8114,18 @@ export const GetClerkCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(getClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(getClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -8288,18 +8288,18 @@ export const DecideClerkCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(decideClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(decideClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -8337,8 +8337,8 @@ export const DecideNoticeCaseParams = zod.object({
 export const DecideNoticeCaseBody = zod.object({
   "action": zod.enum(['approve', 'reject', 'escalate']),
   "reason": zod.string().optional(),
-  "firmId": zod.string().uuid().optional(),
-  "clientPartyId": zod.string().uuid().optional(),
+  "firmId": zod.uuid().optional(),
+  "clientPartyId": zod.uuid().optional(),
   "noticeType": zod.enum(['assessment', 'demand', 'information_request', 'audit', 'penalty', 'reminder', 'other']).optional(),
   "authority": zod.enum(['firs', 'state_irs', 'customs', 'other']).optional(),
   "reference": zod.string().optional(),
@@ -8458,18 +8458,18 @@ export const DecideNoticeCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(decideNoticeCaseResponseCaseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(decideNoticeCaseResponseCaseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -8528,7 +8528,7 @@ export const bulkApproveClerkCasesBodyItemsMax = 50;
 
 export const BulkApproveClerkCasesBody = zod.object({
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "decision": zod.object({
   "action": zod.enum(['approve', 'reject', 'escalate']),
   "reason": zod.string().nullish(),
@@ -8569,7 +8569,7 @@ export const askClerkBodyQuestionMax = 2000;
 
 export const AskClerkBody = zod.object({
   "question": zod.string().min(askClerkBodyQuestionMin).max(askClerkBodyQuestionMax),
-  "previousCaseId": zod.string().uuid().optional()
+  "previousCaseId": zod.uuid().optional()
 })
 
 export const askClerkResponseAnswerOneSectionsItemActionInvoiceIdsMax = 50;
@@ -8678,18 +8678,18 @@ export const AskClerkResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(askClerkResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(askClerkResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -8926,18 +8926,18 @@ export const RetryClerkCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(retryClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(retryClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -9078,18 +9078,18 @@ export const ClaimClerkCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(claimClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(claimClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -9230,18 +9230,18 @@ export const ReleaseClerkCaseResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(releaseClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(releaseClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -9445,7 +9445,7 @@ export const RunIntentEvalResponse = zod.object({
   "verdict": zod.enum(['promote', 'reject', 'inconclusive'])
 }).nullable(),
   "run": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "model": zod.string(),
   "promptVersion": zod.string(),
   "fixtureCount": zod.number(),
@@ -9475,7 +9475,7 @@ export const RunIntentEvalResponse = zod.object({
  * @summary Stored intent-classification eval runs, newest first
  */
 export const ListIntentEvalRunsResponseItem = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "model": zod.string(),
   "promptVersion": zod.string(),
   "fixtureCount": zod.number(),
@@ -9557,7 +9557,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "verdict": zod.enum(['promote', 'reject', 'inconclusive'])
 }).nullable(),
   "run": zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "model": zod.string(),
   "promptVersions": zod.record(zod.string(), zod.string()),
   "fixtureCount": zod.number(),
@@ -9586,7 +9586,7 @@ export const RunPhrasingEvalResponse = zod.object({
  * @summary Stored phrasing eval runs, newest first
  */
 export const ListPhrasingEvalRunsResponseItem = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "model": zod.string(),
   "promptVersions": zod.record(zod.string(), zod.string()),
   "fixtureCount": zod.number(),
@@ -9615,7 +9615,7 @@ export const ListPhrasingEvalRunsResponse = zod.array(ListPhrasingEvalRunsRespon
  * @summary Run the retrieval eval — embed the fixed labeled corpus with the live embedding model and score recall@k / MRR deterministically in app code; the run is stored
  */
 export const RunRetrievalEvalResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "model": zod.string(),
   "promptVersion": zod.string(),
   "k": zod.number(),
@@ -9637,7 +9637,7 @@ export const RunRetrievalEvalResponse = zod.object({
  * @summary Stored retrieval eval runs, newest first
  */
 export const ListRetrievalEvalRunsResponseItem = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "model": zod.string(),
   "promptVersion": zod.string(),
   "k": zod.number(),
@@ -9668,8 +9668,8 @@ export const listIntentFixturesResponseExpectedClientMax = 40;
 
 
 export const ListIntentFixturesResponseItem = zod.object({
-  "id": zod.string().uuid(),
-  "caseId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "caseId": zod.uuid(),
   "label": zod.string(),
   "question": zod.string(),
   "expected": zod.object({
@@ -9697,7 +9697,7 @@ export const mintIntentFixtureBodyExpectedClientMax = 40;
 
 
 export const MintIntentFixtureBody = zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "label": zod.string().max(mintIntentFixtureBodyLabelMax).optional(),
   "expected": zod.object({
   "claimKey": zod.string().min(1).max(mintIntentFixtureBodyExpectedClaimKeyMax),
@@ -9715,8 +9715,8 @@ export const mintIntentFixtureResponseExpectedClientMax = 40;
 
 
 export const MintIntentFixtureResponse = zod.object({
-  "id": zod.string().uuid(),
-  "caseId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "caseId": zod.uuid(),
   "label": zod.string(),
   "question": zod.string(),
   "expected": zod.object({
@@ -9745,8 +9745,8 @@ export const retireIntentFixtureResponseExpectedClientMax = 40;
 
 
 export const RetireIntentFixtureResponse = zod.object({
-  "id": zod.string().uuid(),
-  "caseId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "caseId": zod.uuid(),
   "label": zod.string(),
   "question": zod.string(),
   "expected": zod.object({
@@ -9775,8 +9775,8 @@ export const restoreIntentFixtureResponseExpectedClientMax = 40;
 
 
 export const RestoreIntentFixtureResponse = zod.object({
-  "id": zod.string().uuid(),
-  "caseId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "caseId": zod.uuid(),
   "label": zod.string(),
   "question": zod.string(),
   "expected": zod.object({
@@ -10048,18 +10048,18 @@ export const CreateClerkCaseBatchResponse = zod.object({
 })).optional(),
   "action": zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "why": zod.string(),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
-  "invoiceIds": zod.array(zod.string().uuid()).max(createClerkCaseBatchResponseCasesItemAnswerOneSectionsItemActionInvoiceIdsMax)
+  "invoiceIds": zod.array(zod.uuid()).max(createClerkCaseBatchResponseCasesItemAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
 })).optional(),
   "memory": zod.object({
   "title": zod.string(),
   "items": zod.array(zod.object({
-  "caseId": zod.string().uuid(),
+  "caseId": zod.uuid(),
   "question": zod.string(),
   "askedAt": zod.coerce.date(),
   "kind": zod.enum(['question', 'advisory_brief']).optional()
@@ -10120,7 +10120,7 @@ export const UpdateStaffNotificationPreferencesBody = zod.object({
   "digestEnabled": zod.boolean().optional(),
   "emailEnabled": zod.boolean().optional(),
   "pushEnabled": zod.boolean().optional(),
-  "email": zod.string().email().nullish()
+  "email": zod.email().nullish()
 })
 
 export const UpdateStaffNotificationPreferencesResponse = zod.object({
@@ -10214,7 +10214,7 @@ export const ListStatementConnectionsResponse = zod.array(ListStatementConnectio
  */
 export const CreateStatementConnectionBody = zod.object({
   "connectorKey": zod.string(),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "config": zod.record(zod.string(), zod.unknown()).optional()
 })
 
@@ -10272,11 +10272,11 @@ export const ListStatementSyncRunsResponse = zod.array(ListStatementSyncRunsResp
  * @summary Monthly per-client compliance statements (facts computed by SQL; narrative only phrased)
  */
 export const ListClientStatementsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional()
+  "clientPartyId": zod.uuid().optional()
 })
 
 export const ListClientStatementsResponseItem = zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "monthStart": zod.string(),
   "headline": zod.string(),
   "bullets": zod.array(zod.string()),
@@ -10298,12 +10298,12 @@ export const ListClientStatementsResponse = zod.array(ListClientStatementsRespon
  * @summary Per-client advisory briefs, newest first (sections composed by app code from the platform's own reports; only the adviser's note is phrased)
  */
 export const ListAdvisoryBriefsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional()
+  "clientPartyId": zod.uuid().optional()
 })
 
 export const ListAdvisoryBriefsResponseItem = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "monthStart": zod.string(),
   "headline": zod.string(),
@@ -10331,12 +10331,12 @@ export const ListAdvisoryBriefsResponse = zod.array(ListAdvisoryBriefsResponseIt
  * @summary Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note
  */
 export const GenerateAdvisoryBriefBody = zod.object({
-  "clientPartyId": zod.string().uuid()
+  "clientPartyId": zod.uuid()
 })
 
 export const GenerateAdvisoryBriefResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "monthStart": zod.string(),
   "headline": zod.string(),
@@ -10424,7 +10424,7 @@ export const DraftCatalogueEntryWithClerkResponse = zod.object({
  * @summary Plain-language, catalogue-grounded explanation of an invoice's latest failure
  */
 export const ExplainInvoiceFailureBody = zod.object({
-  "invoiceId": zod.string().uuid()
+  "invoiceId": zod.uuid()
 })
 
 export const ExplainInvoiceFailureResponse = zod.object({
@@ -10439,7 +10439,7 @@ export const ExplainInvoiceFailureResponse = zod.object({
  * @summary A payment-reminder draft for one outstanding receivable, grounded in stored facts (template fallback, nothing stored)
  */
 export const DraftPaymentChaserBody = zod.object({
-  "invoiceId": zod.string().uuid()
+  "invoiceId": zod.uuid()
 })
 
 export const DraftPaymentChaserResponse = zod.object({
@@ -10507,7 +10507,7 @@ export const AssistMatchProposalsResponse = zod.object({
  * @summary Clerk reads a statement's middle-band narrations against each line's own proposal shortlist and records a pick or abstention per line — advisory only, acceptance stays the human decision path
  */
 export const SuggestNarrationMatchesBody = zod.object({
-  "statementId": zod.string().uuid()
+  "statementId": zod.uuid()
 })
 
 export const SuggestNarrationMatchesResponse = zod.object({
@@ -11043,7 +11043,7 @@ export const RunModelCanaryResponse = zod.object({
  * @summary Clerk-assembled action batches from the closed catalogue, computed live from the detector predicates — nothing is stored and nothing runs until a human approves (empty while the clerk_actions flag is dark)
  */
 export const GetActionProposalsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetActionProposalsResponse = zod.object({
@@ -11052,7 +11052,7 @@ export const GetActionProposalsResponse = zod.object({
   "title": zod.string(),
   "why": zod.string(),
   "targets": zod.array(zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "issueDate": zod.string(),
   "daysOverdue": zod.number(),
@@ -11077,18 +11077,18 @@ export const executeActionBodyInvoiceIdsMax = 50;
 
 export const ExecuteActionBody = zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
-  "invoiceIds": zod.array(zod.string().uuid()).min(1).max(executeActionBodyInvoiceIdsMax),
-  "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "invoiceIds": zod.array(zod.uuid()).min(1).max(executeActionBodyInvoiceIdsMax),
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const ExecuteActionResponse = zod.object({
   "decision": zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
-  "decidedBy": zod.string().uuid(),
-  "policyId": zod.string().uuid().nullable(),
+  "decidedBy": zod.uuid(),
+  "policyId": zod.uuid().nullable(),
   "evidence": zod.record(zod.string(), zod.unknown()),
   "targets": zod.array(zod.object({
   "invoiceId": zod.string(),
@@ -11122,17 +11122,17 @@ export const ExecuteActionResponse = zod.object({
  * @summary The client's most recent action decisions — who approved what, on which evidence, with per-target outcomes
  */
 export const GetActionDecisionsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetActionDecisionsResponse = zod.object({
   "decisions": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
-  "decidedBy": zod.string().uuid(),
-  "policyId": zod.string().uuid().nullable(),
+  "decidedBy": zod.uuid(),
+  "policyId": zod.uuid().nullable(),
   "evidence": zod.record(zod.string(), zod.unknown()),
   "targets": zod.array(zod.object({
   "invoiceId": zod.string(),
@@ -11153,23 +11153,23 @@ export const GetActionDecisionsResponse = zod.object({
  * @summary Standing approvals for one client — every non-revoked grant (paused ones included) plus whether the clerk_action_policies flag is live for this firm, which gates granting and every sweep run
  */
 export const GetActionPoliciesQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetActionPoliciesResponse = zod.object({
   "policies": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
   "maxTargetsPerRun": zod.number(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullable(),
   "pausedReason": zod.string().nullable(),
-  "pausedBy": zod.string().uuid().nullable(),
+  "pausedBy": zod.uuid().nullable(),
   "revokedAt": zod.coerce.date().nullable(),
-  "revokedBy": zod.string().uuid().nullable(),
+  "revokedBy": zod.uuid().nullable(),
   "lastRunAt": zod.coerce.date().nullable(),
   "lastRunDay": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -11187,23 +11187,23 @@ export const grantActionPolicyBodyMaxTargetsPerRunMax = 50;
 
 export const GrantActionPolicyBody = zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed']),
-  "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
   "maxTargetsPerRun": zod.number().min(1).max(grantActionPolicyBodyMaxTargetsPerRunMax).optional()
 })
 
 export const GrantActionPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
   "maxTargetsPerRun": zod.number(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullable(),
   "pausedReason": zod.string().nullable(),
-  "pausedBy": zod.string().uuid().nullable(),
+  "pausedBy": zod.uuid().nullable(),
   "revokedAt": zod.coerce.date().nullable(),
-  "revokedBy": zod.string().uuid().nullable(),
+  "revokedBy": zod.uuid().nullable(),
   "lastRunAt": zod.coerce.date().nullable(),
   "lastRunDay": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -11218,18 +11218,18 @@ export const PauseActionPolicyParams = zod.object({
 })
 
 export const PauseActionPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
   "maxTargetsPerRun": zod.number(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullable(),
   "pausedReason": zod.string().nullable(),
-  "pausedBy": zod.string().uuid().nullable(),
+  "pausedBy": zod.uuid().nullable(),
   "revokedAt": zod.coerce.date().nullable(),
-  "revokedBy": zod.string().uuid().nullable(),
+  "revokedBy": zod.uuid().nullable(),
   "lastRunAt": zod.coerce.date().nullable(),
   "lastRunDay": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -11244,18 +11244,18 @@ export const ResumeActionPolicyParams = zod.object({
 })
 
 export const ResumeActionPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
   "maxTargetsPerRun": zod.number(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullable(),
   "pausedReason": zod.string().nullable(),
-  "pausedBy": zod.string().uuid().nullable(),
+  "pausedBy": zod.uuid().nullable(),
   "revokedAt": zod.coerce.date().nullable(),
-  "revokedBy": zod.string().uuid().nullable(),
+  "revokedBy": zod.uuid().nullable(),
   "lastRunAt": zod.coerce.date().nullable(),
   "lastRunDay": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -11270,18 +11270,18 @@ export const RevokeActionPolicyParams = zod.object({
 })
 
 export const RevokeActionPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "kind": zod.string(),
   "maxTargetsPerRun": zod.number(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullable(),
   "pausedReason": zod.string().nullable(),
-  "pausedBy": zod.string().uuid().nullable(),
+  "pausedBy": zod.uuid().nullable(),
   "revokedAt": zod.coerce.date().nullable(),
-  "revokedBy": zod.string().uuid().nullable(),
+  "revokedBy": zod.uuid().nullable(),
   "lastRunAt": zod.coerce.date().nullable(),
   "lastRunDay": zod.string().nullable(),
   "createdAt": zod.coerce.date()
@@ -11296,7 +11296,7 @@ export const getActionEffectivenessQueryWindowDaysMax = 365;
 
 
 export const GetActionEffectivenessQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
   "windowDays": zod.coerce.number().min(1).max(getActionEffectivenessQueryWindowDaysMax).optional().describe('Look-back window in days (default 90, max 365).')
 })
 
@@ -11329,20 +11329,20 @@ export const GetActionEffectivenessResponse = zod.object({
  * @summary Approve a whole action plan (from an Ask answer or a template) as a queued run
  */
 export const CreatePlanRunBody = zod.object({
-  "caseId": zod.string().uuid().optional(),
+  "caseId": zod.uuid().optional(),
   "templateKey": zod.string().optional(),
-  "clientPartyId": zod.string().uuid().optional()
+  "clientPartyId": zod.uuid().optional()
 }).describe('Exactly one origin — an Ask case whose action sections are approved whole (caseId), or a deterministic template assembled for one client (templateKey + clientPartyId). The server re-reads and freezes the steps; nothing client-supplied reaches execution.')
 
 export const CreatePlanRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid().optional(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid().optional(),
   "caseId": zod.string().nullish(),
   "templateKey": zod.string().nullish(),
   "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
   "steps": zod.array(zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring', 'reconcile_matches']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "targetCount": zod.number(),
   "status": zod.enum(['pending', 'executed', 'halted_here', 'skipped']),
@@ -11365,14 +11365,14 @@ export const CreatePlanRunResponse = zod.object({
  */
 export const ListPlanRunsResponse = zod.object({
   "runs": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid().optional(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid().optional(),
   "caseId": zod.string().nullish(),
   "templateKey": zod.string().nullish(),
   "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
   "steps": zod.array(zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring', 'reconcile_matches']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "targetCount": zod.number(),
   "status": zod.enum(['pending', 'executed', 'halted_here', 'skipped']),
@@ -11399,14 +11399,14 @@ export const GetPlanRunParams = zod.object({
 })
 
 export const GetPlanRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid().optional(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid().optional(),
   "caseId": zod.string().nullish(),
   "templateKey": zod.string().nullish(),
   "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
   "steps": zod.array(zod.object({
   "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring', 'reconcile_matches']),
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "targetCount": zod.number(),
   "status": zod.enum(['pending', 'executed', 'halted_here', 'skipped']),
@@ -11428,16 +11428,16 @@ export const GetPlanRunResponse = zod.object({
  * @summary The live recurring-plan approvals for one client
  */
 export const GetPlanPoliciesQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GetPlanPoliciesResponse = zod.object({
   "policies": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "templateKey": zod.string(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullish(),
   "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
@@ -11455,15 +11455,15 @@ export const GetPlanPoliciesResponse = zod.object({
  */
 export const GrantPlanPolicyBody = zod.object({
   "templateKey": zod.string(),
-  "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const GrantPlanPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "templateKey": zod.string(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullish(),
   "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
@@ -11482,11 +11482,11 @@ export const PausePlanPolicyParams = zod.object({
 })
 
 export const PausePlanPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "templateKey": zod.string(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullish(),
   "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
@@ -11505,11 +11505,11 @@ export const ResumePlanPolicyParams = zod.object({
 })
 
 export const ResumePlanPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "templateKey": zod.string(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullish(),
   "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
@@ -11528,11 +11528,11 @@ export const RevokePlanPolicyParams = zod.object({
 })
 
 export const RevokePlanPolicyResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "templateKey": zod.string(),
-  "grantedBy": zod.string().uuid(),
+  "grantedBy": zod.uuid(),
   "grantedByRole": zod.string(),
   "pausedAt": zod.coerce.date().nullish(),
   "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
@@ -11596,7 +11596,7 @@ export const GetAutomationEvidenceResponse = zod.object({
  * @summary One client's automation evidence backtest (for the grant surfaces)
  */
 export const GetClientAutomationEvidenceQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const getClientAutomationEvidenceResponseAsOfRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
@@ -11629,7 +11629,7 @@ export const listObligationsQueryOffsetMin = 0;
 
 
 export const ListObligationsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
+  "clientPartyId": zod.uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
   "status": zod.enum(['open', 'responded', 'closed']).optional(),
   "limit": zod.coerce.number().min(1).max(listObligationsQueryLimitMax).optional(),
   "offset": zod.coerce.number().min(listObligationsQueryOffsetMin).optional()
@@ -11663,7 +11663,7 @@ export const ListObligationsResponse = zod.object({
  * @summary Record a notice received outside Clerk (paper, walk-in) as a tracked obligation — firm staff only, no model involved
  */
 export const CreateObligationBody = zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "noticeType": zod.enum(['assessment', 'demand', 'information_request', 'audit', 'penalty', 'reminder', 'other']),
   "authority": zod.enum(['firs', 'state_irs', 'customs', 'other']),
   "reference": zod.string().optional(),
@@ -11731,7 +11731,7 @@ export const getObligationResponsePackQueryMonthRegExp = new RegExp('^\\d{4}-\\d
 
 
 export const GetObligationResponsePackQueryParams = zod.object({
-  "obligationId": zod.coerce.string().uuid(),
+  "obligationId": zod.uuid(),
   "month": zod.coerce.string().regex(getObligationResponsePackQueryMonthRegExp).optional().describe('Period the figures cover (defaults to the notice\'s issue month when on the live 12-month list, else the current Lagos month).')
 })
 
@@ -11805,7 +11805,7 @@ export const listFilingsQueryOffsetMin = 0;
 
 
 export const ListFilingsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "clientPartyId": zod.uuid().optional(),
   "status": zod.enum(['upcoming', 'prepared', 'filed']).optional(),
   "taxType": zod.enum(['vat', 'paye', 'wht']).optional(),
   "limit": zod.coerce.number().min(1).max(listFilingsQueryLimitMax).optional(),
@@ -11818,9 +11818,9 @@ export const listFilingsResponseFilingsItemDueDateRegExp = new RegExp('^\\d{4}-\
 
 export const ListFilingsResponse = zod.object({
   "filings": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "taxType": zod.string(),
   "period": zod.string().regex(listFilingsResponseFilingsItemPeriodRegExp),
   "dueDate": zod.string().regex(listFilingsResponseFilingsItemDueDateRegExp),
@@ -11870,9 +11870,9 @@ export const updateFilingStatusResponseDueDateRegExp = new RegExp('^\\d{4}-\\d{2
 
 
 export const UpdateFilingStatusResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "taxType": zod.string(),
   "period": zod.string().regex(updateFilingStatusResponsePeriodRegExp),
   "dueDate": zod.string().regex(updateFilingStatusResponseDueDateRegExp),
@@ -11891,13 +11891,13 @@ export const UpdateFilingStatusResponse = zod.object({
  * @summary The firm's client onboarding runs (client-scoped for client users)
  */
 export const ListOnboardingRunsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional()
+  "clientPartyId": zod.uuid().optional()
 })
 
 export const ListOnboardingRunsResponse = zod.object({
   "runs": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "status": zod.enum(['active', 'completed', 'abandoned']),
   "steps": zod.array(zod.object({
@@ -11918,12 +11918,12 @@ export const ListOnboardingRunsResponse = zod.object({
  * @summary Open an evidence-based onboarding checklist for a newly engaged client
  */
 export const CreateOnboardingRunBody = zod.object({
-  "clientPartyId": zod.string().uuid()
+  "clientPartyId": zod.uuid()
 })
 
 export const CreateOnboardingRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "status": zod.enum(['active', 'completed', 'abandoned']),
   "steps": zod.array(zod.object({
@@ -11947,8 +11947,8 @@ export const GetOnboardingRunParams = zod.object({
 })
 
 export const GetOnboardingRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "status": zod.enum(['active', 'completed', 'abandoned']),
   "steps": zod.array(zod.object({
@@ -11972,8 +11972,8 @@ export const RefreshOnboardingRunParams = zod.object({
 })
 
 export const RefreshOnboardingRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "status": zod.enum(['active', 'completed', 'abandoned']),
   "steps": zod.array(zod.object({
@@ -12007,8 +12007,8 @@ export const SkipOnboardingStepBody = zod.object({
 })
 
 export const SkipOnboardingStepResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "status": zod.enum(['active', 'completed', 'abandoned']),
   "steps": zod.array(zod.object({
@@ -12032,8 +12032,8 @@ export const AbandonOnboardingRunParams = zod.object({
 })
 
 export const AbandonOnboardingRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "clientName": zod.string(),
   "status": zod.enum(['active', 'completed', 'abandoned']),
   "steps": zod.array(zod.object({
@@ -12204,7 +12204,7 @@ export const listWhtCreditsQueryOffsetMin = 0;
 
 
 export const ListWhtCreditsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "clientPartyId": zod.uuid().optional(),
   "status": zod.enum(['awaiting_note', 'note_received']).optional(),
   "limit": zod.coerce.number().min(1).max(listWhtCreditsQueryLimitMax).optional(),
   "offset": zod.coerce.number().min(listWhtCreditsQueryOffsetMin).optional()
@@ -12215,10 +12215,10 @@ export const listWhtCreditsResponseCreditsItemDeductedDateRegExp = new RegExp('^
 
 export const ListWhtCreditsResponse = zod.object({
   "credits": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "category": zod.string(),
   "amount": zod.string(),
@@ -12246,7 +12246,7 @@ export const recordWhtCreditBodyDeductedDateRegExp = new RegExp('^\\d{4}-\\d{2}-
 
 
 export const RecordWhtCreditBody = zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "amount": zod.string().optional(),
   "deductedDate": zod.string().regex(recordWhtCreditBodyDeductedDateRegExp)
 })
@@ -12255,10 +12255,10 @@ export const recordWhtCreditResponseDeductedDateRegExp = new RegExp('^\\d{4}-\\d
 
 
 export const RecordWhtCreditResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "category": zod.string(),
   "amount": zod.string(),
@@ -12293,10 +12293,10 @@ export const markWhtNoteReceivedResponseDeductedDateRegExp = new RegExp('^\\d{4}
 
 
 export const MarkWhtNoteReceivedResponse = zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
-  "invoiceId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "category": zod.string(),
   "amount": zod.string(),
@@ -12317,7 +12317,7 @@ export const getWhtRemittanceQueryPeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
 
 
 export const GetWhtRemittanceQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "period": zod.coerce.string().regex(getWhtRemittanceQueryPeriodRegExp).optional()
 })
 
@@ -12331,7 +12331,7 @@ export const GetWhtRemittanceResponse = zod.object({
   "periodLabel": zod.string(),
   "dueDate": zod.string().regex(getWhtRemittanceResponseDueDateRegExp),
   "rows": zod.array(zod.object({
-  "invoiceId": zod.string().uuid(),
+  "invoiceId": zod.uuid(),
   "invoiceNumber": zod.string(),
   "vendorName": zod.string(),
   "category": zod.string(),
@@ -12378,7 +12378,7 @@ export const listOperationsResponseNextCursorMax = 256;
 
 export const ListOperationsResponse = zod.object({
   "operations": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "command": zod.enum(['invoice.create', 'invoice.import']),
   "idempotencyKey": zod.string().min(1).max(listOperationsResponseOperationsItemIdempotencyKeyMax).regex(listOperationsResponseOperationsItemIdempotencyKeyRegExp),
   "status": zod.enum(['succeeded', 'partial', 'failed']),
@@ -12427,7 +12427,7 @@ export const lookupOperationResponseTwoResultBodyThreeNextChunkIndexMax = 5000;
 
 
 export const LookupOperationResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "command": zod.enum(['invoice.create', 'invoice.import']),
   "idempotencyKey": zod.string().min(1).max(lookupOperationResponseOneIdempotencyKeyMax).regex(lookupOperationResponseOneIdempotencyKeyRegExp),
   "status": zod.enum(['succeeded', 'partial', 'failed']),
@@ -12494,7 +12494,7 @@ export const LookupOperationResponse = zod.object({
 }))
 }))
 }),zod.object({
-  "runId": zod.string().uuid(),
+  "runId": zod.uuid(),
   "chunkIndex": zod.number().min(lookupOperationResponseTwoResultBodyThreeChunkIndexMin).max(lookupOperationResponseTwoResultBodyThreeChunkIndexMax),
   "nextChunkIndex": zod.number().min(1).max(lookupOperationResponseTwoResultBodyThreeNextChunkIndexMax),
   "result": zod.object({
@@ -12523,7 +12523,7 @@ export const LookupOperationResponse = zod.object({
  * @summary Recover the caller's authorized operation result
  */
 export const GetOperationParams = zod.object({
-  "id": zod.coerce.string().uuid()
+  "id": zod.uuid()
 })
 
 export const getOperationResponseOneIdempotencyKeyMax = 128;
@@ -12546,7 +12546,7 @@ export const getOperationResponseTwoResultBodyThreeNextChunkIndexMax = 5000;
 
 
 export const GetOperationResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "command": zod.enum(['invoice.create', 'invoice.import']),
   "idempotencyKey": zod.string().min(1).max(getOperationResponseOneIdempotencyKeyMax).regex(getOperationResponseOneIdempotencyKeyRegExp),
   "status": zod.enum(['succeeded', 'partial', 'failed']),
@@ -12613,7 +12613,7 @@ export const GetOperationResponse = zod.object({
 }))
 }))
 }),zod.object({
-  "runId": zod.string().uuid(),
+  "runId": zod.uuid(),
   "chunkIndex": zod.number().min(getOperationResponseTwoResultBodyThreeChunkIndexMin).max(getOperationResponseTwoResultBodyThreeChunkIndexMax),
   "nextChunkIndex": zod.number().min(1).max(getOperationResponseTwoResultBodyThreeNextChunkIndexMax),
   "result": zod.object({
@@ -12652,8 +12652,8 @@ export const createInvoiceImportRunBodyChunkHashesMax = 5000;
 
 
 export const CreateInvoiceImportRunBody = zod.object({
-  "id": zod.string().uuid().describe('Random client intent UUID, persisted before dispatch. Never derive only from file content.'),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid().describe('Random client intent UUID, persisted before dispatch. Never derive only from file content.'),
+  "clientPartyId": zod.uuid(),
   "totalRows": zod.number().min(1).max(createInvoiceImportRunBodyTotalRowsMax),
   "chunkSize": zod.number().min(1).max(createInvoiceImportRunBodyChunkSizeMax),
   "chunkHashes": zod.array(zod.string().regex(createInvoiceImportRunBodyChunkHashesItemRegExp)).min(1).max(createInvoiceImportRunBodyChunkHashesMax).describe('Exactly ceil(totalRows\/chunkSize) ordered hashes. Hash the JSON rows array using recursively sorted object keys, preserved array order, omitted undefined properties, and UTF-8 SHA-256 lowercase hex. Rows are not trimmed or coerced.')
@@ -12689,8 +12689,8 @@ export const createInvoiceImportRunResponseChunksMax = 5000;
 
 
 export const CreateInvoiceImportRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "manifestHash": zod.string().regex(createInvoiceImportRunResponseManifestHashRegExp),
   "totalRows": zod.number().min(1).max(createInvoiceImportRunResponseTotalRowsMax),
   "chunkSize": zod.number().min(1).max(createInvoiceImportRunResponseChunkSizeMax),
@@ -12705,7 +12705,7 @@ export const CreateInvoiceImportRunResponse = zod.object({
   "finalizedAt": zod.coerce.date().nullable(),
   "chunks": zod.array(zod.object({
   "chunkIndex": zod.number().min(createInvoiceImportRunResponseChunksItemChunkIndexMin).max(createInvoiceImportRunResponseChunksItemChunkIndexMax),
-  "operationId": zod.string().uuid(),
+  "operationId": zod.uuid(),
   "rowCount": zod.number().min(1).max(createInvoiceImportRunResponseChunksItemRowCountMax),
   "result": zod.object({
   "total": zod.number(),
@@ -12750,7 +12750,7 @@ export const CreateInvoiceImportRunResponse = zod.object({
  * @summary Read the authorized import checkpoint and committed chunk results
  */
 export const GetInvoiceImportRunParams = zod.object({
-  "id": zod.coerce.string().uuid()
+  "id": zod.uuid()
 })
 
 export const getInvoiceImportRunResponseManifestHashRegExp = new RegExp('^[0-9a-f]{64}$');
@@ -12783,8 +12783,8 @@ export const getInvoiceImportRunResponseChunksMax = 5000;
 
 
 export const GetInvoiceImportRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "manifestHash": zod.string().regex(getInvoiceImportRunResponseManifestHashRegExp),
   "totalRows": zod.number().min(1).max(getInvoiceImportRunResponseTotalRowsMax),
   "chunkSize": zod.number().min(1).max(getInvoiceImportRunResponseChunkSizeMax),
@@ -12799,7 +12799,7 @@ export const GetInvoiceImportRunResponse = zod.object({
   "finalizedAt": zod.coerce.date().nullable(),
   "chunks": zod.array(zod.object({
   "chunkIndex": zod.number().min(getInvoiceImportRunResponseChunksItemChunkIndexMin).max(getInvoiceImportRunResponseChunksItemChunkIndexMax),
-  "operationId": zod.string().uuid(),
+  "operationId": zod.uuid(),
   "rowCount": zod.number().min(1).max(getInvoiceImportRunResponseChunksItemRowCountMax),
   "result": zod.object({
   "total": zod.number(),
@@ -12849,7 +12849,7 @@ export const commitInvoiceImportChunkPathChunkIndexMax = 4999;
 
 
 export const CommitInvoiceImportChunkParams = zod.object({
-  "id": zod.coerce.string().uuid(),
+  "id": zod.uuid(),
   "chunkIndex": zod.coerce.number().min(commitInvoiceImportChunkPathChunkIndexMin).max(commitInvoiceImportChunkPathChunkIndexMax)
 })
 
@@ -12891,7 +12891,7 @@ export const commitInvoiceImportChunkResponseNextChunkIndexMax = 5000;
 
 
 export const CommitInvoiceImportChunkResponse = zod.object({
-  "runId": zod.string().uuid(),
+  "runId": zod.uuid(),
   "chunkIndex": zod.number().min(commitInvoiceImportChunkResponseChunkIndexMin).max(commitInvoiceImportChunkResponseChunkIndexMax),
   "nextChunkIndex": zod.number().min(1).max(commitInvoiceImportChunkResponseNextChunkIndexMax),
   "result": zod.object({
@@ -12919,7 +12919,7 @@ export const CommitInvoiceImportChunkResponse = zod.object({
  * @summary Finalize a fully committed run and recover its aggregate result
  */
 export const FinalizeInvoiceImportRunParams = zod.object({
-  "id": zod.coerce.string().uuid()
+  "id": zod.uuid()
 })
 
 export const FinalizeInvoiceImportRunBody = zod.object({
@@ -12956,8 +12956,8 @@ export const finalizeInvoiceImportRunResponseChunksMax = 5000;
 
 
 export const FinalizeInvoiceImportRunResponse = zod.object({
-  "id": zod.string().uuid(),
-  "clientPartyId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "clientPartyId": zod.uuid(),
   "manifestHash": zod.string().regex(finalizeInvoiceImportRunResponseManifestHashRegExp),
   "totalRows": zod.number().min(1).max(finalizeInvoiceImportRunResponseTotalRowsMax),
   "chunkSize": zod.number().min(1).max(finalizeInvoiceImportRunResponseChunkSizeMax),
@@ -12972,7 +12972,7 @@ export const FinalizeInvoiceImportRunResponse = zod.object({
   "finalizedAt": zod.coerce.date().nullable(),
   "chunks": zod.array(zod.object({
   "chunkIndex": zod.number().min(finalizeInvoiceImportRunResponseChunksItemChunkIndexMin).max(finalizeInvoiceImportRunResponseChunksItemChunkIndexMax),
-  "operationId": zod.string().uuid(),
+  "operationId": zod.uuid(),
   "rowCount": zod.number().min(1).max(finalizeInvoiceImportRunResponseChunksItemRowCountMax),
   "result": zod.object({
   "total": zod.number(),
@@ -13021,7 +13021,7 @@ export const listInvoiceDraftsQueryOffsetMin = 0;
 
 
 export const ListInvoiceDraftsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "offset": zod.coerce.number().min(listInvoiceDraftsQueryOffsetMin).default(listInvoiceDraftsQueryOffsetDefault)
 })
 
@@ -13053,9 +13053,9 @@ export const listInvoiceDraftsResponseItemsItemDraftLinesMax = 500;
 
 export const ListInvoiceDraftsResponse = zod.object({
   "items": zod.array(zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "revision": zod.number().min(1),
-  "writeId": zod.string().uuid(),
+  "writeId": zod.uuid(),
   "draft": zod.object({
   "invoiceNumber": zod.string().max(listInvoiceDraftsResponseItemsItemDraftInvoiceNumberMax),
   "buyerPartyId": zod.string().regex(listInvoiceDraftsResponseItemsItemDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
@@ -13086,7 +13086,7 @@ export const GetInvoiceDraftParams = zod.object({
 })
 
 export const GetInvoiceDraftQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().uuid()
+  "clientPartyId": zod.uuid()
 })
 
 
@@ -13116,9 +13116,9 @@ export const getInvoiceDraftResponseDraftLinesMax = 500;
 
 
 export const GetInvoiceDraftResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "revision": zod.number().min(1),
-  "writeId": zod.string().uuid(),
+  "writeId": zod.uuid(),
   "draft": zod.object({
   "invoiceNumber": zod.string().max(getInvoiceDraftResponseDraftInvoiceNumberMax),
   "buyerPartyId": zod.string().regex(getInvoiceDraftResponseDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
@@ -13175,9 +13175,9 @@ export const saveInvoiceDraftBodyDraftLinesMax = 500;
 
 
 export const SaveInvoiceDraftBody = zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "expectedRevision": zod.number().min(saveInvoiceDraftBodyExpectedRevisionMin),
-  "writeId": zod.string().uuid(),
+  "writeId": zod.uuid(),
   "draft": zod.object({
   "invoiceNumber": zod.string().max(saveInvoiceDraftBodyDraftInvoiceNumberMax),
   "buyerPartyId": zod.string().regex(saveInvoiceDraftBodyDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
@@ -13222,9 +13222,9 @@ export const saveInvoiceDraftResponseDraftLinesMax = 500;
 
 
 export const SaveInvoiceDraftResponse = zod.object({
-  "id": zod.string().uuid(),
+  "id": zod.uuid(),
   "revision": zod.number().min(1),
-  "writeId": zod.string().uuid(),
+  "writeId": zod.uuid(),
   "draft": zod.object({
   "invoiceNumber": zod.string().max(saveInvoiceDraftResponseDraftInvoiceNumberMax),
   "buyerPartyId": zod.string().regex(saveInvoiceDraftResponseDraftBuyerPartyIdRegExp).describe('UUID of a selected buyer, or an empty string while unfinished'),
@@ -13257,7 +13257,7 @@ export const deleteInvoiceDraftBodyExpectedRevisionMin = 0;
 
 
 export const DeleteInvoiceDraftBody = zod.object({
-  "clientPartyId": zod.string().uuid(),
+  "clientPartyId": zod.uuid(),
   "expectedRevision": zod.number().min(deleteInvoiceDraftBodyExpectedRevisionMin)
 })
 
@@ -13273,7 +13273,7 @@ export const listClerkReservationsQueryLimitMax = 100;
 
 
 export const ListClerkReservationsQueryParams = zod.object({
-  "afterId": zod.coerce.string().uuid().optional(),
+  "afterId": zod.uuid().optional(),
   "limit": zod.coerce.number().min(1).max(listClerkReservationsQueryLimitMax).default(listClerkReservationsQueryLimitDefault)
 })
 
@@ -13284,13 +13284,13 @@ export const listClerkReservationsResponseReservationsMax = 100;
 
 export const ListClerkReservationsResponse = zod.object({
   "reservations": zod.array(zod.object({
-  "id": zod.string().uuid(),
-  "firmId": zod.string().uuid(),
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
   "reservedTokens": zod.string().regex(listClerkReservationsResponseReservationsItemReservedTokensRegExp).describe('Positive bigint encoded as a decimal string.'),
   "createdAt": zod.coerce.date(),
   "expiresAt": zod.coerce.date()
 })).max(listClerkReservationsResponseReservationsMax),
-  "nextAfterId": zod.string().uuid().nullable().describe('Last UUID when the page is full; null otherwise. A following page may be empty.')
+  "nextAfterId": zod.uuid().nullable().describe('Last UUID when the page is full; null otherwise. A following page may be empty.')
 })
 
 
@@ -13298,7 +13298,7 @@ export const ListClerkReservationsResponse = zod.object({
  * Requires an authenticated operator with operator.queue.act and the normal x-valo-csrf header (the legacy x-meridian-csrf alias is still accepted). The operator must confirm provider execution has stopped and supply an audit reason. Charges at least the reserved amount, appends audit evidence and settles atomically. Never refunds uncertain spend. Repeated reconciliation returns the existing inferenceCallId with replayed=true; subsequent input cannot change the recorded charge. A later provider result charges only excess usage not already charged in the same UTC budget month.
  */
 export const ReconcileClerkReservationParams = zod.object({
-  "id": zod.coerce.string().uuid()
+  "id": zod.uuid()
 })
 
 export const reconcileClerkReservationBodyReasonMin = 10;
@@ -13315,7 +13315,7 @@ export const ReconcileClerkReservationBody = zod.object({
 })
 
 export const ReconcileClerkReservationResponse = zod.object({
-  "inferenceCallId": zod.string().uuid(),
+  "inferenceCallId": zod.uuid(),
   "replayed": zod.boolean()
 })
 

@@ -27,7 +27,7 @@ catalog:
   tsx: 4.22.4
   vite: ^7.3.2
   wouter: ^3.3.5
-  zod: ^3.25.76
+  zod: ^4.5.4
 
 # Supply-chain gate ignores, each with a reason. image-size: metro (the Expo
 # dev-time bundler) pins the v1 line and calls the package's callable default
