@@ -10,6 +10,88 @@ export interface ReleaseReadinessCheck {
 
 const MAX_CLOCK_SKEW_MS = 5 * 60_000;
 
+export interface HeartbeatEvidence {
+  lastSucceededAt?: Date | null;
+  lastFailedAt?: Date | null;
+  lastError?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+const operationalActions: Record<
+  string,
+  { owner: string; remediation: string }
+> = {
+  scheduled_work: {
+    owner: "Platform operations",
+    remediation:
+      "Inspect the approved scheduler and failed passes; rerun the existing ops:sweep tool after remediation.",
+  },
+  backup: {
+    owner: "Database operations",
+    remediation:
+      "Run ops:backup on an approved private runner, verify the retained manifest, and confirm encrypted private off-box retention separately.",
+  },
+  restore_drill: {
+    owner: "Database operations",
+    remediation:
+      "Run ops:restore-drill with a trusted retained manifest and a fresh, explicitly disposable isolated database; inspect catalog and row-count verification.",
+  },
+};
+
+function isoDate(value: Date | null | undefined): string | null {
+  return value && Number.isFinite(value.getTime()) ? value.toISOString() : null;
+}
+
+function recoveryProvenance(
+  key: string,
+  metadata: Record<string, unknown> | null | undefined,
+  succeededAt: number,
+  maxAgeMs: number,
+  now: number,
+): "current" | "stale" | "unverified" {
+  if (key !== "backup" && key !== "restore_drill") return "current";
+  const hashes =
+    key === "backup"
+      ? ["sha256", "snapshotSha256", "manifestSha256"]
+      : ["backupSha256", "snapshotSha256", "backupManifestSha256"];
+  if (
+    metadata?.evidenceVersion !== 2 ||
+    hashes.some(
+      (field) =>
+        typeof metadata[field] !== "string" ||
+        !/^[a-f0-9]{64}$/.test(metadata[field]),
+    )
+  )
+    return "unverified";
+  const rawCreatedAt =
+    metadata[key === "backup" ? "createdAt" : "backupCreatedAt"];
+  const createdAt =
+    typeof rawCreatedAt === "string" ? Date.parse(rawCreatedAt) : NaN;
+  if (
+    !Number.isFinite(createdAt) ||
+    createdAt > succeededAt ||
+    createdAt > now + MAX_CLOCK_SKEW_MS
+  )
+    return "unverified";
+  if (key === "backup") {
+    if (
+      !Number.isSafeInteger(metadata.bytes) ||
+      Number(metadata.bytes) <= 0 ||
+      !Number.isSafeInteger(metadata.tocEntries) ||
+      Number(metadata.tocEntries) <= 0
+    )
+      return "unverified";
+    if (now - createdAt > maxAgeMs) return "stale";
+  } else if (
+    metadata.securityCatalogVerified !== true ||
+    metadata.allTableCountsVerified !== true ||
+    succeededAt - createdAt > 24 * 60 * 60_000
+  ) {
+    return "unverified";
+  }
+  return "current";
+}
+
 export function deploymentRevisionCheck(
   actualRevision: string | null,
   expectedRevision: string | null,
@@ -57,30 +139,69 @@ export function heartbeatCheck(
   maxAgeMs: number,
   production: boolean,
   now = Date.now(),
+  evidence: HeartbeatEvidence = {},
 ): ReleaseReadinessCheck {
-  if (!lastSucceededAt) {
-    return {
-      key,
-      label,
-      status: production ? "blocked" : "warning",
-      summary: "No successful run has been recorded.",
-      detail: { maxAgeMinutes: Math.round(maxAgeMs / 60_000) },
-    };
-  }
-  const signedAgeMs = now - lastSucceededAt.getTime();
+  const success = isoDate(lastSucceededAt);
+  const failure = isoDate(evidence.lastFailedAt);
+  const signedAgeMs = success ? now - Date.parse(success) : NaN;
   const future = signedAgeMs < -MAX_CLOCK_SKEW_MS;
-  const ageMs = Math.max(0, signedAgeMs);
-  const current = !future && ageMs <= maxAgeMs;
+  const ageMs = success ? Math.max(0, signedAgeMs) : null;
+  const failed =
+    Boolean(evidence.lastError) ||
+    Boolean(
+      failure && (!success || Date.parse(failure) >= Date.parse(success)),
+    );
+  const invalid =
+    (lastSucceededAt != null && !success) ||
+    (evidence.lastFailedAt != null && !failure) ||
+    future;
+  const provenance = success
+    ? recoveryProvenance(
+        key,
+        evidence.metadata,
+        Date.parse(success),
+        maxAgeMs,
+        now,
+      )
+    : "unverified";
+  const evidenceState = failed
+    ? "failed"
+    : invalid
+      ? "invalid"
+      : !success
+        ? "missing"
+        : ageMs! > maxAgeMs
+          ? "stale"
+          : provenance;
+  const summaries = {
+    failed:
+      "A failed run is recorded; the last success does not clear the failure.",
+    invalid:
+      "The recorded evidence time is invalid or unexpectedly in the future.",
+    missing: "No successful run has been recorded.",
+    stale: "The last successful run or backup snapshot is stale.",
+    unverified:
+      "The success timestamp lacks valid version-2 recovery provenance.",
+    current: `Last successful run ${Math.round((ageMs ?? 0) / 60_000)} minute(s) ago.`,
+  };
   return {
     key,
     label,
-    status: current ? "pass" : production ? "blocked" : "warning",
-    summary: future
-      ? "The recorded success time is unexpectedly in the future."
-      : current
-        ? `Last successful run ${Math.round(ageMs / 60_000)} minute(s) ago.`
-        : `Last successful run is stale (${Math.round(ageMs / 60_000)} minute(s) ago).`,
-    detail: { lastSucceededAt: lastSucceededAt.toISOString(), ageMs, maxAgeMs },
+    status:
+      evidenceState === "current" ? "pass" : production ? "blocked" : "warning",
+    summary: summaries[evidenceState],
+    // Never expose raw errors, filenames, database identities or arbitrary metadata.
+    detail: {
+      evidenceState,
+      evidenceSource: "operational_heartbeats",
+      lastSucceededAt: success,
+      lastFailedAt: failure,
+      ageMs,
+      maxAgeMs,
+      provenanceVerified: success !== null && provenance !== "unverified",
+      ...(key === "backup" ? { offBoxRetentionVerified: false } : {}),
+      ...operationalActions[key],
+    },
   };
 }
 
@@ -93,33 +214,61 @@ export function evidenceCheck(input: {
   production: boolean;
   detail?: Record<string, unknown>;
   now?: number;
+  owner?: string;
+  remediation?: string;
+  requireReference?: boolean;
 }): ReleaseReadinessCheck {
   const raw = input.raw?.trim();
   const verifiedAt = raw ? new Date(raw) : null;
-  const valid = verifiedAt !== null && Number.isFinite(verifiedAt.getTime());
+  const valid =
+    verifiedAt !== null &&
+    Number.isFinite(verifiedAt.getTime()) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      raw!,
+    );
   const signedAgeMs = valid
     ? (input.now ?? Date.now()) - verifiedAt.getTime()
     : null;
   const future = signedAgeMs !== null && signedAgeMs < -MAX_CLOCK_SKEW_MS;
   const ageMs = signedAgeMs === null ? null : Math.max(0, signedAgeMs);
-  const current = ageMs !== null && !future && ageMs <= input.maxAgeMs;
+  const hasReference =
+    typeof input.detail?.evidenceReference === "string" &&
+    input.detail.evidenceReference.trim().length > 0;
+  const evidenceState = !raw
+    ? "missing"
+    : !valid || future
+      ? "invalid"
+      : ageMs! > input.maxAgeMs
+        ? "stale"
+        : input.requireReference && !hasReference
+          ? "unverified"
+          : "current";
+  const current = evidenceState === "current";
   return {
     key: input.key,
     label: input.label,
     status: current ? "pass" : input.production ? "blocked" : "warning",
     summary: current
-      ? `Evidence verified ${Math.round(ageMs / 86_400_000)} day(s) ago.`
+      ? `Operator-attested evidence dated ${Math.round(ageMs! / 86_400_000)} day(s) ago; not independently verified by this service.`
       : future
         ? `${input.envName} is unexpectedly in the future.`
         : !raw
-          ? `${input.envName} is not configured.`
+          ? "No dated evidence has been recorded."
           : !valid
             ? `${input.envName} is not a valid ISO date-time.`
-            : `Evidence is stale (${Math.round((ageMs ?? 0) / 86_400_000)} day(s) old).`,
+            : evidenceState === "unverified"
+              ? "The evidence date has no supporting report reference."
+              : `Evidence is stale (${Math.round((ageMs ?? 0) / 86_400_000)} day(s) old).`,
     detail: {
       ...input.detail,
       verifiedAt: valid ? verifiedAt.toISOString() : null,
       maxAgeDays: Math.round(input.maxAgeMs / 86_400_000),
+      evidenceState,
+      evidenceSource: "operator_attestation",
+      owner: input.owner ?? "Deployment owner",
+      remediation:
+        input.remediation ??
+        "Complete the approved verification and retain its supporting evidence before recording a date.",
     },
   };
 }
@@ -174,7 +323,7 @@ export function securityConfigurationCheck(input: {
     label: "Security configuration",
     status: clean ? "pass" : input.production ? "blocked" : "warning",
     summary: clean
-      ? "Machine endpoints require signatures and privileged roles require TOTP."
+      ? "Signature and TOTP controls are configured; external authentication has not been verified by this check."
       : "One or more production security controls are not configured.",
     detail: {
       signedMachineRequestsOnly: input.signedOnly,
@@ -182,6 +331,10 @@ export function securityConfigurationCheck(input: {
       schedulerProtected: input.schedulerSecured,
       privilegedRolesRequireTotp: input.privilegedMfa,
       requiredTotpRoles: ["operator", "firm_admin", "bank_user"],
+      evidenceState: "configuration_only",
+      owner: "Platform operations",
+      remediation:
+        "Run the read-only operational-check runner from an approved external host to verify signed metrics access.",
     },
   };
 }
@@ -204,7 +357,7 @@ export function authorityRailsCheck(input: {
     label: "Authority rails",
     status: ready ? "pass" : input.requireLive ? "blocked" : "warning",
     summary: ready
-      ? "Both live HTTP rails are configured and accreditation is confirmed."
+      ? "Both live HTTP rails are configured and accreditation is attested; no provider transaction is verified by this check."
       : "The deployment remains on a sandbox, simulator, partial rail configuration, or unconfirmed accreditation.",
     detail: {
       transport: input.transport,
@@ -212,6 +365,10 @@ export function authorityRailsCheck(input: {
       configuredRailCount: input.configuredRailCount,
       accreditationConfirmed: input.accreditationConfirmed,
       liveRailsRequired: input.requireLive,
+      evidenceState: "configuration_only",
+      owner: "Provider integration owner",
+      remediation:
+        "Obtain provider credentials and approval, then retain real provider validation evidence before claiming live readiness.",
     },
   };
 }

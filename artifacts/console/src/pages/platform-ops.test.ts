@@ -1,4 +1,7 @@
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { OperationalReadinessCheck } from "@workspace/api-client-react";
 import {
   HEALTH_ALERT_ACTION_LABELS,
   HEALTH_ALERTS_EMPTY,
@@ -15,7 +18,118 @@ import {
   retryingLine,
   isParked,
   RETRYING_EMPTY,
+  operationalEvidenceBadge,
+  OperationalReadinessRow,
+  ReleaseReadinessSection,
 } from "./platform-ops";
+
+const query = vi.hoisted(() => ({ readiness: vi.fn() }));
+vi.mock("@workspace/api-client-react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@workspace/api-client-react")>()),
+  useGetReleaseReadiness: query.readiness,
+}));
+
+describe("operational proof", () => {
+  const check: OperationalReadinessCheck = {
+    key: "backup",
+    label: "Database backup",
+    status: "blocked",
+    summary: "The latest run failed.",
+    detail: {
+      evidenceSource: "operational_heartbeats",
+      evidenceState: "failed",
+      lastSucceededAt: "2026-09-04T10:00:00.000Z",
+      lastFailedAt: "2026-09-04T11:00:00.000Z",
+      owner: "Database operations",
+      remediation: "Inspect the approved private runner.",
+      offBoxRetentionVerified: false,
+      lastError: "private-error",
+      metadata: { secret: "private-secret" },
+    },
+  };
+  test("missing, stale, failed and configuration evidence have distinct badges", () => {
+    const states = [
+      "missing",
+      "stale",
+      "failed",
+      "invalid",
+      "unverified",
+      "current",
+      "configuration_only",
+    ];
+    const labels = states.map(
+      (evidenceState) =>
+        operationalEvidenceBadge({ ...check, detail: { evidenceState } }).label,
+    );
+    expect(new Set(labels).size).toBe(states.length);
+    const configured = operationalEvidenceBadge({
+      ...check,
+      status: "pass",
+      detail: { evidenceState: "configuration_only" },
+    });
+    expect(configured.label).toBe("Configured only");
+    expect(configured.classes).toContain("slate");
+    expect(
+      operationalEvidenceBadge({
+        ...check,
+        status: "pass",
+        detail: {
+          evidenceState: "current",
+          evidenceSource: "operator_attestation",
+        },
+      }).label,
+    ).toBe("Attested");
+  });
+  test("rows render current timestamps, owner and next action without arbitrary evidence", () => {
+    const html = renderToStaticMarkup(
+      createElement(OperationalReadinessRow, { check }),
+    );
+    expect(html).toContain('dateTime="2026-09-04T10:00:00.000Z"');
+    expect(html).toContain('dateTime="2026-09-04T11:00:00.000Z"');
+    expect(html).toContain("Run failed");
+    expect(html).toContain("Owner: Database operations");
+    expect(html).toContain("Next action: Inspect the approved private runner.");
+    expect(html).toContain("Private off-box retention: not verified");
+    expect(html).not.toMatch(/private-error|private-secret/);
+  });
+  test("missing timestamps never render as a successful run", () => {
+    const html = renderToStaticMarkup(
+      createElement(OperationalReadinessRow, {
+        check: {
+          ...check,
+          detail: {
+            evidenceState: "missing",
+            evidenceSource: "operational_heartbeats",
+            lastSucceededAt: "invalid",
+          },
+        },
+      }),
+    );
+    expect(html).toContain("Never recorded");
+    expect(html).toContain("Evidence missing");
+    expect(html).not.toContain("<time");
+  });
+  test("older server details retain the established readiness badge", () => {
+    expect(operationalEvidenceBadge({ ...check, detail: null }).label).toBe(
+      "Blocked",
+    );
+  });
+  test("a failed refresh cannot keep a cached Ready badge or expose a raw error", () => {
+    query.readiness.mockReturnValue({
+      data: { status: "ready", checks: [check] },
+      isLoading: false,
+      error: new Error("private-response-detail"),
+      refetch: vi.fn(),
+      isFetching: false,
+    });
+    const html = renderToStaticMarkup(createElement(ReleaseReadinessSection));
+    expect(html).toContain("Evidence unavailable");
+    expect(html).toContain("Unable to load release readiness.");
+    expect(html).not.toMatch(
+      />Ready<|private-response-detail|release-check-backup/,
+    );
+  });
+});
 
 // Helpers behind the two operator observability cards. The action-label map
 // is a MIRROR of the alert actions the server-side sweeps write to the audit
@@ -66,13 +180,15 @@ describe("rail configuration pills", () => {
   });
 
   test("key ids are named, the legacy single token is called out, secrets never appear", () => {
-    expect(railKeyIdsLine({ keyIds: [], legacyTokenAccepted: true })).toBeNull();
-    expect(railKeyIdsLine({ keyIds: ["legacy"], legacyTokenAccepted: true })).toBe(
-      "Keys: legacy (single token) — plain x-op-token accepted",
-    );
-    expect(railKeyIdsLine({ keyIds: ["k1", "k2"], legacyTokenAccepted: false })).toBe(
-      "Keys: k1, k2 — signed requests only",
-    );
+    expect(
+      railKeyIdsLine({ keyIds: [], legacyTokenAccepted: true }),
+    ).toBeNull();
+    expect(
+      railKeyIdsLine({ keyIds: ["legacy"], legacyTokenAccepted: true }),
+    ).toBe("Keys: legacy (single token) — plain x-op-token accepted");
+    expect(
+      railKeyIdsLine({ keyIds: ["k1", "k2"], legacyTokenAccepted: false }),
+    ).toBe("Keys: k1, k2 — signed requests only");
   });
 });
 
@@ -92,7 +208,11 @@ describe("railTransportLine", () => {
 
   test("a live HTTP rail names the http transport and the live environment", () => {
     expect(
-      railTransportLine({ transport: "http", environment: "live", configured: true }),
+      railTransportLine({
+        transport: "http",
+        environment: "live",
+        configured: true,
+      }),
     ).toBe("http · live");
   });
 
@@ -119,7 +239,9 @@ describe("railTransportLine", () => {
   test("the not-configured pill is the same neutral slate as a dark rail-config entry", () => {
     expect(RAIL_NOT_CONFIGURED_LABEL).toBe("Not configured");
     expect(railNotConfiguredBadgeClasses()).toContain("slate");
-    expect(railNotConfiguredBadgeClasses()).toBe(railConfiguredBadgeClasses(false));
+    expect(railNotConfiguredBadgeClasses()).toBe(
+      railConfiguredBadgeClasses(false),
+    );
   });
 });
 
@@ -140,27 +262,62 @@ describe("card copy", () => {
 describe("rail last error and retrying lines (R102)", () => {
   test("the rails card names the failure class, and explains a refused credential", () => {
     expect(railLastErrorLine("RAIL_TIMEOUT")).toBe("last error RAIL_TIMEOUT");
-    expect(railLastErrorLine("RAIL_UNAUTHORIZED")).toContain("refuses our token");
+    expect(railLastErrorLine("RAIL_UNAUTHORIZED")).toContain(
+      "refuses our token",
+    );
   });
 
   test("a retrying row says its tries and next try; a parked row says so with its wake time", () => {
     const now = new Date("2026-09-03T10:00:00.000Z");
     const later = new Date("2026-09-03T10:05:00.000Z").toISOString();
     expect(
-      retryingLine({ attempts: 2, maxAttempts: 6, nextAttemptAt: later, parkedUntil: null, parkCount: 0 }, now),
+      retryingLine(
+        {
+          attempts: 2,
+          maxAttempts: 6,
+          nextAttemptAt: later,
+          parkedUntil: null,
+          parkCount: 0,
+        },
+        now,
+      ),
     ).toMatch(/^2\/6 attempts · next try /);
     expect(
-      retryingLine({ attempts: 0, maxAttempts: 6, nextAttemptAt: later, parkedUntil: later, parkCount: 3 }, now),
-    ).toMatch(/^0\/6 attempts · parked behind the rail breaker \(3 parks\) · wakes /);
+      retryingLine(
+        {
+          attempts: 0,
+          maxAttempts: 6,
+          nextAttemptAt: later,
+          parkedUntil: later,
+          parkCount: 3,
+        },
+        now,
+      ),
+    ).toMatch(
+      /^0\/6 attempts · parked behind the rail breaker \(3 parks\) · wakes /,
+    );
     expect(
-      retryingLine({ attempts: 1, maxAttempts: 6, nextAttemptAt: null, parkedUntil: null, parkCount: 0 }, now),
+      retryingLine(
+        {
+          attempts: 1,
+          maxAttempts: 6,
+          nextAttemptAt: null,
+          parkedUntil: null,
+          parkCount: 0,
+        },
+        now,
+      ),
     ).toBe("1/6 attempts");
   });
 
   test("isParked reads a parkedUntil still in the future; a passed one is a plain retry", () => {
     const now = new Date("2026-09-03T10:00:00.000Z");
-    expect(isParked({ parkedUntil: "2026-09-03T10:01:00.000Z" }, now)).toBe(true);
-    expect(isParked({ parkedUntil: "2026-09-03T09:59:00.000Z" }, now)).toBe(false);
+    expect(isParked({ parkedUntil: "2026-09-03T10:01:00.000Z" }, now)).toBe(
+      true,
+    );
+    expect(isParked({ parkedUntil: "2026-09-03T09:59:00.000Z" }, now)).toBe(
+      false,
+    );
     expect(isParked({ parkedUntil: null }, now)).toBe(false);
     expect(RETRYING_EMPTY).toMatch(/Nothing retrying/);
   });

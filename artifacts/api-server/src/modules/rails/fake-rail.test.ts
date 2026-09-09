@@ -1,6 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { createConnection } from "node:net";
 import { sampleCanonical } from "../../test-helpers/canonical.ts";
 import { startFakeRail, type FakeRail } from "./fake-rail.ts";
 
@@ -346,6 +347,74 @@ test("an unreadable submission body is the fake's own 500, never a 400/422 the p
   assert.equal(resp.headers.get("connection"), "close");
   assert.equal(((await resp.json()) as { code: string }).code, "UNREADABLE_BODY");
   assert.equal(fake.calls.at(-1)?.outcome, "unreadable");
+});
+
+test("20 oversized rejections preserve the next GET and allow a same-port restart", { timeout: 15_000 }, async () => {
+  let rail = await startFakeRail();
+  const port = rail.port;
+  try {
+    for (let i = 0; i < 20; i++) {
+      if (i === 10) {
+        await rail.close();
+        rail = await startFakeRail({ port });
+      }
+      const rejected = await fetch(`${rail.url}/v0/submissions`, {
+        method: "POST",
+        body: "x".repeat(2 * 1024 * 1024),
+        signal: AbortSignal.timeout(3_000),
+      });
+      assert.equal(rejected.status, 413, `attempt ${i + 1}`);
+      assert.equal(rejected.headers.get("connection"), "close");
+      assert.equal(((await rejected.json()) as { code: string }).code, "PAYLOAD_TOO_LARGE");
+      assert.equal(rail.calls.at(-1)?.outcome, "too_large");
+      assert.equal(rail.held.size, 0);
+      const next = await fetch(`${rail.url}/__fake/healthz`, { signal: AbortSignal.timeout(3_000) });
+      assert.equal(next.status, 200);
+      assert.equal(((await next.json()) as { ok: boolean }).ok, true);
+    }
+  } finally {
+    await rail.close();
+  }
+});
+
+test("a rejected unfinished upload closes within a fixed deadline and releases its port", { timeout: 5_000 }, async () => {
+  const rail = await startFakeRail();
+  const socket = createConnection({ host: rail.host, port: rail.port, allowHalfOpen: true });
+  const chunks: Buffer[] = [];
+  socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+  socket.on("error", () => {});
+  // Keep the write side open after the server's FIN: rejection cleanup must
+  // not depend on the client finishing the declared body or closing its half.
+  const closed = new Promise<void>((resolve) => socket.once("close", resolve));
+  let dribble: ReturnType<typeof setInterval> | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.once("connect", resolve);
+      socket.once("error", reject);
+    });
+    socket.write("POST /v0/submissions HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1000000000\r\n\r\n");
+    socket.write(Buffer.alloc(1_048_577, "x"));
+    dribble = setInterval(() => socket.write(Buffer.alloc(1_024, "x")), 25);
+    await Promise.race([
+      closed,
+      new Promise<never>((_resolve, reject) => {
+        deadline = setTimeout(() => reject(new Error("Rejected upload stayed open")), 2_500);
+      }),
+    ]);
+    const response = Buffer.concat(chunks).toString("utf8");
+    assert.match(response, /^HTTP\/1\.1 413 /);
+    assert.match(response, /PAYLOAD_TOO_LARGE/);
+    assert.equal(rail.calls.at(-1)?.outcome, "too_large");
+    await rail.close();
+    const restarted = await startFakeRail({ port: rail.port });
+    await restarted.close();
+  } finally {
+    clearInterval(dribble);
+    clearTimeout(deadline);
+    socket.destroy();
+    await rail.close();
+  }
 });
 
 test("PUT /__fake/script accepts op lookup and refuses an unknown op", async () => {

@@ -2,12 +2,14 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarClock,
-  Check,
   CheckCircle2,
-  Circle,
   ListChecks,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { firstInvoiceJourney } from "./first-invoice-journey";
+import { FirstInvoiceOnboarding } from "./first-invoice-onboarding";
+import type { TodaySetupStepView } from "./today-types";
+export type { TodaySetupStepView } from "./today-types";
 import { Metric, MetricStrip, WorkQueue, WorkspaceHeader } from "./workspace";
 
 export interface TodayItemView {
@@ -20,14 +22,6 @@ export interface TodayItemView {
   href: string;
   clientName: string | null;
   source: string;
-}
-
-export interface TodaySetupStepView {
-  id: string;
-  label: string;
-  description: string;
-  complete: boolean;
-  href: string;
 }
 
 export interface TodaySummaryView {
@@ -62,6 +56,9 @@ export function TodayWorkspace({
   onOpen,
   onManageWork,
   actions,
+  setupError,
+  setupLoading = false,
+  onRetrySetup,
 }: {
   eyebrow: string;
   title: string;
@@ -73,10 +70,12 @@ export function TodayWorkspace({
   onOpen: (href: string, item?: TodayItemView) => void;
   onManageWork?: () => void;
   actions?: ReactNode;
+  setupError?: string | null;
+  setupLoading?: boolean;
+  onRetrySetup?: () => void;
 }) {
-  const setupPercent = summary.totalSetupSteps
-    ? Math.round((summary.completedSetupSteps / summary.totalSetupSteps) * 100)
-    : 100;
+  const journey = firstInvoiceJourney(setup);
+  const setupUnavailable = Boolean(setupError) || setupLoading;
   return (
     <div className="mi-today">
       <WorkspaceHeader
@@ -110,20 +109,43 @@ export function TodayWorkspace({
         />
         <Metric
           label="Workspace setup"
-          value={`${setupPercent}%`}
-          detail={`${summary.completedSetupSteps} of ${summary.totalSetupSteps} complete`}
+          value={
+            setupLoading
+              ? "Checking"
+              : setupUnavailable
+                ? "Unavailable"
+                : journey.percent === null
+                  ? "Not applicable"
+                  : `${journey.percent}%`
+          }
+          detail={
+            setupLoading
+              ? "Loading setup records"
+              : setupUnavailable
+                ? "Setup records could not be confirmed"
+                : journey.total
+                  ? `${journey.completed} of ${journey.total} complete`
+                  : "No setup steps for this role"
+          }
           icon={<CheckCircle2 aria-hidden="true" />}
-          tone={setupPercent === 100 ? "positive" : "default"}
+          tone={
+            !setupUnavailable && journey.percent === 100
+              ? "positive"
+              : "default"
+          }
         />
       </MetricStrip>
 
       <div className="mi-today__grid">
         <WorkQueue
           title="Priority queue"
-          description={`Live view refreshed ${new Intl.DateTimeFormat("en-NG", {
-            hour: "numeric",
-            minute: "2-digit",
-          }).format(new Date(generatedAt))}`}
+          description={`Showing ${items.length} of ${summary.total} priorities. Live view refreshed ${new Intl.DateTimeFormat(
+            "en-NG",
+            {
+              hour: "numeric",
+              minute: "2-digit",
+            },
+          ).format(new Date(generatedAt))}`}
           items={items.map((item) => ({
             id: item.id,
             title: item.title,
@@ -156,8 +178,16 @@ export function TodayWorkspace({
               </button>
             ),
           }))}
-          emptyTitle="Your priority queue is clear"
-          emptyDescription="No failed, overdue or open records need attention right now."
+          emptyTitle={
+            summary.total
+              ? "No priorities in this view"
+              : "Your priority queue is clear"
+          }
+          emptyDescription={
+            summary.total
+              ? "Open priorities exist, but none were returned in this view."
+              : "No failed, overdue or open records need attention right now."
+          }
           toolbar={
             onManageWork ? (
               <button
@@ -172,50 +202,13 @@ export function TodayWorkspace({
           }
         />
 
-        <section
-          className="mi-today__setup"
-          aria-labelledby="mi-today-setup-title"
-        >
-          <div className="mi-today__setup-heading">
-            <div>
-              <p id="mi-today-setup-title">Getting ready</p>
-              <span>Recommended steps for this workspace</span>
-            </div>
-            <strong>{setupPercent}%</strong>
-          </div>
-          <div
-            className="mi-today__progress"
-            role="progressbar"
-            aria-label="Workspace setup progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={setupPercent}
-          >
-            <span style={{ width: `${setupPercent}%` }} />
-          </div>
-          {setup.length === 0 ? (
-            <p className="mi-today__setup-empty">
-              No setup steps apply to this role.
-            </p>
-          ) : (
-            <ol className="mi-today__setup-list">
-              {setup.map((step) => (
-                <li key={step.id} data-complete={step.complete}>
-                  <span className="mi-today__setup-marker" aria-hidden="true">
-                    {step.complete ? <Check /> : <Circle />}
-                  </span>
-                  <button type="button" onClick={() => onOpen(step.href)}>
-                    <strong>{step.label}</strong>
-                    <span className="mi-today__step-status">
-                      {step.complete ? "Completed" : "Not completed"}
-                    </span>
-                    <small>{step.description}</small>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+        <FirstInvoiceOnboarding
+          setup={setup}
+          onOpen={onOpen}
+          error={setupError}
+          loading={setupLoading}
+          onRetry={onRetrySetup}
+        />
       </div>
     </div>
   );

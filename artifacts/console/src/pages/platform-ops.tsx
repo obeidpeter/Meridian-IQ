@@ -18,6 +18,7 @@ import type {
   OutboxEvent,
   Message,
   HealthAlert,
+  OperationalReadinessCheck,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,6 +189,100 @@ export function readinessBadge(status: "ready" | "warning" | "blocked") {
   };
 }
 
+export function operationalEvidenceBadge(check: OperationalReadinessCheck) {
+  const state = check.detail?.evidenceState;
+  const labels: Record<string, string> = {
+    missing: "Evidence missing",
+    stale: "Evidence stale",
+    failed: "Run failed",
+    invalid: "Invalid evidence",
+    unverified: "Unverified evidence",
+    current:
+      check.detail?.evidenceSource === "operator_attestation"
+        ? "Attested"
+        : "Current evidence",
+    configuration_only:
+      check.status === "pass" ? "Configured only" : "Configuration incomplete",
+  };
+  const fallback = readinessBadge(
+    check.status === "pass" ? "ready" : check.status,
+  );
+  return typeof state === "string" && labels[state]
+    ? {
+        label: labels[state],
+        classes:
+          state === "configuration_only" && check.status === "pass"
+            ? pillClasses("slate")
+            : fallback.classes,
+      }
+    : fallback;
+}
+
+export function OperationalReadinessRow({
+  check,
+}: {
+  check: OperationalReadinessCheck;
+}) {
+  const badge = operationalEvidenceBadge(check);
+  const detail = check.detail;
+  const timestamp = (value: unknown) =>
+    typeof value === "string" && Number.isFinite(Date.parse(value))
+      ? value
+      : null;
+  const success = timestamp(detail?.lastSucceededAt);
+  const failed = timestamp(detail?.lastFailedAt);
+  const attested = timestamp(detail?.verifiedAt);
+  return (
+    <div
+      className="flex flex-wrap items-start justify-between gap-3 py-3"
+      data-testid={`release-check-${check.key}`}
+    >
+      <div className="min-w-0 flex-1 basis-64 break-words">
+        <p className="text-sm font-medium">{check.label}</p>
+        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+          {check.summary}
+        </p>
+        {detail?.evidenceSource === "operational_heartbeats" && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Last success:{" "}
+            {success ? (
+              <time dateTime={success}>{formatDateTime(success)}</time>
+            ) : (
+              "Never recorded"
+            )}
+          </p>
+        )}
+        {failed && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Last failure:{" "}
+            <time dateTime={failed}>{formatDateTime(failed)}</time>
+          </p>
+        )}
+        {attested && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Attested at:{" "}
+            <time dateTime={attested}>{formatDateTime(attested)}</time>
+          </p>
+        )}
+        {detail?.offBoxRetentionVerified === false && (
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+            Private off-box retention: not verified
+          </p>
+        )}
+        {typeof detail?.owner === "string" && (
+          <p className="mt-1 text-xs">Owner: {detail.owner}</p>
+        )}
+        {typeof detail?.remediation === "string" && (
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Next action: {detail.remediation}
+          </p>
+        )}
+      </div>
+      <span className={`${badge.classes} shrink-0`}>{badge.label}</span>
+    </div>
+  );
+}
+
 function QueuePagination({
   canPrevious,
   canNext,
@@ -231,7 +326,7 @@ function QueuePagination({
   );
 }
 
-function ReleaseReadinessSection() {
+export function ReleaseReadinessSection() {
   const { data, isLoading, error, refetch, isFetching } =
     useGetReleaseReadiness({
       query: {
@@ -249,11 +344,15 @@ function ReleaseReadinessSection() {
             Release readiness
           </CardTitle>
           <div className="flex items-center gap-2">
-            {data && (
+            {error ? (
+              <span className={pillClasses("red")} data-testid="release-status">
+                Evidence unavailable
+              </span>
+            ) : data ? (
               <span className={overall.classes} data-testid="release-status">
                 {overall.label}
               </span>
-            )}
+            ) : null}
             <Button
               type="button"
               size="sm"
@@ -280,29 +379,16 @@ function ReleaseReadinessSection() {
             <p className="mb-4 break-all font-mono text-xs text-muted-foreground">
               Build {data.buildRevision} · contract {data.contractVersion}
             </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Evidence checked:{" "}
+              <time dateTime={data.generatedAt}>
+                {formatDateTime(data.generatedAt)}
+              </time>
+            </p>
             <div className="divide-y" aria-label="Release readiness checks">
-              {data.checks.map((check) => {
-                const badge = readinessBadge(
-                  check.status === "pass" ? "ready" : check.status,
-                );
-                return (
-                  <div
-                    key={check.key}
-                    className="flex flex-wrap items-start justify-between gap-3 py-3"
-                    data-testid={`release-check-${check.key}`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{check.label}</p>
-                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                        {check.summary}
-                      </p>
-                    </div>
-                    <span className={`${badge.classes} shrink-0`}>
-                      {badge.label}
-                    </span>
-                  </div>
-                );
-              })}
+              {data.checks.map((check) => (
+                <OperationalReadinessRow key={check.key} check={check} />
+              ))}
             </div>
           </>
         ) : null}
@@ -314,11 +400,12 @@ function ReleaseReadinessSection() {
 function RetryingSection() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [history, setHistory] = useState<Array<string | undefined>>([]);
-  const { data, isLoading, isFetching, error, refetch } =
-    useListRetryingEvents({
+  const { data, isLoading, isFetching, error, refetch } = useListRetryingEvents(
+    {
       limit: 50,
       cursor,
-    });
+    },
+  );
   const items = data?.items ?? [];
   return (
     <Card data-testid="card-retrying">

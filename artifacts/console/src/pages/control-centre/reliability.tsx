@@ -20,9 +20,9 @@ import {
   ServerCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { formatDateTime, humanize } from "@/lib/format";
-import { StatusPill, WorkspaceLoading } from "./shared";
 
 type ConnectionFilter = "all" | "attention" | "erp" | "bank_feed";
 
@@ -34,13 +34,34 @@ export function IntegrationReliabilityWorkspace() {
       staleTime: 30_000,
     },
   });
-  if (query.isLoading) return <WorkspaceLoading />;
+  if (query.isLoading) {
+    return (
+      <div
+        className="mi-reliability space-y-6"
+        role="status"
+        aria-label="Loading workspace"
+        aria-busy="true"
+      >
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-[var(--mi-line)] bg-[var(--mi-line)] sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton
+              key={index}
+              className="h-28 rounded-none bg-[var(--mi-paper)]"
+            />
+          ))}
+        </div>
+        <Skeleton className="h-80 w-full bg-[var(--mi-paper)]" />
+      </div>
+    );
+  }
   if (query.isError || !query.data) {
     return (
-      <QueryError
-        thing="integration reliability"
-        onRetry={() => query.refetch()}
-      />
+      <div className="mi-reliability">
+        <QueryError
+          thing="integration reliability"
+          onRetry={() => query.refetch()}
+        />
+      </div>
     );
   }
   const data = query.data;
@@ -71,7 +92,7 @@ export function IntegrationReliabilityWorkspace() {
     }));
 
   return (
-    <div className="space-y-6">
+    <div className="mi-reliability space-y-6">
       <MetricStrip label="Integration reliability summary">
         <Metric
           label="Healthy connections"
@@ -105,15 +126,22 @@ export function IntegrationReliabilityWorkspace() {
 
       <section
         id="connections"
-        className="scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white"
+        aria-labelledby="connections-title"
+        className="scroll-mt-6 border-y border-[var(--mi-line)] bg-[var(--mi-paper)]"
       >
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-950">
-              <Activity className="size-4 text-teal-700" aria-hidden="true" />{" "}
+        <div className="mi-reliability__header flex flex-col gap-3 border-b border-[var(--mi-line)] px-4 py-4">
+          <div className="min-w-0">
+            <h2
+              id="connections-title"
+              className="flex items-center gap-2 text-base font-extrabold text-[var(--mi-ink)]"
+            >
+              <Activity
+                className="size-4 shrink-0 text-[var(--mi-teal)]"
+                aria-hidden="true"
+              />{" "}
               Connection estate
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs text-[var(--mi-muted)]">
               Latest sync outcome, freshness and row-level throughput by tenant
               connection.
             </p>
@@ -147,77 +175,91 @@ export function IntegrationReliabilityWorkspace() {
         </div>
 
         {data.connectionsTruncated && (
-          <p className="px-4 pb-3 text-xs text-slate-500">
+          <p className="px-4 py-3 text-xs text-[var(--mi-muted)]" role="note">
             Showing the {data.connections.length} most affected of{" "}
             {data.totalConnections} connections — the counts above cover
             everything.
           </p>
         )}
         {connections.length === 0 ? (
-          <div className="px-5 py-12 text-center text-sm text-slate-500">
+          <div
+            className="px-5 py-12 text-center text-sm text-[var(--mi-muted)]"
+            role="status"
+          >
             No connections in this view.
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
+          <div className="divide-y divide-[var(--mi-line)]">
             {connections.map((connection) => (
               <div
                 key={`${connection.type}:${connection.id}`}
-                className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(13rem,1.4fr)_minmax(10rem,1fr)_repeat(3,minmax(6rem,.7fr))] lg:items-center"
+                className="mi-reliability__connection grid gap-4 px-4 py-4"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-extrabold text-slate-950">
+                    <p className="mi-reliability__name text-sm font-extrabold text-[var(--mi-ink)]">
                       {connection.clientName}
                     </p>
-                    <StatusPill status={connection.operationalState}>
+                    <span
+                      className="mi-reliability__status"
+                      data-tone={
+                        connection.operationalState === "healthy"
+                          ? "positive"
+                          : connection.operationalState === "stale"
+                            ? "warning"
+                            : "critical"
+                      }
+                    >
                       {humanize(connection.operationalState)}
-                    </StatusPill>
+                    </span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-[var(--mi-muted)]">
                     {connection.firmName} / {connection.connectorKey}
                   </p>
                   {connection.issue ? (
-                    <p className="mt-1 text-xs text-amber-800">
+                    <p className="mi-reliability__issue mt-1 text-xs text-[var(--mi-warning)]">
                       {connection.issue}
                     </p>
                   ) : null}
                 </div>
-                <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-600">
-                    Last sync
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    {formatDateTime(connection.lastSyncAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-600">
-                    Run
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    {connection.latestRunStatus
-                      ? humanize(connection.latestRunStatus)
-                      : "No run"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-600">
-                    Read / written
-                  </p>
-                  <p className="mt-1 text-sm font-extrabold tabular-nums text-slate-900">
-                    {connection.recordsRead} / {connection.recordsWritten}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-600">
-                    Row errors
-                  </p>
-                  <p
-                    className={`mt-1 text-sm font-extrabold tabular-nums ${connection.errorCount > 0 ? "text-red-700" : "text-slate-900"}`}
-                  >
-                    {connection.errorCount}
-                  </p>
-                </div>
+                <dl className="mi-reliability__facts">
+                  <div>
+                    <dt className="text-[11px] font-bold uppercase text-[var(--mi-muted)]">
+                      Last sync
+                    </dt>
+                    <dd className="mt-1 text-sm font-semibold text-[var(--mi-ink)]">
+                      {formatDateTime(connection.lastSyncAt)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-bold uppercase text-[var(--mi-muted)]">
+                      Run
+                    </dt>
+                    <dd className="mt-1 text-sm font-semibold text-[var(--mi-ink)]">
+                      {connection.latestRunStatus
+                        ? humanize(connection.latestRunStatus)
+                        : "No run"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-bold uppercase text-[var(--mi-muted)]">
+                      Read / written
+                    </dt>
+                    <dd className="mt-1 text-sm font-extrabold tabular-nums text-[var(--mi-ink)]">
+                      {connection.recordsRead} / {connection.recordsWritten}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-bold uppercase text-[var(--mi-muted)]">
+                      Row errors
+                    </dt>
+                    <dd
+                      className={`mt-1 text-sm font-extrabold tabular-nums ${connection.errorCount > 0 ? "text-[var(--mi-critical)]" : "text-[var(--mi-ink)]"}`}
+                    >
+                      {connection.errorCount}
+                    </dd>
+                  </div>
+                </dl>
               </div>
             ))}
           </div>

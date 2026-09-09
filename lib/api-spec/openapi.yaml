@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.100.0
+  version: 0.101.0
   description: >-
     Valo platform API — data spine, compliance rails and consent.
     Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained
@@ -363,6 +363,64 @@ paths:
                 $ref: "#/components/schemas/WorkItem"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /work-items/page:
+    get:
+      operationId: listWorkItemsPage
+      tags: [work]
+      summary: Page through scoped team work in priority and due-date order
+      description: >-
+        Cursors are bound to the caller and filters. Pages reflect live records;
+        refresh from the first page after mutations or to see externally reordered tasks.
+        The legacy work-items list remains available for existing clients.
+      parameters:
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum: [active, done, all]
+            default: active
+        - name: clientPartyId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Work page with full scoped count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor, total]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 100
+                    items:
+                      $ref: "#/components/schemas/WorkItem"
+                  nextCursor:
+                    type: [string, "null"]
+                  total:
+                    type: integer
+                    minimum: 0
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /work-items/{id}:
     patch:

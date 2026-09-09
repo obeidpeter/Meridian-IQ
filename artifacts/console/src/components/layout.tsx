@@ -79,7 +79,7 @@ import {
   type CommandItem,
   trackUsabilityEvent,
 } from "@workspace/web-ui";
-import { HELP_TOPICS } from "@/pages/help";
+import { HELP_TOPICS } from "@/lib/help-topics";
 
 // Every console page maps to the RBAC capability its API surface requires
 // (modules/auth/rbac.ts). The nav renders only what the signed-in principal

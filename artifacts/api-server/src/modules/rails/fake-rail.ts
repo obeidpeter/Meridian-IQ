@@ -69,6 +69,7 @@ export interface FakeRail {
 }
 
 const BODY_LIMIT = 1_048_576;
+const REJECT_CLOSE_TIMEOUT_MS = 1_000;
 // A scripted timeout holds the socket open until the client gives up; this
 // ceiling keeps the server from leaking a response forever.
 const TIMEOUT_HOLD_MS = 60_000;
@@ -79,7 +80,7 @@ class BodyTooLarge extends Error {}
 async function readJson(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buf.length;
     if (size > BODY_LIMIT) throw new BodyTooLarge("body too large");
@@ -112,8 +113,15 @@ function send(
 
 /** Answer and drop the connection: a half-read request must not poison the keep-alive pool. */
 function sendAndClose(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): void {
+  // An early iterator exit or immediate destroy resets Windows TCP before the
+  // response arrives. Discard the rest without buffering, but never let a
+  // stalled upload/reader extend the rejected socket's lifetime indefinitely.
+  const socket = req.socket;
+  const deadline = setTimeout(() => socket.destroy(), REJECT_CLOSE_TIMEOUT_MS);
+  deadline.unref();
+  socket.once("close", () => clearTimeout(deadline));
+  req.resume();
   send(res, status, body, { connection: "close" });
-  req.destroy();
 }
 
 function invoiceNumberOf(body: unknown): string | null {

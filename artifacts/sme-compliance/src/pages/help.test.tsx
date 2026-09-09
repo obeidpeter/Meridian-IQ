@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { Help, HELP_TOPICS } from "./help";
+import { HELP_TOPICS as SHARED_HELP_TOPICS } from "@/lib/help-topics";
 
 afterEach(cleanup);
 
@@ -9,6 +10,10 @@ afterEach(cleanup);
 // topic list is a small contract: unique ids, plain-language content, and a
 // rendered anchor for every topic.
 describe("help topics", () => {
+  test("the page re-exports the topic data used by the layout", () => {
+    expect(HELP_TOPICS).toBe(SHARED_HELP_TOPICS);
+  });
+
   test("draft help explains account sync, expiry and safe retry", () => {
     const draft = HELP_TOPICS.find((topic) => topic.id === "drafts")!;
     expect(draft.summary).toContain("account");

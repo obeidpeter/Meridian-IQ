@@ -23,6 +23,7 @@ import {
 import {
   loadBackupManifest,
   recordRecoveryHeartbeat,
+  recordRecoveryFailure,
   sha256,
   snapshotDigest,
 } from "./recovery-evidence.mjs";
@@ -31,6 +32,7 @@ import {
   assertPrerequisites,
   rolePrerequisitesSql,
 } from "./backup-prerequisites.mjs";
+import { heartbeatCheck } from "../../../artifacts/api-server/src/modules/desk/release-readiness-checks.ts";
 
 // Windows unit fixtures simulate only the unavailable directory-flush boundary.
 // CLI/real-PG integration has no bypass and uses the real fsync implementation.
@@ -447,7 +449,14 @@ test("restore fails closed on changed policies, triggers, constraints, privilege
     }),
     /count differs/,
   );
-  assert.equal(f.heartbeats.length, 1);
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_succeeded_at")).length,
+    1,
+  );
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_failed_at")).length,
+    6,
+  );
 });
 
 test("retention refuses symlinked bundles and preserves unrelated/in-progress files", async (t) => {
@@ -542,7 +551,7 @@ test("persistent psql snapshot stays held through dump and exits on success/fail
   assert.ok(child.exitCode !== null || child.signalCode !== null);
 });
 
-test("duplicate invocation refuses before capture; sequential files are unique and failed dumps publish nothing", async (t) => {
+test("duplicate invocation refuses before capture; sequential files are unique and failed dumps publish no success", async (t) => {
   const directory = temp(t);
   const env = {
     DATABASE_URL: "postgresql://localhost/source",
@@ -550,6 +559,7 @@ test("duplicate invocation refuses before capture; sequential files are unique a
     BACKUP_RUNTIME_ROLE: "meridian_login",
   };
   let heartbeats = 0;
+  let failures = 0;
   let captures = 0;
   let releaseCapture;
   const held = new Promise((resolve) => {
@@ -562,8 +572,9 @@ test("duplicate invocation refuses before capture; sequential files are unique a
       await held;
       return use(baseline());
     },
-    query: () => {
-      heartbeats++;
+    query: (_url, sql) => {
+      if (sql.includes("last_failed_at")) failures++;
+      else heartbeats++;
     },
     log: () => {},
     run: (command, _args, options) => {
@@ -577,6 +588,7 @@ test("duplicate invocation refuses before capture; sequential files are unique a
     await assert.rejects(backup(env, deps), /EEXIST/);
     assert.equal(captures, 1);
     assert.equal(heartbeats, 0);
+    assert.equal(failures, 0);
     assert.equal(
       readdirSync(directory).filter((name) => name.endsWith(".dump")).length,
       1,
@@ -612,6 +624,7 @@ test("duplicate invocation refuses before capture; sequential files are unique a
   );
   assert.deepEqual(readdirSync(directory).sort(), before);
   assert.equal(heartbeats, 2);
+  assert.equal(failures, 1);
 });
 
 test("cross-directory publication rejects older evidence and retains its verified archive without pruning", async (t) => {
@@ -792,8 +805,10 @@ test("archive, manifest, checksum and directory sync precede publication/pruning
         sync("directory");
         fixtureDirectorySync(dir);
       },
-      query: () => {
-        order.push("heartbeat");
+      query: (_url, sql) => {
+        order.push(
+          sql.includes("last_failed_at") ? "failure-heartbeat" : "heartbeat",
+        );
         assert.ok(
           readdirSync(f.dir).includes(f.saved.manifest.archive.file),
           "pruning occurred before publication",
@@ -804,6 +819,7 @@ test("archive, manifest, checksum and directory sync precede publication/pruning
     if (failure) {
       await assert.rejects(action, new RegExp(`sync failed: ${failure}`));
       assert.ok(!order.includes("heartbeat"));
+      assert.equal(order.at(-1), "failure-heartbeat");
       assert.ok(readdirSync(f.dir).includes(f.saved.manifest.archive.file));
     } else {
       const saved = await action;
@@ -881,7 +897,14 @@ test("extension availability/default mismatch refuses before creation; restored 
     if (!kind.startsWith("restored"))
       assert.ok(!f.calls.some((c) => c.sql?.startsWith("CREATE DATABASE")));
   }
-  assert.equal(f.heartbeats.length, 1);
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_succeeded_at")).length,
+    1,
+  );
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_failed_at")).length,
+    2,
+  );
 });
 
 test("incoming membership, grantor and option drift refuse before database creation", async (t) => {
@@ -932,7 +955,14 @@ test("incoming membership, grantor and option drift refuse before database creat
     }),
     /runtime SET ROLE denied/,
   );
-  assert.equal(f.heartbeats.length, 1);
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_succeeded_at")).length,
+    1,
+  );
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_failed_at")).length,
+    1,
+  );
 });
 
 test("recursive runtime membership paths require SET on every edge, not superuser shortcuts", async (t) => {
@@ -1097,7 +1127,14 @@ test("database creation, ACL and settings drift fail before evidence; scratch cr
     assert.equal(restored, ["acl", "settings"].includes(kind));
     assert.ok(!f.calls.some((call) => call.args?.includes("--create")));
   }
-  assert.equal(f.heartbeats.length, 1);
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_succeeded_at")).length,
+    1,
+  );
+  assert.equal(
+    f.heartbeats.filter((sql) => sql.includes("last_failed_at")).length,
+    2,
+  );
 });
 
 test("database ACL/settings roles cannot be omitted from the hashed role prerequisites", async (t) => {
@@ -1125,4 +1162,302 @@ test("database ACL/settings roles cannot be omitted from the hashed role prerequ
       /database ACL\/settings role missing/,
     );
   }
+});
+
+// Model only the SQL assignments asserted below; no PostgreSQL connection is used.
+function heartbeatLedger(key, metadata) {
+  let clock = Date.now();
+  const row = {
+    lastSucceededAt: new Date(clock),
+    lastFailedAt: null,
+    lastError: null,
+    metadata,
+  };
+  const queries = [];
+  const query = (_url, sql) => {
+    queries.push(sql);
+    clock = Math.max(clock + 1, Date.now());
+    const timestamp = new Date(clock);
+    if (sql.includes("last_failed_at")) {
+      assert.match(
+        sql,
+        /INSERT INTO operational_heartbeats \(key,last_failed_at,last_error,updated_at\)/,
+      );
+      assert.match(
+        sql,
+        /DO UPDATE SET last_failed_at=excluded.last_failed_at,\s*last_error=excluded.last_error,updated_at=now()/,
+      );
+      assert.doesNotMatch(
+        sql,
+        /last_succeeded_at|last_started_at|metadata\s*=/,
+      );
+      if (key === "backup") {
+        assert.match(
+          sql,
+          /WHERE operational_heartbeats.metadata->>'createdAt' IS NULL/,
+        );
+        const failedSnapshot = sql.match(/<= '([^']+)'::timestamptz/)[1];
+        if (
+          row.metadata?.createdAt &&
+          Date.parse(row.metadata.createdAt) > Date.parse(failedSnapshot)
+        )
+          return;
+      }
+      row.lastFailedAt = timestamp;
+      row.lastError = `${key}_run_failed`;
+    } else {
+      assert.match(
+        sql,
+        /last_succeeded_at=excluded.last_succeeded_at,\s*last_error=NULL,metadata=excluded.metadata/,
+      );
+      const encoded = sql.match(/decode\('([^']+)','base64'\)/)[1];
+      row.metadata = JSON.parse(
+        Buffer.from(encoded, "base64").toString("utf8"),
+      );
+      row.lastSucceededAt = timestamp;
+      row.lastError = null;
+    }
+  };
+  const readiness = () =>
+    heartbeatCheck(
+      key,
+      key,
+      row.lastSucceededAt,
+      26 * 3600_000,
+      true,
+      clock,
+      row,
+    );
+  return { row, queries, query, readiness };
+}
+
+test("actual backup failure is not green: preserve successful evidence, sanitize failure, recover on later success", async (t) => {
+  const f = await fixture(
+    t,
+    "postgresql://runtime:private-source-password@localhost/source",
+  );
+  const ledger = heartbeatLedger("backup", f.saved.metadata);
+  const previous = structuredClone(ledger.row);
+  assert.equal(ledger.readiness().status, "pass");
+  const env = {
+    DATABASE_URL: f.env.DATABASE_URL,
+    BACKUP_DIR: f.dir,
+    BACKUP_RUNTIME_ROLE: "meridian_login",
+  };
+  const failure = new Error(
+    "dump exploded at C:/private/backup.dump with private-source-password",
+  );
+  await assert.rejects(
+    backup(env, {
+      snapshot: async (_url, use) => use(baseline()),
+      run: () => {
+        throw failure;
+      },
+      query: ledger.query,
+      log: () => {},
+    }),
+    (error) => {
+      assert.match(error.message, /dump exploded/);
+      assert.doesNotMatch(error.message, /private-source-password/);
+      return true;
+    },
+  );
+  assert.deepEqual(ledger.row.lastSucceededAt, previous.lastSucceededAt);
+  assert.deepEqual(ledger.row.metadata, previous.metadata);
+  assert.equal(ledger.row.lastError, "backup_run_failed");
+  assert.equal(ledger.readiness().detail.evidenceState, "failed");
+  assert.equal(ledger.readiness().status, "blocked");
+  assert.doesNotMatch(
+    ledger.queries.join("\n"),
+    /dump exploded|private-source-password|private\/backup|postgresql:/,
+  );
+  const failedAt = ledger.row.lastFailedAt;
+  await backup(env, {
+    snapshot: async (_url, use) => use(baseline()),
+    run: (command, _args, options) => {
+      if (command === "pg_dump")
+        writeFileSync(options.stdio[1], "recovered archive");
+      return { status: 0, stdout: "1; archive entry\n" };
+    },
+    syncDirectory: fixtureDirectorySync,
+    query: ledger.query,
+    log: () => {},
+  });
+  assert.equal(ledger.row.lastError, null);
+  assert.deepEqual(ledger.row.lastFailedAt, failedAt);
+  assert.equal(ledger.readiness().status, "pass");
+});
+
+test("actual restore failure preserves last success and provenance; later verified restore clears the failure", async (t) => {
+  const f = await fixture(t);
+  const prior = await restoreDrill(f.env, f.deps);
+  const ledger = heartbeatLedger("restore_drill", prior);
+  const previous = structuredClone(ledger.row);
+  const query = (url, sql) =>
+    sql.includes("INSERT INTO operational_heartbeats")
+      ? ledger.query(url, sql)
+      : f.deps.query(url, sql);
+  await assert.rejects(
+    restoreDrill(f.env, {
+      ...f.deps,
+      query,
+      run: (command, args, options) => {
+        if (args.includes("--exit-on-error"))
+          throw new Error(
+            "restore exploded at /private/backup.dump with private-credential",
+          );
+        return f.deps.run(command, args, options);
+      },
+    }),
+    /restore exploded/,
+  );
+  assert.deepEqual(ledger.row.lastSucceededAt, previous.lastSucceededAt);
+  assert.deepEqual(ledger.row.metadata, previous.metadata);
+  assert.equal(ledger.row.lastError, "restore_drill_run_failed");
+  assert.equal(ledger.readiness().detail.evidenceState, "failed");
+  assert.equal(ledger.readiness().status, "blocked");
+  assert.doesNotMatch(
+    ledger.queries.join("\n"),
+    /exploded|private|backup.dump|postgresql:/,
+  );
+  await restoreDrill(f.env, { ...f.deps, query });
+  assert.equal(ledger.row.lastError, null);
+  assert.equal(ledger.readiness().status, "pass");
+});
+
+test("failure reporting errors never replace the original backup or restore error", async (t) => {
+  const f = await fixture(t);
+  const original = new Error("original operation failure");
+  let failedReports = 0;
+  const unavailable = (_url, sql) => {
+    assert.match(sql, /last_failed_at/);
+    failedReports++;
+    throw new Error(
+      "private reporting failure with /private/path and credential",
+    );
+  };
+  await assert.rejects(
+    backup(
+      {
+        DATABASE_URL: f.env.DATABASE_URL,
+        BACKUP_DIR: f.dir,
+        BACKUP_RUNTIME_ROLE: "meridian_login",
+      },
+      {
+        snapshot: async (_url, use) => use(baseline()),
+        run: () => {
+          throw original;
+        },
+        query: unavailable,
+        log: () => {},
+      },
+    ),
+    { message: original.message },
+  );
+  await assert.rejects(
+    restoreDrill(f.env, {
+      ...f.deps,
+      run: (command, args, options) => {
+        if (args.includes("--exit-on-error")) throw original;
+        return f.deps.run(command, args, options);
+      },
+      query: (url, sql) =>
+        sql.includes("INSERT INTO operational_heartbeats")
+          ? unavailable(url, sql)
+          : f.deps.query(url, sql),
+    }),
+    { message: original.message },
+  );
+  assert.equal(failedReports, 2);
+});
+
+test("invalid backup configuration and snapshot preflight never write a heartbeat", async (t) => {
+  const env = {
+    DATABASE_URL: "postgresql://localhost/source",
+    BACKUP_DIR: temp(t),
+    BACKUP_RUNTIME_ROLE: "meridian_login",
+  };
+  let writes = 0;
+  let dumps = 0;
+  const deps = {
+    query: () => {
+      writes++;
+    },
+    log: () => {},
+    run: () => {
+      dumps++;
+    },
+    snapshot: async (_url, use) => use(baseline()),
+  };
+  for (const changes of [
+    { DATABASE_URL: undefined },
+    { DATABASE_URL: "invalid" },
+    { BACKUP_RUNTIME_ROLE: undefined },
+    { BACKUP_KEEP: "0" },
+    { BACKUP_DIR: "relative-private-directory" },
+  ])
+    await assert.rejects(backup({ ...env, ...changes }, deps));
+  await assert.rejects(
+    backup(env, {
+      ...deps,
+      snapshot: () => {
+        throw new Error("preflight refused");
+      },
+    }),
+    /preflight refused/,
+  );
+  await assert.rejects(
+    backup(env, {
+      ...deps,
+      snapshot: async (_url, use) =>
+        use({
+          ...baseline(),
+          runtimeLogin: { name: "incorrect_login", canSetRole: false },
+        }),
+    }),
+  );
+  assert.equal(writes, 0);
+  assert.equal(dumps, 0);
+});
+
+test("failure helper accepts only closed operation keys, uses bounded SQL and preserves newer snapshot evidence", () => {
+  const metadata = { createdAt: new Date().toISOString() };
+  const ledger = heartbeatLedger("backup", metadata);
+  const previous = structuredClone(ledger.row);
+  recordRecoveryFailure(
+    "injected-only",
+    "backup",
+    ledger.query,
+    new Date(Date.now() - 60_000).toISOString(),
+  );
+  assert.deepEqual(ledger.row, previous);
+  const sql = ledger.queries[0];
+  assert.match(sql, /statement_timeout = '3s'/);
+  assert.match(sql, /lock_timeout = '1s'/);
+  assert.match(sql, /SET LOCAL ROLE meridian_app/);
+  assert.match(sql, /set_config\('app.bypass', 'on', true\)/);
+  assert.match(sql, /'backup_run_failed'/);
+  let writes = 0;
+  for (const key of [
+    "scheduled_work",
+    "backup'; DROP TABLE operational_heartbeats; --",
+  ])
+    assert.equal(
+      recordRecoveryFailure("injected-only", key, () => {
+        writes++;
+      }),
+      false,
+    );
+  assert.equal(
+    recordRecoveryFailure(
+      "injected-only",
+      "backup",
+      () => {
+        writes++;
+      },
+      "invalid-date",
+    ),
+    false,
+  );
+  assert.equal(writes, 0);
 });

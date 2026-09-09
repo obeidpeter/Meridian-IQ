@@ -34,10 +34,13 @@ import {
   dispatchWebhookDeliveries,
 } from "./modules/integrations/webhooks.ts";
 import { closeAllServers, listen } from "./test-helpers/route-harness.ts";
+import { createLoopbackClient } from "./test-helpers/loopback-client.ts";
 
 // Real main-app authentication and PostgreSQL, with no dev-principal bypass.
 // This suite never silently skips an unavailable or unacknowledged database.
 const salt = randomUUID();
+const client = createLoopbackClient();
+const fetch = client.request;
 const userId = randomUUID();
 const firmId = randomUUID();
 const buyerId = randomUUID();
@@ -98,6 +101,7 @@ before(async () => {
 });
 
 after(async () => {
+  client.close();
   await closeAllServers();
   await closeDatabasePools();
   if (previousNodeEnv === undefined) delete process.env.NODE_ENV;

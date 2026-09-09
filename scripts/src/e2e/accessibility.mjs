@@ -97,8 +97,21 @@ export async function collectAccessibilityIssues(page, { reportAxe } = {}) {
       if (!visible(control) || text(control)) continue;
       const rect = control.getBoundingClientRect();
       if (rect.width < 24 || rect.height < 24) {
+        const attributes = [
+          "id",
+          "data-testid",
+          "aria-label",
+          "aria-labelledby",
+          "title",
+        ]
+          .filter((attribute) => control.hasAttribute(attribute))
+          .map(
+            (attribute) =>
+              `[${attribute}=${JSON.stringify(control.getAttribute(attribute))}]`,
+          )
+          .join("");
         findings.push(
-          `icon control smaller than 24px (${Math.round(rect.width)}x${Math.round(rect.height)})`,
+          `icon control smaller than 24px (${Math.round(rect.width)}x${Math.round(rect.height)}): ${control.tagName.toLowerCase()}${attributes}`,
         );
       }
     }

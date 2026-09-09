@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { OPS_OUTPUT_LIMIT, hostPortFromUrl, psql } from "./common.mjs";
+import { OPS_OUTPUT_LIMIT, hostPortFromUrl, psql, run } from "./common.mjs";
 import { assertSecurityCatalog } from "./security-catalog.mjs";
 import { assertPrerequisites } from "./backup-prerequisites.mjs";
 import {
@@ -240,4 +240,51 @@ export function recordRecoveryHeartbeat(url, key, metadata, query = psql) {
     END IF;
     END $heartbeat$; COMMIT;`,
   );
+}
+
+function failureQuery(url, sql) {
+  return psql(url, sql, (command, args, options) =>
+    run(command, args, {
+      ...options,
+      timeout: 5_000,
+      env: { ...options.env, PGCONNECT_TIMEOUT: "3" },
+    }),
+  );
+}
+
+// Call only after the operation's exclusive claim and preflight have succeeded.
+// No error argument is accepted: only closed codes may enter the shared ledger.
+export function recordRecoveryFailure(
+  url,
+  key,
+  query = failureQuery,
+  snapshotCreatedAt,
+) {
+  try {
+    assert.ok(["backup", "restore_drill"].includes(key));
+    const newerSnapshot =
+      key === "backup"
+        ? `WHERE operational_heartbeats.metadata->>'createdAt' IS NULL
+        OR (operational_heartbeats.metadata->>'createdAt')::timestamptz
+          <= '${new Date(snapshotCreatedAt).toISOString()}'::timestamptz`
+        : "";
+    query(
+      url,
+      `BEGIN;
+      SET LOCAL statement_timeout = '3s';
+      SET LOCAL lock_timeout = '1s';
+      SET LOCAL ROLE meridian_app;
+      SELECT set_config('app.bypass', 'on', true);
+      INSERT INTO operational_heartbeats (key,last_failed_at,last_error,updated_at)
+      VALUES ('${key}',now(),'${key}_run_failed',now())
+      ON CONFLICT (key) DO UPDATE SET last_failed_at=excluded.last_failed_at,
+        last_error=excluded.last_error,updated_at=now()
+        ${newerSnapshot};
+      COMMIT;`,
+    );
+    return true;
+  } catch {
+    // Reporting must never replace the operation's original, redacted failure.
+    return false;
+  }
 }

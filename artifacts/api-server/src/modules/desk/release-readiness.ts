@@ -46,6 +46,7 @@ const envInt = (name: string, fallback: number): number => {
 };
 
 export async function getReleaseReadiness() {
+  const now = Date.now();
   const production = process.env.NODE_ENV === "production";
   const actualRevision = deployedBuildRevision();
   const expectedRevision = expectedBuildRevision();
@@ -55,7 +56,9 @@ export async function getReleaseReadiness() {
     deploymentRevisionCheck(
       actualRevision,
       expectedRevision,
-      Boolean(expectedRevision && revisionsMatch(actualRevision, expectedRevision)),
+      Boolean(
+        expectedRevision && revisionsMatch(actualRevision, expectedRevision),
+      ),
       production,
     ),
   );
@@ -86,6 +89,8 @@ export async function getReleaseReadiness() {
       byKey.get("scheduled_work")?.lastSucceededAt,
       envInt("SCHEDULED_WORK_MAX_AGE_MS", 10 * 60_000),
       production,
+      now,
+      byKey.get("scheduled_work"),
     ),
   );
   checks.push(
@@ -95,6 +100,8 @@ export async function getReleaseReadiness() {
       byKey.get("backup")?.lastSucceededAt,
       envInt("BACKUP_MAX_AGE_MS", 26 * 60 * 60_000),
       production,
+      now,
+      byKey.get("backup"),
     ),
   );
   checks.push(
@@ -104,6 +111,8 @@ export async function getReleaseReadiness() {
       byKey.get("restore_drill")?.lastSucceededAt,
       envInt("RESTORE_DRILL_MAX_AGE_MS", 31 * 24 * 60 * 60_000),
       production,
+      now,
+      byKey.get("restore_drill"),
     ),
   );
 
@@ -116,6 +125,10 @@ export async function getReleaseReadiness() {
       maxAgeMs: envInt("ADVISORY_INBOX_MAX_AGE_MS", 90 * 24 * 60 * 60_000),
       production,
       detail: { address: ADVISORY_EMAIL },
+      now,
+      owner: "Advisory operations",
+      remediation:
+        "Complete an approved receive, triage and reply test; retain private evidence before setting ADVISORY_INBOX_VERIFIED_AT.",
     }),
   );
   checks.push(
@@ -126,6 +139,11 @@ export async function getReleaseReadiness() {
       raw: process.env.USABILITY_VALIDATED_AT,
       maxAgeMs: envInt("USABILITY_MAX_AGE_MS", 180 * 24 * 60 * 60_000),
       production,
+      now,
+      owner: "Product research",
+      requireReference: true,
+      remediation:
+        "Complete moderated participant sessions and retain the findings; record USABILITY_VALIDATED_AT and USABILITY_EVIDENCE_REF only afterwards.",
       detail: {
         evidenceReference: process.env.USABILITY_EVIDENCE_REF?.trim() || null,
       },
@@ -180,7 +198,9 @@ export async function getReleaseReadiness() {
       transport: rail.transport,
       environment: rail.environment,
       railsConfigured,
-      configuredRailCount: Object.values(rail.rails).filter((item) => item.configured).length,
+      configuredRailCount: Object.values(rail.rails).filter(
+        (item) => item.configured,
+      ).length,
       accreditationConfirmed,
       requireLive,
     }),
@@ -217,7 +237,8 @@ export async function getReleaseReadiness() {
       bankDataRoomActive,
       activationReady: creditGovernance.activationReady,
       blockers: creditGovernance.blockers,
-      observableBusinesses: creditGovernance.activationEvidence.observableBusinesses,
+      observableBusinesses:
+        creditGovernance.activationEvidence.observableBusinesses,
       targetBusinesses: creditGovernance.activationEvidence.targetBusinesses,
       latestBacktestPassed: creditGovernance.latestBacktest?.passed ?? false,
     }),
@@ -228,7 +249,7 @@ export async function getReleaseReadiness() {
 
   return {
     status: releaseStatus(checks),
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date(now).toISOString(),
     buildRevision: actualRevision,
     expectedBuildRevision: expectedRevision,
     contractVersion: API_CONTRACT_VERSION,
