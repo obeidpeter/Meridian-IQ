@@ -88,8 +88,18 @@ clears a floor by five points or more says so, and `test:coverage:write`
 records the measured percentages (rounded down, less a two-point tolerance
 for run-to-run variance) as the new floors, so the ratchet moves up by hand
 and never down by accident. `test:coverage:check`
-re-checks an existing lcov without re-running the suite. The web packages
-have no floors yet; that is the next stage.
+re-checks an existing lcov without re-running the suite.
+
+The web packages run the same way (R121): `test:coverage` in `lib/web-ui`,
+`artifacts/console` and `artifacts/sme-compliance` runs the Vitest suite
+under its V8 provider, and the floors file's `runner.kind` (`vitest` there,
+`node-test` for the api-server) tells the shared script how to start the
+suite; everything from the lcov onward is one code path. The web-ui areas
+are its workspace, operation-recovery and hook modules; the console's are
+`src/lib` and `src/components`; the SME app adds its dashboard modules. CI
+runs the three coverage forms and retains the lcov and summary files as the
+`web-coverage` artifact. The buyer portal, landing and mobile suites still
+run plain; their floors are the stage after this one.
 
 Use only a disposable database: the main-app HTTP integration and E2E failure
 fixtures require `E2E_DATABASE_DISPOSABLE=1`. The route fixtures give each test

@@ -1,4 +1,9 @@
 {
+  "runner": {
+    "kind": "node-test",
+    "seed": "./src/test-helpers/seed-release-flags.ts",
+    "pattern": "src/**/*.test.ts"
+  },
   "areas": {
     "auth": {
       "paths": [
