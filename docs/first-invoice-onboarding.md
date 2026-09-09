@@ -81,9 +81,12 @@ caches. A synchronous in-flight lock prevents overlapping submissions and edits
 during a save. Initial load failures offer retry without a fabricated empty form;
 cached refetch errors preserve the editor's unsaved input.
 
-The PATCH API has no revision guard. Sending changed fields avoids overwriting
-unrelated values, but cannot prevent another writer from changing the same field
-between read and save. The editor does not promise atomic or conflict-free edits.
+The PATCH API carries an optimistic-concurrency guard (R113): the editor sends
+the `updatedAt` of the record it edited as `expectedUpdatedAt`, a record that
+changed since answers 409 with nothing written, and the page refetches so the
+newer saved values appear beside the unsaved ones for the user to reconcile.
+Sending changed fields still keeps unrelated values untouched. The guard is a
+refusal, not a merge: the user decides what to keep after a conflict.
 
 App pages install a `beforeunload` warning only while dirty and remove it after
 save, discard or unmount. No persisted business-PII draft is created. **In-app

@@ -1030,3 +1030,28 @@ test("workflow stays manual, main-only, read-only, protected and distinct from p
   );
   for (const pin of actual) assert.match(pin, /@[a-f0-9]{40}$/);
 });
+
+test("the CI producer workflow grants its token read-only contents access (R113)", () => {
+  // Release preparation trusts the artifacts ci.yml produces, so that
+  // workflow's token scope is part of the provenance chain: one top-level
+  // read-only block, no job widening it, and no secret or token use at all.
+  const workflow = readFileSync(
+    path.join(ROOT, ".github/workflows/ci.yml"),
+    "utf8",
+  );
+  const block = workflow.match(/^permissions:\n((?: {2}[a-z-]+: [a-z-]+\n)+)/m);
+  assert.ok(block, "ci.yml must declare a top-level permissions block");
+  assert.deepEqual(
+    block[1].trim().split("\n").map((line) => line.trim()),
+    ["contents: read"],
+  );
+  assert.equal(
+    (workflow.match(/^\s*permissions:/gm) ?? []).length,
+    1,
+    "no job may widen the token",
+  );
+  assert.doesNotMatch(
+    workflow,
+    /pull_request_target|workflow_run:|secrets\.|github\.token|GITHUB_TOKEN/,
+  );
+});

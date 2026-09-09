@@ -40,7 +40,7 @@ function errorMessage(error: unknown): string {
 export function Today() {
   usePageTitle("Today");
   const [, navigate] = useLocation();
-  const { data, isLoading, error, refetch } = useGetWorkspaceToday(
+  const { data, isLoading, isFetching, error, refetch } = useGetWorkspaceToday(
     { limit: 24 },
     {
       query: {
@@ -83,6 +83,9 @@ export function Today() {
           </Button>
         </div>
       ) : null}
+      {/* R113: the setup checklist is confirmed only by a successful read.
+          After a failed refresh the cached queue stays useful, but the
+          checklist reports unavailable instead of a stale percentage. */}
       <TodayWorkspace
         eyebrow="Valo Today"
         title="What needs attention"
@@ -90,6 +93,9 @@ export function Today() {
         summary={data.summary}
         items={data.items}
         setup={data.setup}
+        setupError={error ? errorMessage(error) : null}
+        setupLoading={Boolean(error) && isFetching}
+        onRetrySetup={() => void refetch()}
         generatedAt={data.generatedAt}
         onOpen={(href, item) => {
           if (item) trackUsabilityEvent("today_item_opened", "today");

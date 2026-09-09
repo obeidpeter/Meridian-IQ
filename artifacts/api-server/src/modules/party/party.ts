@@ -203,11 +203,30 @@ export interface UpdatePartyInput {
   street?: string | null;
   city?: string | null;
   countryCode?: string;
+  /** The updatedAt the caller last loaded (the generated body parser coerces
+   *  the date-time to a Date); a mismatch is a 409 (R113). */
+  expectedUpdatedAt?: string | Date;
+}
+
+const PARTY_STALE_MESSAGE =
+  "These business details changed since you loaded them. Review the latest saved values and try again.";
+
+function staleParty(): DomainError {
+  return new DomainError("PARTY_STALE", PARTY_STALE_MESSAGE, 409);
 }
 
 // Correct a party's registration data (fix-and-retry flow: a rejected TIN or
 // missing address is fixed here, then the failed invoice is re-submitted).
 // Merged duplicates are frozen — the survivor is the editable record.
+//
+// Lost-update guard (R113): a caller that supplies expectedUpdatedAt gets its
+// change applied only if the row still carries that stamp. The stamp is
+// checked against the row read in this transaction AND repeated in the UPDATE's
+// WHERE clause, because under READ COMMITTED a concurrent writer that commits
+// between the read and the update makes the UPDATE re-evaluate its predicate
+// on the newer row — zero rows means someone else saved first, and the 409
+// rolls this request back with nothing written. Callers that omit the stamp
+// keep the historical last-write-wins behaviour.
 export async function updateParty(
   id: string,
   patch: UpdatePartyInput,
@@ -221,6 +240,17 @@ export async function updateParty(
       "This party was merged; edit the surviving party instead",
       409,
     );
+  }
+  const expected =
+    patch.expectedUpdatedAt === undefined
+      ? null
+      : new Date(patch.expectedUpdatedAt);
+  if (
+    expected &&
+    (Number.isNaN(expected.getTime()) ||
+      expected.getTime() !== existing.updatedAt.getTime())
+  ) {
+    throw staleParty();
   }
   const values: Partial<typeof partiesTable.$inferInsert> = {};
   if (patch.legalName !== undefined) values.legalName = patch.legalName;
@@ -248,8 +278,13 @@ export async function updateParty(
   const [row] = await getDb()
     .update(partiesTable)
     .set(values)
-    .where(eq(partiesTable.id, id))
+    .where(
+      expected
+        ? and(eq(partiesTable.id, id), eq(partiesTable.updatedAt, expected))
+        : eq(partiesTable.id, id),
+    )
     .returning();
+  if (!row) throw staleParty();
   await appendAudit({
     actorId,
     action: "party.update",

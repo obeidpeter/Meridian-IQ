@@ -54,6 +54,7 @@ import { migration0052 } from "./0052_invoice_drafts.ts";
 import { migration0053 } from "./0053_clerk_reservations.ts";
 import { migration0054 } from "./0054_import_runs.ts";
 import { migration0055 } from "./0055_production_bootstrap_claims.ts";
+import { migration0056 } from "./0056_clerk_reservation_uniques.ts";
 
 export interface Migration {
   version: number;
@@ -121,6 +122,7 @@ export const migrations: Migration[] = [
   migration0053,
   migration0054,
   migration0055,
+  migration0056,
 ];
 
 type Executor = Pick<pg.Pool, "query">;

@@ -168,6 +168,56 @@ test("firm_staff can PATCH an unengaged buyer party referenced by a firm invoice
   assert.equal(body.city, "Test City");
 });
 
+test("a stale expectedUpdatedAt is refused with nothing written; the current stamp saves and then goes stale (R113)", async () => {
+  await ensureFixtures();
+  const base = await listen(appFor(staffOf(firmId), partiesRouter));
+  const read = async () =>
+    (await (await fetch(`${base}/parties/${buyerPartyId}`)).json()) as {
+      city: string | null;
+      updatedAt: string;
+    };
+  const patch = (body: Record<string, unknown>) =>
+    fetch(`${base}/parties/${buyerPartyId}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
+
+  const loaded = await read();
+  const stale = await patch({
+    city: "Stale City",
+    expectedUpdatedAt: "2020-01-01T00:00:00.000Z",
+  });
+  assert.equal(stale.status, 409, "a stale stamp must not overwrite");
+  assert.deepEqual(await stale.json(), {
+    error:
+      "These business details changed since you loaded them. Review the latest saved values and try again.",
+  });
+  assert.deepEqual(await read(), loaded, "a refused update writes nothing");
+
+  const malformed = await patch({ city: "x", expectedUpdatedAt: "yesterday" });
+  assert.equal(malformed.status, 400, "the stamp is a date-time, not free text");
+
+  const fresh = await patch({
+    city: "Fresh City",
+    expectedUpdatedAt: loaded.updatedAt,
+  });
+  assert.equal(fresh.status, 200, "the current stamp saves");
+  const saved = (await fresh.json()) as { city: string; updatedAt: string };
+  assert.equal(saved.city, "Fresh City");
+  assert.notEqual(saved.updatedAt, loaded.updatedAt, "a save moves the stamp");
+
+  const replay = await patch({
+    city: "Replayed City",
+    expectedUpdatedAt: loaded.updatedAt,
+  });
+  assert.equal(replay.status, 409, "the superseded stamp is now stale");
+  assert.equal((await read()).city, "Fresh City");
+
+  const legacy = await patch({ city: "Legacy City" });
+  assert.equal(legacy.status, 200, "callers without a stamp keep last-write-wins");
+});
+
 test("an unrelated firm cannot discover or update another firm's buyer", async () => {
   await ensureFixtures();
   const base = await listen(appFor(staffOf(otherFirmId), partiesRouter));

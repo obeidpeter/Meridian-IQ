@@ -32,6 +32,15 @@ const index = (name: string, expect = true) =>
     [`public.${name}`],
     expect,
   );
+// A single-column unique index (constraint-backed or bare) on the column,
+// whatever name its builder gave it — a drizzle push and migration 0053 name
+// the same guardrail differently (R113).
+const uniqueOn = (table: string, columnName: string) =>
+  sqlProbe(
+    `${table}(${columnName}) is enforced unique`,
+    "SELECT EXISTS (SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0] WHERE i.indrelid = to_regclass($1) AND i.indisunique AND i.indisvalid AND i.indnatts = 1 AND i.indpred IS NULL AND a.attname = $2) AS ok",
+    [`public.${table}`, columnName],
+  );
 const trigger = (table: string, name: string, expect = true) =>
   sqlProbe(
     `${table}.${name} trigger is enabled`,
@@ -186,6 +195,20 @@ export const RELIABILITY_LADDER = [
         "production_bootstrap_claims",
         "meridian_bootstrap_claim_immutable",
       ),
+    ],
+  },
+  {
+    version: 56,
+    atTop: [
+      uniqueOn("clerk_reservations", "inference_call_id"),
+      uniqueOn("clerk_reservations", "provider_call_id"),
+    ],
+    // Additive integrity survives rollback: an older binary never relied on
+    // the constraints being absent, and dropping them would reopen the
+    // double-settlement window (down is SELECT 1).
+    afterRollback: [
+      uniqueOn("clerk_reservations", "inference_call_id"),
+      uniqueOn("clerk_reservations", "provider_call_id"),
     ],
   },
 ];

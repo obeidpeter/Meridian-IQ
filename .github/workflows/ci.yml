@@ -3,6 +3,14 @@
 # Postgres, generated-client drift, full typecheck and production builds.
 name: CI
 
+# The token's default scope is the weakest link in the artifact provenance that
+# release preparation trusts (R113): every step reads the checkout and uploads
+# its artifacts through the runner's own token, so the workflow token needs
+# nothing beyond read access to contents. Widen per job if a step ever needs
+# more, never here.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]

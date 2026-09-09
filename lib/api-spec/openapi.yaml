@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.101.0
+  version: 0.102.0
   description: >-
     Valo platform API — data spine, compliance rails and consent.
     Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained
@@ -9146,6 +9146,14 @@ components:
           type: ["string", "null"]
         countryCode:
           type: string
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          description: >-
+            Optimistic-concurrency guard (R113): the party's updatedAt the caller
+            last loaded. When present, the update applies only if the record has
+            not changed since; otherwise the response is 409 Conflict and nothing
+            is written. Clients that omit it keep last-write-wins.
     PartyMergeInput:
       type: object
       required: [survivorId, duplicateId]

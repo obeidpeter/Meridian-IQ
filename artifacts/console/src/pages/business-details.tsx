@@ -21,7 +21,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { serverErrorMessage } from "@/lib/errors";
+import { errorStatus, serverErrorMessage } from "@/lib/errors";
 
 export default function BusinessDetails() {
   usePageTitle("Business details");
@@ -70,6 +70,10 @@ export default function BusinessDetails() {
       }
       return updated;
     } catch (error) {
+      // R113: a 409 is another save landing first. Refetch so the form can
+      // show the newer saved values beside the unsaved ones; the message
+      // below is the server's own.
+      if (errorStatus(error) === 409) void party.refetch();
       throw new Error(
         serverErrorMessage(error) ??
           "Business details could not be saved. Please try again.",

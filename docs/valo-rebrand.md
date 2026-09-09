@@ -11,7 +11,7 @@ Named demo businesses retain their separate fixture identities.
 This is a presentation change with additive compatibility support, not a
 database, identity-provider, or mobile signing migration. It does not change
 tenant isolation, permissions, consent, audit evidence, or approval boundaries.
-The API contract version is `0.101.0`; regenerate the clients from OpenAPI and
+The API contract version is `0.102.0`; regenerate the clients from OpenAPI and
 promote matching API and web artifacts through the existing
 [release path](operations.md). Existing rollback qualifications still apply.
 
@@ -138,7 +138,7 @@ completed by source edits or documentation checks.
   credentials still match the unchanged app IDs, then test notification
   delivery and tap-through on physical iOS and Android devices. Do not rotate
   or replace signing/push credentials just to change the product label.
-- [ ] Verify the released API and web handshake reports `0.101.0`, new and
+- [ ] Verify the released API and web handshake reports `0.102.0`, new and
   legacy request headers work, mismatched pairs fail, outgoing webhook aliases
   agree, and metric aliases have parity. Check dashboards for double-counting.
 - [ ] Test a returning browser with old SME caches: the new worker activates,
