@@ -419,14 +419,12 @@ test("buyer totals, failed priority and confirmation proof are not truncated to 
 test("buyer recorded responses remain setup proof after the invoice leaves Today's queue", async () => {
   const scope = await makeScope(false);
   const id = await invoice(scope, { status: "settled" });
-  await getDb()
-    .insert(confirmationsTable)
-    .values({
-      invoiceId: id,
-      buyerPartyId: scope.buyerId,
-      state: "queried",
-      confirmingUserId: scope.userId,
-    });
+  await getDb().insert(confirmationsTable).values({
+    invoiceId: id,
+    buyerPartyId: scope.buyerId,
+    state: "queried",
+    confirmingUserId: scope.userId,
+  });
   const body = await today(
     buyerPrincipal(scope.buyerId, { userId: scope.userId }),
     1,
@@ -449,14 +447,12 @@ test("first-invoice setup uses one supplier/receivable and current validation, n
     buyerPartyId: scope.otherBuyerId,
     status: "validated",
   });
-  await db
-    .insert(invoiceLifecycleEventsTable)
-    .values({
-      invoiceId: sibling,
-      firmId: scope.firmId,
-      fromStatus: "draft",
-      toStatus: "validated",
-    });
+  await db.insert(invoiceLifecycleEventsTable).values({
+    invoiceId: sibling,
+    firmId: scope.firmId,
+    fromStatus: "draft",
+    toStatus: "validated",
+  });
   await invoice(scope, {
     supplierPartyId: scope.siblingId,
     buyerPartyId: scope.clientId,
@@ -516,14 +512,12 @@ test("first-invoice setup uses one supplier/receivable and current validation, n
     .update(invoicesTable)
     .set({ status: "validated" })
     .where(eq(invoicesTable.id, id));
-  await db
-    .insert(invoiceLifecycleEventsTable)
-    .values({
-      invoiceId: id,
-      firmId: scope.firmId,
-      fromStatus: "draft",
-      toStatus: "validated",
-    });
+  await db.insert(invoiceLifecycleEventsTable).values({
+    invoiceId: id,
+    firmId: scope.firmId,
+    fromStatus: "draft",
+    toStatus: "validated",
+  });
   assert.equal(
     step(await today(principal), "invoice_validation").complete,
     true,

@@ -4,9 +4,7 @@ import {
   useListClerkEvalRuns,
   getListClerkEvalRunsQueryKey,
 } from "@workspace/api-client-react";
-import type {
-  ClerkMetrics,
-} from "@workspace/api-client-react";
+import type { ClerkMetrics } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,16 +13,8 @@ import { QueryError } from "@/components/query-error";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import {
-  formatDateTime,
-  formatPct,
-  pillClasses,
-} from "@/lib/format";
-import {
-  EVAL_RISK_TONE,
-  EVAL_OUTCOME_TONE,
-  fmtEvalDuration,
-} from "./format";
+import { formatDateTime, formatPct, pillClasses } from "@/lib/format";
+import { EVAL_RISK_TONE, EVAL_OUTCOME_TONE, fmtEvalDuration } from "./format";
 import {
   DigestImpactCard,
   IntentEvalCard,
@@ -102,9 +92,9 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Runs the synthetic fixture corpus through the live model (about
-            6 model calls, one per fixture — it can take tens of seconds)
-            and scores field accuracy and prompt-injection resistance.
+            Runs the synthetic fixture corpus through the live model (about 6
+            model calls, one per fixture — it can take tens of seconds) and
+            scores field accuracy and prompt-injection resistance.
           </p>
           {evalRunsLoading ? (
             <Skeleton className="h-24" />
@@ -119,16 +109,13 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
               className="text-sm text-muted-foreground"
               data-testid="text-eval-empty"
             >
-              No evaluation runs yet — run one to baseline the current model
-              and prompt.
+              No evaluation runs yet — run one to baseline the current model and
+              prompt.
             </p>
           ) : (
             <>
               <ScrollRegion label="Evaluation runs table">
-                <table
-                  className="w-full text-sm"
-                  data-testid="table-eval-runs"
-                >
+                <table className="w-full text-sm" data-testid="table-eval-runs">
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                       <th className="py-2 pr-3 font-medium">When</th>
@@ -143,9 +130,7 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
                       <th className="py-2 pr-3 font-medium text-right">
                         Fixtures
                       </th>
-                      <th className="py-2 font-medium text-right">
-                        Duration
-                      </th>
+                      <th className="py-2 font-medium text-right">Duration</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -232,8 +217,7 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
                                 {fx.outcome}
                               </span>
                               <span className="text-xs text-muted-foreground tabular-nums">
-                                {fx.fieldsCorrect}/{fx.fieldsCompared}{" "}
-                                fields
+                                {fx.fieldsCorrect}/{fx.fieldsCompared} fields
                               </span>
                               {fx.injectionResisted === false && (
                                 <span className={pillClasses("red")}>
@@ -245,8 +229,8 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
                               <ul className="text-xs text-muted-foreground space-y-0.5">
                                 {fx.mismatches.map((m) => (
                                   <li key={m.field}>
-                                    <code>{m.field}</code>:{" "}
-                                    {m.expected ?? "—"} → {m.actual ?? "—"}
+                                    <code>{m.field}</code>: {m.expected ?? "—"}{" "}
+                                    → {m.actual ?? "—"}
                                   </li>
                                 ))}
                               </ul>
@@ -272,11 +256,11 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="text-xs text-muted-foreground">
-              Every phrased surface (digest, statements, chasers, replies,
-              cover notes, advisory briefs) is checked against its own
-              facts: a numeral the facts never stated forfeits the phrasing
-              and the deterministic template answers instead. Zero is the
-              healthy reading.
+              Every phrased surface (digest, statements, chasers, replies, cover
+              notes, advisory briefs) is checked against its own facts: a
+              numeral the facts never stated forfeits the phrasing and the
+              deterministic template answers instead. Zero is the healthy
+              reading.
             </p>
             <p className="text-sm" data-testid="text-grounding-violations">
               {metrics.grounding.violations === 0
@@ -308,10 +292,10 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              From the stored evaluation runs (including red-team fixtures)
-              — resistance is the share of injection fixtures where every
-              critical field kept its legitimate value. Pure SQL, no model
-              involved in the judgment.
+              From the stored evaluation runs (including red-team fixtures) —
+              resistance is the share of injection fixtures where every critical
+              field kept its legitimate value. Pure SQL, no model involved in
+              the judgment.
             </p>
             <div className="grid gap-4 md:grid-cols-2">
               <ScrollRegion label="Injection resistance by month table">
@@ -322,20 +306,14 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                       <th className="py-2 pr-3 font-medium">Month</th>
-                      <th className="py-2 pr-3 font-medium text-right">
-                        Runs
-                      </th>
-                      <th className="py-2 font-medium text-right">
-                        Resisted
-                      </th>
+                      <th className="py-2 pr-3 font-medium text-right">Runs</th>
+                      <th className="py-2 font-medium text-right">Resisted</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {metrics.injectionTrend.months.map((m) => (
                       <tr key={m.month}>
-                        <td className="py-2 pr-3 tabular-nums">
-                          {m.month}
-                        </td>
+                        <td className="py-2 pr-3 tabular-nums">{m.month}</td>
                         <td className="py-2 pr-3 text-right tabular-nums">
                           {m.runs}
                         </td>
@@ -357,12 +335,8 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                       <th className="py-2 pr-3 font-medium">Prompt</th>
-                      <th className="py-2 pr-3 font-medium text-right">
-                        Runs
-                      </th>
-                      <th className="py-2 font-medium text-right">
-                        Resisted
-                      </th>
+                      <th className="py-2 pr-3 font-medium text-right">Runs</th>
+                      <th className="py-2 font-medium text-right">Resisted</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">

@@ -109,9 +109,9 @@ describe("inviteClientLoginHref / readInvitationPrefill", () => {
   test("percent-encodes the party id and reads it back intact", () => {
     const href = inviteClientLoginHref("a b/c");
     expect(href).toContain("clientPartyId=a%20b%2Fc");
-    expect(readInvitationPrefill(href.slice(href.indexOf("?"))).clientPartyId).toBe(
-      "a b/c",
-    );
+    expect(
+      readInvitationPrefill(href.slice(href.indexOf("?"))).clientPartyId,
+    ).toBe("a b/c");
   });
 
   test("an unknown or missing role falls back to firm_staff with no party", () => {

@@ -42,9 +42,7 @@ export async function sweepOnboardingRuns(): Promise<{
     // Per-run bypass scope so one broken run cannot wedge the pass; the
     // refresh's own CAS discipline makes a mid-loop crash harmless.
     try {
-      await runInBypassContext(() =>
-        refreshOnboardingRun(run.id, run.firm_id),
-      );
+      await runInBypassContext(() => refreshOnboardingRun(run.id, run.firm_id));
       refreshed += 1;
     } catch (err) {
       if (err instanceof DomainError && err.code === "NOT_FOUND") {
@@ -76,7 +74,10 @@ export async function sweepOnboardingRuns(): Promise<{
         continue;
       }
       logger.warn(
-        { runId: run.id, err: err instanceof Error ? err.message : String(err) },
+        {
+          runId: run.id,
+          err: err instanceof Error ? err.message : String(err),
+        },
         "onboarding refresh sweep: run failed",
       );
     }

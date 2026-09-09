@@ -1,7 +1,4 @@
-import type {
-  ClerkAnswer,
-  ClerkAnswerLink,
-} from "@workspace/api-client-react";
+import type { ClerkAnswer, ClerkAnswerLink } from "@workspace/api-client-react";
 import { humanize, pillClasses, type BadgeTone } from "@/lib/format";
 import { clerkBudgetExhausted, killSwitchTripped } from "@workspace/api-errors";
 import { serverErrorMessage } from "@/lib/errors";
@@ -257,7 +254,10 @@ export { fieldLabel } from "@workspace/format/notice-copy";
  * were skipped as duplicates. e.g. "Clerk found 3 invoices and opened a case
  * for each · 1 duplicate skipped".
  */
-export function batchSummary(opened: number, skippedDuplicates: number): string {
+export function batchSummary(
+  opened: number,
+  skippedDuplicates: number,
+): string {
   if (opened === 0) {
     // All-duplicates batches return 200 with no cases; anything else with
     // zero segments is a 4xx, so this branch is effectively "all duplicates".
@@ -351,12 +351,18 @@ export function dockAnswerView(answer: {
   claimVersion?: number | string | null;
   facts?: { key: string; label: string; value: string; unit?: string | null }[];
   sections?: {
-    facts: { key: string; label: string; value: string; unit?: string | null }[];
+    facts: {
+      key: string;
+      label: string;
+      value: string;
+      unit?: string | null;
+    }[];
     action?: unknown;
   }[];
   links?: unknown[];
 }) {
-  const allFacts = answer.sections?.flatMap((s) => s.facts) ?? answer.facts ?? [];
+  const allFacts =
+    answer.sections?.flatMap((s) => s.facts) ?? answer.facts ?? [];
   const scope = dataAnswerScope(answer.dataParams);
   const sourceLine = answer.dataIntent
     ? `From your records${scope ? ` (${scope})` : ""}${answer.citation ? ` · ${answer.citation}` : ""}`
@@ -378,4 +384,3 @@ export function dockAnswerView(answer: {
     hasMore,
   };
 }
-

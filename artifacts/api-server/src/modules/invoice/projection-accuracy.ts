@@ -73,9 +73,7 @@ export function summarizeProjectionAccuracy(
   for (const [buyerPartyId, list] of byBuyer) {
     for (let i = 0; i < list.length; i++) {
       const row = list[i];
-      const others = list
-        .filter((_, j) => j !== i)
-        .map((r) => r.daysToPay);
+      const others = list.filter((_, j) => j !== i).map((r) => r.daysToPay);
       let predicted: number;
       let basis: ProjectionBasis;
       if (others.length >= MIN_RHYTHM_OTHERS) {

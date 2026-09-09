@@ -41,7 +41,14 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { AlertTriangle, BookOpen, Pencil, Plus, Search, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  Pencil,
+  Plus,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { formatDateTime, formatPct, pillClasses } from "@/lib/format";
 
 // ADV-03: the living error catalogue, updatable by operators within one
@@ -173,9 +180,9 @@ function StatementFormatsSection() {
       <CardContent className="space-y-2">
         {(formats ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No custom formats yet. When a client's bank export isn't
-            recognised, paste a sample here and Clerk proposes the column
-            mapping — the parser validates it before anything is saved.
+            No custom formats yet. When a client's bank export isn't recognised,
+            paste a sample here and Clerk proposes the column mapping — the
+            parser validates it before anything is saved.
           </p>
         ) : (
           (formats ?? []).map((f) => (
@@ -293,9 +300,7 @@ function StatementFormatsSection() {
           <DialogFooter>
             <Button
               onClick={save}
-              disabled={
-                !columns || !bankName.trim() || createFormat.isPending
-              }
+              disabled={!columns || !bankName.trim() || createFormat.isPending}
               data-testid="button-save-format"
             >
               {createFormat.isPending ? "Validating…" : "Validate & save"}
@@ -347,15 +352,14 @@ function CatalogueCoverageCard({ enabled }: { enabled: boolean }) {
             <p className="text-xs text-muted-foreground">mapped today</p>
           </div>
           <div data-testid="coverage-sla">
-            <p className="text-xs text-muted-foreground">
-              Mapped within a day
-            </p>
+            <p className="text-xs text-muted-foreground">Mapped within a day</p>
             <p className="text-lg font-semibold tabular-nums">
               {formatPct(coverage.sla.withinOneDayShare)}
             </p>
             <p className="text-xs text-muted-foreground">
-              {coverage.sla.judged} entr{coverage.sla.judged === 1 ? "y" : "ies"}{" "}
-              judged · {coverage.sla.proactive} proactive
+              {coverage.sla.judged} entr
+              {coverage.sla.judged === 1 ? "y" : "ies"} judged ·{" "}
+              {coverage.sla.proactive} proactive
             </p>
           </div>
           <div>
@@ -476,7 +480,8 @@ export function Catalogue() {
         onError: () =>
           toast({
             title: "Clerk could not draft this entry",
-            description: "Write it manually — the observed rejections may be unusable.",
+            description:
+              "Write it manually — the observed rejections may be unusable.",
             variant: "destructive",
           }),
       },
@@ -639,7 +644,10 @@ export function Catalogue() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <p className="font-mono text-sm font-semibold flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
+                      <BookOpen
+                        className="w-4 h-4 text-primary shrink-0"
+                        aria-hidden="true"
+                      />
                       {entry.code}
                       {entry.category && (
                         <span className="rounded-full border px-2 py-0.5 text-xs font-sans font-normal text-muted-foreground">
@@ -659,7 +667,9 @@ export function Catalogue() {
                     </p>
                     <p className="text-sm">
                       <span className="font-medium">Cause:</span>{" "}
-                      <span className="text-muted-foreground">{entry.cause}</span>
+                      <span className="text-muted-foreground">
+                        {entry.cause}
+                      </span>
                     </p>
                     <p className="text-sm">
                       <span className="font-medium">Fix:</span>{" "}
@@ -691,7 +701,10 @@ export function Catalogue() {
 
       {canWrite && <StatementFormatsSection />}
 
-      <Dialog open={form !== null} onOpenChange={(open) => !open && setForm(null)}>
+      <Dialog
+        open={form !== null}
+        onOpenChange={(open) => !open && setForm(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -720,7 +733,9 @@ export function Catalogue() {
                 <Input
                   id="cat-category"
                   value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, category: e.target.value })
+                  }
                   placeholder="mbs / rail / import"
                 />
               </div>

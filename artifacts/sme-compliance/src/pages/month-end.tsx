@@ -162,13 +162,9 @@ export function MonthEnd() {
         }
         status={
           close.attentionCount > 0 ? (
-            <span className={pillClasses("amber")}>
-              Review required
-            </span>
+            <span className={pillClasses("amber")}>Review required</span>
           ) : (
-            <span className={pillClasses("emerald")}>
-              All checks clear
-            </span>
+            <span className={pillClasses("emerald")}>All checks clear</span>
           )
         }
       />
@@ -178,8 +174,8 @@ export function MonthEnd() {
         data-testid="text-close-explainer"
       >
         {vatMonthLabel(close.asOf)} checks — when every check below is clear,
-        you can treat the month&apos;s books as complete. Valo records
-        the checks; a human closes the month.
+        you can treat the month&apos;s books as complete. Valo records the
+        checks; a human closes the month.
       </p>
 
       <MetricStrip label="Month-end status">

@@ -2,7 +2,12 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { getDb, clerkBatchesTable, clerkCasesTable, usersTable } from "@workspace/db";
+import {
+  getDb,
+  clerkBatchesTable,
+  clerkCasesTable,
+  usersTable,
+} from "@workspace/db";
 import { DomainError } from "../errors.ts";
 import { validateScanSegments } from "./scan-batch.ts";
 import { createClerkBatch, processBatch } from "./batch-async.ts";
@@ -30,7 +35,9 @@ const actorId = randomUUID();
 // Minimal textless multi-page PDF (mirrors clerk-scan.test.ts): pdfjs
 // renders the pages, getText() finds nothing → the scan path engages.
 function blankPdf(pages: number, tag: string): string {
-  const kids = Array.from({ length: pages }, (_, i) => `${3 + i} 0 R`).join(" ");
+  const kids = Array.from({ length: pages }, (_, i) => `${3 + i} 0 R`).join(
+    " ",
+  );
   const body = Array.from(
     { length: pages },
     (_, i) =>
@@ -117,7 +124,10 @@ test("validateScanSegments: legal splits pass sorted; anything else fails closed
     "sorted into document order",
   );
 
-  const bad = (segs: Parameters<typeof validateScanSegments>[0], pages: number) =>
+  const bad = (
+    segs: Parameters<typeof validateScanSegments>[0],
+    pages: number,
+  ) =>
     assert.throws(
       () => validateScanSegments(segs, pages),
       (err: unknown) =>
@@ -197,7 +207,9 @@ test("a textless PDF queues as a scan bundle and processes into per-segment case
 
   // One segmentation call + one vision extraction per segment.
   assert.equal(calls.filter((c) => c.schemaName === "scan_segments").length, 1);
-  const extractions = calls.filter((c) => c.schemaName === "invoice_extraction");
+  const extractions = calls.filter(
+    (c) => c.schemaName === "invoice_extraction",
+  );
   assert.equal(extractions.length, 2);
   // Vision path: the extraction user content carries page images.
   for (const call of extractions) {

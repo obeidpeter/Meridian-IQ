@@ -41,8 +41,8 @@ export function StaleBuildBanner() {
     >
       <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
       <p className="flex-1">
-        This portal was updated ahead of the server (v{data.contractVersion}{" "}
-        vs v{API_CONTRACT_VERSION}). Some features may fail until the platform
+        This portal was updated ahead of the server (v{data.contractVersion} vs
+        v{API_CONTRACT_VERSION}). Some features may fail until the platform
         finishes updating.
       </p>
       <button

@@ -96,7 +96,8 @@ export async function recordChase(
     .values({
       firmId: invoice.firmId,
       invoiceId,
-      stage: sql`(SELECT COALESCE(MAX(stage), 0) + 1 FROM chase_log WHERE invoice_id = ${invoiceId})` as unknown as number,
+      stage:
+        sql`(SELECT COALESCE(MAX(stage), 0) + 1 FROM chase_log WHERE invoice_id = ${invoiceId})` as unknown as number,
       loggedByUserId: principal.userId,
     })
     .returning({

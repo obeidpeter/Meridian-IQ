@@ -75,9 +75,9 @@ export function ClerkActionEffectivenessCard({
           >
             Estimated s.104 exposure floor removed by the window&apos;s
             submissions: {formatNaira(exposureCleared)} (lowest band — an
-            estimate under Valo&apos;s published penalty model, not
-            advice). Drafted reminders are audited by the reminder
-            effectiveness report, not here.
+            estimate under Valo&apos;s published penalty model, not advice).
+            Drafted reminders are audited by the reminder effectiveness report,
+            not here.
           </p>
         )}
       </CardContent>

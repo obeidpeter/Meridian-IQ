@@ -105,16 +105,18 @@ async function retireStaleAssessmentPopulation(): Promise<void> {
     "1",
     "credit.integration needs an empty assessment population: set E2E_DATABASE_DISPOSABLE=1 to retire (layer-3 revoke) the businesses an earlier run left on this scratch database",
   );
-  await getDb().insert(consentRecordsTable).values(
-    stale.map(({ partyId }) => ({
-      partyId: partyId as string,
-      layer: 3,
-      action: "revoke" as const,
-      scope: "credit_scoring",
-      basis: "consent",
-      channel: "test",
-    })),
-  );
+  await getDb()
+    .insert(consentRecordsTable)
+    .values(
+      stale.map(({ partyId }) => ({
+        partyId: partyId as string,
+        layer: 3,
+        action: "revoke" as const,
+        scope: "credit_scoring",
+        basis: "consent",
+        channel: "test",
+      })),
+    );
 }
 
 before(async () => {

@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/sweeps";
-import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
+import {
+  alertOnceViaAuditLedger,
+  atMostHourly,
+  envThreshold,
+} from "./watch-shared";
 
 // Kept-rate drift watch — the accuracy sibling of resistance-watch.ts. The
 // corrections exhaust (every field an operator kept or overrode at approval)
@@ -155,4 +159,6 @@ export async function sweepQualityWatch(
   });
 }
 
-registerSweep("clerk.quality_watch", atMostHourly(sweepQualityWatch), { critical: false });
+registerSweep("clerk.quality_watch", atMostHourly(sweepQualityWatch), {
+  critical: false,
+});

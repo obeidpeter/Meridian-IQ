@@ -19,35 +19,43 @@ export const partyTypeEnum = pgEnum("party_type", [
   "bank",
 ]);
 
-export const partiesTable = pgTable("parties", {
-  id: id(),
-  type: partyTypeEnum("type").notNull(),
-  legalName: text("legal_name").notNull(),
-  // Nigerian Tax Identification Number. Nullable until captured.
-  tin: text("tin"),
-  tinValidated: boolean("tin_validated").notNull().default(false),
-  // Corporate Affairs Commission company number.
-  cacNumber: text("cac_number"),
-  // Postal address (required for UBL mandatory-field completeness).
-  street: text("street"),
-  city: text("city"),
-  countryCode: text("country_code").notNull().default("NG"),
-  // When two duplicate parties are merged, the loser points at the survivor.
-  // History is preserved: rows are never deleted (CORE-08).
-  mergedIntoId: uuid("merged_into_id"),
-  // Provenance, not ownership: parties stay shared spine entities, but a
-  // newly captured customer must be visible to whoever captured it BEFORE any
-  // invoice references it (the list rules in routes/parties.ts). User id is
-  // text to match the audit convention (dev principals are not UUIDs).
-  createdByFirmId: uuid("created_by_firm_id"),
-  createdByUserId: text("created_by_user_id"),
-  schemaVersion: integer("schema_version").notNull().default(1),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-// TIN is the documented entity key (CORE-08): imports, onboarding and the
-// duplicate workbench all resolve parties by it, so give those lookups an
-// index instead of a growing seq scan. Partial: tin is null until captured.
-}, (t) => [index("parties_tin_idx").on(t.tin).where(sql`tin IS NOT NULL`)]);
+export const partiesTable = pgTable(
+  "parties",
+  {
+    id: id(),
+    type: partyTypeEnum("type").notNull(),
+    legalName: text("legal_name").notNull(),
+    // Nigerian Tax Identification Number. Nullable until captured.
+    tin: text("tin"),
+    tinValidated: boolean("tin_validated").notNull().default(false),
+    // Corporate Affairs Commission company number.
+    cacNumber: text("cac_number"),
+    // Postal address (required for UBL mandatory-field completeness).
+    street: text("street"),
+    city: text("city"),
+    countryCode: text("country_code").notNull().default("NG"),
+    // When two duplicate parties are merged, the loser points at the survivor.
+    // History is preserved: rows are never deleted (CORE-08).
+    mergedIntoId: uuid("merged_into_id"),
+    // Provenance, not ownership: parties stay shared spine entities, but a
+    // newly captured customer must be visible to whoever captured it BEFORE any
+    // invoice references it (the list rules in routes/parties.ts). User id is
+    // text to match the audit convention (dev principals are not UUIDs).
+    createdByFirmId: uuid("created_by_firm_id"),
+    createdByUserId: text("created_by_user_id"),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    // TIN is the documented entity key (CORE-08): imports, onboarding and the
+    // duplicate workbench all resolve parties by it, so give those lookups an
+    // index instead of a growing seq scan. Partial: tin is null until captured.
+  },
+  (t) => [
+    index("parties_tin_idx")
+      .on(t.tin)
+      .where(sql`tin IS NOT NULL`),
+  ],
+);
 
 export type Party = typeof partiesTable.$inferSelect;
 export type PartyType = (typeof partyTypeEnum.enumValues)[number];

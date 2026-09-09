@@ -42,18 +42,20 @@ async function seedInvoice(input: {
   status?: "draft" | "validated" | "stamped" | "cancelled" | "failed";
 }): Promise<string> {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId,
-    supplierPartyId: input.supplierPartyId ?? clientA,
-    buyerPartyId: input.buyerPartyId ?? buyer,
-    invoiceNumber: input.invoiceNumber,
-    issueDate: input.issueDate,
-    status: input.status ?? "stamped",
-    grandTotal: "100000.00",
-    subtotal: "93023.26",
-    vatTotal: "6976.74",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId,
+      supplierPartyId: input.supplierPartyId ?? clientA,
+      buyerPartyId: input.buyerPartyId ?? buyer,
+      invoiceNumber: input.invoiceNumber,
+      issueDate: input.issueDate,
+      status: input.status ?? "stamped",
+      grandTotal: "100000.00",
+      subtotal: "93023.26",
+      vatTotal: "6976.74",
+    });
   return id;
 }
 
@@ -63,15 +65,17 @@ async function seedAttempt(
   when: string,
   opts: { rail?: "rail_primary" | "rail_secondary"; errorCode?: string } = {},
 ): Promise<void> {
-  await getDb().insert(submissionAttemptsTable).values({
-    invoiceId,
-    rail: opts.rail ?? "rail_primary",
-    attemptNo: 1,
-    idempotencyKey: randomUUID(),
-    status,
-    errorCode: opts.errorCode ?? null,
-    createdAt: new Date(`${when}T09:00:00Z`),
-  });
+  await getDb()
+    .insert(submissionAttemptsTable)
+    .values({
+      invoiceId,
+      rail: opts.rail ?? "rail_primary",
+      attemptNo: 1,
+      idempotencyKey: randomUUID(),
+      status,
+      errorCode: opts.errorCode ?? null,
+      createdAt: new Date(`${when}T09:00:00Z`),
+    });
 }
 
 before(async () => {
@@ -81,30 +85,70 @@ before(async () => {
     { id: clientA, type: "client_business", legalName: `SC Alpha ${SALT}` },
     { id: clientB, type: "client_business", legalName: `SC Beta ${SALT}` },
     { id: clientC, type: "client_business", legalName: `SC Gamma ${SALT}` },
-    { id: clientArchived, type: "client_business", legalName: `SC Gone ${SALT}` },
+    {
+      id: clientArchived,
+      type: "client_business",
+      legalName: `SC Gone ${SALT}`,
+    },
     { id: buyer, type: "buyer", legalName: `SC Buyer ${SALT}` },
     { id: vendor, type: "buyer", legalName: `SC Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientA, type: "retainer", status: "open", title: `sc A ${SALT}` },
-    { firmId, clientPartyId: clientB, type: "retainer", status: "open", title: `sc B ${SALT}` },
-    { firmId, clientPartyId: clientC, type: "retainer", status: "open", title: `sc C ${SALT}` },
-    { firmId, clientPartyId: clientArchived, type: "retainer", status: "archived", title: `sc X ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientA,
+      type: "retainer",
+      status: "open",
+      title: `sc A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: clientB,
+      type: "retainer",
+      status: "open",
+      title: `sc B ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: clientC,
+      type: "retainer",
+      status: "open",
+      title: `sc C ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: clientArchived,
+      type: "retainer",
+      status: "archived",
+      title: `sc X ${SALT}`,
+    },
   ]);
 
   // Client A: 3 accepted (2 inside the window, 1 late), 1 of them also saw
   // a rejection first, plus 1 overdue draft (never attempted).
-  const a1 = await seedInvoice({ invoiceNumber: `SC-A1-${SALT}`, issueDate: daysAgo(60) });
+  const a1 = await seedInvoice({
+    invoiceNumber: `SC-A1-${SALT}`,
+    issueDate: daysAgo(60),
+  });
   await seedAttempt(a1, "accepted", daysAgo(58)); // +2d: inside window
-  const a2 = await seedInvoice({ invoiceNumber: `SC-A2-${SALT}`, issueDate: daysAgo(50) });
+  const a2 = await seedInvoice({
+    invoiceNumber: `SC-A2-${SALT}`,
+    issueDate: daysAgo(50),
+  });
   await seedAttempt(a2, "rejected", daysAgo(49));
   await seedAttempt(a2, "accepted", daysAgo(46)); // +4d: inside window
-  const a3 = await seedInvoice({ invoiceNumber: `SC-A3-${SALT}`, issueDate: daysAgo(40) });
+  const a3 = await seedInvoice({
+    invoiceNumber: `SC-A3-${SALT}`,
+    issueDate: daysAgo(40),
+  });
   await seedAttempt(a3, "accepted", daysAgo(28)); // +12d: outside window
   // The deadline boundary: accepted exactly on day issue+7. The overdue
   // predicate says day 7 IS late (issue + window <= today), so this must
   // NOT count as within-window — the review-confirmed off-by-one.
-  const a5 = await seedInvoice({ invoiceNumber: `SC-A5-${SALT}`, issueDate: daysAgo(35) });
+  const a5 = await seedInvoice({
+    invoiceNumber: `SC-A5-${SALT}`,
+    issueDate: daysAgo(35),
+  });
   await seedAttempt(a5, "accepted", daysAgo(28)); // +7d: the boundary — late
   await seedInvoice({
     invoiceNumber: `SC-A4-${SALT}`,
@@ -155,7 +199,10 @@ before(async () => {
     invoiceNumber: `SC-C1-${SALT}`,
     issueDate: daysAgo(30),
   });
-  await seedAttempt(c1, "error", daysAgo(29), { rail: "rail_primary", errorCode: "RAIL_UNAVAILABLE" });
+  await seedAttempt(c1, "error", daysAgo(29), {
+    rail: "rail_primary",
+    errorCode: "RAIL_UNAVAILABLE",
+  });
   await seedAttempt(c1, "accepted", daysAgo(29), { rail: "rail_secondary" });
   const c2 = await seedInvoice({
     supplierPartyId: clientC,
@@ -163,7 +210,9 @@ before(async () => {
     issueDate: daysAgo(3),
     status: "failed",
   });
-  await seedAttempt(c2, "rejected", daysAgo(2), { errorCode: "MBS_INVALID_TIN" });
+  await seedAttempt(c2, "rejected", daysAgo(2), {
+    errorCode: "MBS_INVALID_TIN",
+  });
   const c3 = await seedInvoice({
     supplierPartyId: clientC,
     invoiceNumber: `SC-C3-${SALT}`,

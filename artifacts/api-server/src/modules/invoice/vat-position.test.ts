@@ -25,7 +25,10 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Monthly VAT position (contract 0.45.0). Pinned here:
 //  - the OUTPUT basis mirrors the VAT pack: only rails-accepted documents in
@@ -147,7 +150,11 @@ before(async () => {
   };
   await db.insert(invoicesTable).values([
     // OUTPUT side. Accepted NGN invoice: +100.00.
-    withId({ invoiceNumber: OUT_NGN, vatTotal: "100.00", grandTotal: "1100.00" }),
+    withId({
+      invoiceNumber: OUT_NGN,
+      vatTotal: "100.00",
+      grandTotal: "1100.00",
+    }),
     // Accepted NGN credit note: netted, -30.00.
     withId({ invoiceNumber: OUT_CN, kind: "credit_note", vatTotal: "30.00" }),
     // Accepted USD invoice with a captured rate: 2.00 * 1500 = +3000.00.
@@ -255,12 +262,14 @@ before(async () => {
     checkedByUserId: adminId,
     checkedAt,
   });
-  await db.insert(billVerificationsTable).values([
-    check(BILL_VERIFIED, false, older),
-    check(BILL_VERIFIED, true, newer),
-    check(BILL_INVALID, true, older),
-    check(BILL_INVALID, false, newer),
-  ]);
+  await db
+    .insert(billVerificationsTable)
+    .values([
+      check(BILL_VERIFIED, false, older),
+      check(BILL_VERIFIED, true, newer),
+      check(BILL_INVALID, true, older),
+      check(BILL_INVALID, false, newer),
+    ]);
 });
 
 after(async () => {
@@ -368,8 +377,14 @@ test("listVatPositionDocuments carries signed NGN values and the verified postur
       .filter((d) => filter(d) && d.vatNgn !== null)
       .reduce((s, d) => s + Number(d.vatNgn), 0)
       .toFixed(2);
-  assert.equal(sum((d) => d.docType !== "bill"), "3070.00");
-  assert.equal(sum((d) => d.docType === "bill"), "75.00");
+  assert.equal(
+    sum((d) => d.docType !== "bill"),
+    "3070.00",
+  );
+  assert.equal(
+    sum((d) => d.docType === "bill"),
+    "75.00",
+  );
 });
 
 test("GET /vat-position answers the scoped position and refuses a bad month", async () => {
@@ -390,7 +405,9 @@ test("GET /vat-position answers the scoped position and refuses a bad month", as
   assert.equal(body.excludedForFx, 2);
 
   // Omitted month defaults to the current Lagos month.
-  const defaulted = await fetch(`${base}/vat-position?clientPartyId=${clientOne}`);
+  const defaulted = await fetch(
+    `${base}/vat-position?clientPartyId=${clientOne}`,
+  );
   assert.equal(defaulted.status, 200);
   assert.equal(
     ((await defaulted.json()) as { monthStart: string }).monthStart,
@@ -439,7 +456,10 @@ test("GET /vat-position/export ships the per-document CSV with the note row", as
   );
   const csv = await res.text();
   const lines = csv.split("\r\n").filter((l) => l.length > 0);
-  assert.match(lines[0], /^﻿?docType,invoiceNumber,counterparty,currency,fxRateToNgn,vatOriginal,vatNgn,verified$/);
+  assert.match(
+    lines[0],
+    /^﻿?docType,invoiceNumber,counterparty,currency,fxRateToNgn,vatOriginal,vatNgn,verified$/,
+  );
   const cell = (line: string) => line.split(",");
   const cnLine = lines.find((l) => l.includes(OUT_CN));
   assert.ok(cnLine, "credit note row present");
@@ -449,7 +469,11 @@ test("GET /vat-position/export ships the per-document CSV with the note row", as
   const invLine = lines.find((l) => l.includes(BILL_INVALID));
   assert.equal(cell(invLine ?? "")[7], "no");
   const noFxLine = lines.find((l) => l.includes(BILL_NOFX));
-  assert.equal(cell(noFxLine ?? "")[6], "", "excluded bill ships a blank NGN cell");
+  assert.equal(
+    cell(noFxLine ?? "")[6],
+    "",
+    "excluded bill ships a blank NGN cell",
+  );
   const outLine = lines.find((l) => l.includes(OUT_NGN));
   assert.equal(cell(outLine ?? "")[7], "", "verified is blank on output docs");
   // The disclosure travels WITH the file.

@@ -130,7 +130,8 @@ function computeDeadlines(
       clientPartyId,
       kind: "b2c_report",
       title: "Consolidated B2C sales report",
-      description: "Aggregated business-to-consumer sales report for the period.",
+      description:
+        "Aggregated business-to-consumer sales report for the period.",
       dueDate: b2cDue.toISOString(),
       status: b2cDays <= 5 ? "due_soon" : "upcoming",
       severity: b2cDays <= 5 ? "warning" : "info",
@@ -348,9 +349,12 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   // Deadline headline numbers: the per-invoice share comes from the
   // aggregate (exact past the deadline-list cap), the rest from the
   // non-invoice deadlines (VAT, B2C clocks, bills) the list carries.
-  const other = deadlines.filter((d) => d.kind !== "invoice_submission" && d.kind !== "penalty_watch");
+  const other = deadlines.filter(
+    (d) => d.kind !== "invoice_submission" && d.kind !== "penalty_watch",
+  );
   const overdueCount =
-    book.overdueSubmissions + other.filter((d) => d.status === "overdue").length;
+    book.overdueSubmissions +
+    other.filter((d) => d.status === "overdue").length;
   const upcomingCount =
     book.unsubmittedCount + other.filter((d) => d.status !== "met").length;
   const nextDeadline = deadlines.find((d) => d.status !== "met") ?? null;
@@ -499,46 +503,39 @@ router.get("/dashboard/chase-list", async (req, res): Promise<void> => {
 
 // CSV download of the per-invoice rows behind the aging summary — the file a
 // collections call or external accountant works from. Same access posture.
-router.get(
-  "/dashboard/receivables/export",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "invoice.read");
-    const query = parseOrThrow(ExportReceivablesCsvQueryParams, req.query);
-    const clientPartyId = query.clientPartyId;
-    await assertPartyAccess(req.principal, clientPartyId);
-    const tenant = tenantFirmId(req.principal);
-    const rows = await listOutstandingReceivables(clientPartyId, tenant);
-    const csv = toCsv(
-      [
-        "invoiceNumber",
-        "buyer",
-        "issueDate",
-        "dueDate",
-        "ageDays",
-        "bucket",
-        "currency",
-        "outstanding",
-        "status",
-      ],
-      rows.map((r) => [
-        r.invoiceNumber,
-        r.buyerName,
-        r.issueDate,
-        r.dueDate,
-        r.ageDays,
-        r.bucket,
-        r.currency,
-        r.grandTotal,
-        r.status,
-      ]),
-    );
-    sendCsvAttachment(
-      res,
-      `receivables-${lagosDateString()}.csv`,
-      csv,
-    );
-  },
-);
+router.get("/dashboard/receivables/export", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ExportReceivablesCsvQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
+  await assertPartyAccess(req.principal, clientPartyId);
+  const tenant = tenantFirmId(req.principal);
+  const rows = await listOutstandingReceivables(clientPartyId, tenant);
+  const csv = toCsv(
+    [
+      "invoiceNumber",
+      "buyer",
+      "issueDate",
+      "dueDate",
+      "ageDays",
+      "bucket",
+      "currency",
+      "outstanding",
+      "status",
+    ],
+    rows.map((r) => [
+      r.invoiceNumber,
+      r.buyerName,
+      r.issueDate,
+      r.dueDate,
+      r.ageDays,
+      r.bucket,
+      r.currency,
+      r.grandTotal,
+      r.status,
+    ]),
+  );
+  sendCsvAttachment(res, `receivables-${lagosDateString()}.csv`, csv);
+});
 
 router.get("/compliance/calendar", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");

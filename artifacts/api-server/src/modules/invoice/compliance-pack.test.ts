@@ -35,7 +35,10 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // Monthly client compliance pack (contract 0.45.0). Pinned here:
@@ -107,8 +110,18 @@ before(async () => {
     { id: vendorParty, type: "buyer", legalName: `Pack Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId: firmA, clientPartyId: clientParty, type: "retainer", title: `pack A ${SALT}` },
-    { firmId: firmA, clientPartyId: siblingParty, type: "retainer", title: `pack B ${SALT}` },
+    {
+      firmId: firmA,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `pack A ${SALT}`,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `pack B ${SALT}`,
+    },
   ]);
 
   const stampedId = randomUUID();
@@ -280,10 +293,16 @@ test("the pack computes register, snapshots, VAT and deadlines for one client mo
     amount: "540.00",
     count: 1,
   });
-  assert.equal(facts.payables.topSuppliers[0]?.supplierName, `Pack Vendor ${SALT}`);
+  assert.equal(
+    facts.payables.topSuppliers[0]?.supplierName,
+    `Pack Vendor ${SALT}`,
+  );
 
   // The VAT section IS computeVatPosition for the same inputs.
-  assert.deepEqual(facts.vat, await computeVatPosition(firmA, clientParty, MONTH));
+  assert.deepEqual(
+    facts.vat,
+    await computeVatPosition(firmA, clientParty, MONTH),
+  );
   assert.equal(facts.vat.outputVat, "67.50", "credit note netted");
   assert.equal(facts.vat.inputVat, "40.00");
   assert.equal(facts.vat.defensibleNetVat, "67.50", "no verified input yet");
@@ -373,7 +392,9 @@ test("the renderer produces a real PDF and the route ships it as an attachment",
   assert.equal(buf.subarray(0, 5).toString(), "%PDF-");
 
   const base = await listen(appFor(admin, compliancePackRouter));
-  const res = await fetch(`${base}/compliance-pack?clientPartyId=${clientParty}`);
+  const res = await fetch(
+    `${base}/compliance-pack?clientPartyId=${clientParty}`,
+  );
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("content-type"), "application/pdf");
   assert.equal(
@@ -414,7 +435,9 @@ test("SEC-03: a client principal naming a sibling still pulls only its OWN pack"
   const base = await listen(appFor(clientUser, compliancePackRouter));
   // resolveClientAnalyticsScope PINS a client_user to its own party — the
   // sibling id in the query is ignored, never honoured.
-  const res = await fetch(`${base}/compliance-pack?clientPartyId=${siblingParty}`);
+  const res = await fetch(
+    `${base}/compliance-pack?clientPartyId=${siblingParty}`,
+  );
   assert.equal(res.status, 200);
   const text = await pdfText(Buffer.from(await res.arrayBuffer()));
   assert.ok(text.includes(CLIENT_NAME), "the caller's own client name");
@@ -469,7 +492,11 @@ test("notify answers 202 but writes nothing without a layer-1 grant; a grant lig
   assert.deepEqual(msgs.map((m) => m.channel).sort(), ["email", "whatsapp"]);
   assert.ok(msgs.every((m) => m.entityType === "compliance_pack"));
   assert.ok(
-    msgs.every((m) => m.entityId === `pack-${clientParty.replace(/[^a-z]/gi, "").slice(0, 6)}`),
+    msgs.every(
+      (m) =>
+        m.entityId ===
+        `pack-${clientParty.replace(/[^a-z]/gi, "").slice(0, 6)}`,
+    ),
     "pointer-only entity ref (SEC-12)",
   );
 });

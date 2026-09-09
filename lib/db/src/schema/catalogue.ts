@@ -1,9 +1,4 @@
-import {
-  pgTable,
-  text,
-  boolean,
-  pgEnum,
-} from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createdAt, updatedAt } from "./columns.ts";
 
 // Persisted, operator-editable validation-error catalogue (ADV-03, INT-02).
@@ -28,4 +23,3 @@ export const errorCatalogueTable = pgTable("error_catalogue", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
-

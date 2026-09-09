@@ -1272,7 +1272,9 @@ export async function sweepPipelineRetention(): Promise<void> {
   });
 }
 
-registerSweep("pipeline.retention", sweepPipelineRetention, { critical: false });
+registerSweep("pipeline.retention", sweepPipelineRetention, {
+  critical: false,
+});
 
 // Outbox gauges (R96): depth by state, the age of the oldest ready event and
 // the dead-letter count — the series an alert on "the pipeline is stuck"

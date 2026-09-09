@@ -387,7 +387,10 @@ export function drawPayablesSection(
         `${g.currency} ${formatMoney(g.total.amount)}`,
         true,
       );
-      kvRow(`  Overdue — ${g.overdue.count} bill(s)`, formatMoney(g.overdue.amount));
+      kvRow(
+        `  Overdue — ${g.overdue.count} bill(s)`,
+        formatMoney(g.overdue.amount),
+      );
       for (const w of g.dueWeeks) {
         kvRow(
           `  Week of ${w.startDate} — ${w.count} bill(s)`,
@@ -408,7 +411,10 @@ export function drawPayablesSection(
         .text("TOP SUPPLIERS", MARGIN, cursor.y);
       cursor.y += 12;
       for (const s of payables.topSuppliers) {
-        kvRow(`  ${s.supplierName} — ${s.count} bill(s)`, formatMoney(s.amount));
+        kvRow(
+          `  ${s.supplierName} — ${s.count} bill(s)`,
+          formatMoney(s.amount),
+        );
       }
     }
   }
@@ -441,10 +447,7 @@ export function drawVatSection(
     `NGN ${formatMoney(vat.defensibleNetVat)}`,
     true,
   );
-  kvRow(
-    "Documents excluded for a missing FX rate",
-    String(vat.excludedForFx),
-  );
+  kvRow("Documents excluded for a missing FX rate", String(vat.excludedForFx));
   // The basis disclosure travels IN the paper (the vat-note.ts rule): the
   // caveats must survive however the PDF is handed around.
   cursor.y = ensureRoom(doc, cursor.y, 40);
@@ -485,7 +488,12 @@ export async function renderCompliancePackPdf(
   // --- Brand header (pdf.ts's block, pack-titled) ----------------------------
   const layout = packLayout(doc, packTheme.primary);
   const { cursor, section, kvRow, emptyLine } = layout;
-  cursor.y = drawBrandHeader(doc, packTheme, "COMPLIANCE PACK", facts.monthLabel);
+  cursor.y = drawBrandHeader(
+    doc,
+    packTheme,
+    "COMPLIANCE PACK",
+    facts.monthLabel,
+  );
 
   // --- Cover block: who, which month, and the note ---------------------------
   drawCoverIntro(

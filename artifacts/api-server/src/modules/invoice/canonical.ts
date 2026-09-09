@@ -126,7 +126,10 @@ export function serializeToUbl(inv: CanonicalInvoice): string {
         "cbc:ID": l.id,
         // UBL carries the unit of measure as the unitCode attribute on the
         // quantity element (UBL 2.1, CORE-01), not as a sibling element.
-        "cbc:InvoicedQuantity": { "#text": l.quantity, "@_unitCode": l.unitCode },
+        "cbc:InvoicedQuantity": {
+          "#text": l.quantity,
+          "@_unitCode": l.unitCode,
+        },
         "cbc:LineExtensionAmount": l.lineExtension,
         "cac:Item": { "cbc:Description": l.description },
         "cac:Price": { "cbc:PriceAmount": l.unitPrice },
@@ -142,7 +145,9 @@ export function serializeToUbl(inv: CanonicalInvoice): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n${builder.build(doc)}`;
 }
 
-function ublToParty(node: Record<string, unknown>): CanonicalInvoice["supplier"] {
+function ublToParty(
+  node: Record<string, unknown>,
+): CanonicalInvoice["supplier"] {
   const party = node["cac:Party"] as Record<string, unknown>;
   const addr = party["cac:PostalAddress"] as Record<string, unknown>;
   const country = addr["cac:Country"] as Record<string, unknown>;

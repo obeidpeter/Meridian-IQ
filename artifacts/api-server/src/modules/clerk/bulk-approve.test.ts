@@ -56,7 +56,9 @@ const ISSUE_DATE = lagosDateOffset(-2);
 // list and a fast-lane case by construction.
 function cleanOutput(
   invoiceNumber: string,
-  overrides: Partial<Record<string, { value: string | null; confidence?: number }>> = {},
+  overrides: Partial<
+    Record<string, { value: string | null; confidence?: number }>
+  > = {},
 ): ExtractionOutput {
   const base: Record<string, string | null> = {
     invoiceNumber,
@@ -89,7 +91,10 @@ function cleanOutput(
   };
 }
 
-async function makeCase(output: ExtractionOutput | (() => never), name: string): Promise<ClerkCase> {
+async function makeCase(
+  output: ExtractionOutput | (() => never),
+  name: string,
+): Promise<ClerkCase> {
   const gateway = fakeGateway(() =>
     typeof output === "function" ? output() : JSON.stringify(output),
   );
@@ -190,9 +195,7 @@ test("fastLaneBlocker mirrors the console predicate (clerk-shared isReadyToAppro
     ...clean,
     extraction: {
       ...clean.extraction,
-      fields: [
-        { ...clean.extraction.fields[0], confidence: 0.89 },
-      ],
+      fields: [{ ...clean.extraction.fields[0], confidence: 0.89 }],
     },
   };
   assert.match(

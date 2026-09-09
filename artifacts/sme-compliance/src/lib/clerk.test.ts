@@ -81,13 +81,18 @@ describe("planLine", () => {
     expect(
       planLine({
         plan: [
-          { key: "data.submitted_this_month", title: "This month's submissions" },
+          {
+            key: "data.submitted_this_month",
+            title: "This month's submissions",
+          },
           { key: "data.overdue_invoices", title: "Overdue invoices" },
         ],
       }),
     ).toBe("Answered using: This month's submissions · Overdue invoices");
     expect(
-      planLine({ plan: [{ key: "data.month_delta", title: "Month vs month" }] }),
+      planLine({
+        plan: [{ key: "data.month_delta", title: "Month vs month" }],
+      }),
     ).toBe("Answered using: Month vs month");
   });
 
@@ -154,9 +159,7 @@ describe("holdsFollowupCase", () => {
     expect(
       holdsFollowupCase({
         ...base,
-        sections: [
-          { title: "This month", text: "3 submitted.", facts: [] },
-        ],
+        sections: [{ title: "This month", text: "3 submitted.", facts: [] }],
       }),
     ).toBe(true);
   });
@@ -173,9 +176,9 @@ describe("holdsFollowupCase", () => {
   test("register-claim answers, refusals, and empty carriers don't thread", () => {
     expect(holdsFollowupCase(null)).toBe(false);
     expect(holdsFollowupCase(undefined)).toBe(false);
-    expect(
-      holdsFollowupCase({ ...base, claimKey: "vat.standard_rate" }),
-    ).toBe(false);
+    expect(holdsFollowupCase({ ...base, claimKey: "vat.standard_rate" })).toBe(
+      false,
+    );
     expect(
       holdsFollowupCase({ answered: false, refusalReason: "Not covered." }),
     ).toBe(false);
@@ -189,9 +192,9 @@ describe("holdsFollowupCase", () => {
     ).toBe(false);
     // Empty sections/pins carry no scope to inherit.
     expect(holdsFollowupCase({ ...base, sections: [], pins: {} })).toBe(false);
-    expect(
-      holdsFollowupCase({ ...base, pins: { monthLabel: "  " } }),
-    ).toBe(false);
+    expect(holdsFollowupCase({ ...base, pins: { monthLabel: "  " } })).toBe(
+      false,
+    );
   });
 });
 
@@ -432,17 +435,31 @@ describe("handleClerkGatewayError", () => {
 describe("captureStatusExplanation", () => {
   test("escalation tells the client nothing is needed yet", () => {
     expect(captureStatusExplanation("escalated")).toContain("escalated");
-    expect(captureStatusExplanation("escalated")).toContain("Nothing is needed from you");
+    expect(captureStatusExplanation("escalated")).toContain(
+      "Nothing is needed from you",
+    );
   });
 
   test("a rejection without a recorded reason says what to do next", () => {
-    expect(captureStatusExplanation("rejected", null)).toContain("corrected copy");
-    expect(captureStatusExplanation("rejected", "")).toContain("corrected copy");
+    expect(captureStatusExplanation("rejected", null)).toContain(
+      "corrected copy",
+    );
+    expect(captureStatusExplanation("rejected", "")).toContain(
+      "corrected copy",
+    );
   });
 
   test("a rejection with a reason, and every other status, keep their own copy", () => {
-    expect(captureStatusExplanation("rejected", "Duplicate of INV-1")).toBeNull();
-    for (const s of ["pending", "extracted", "in_review", "approved", "failed"]) {
+    expect(
+      captureStatusExplanation("rejected", "Duplicate of INV-1"),
+    ).toBeNull();
+    for (const s of [
+      "pending",
+      "extracted",
+      "in_review",
+      "approved",
+      "failed",
+    ]) {
       expect(captureStatusExplanation(s)).toBeNull();
     }
   });
@@ -476,13 +493,16 @@ describe("dockAnswerView", () => {
       claimVersion: 3,
       facts: [fact("a")],
     });
-    expect(view.sourceLine).toBe("Source: VAT Act s.15 · approved claim vat.rate v3");
+    expect(view.sourceLine).toBe(
+      "Source: VAT Act s.15 · approved claim vat.rate v3",
+    );
     expect(view.hasMore).toBe(false);
   });
 
   test("deep links or a proposed action mean there is more in the full workspace", () => {
     expect(
-      dockAnswerView({ answered: true, sections: [{ facts: [], action: {} }] }).hasMore,
+      dockAnswerView({ answered: true, sections: [{ facts: [], action: {} }] })
+        .hasMore,
     ).toBe(true);
     expect(dockAnswerView({ answered: true, links: [{}] }).hasMore).toBe(true);
   });
@@ -491,13 +511,17 @@ describe("dockAnswerView", () => {
 describe("dockErrorMessage", () => {
   test("the kill switch and the monthly allowance each explain themselves", () => {
     const err = (status: number) =>
-      Object.assign(new Error(`HTTP ${status}`), { status, response: { status } });
+      Object.assign(new Error(`HTTP ${status}`), {
+        status,
+        response: { status },
+      });
     expect(dockErrorMessage(err(503))).toContain("switched off");
     expect(dockErrorMessage(err(429))).toContain("allowance");
   });
 
   test("anything else relays the server's words and says nothing changed", () => {
-    expect(dockErrorMessage(new Error("boom"))).toContain("Nothing was changed.");
+    expect(dockErrorMessage(new Error("boom"))).toContain(
+      "Nothing was changed.",
+    );
   });
 });
-

@@ -38,7 +38,10 @@ test("every Invoice Room browser route is public only behind its opaque credenti
 });
 
 test("browser writes leave the ambient transaction but retain CSRF and raw-pool throttles", () => {
-  const noContext = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const noContext = setBlock(
+    src("middleware/request-policy.ts"),
+    "NO_CONTEXT_ROUTES = new Set(",
+  );
   for (const path of PUBLIC_BROWSER_PATHS.filter(
     (path) => !path.endsWith("/pdf") && path !== "/api/public/invoice-room",
   )) {
@@ -129,7 +132,9 @@ test("OTP budgets are keyed per room as well as per session, and reminders respe
     "OTP verification is budgeted per room across sessions",
   );
   assert.ok(
-    verify.includes("for (const key of throttleKeys) await clearActionFailures(key)"),
+    verify.includes(
+      "for (const key of throttleKeys) await clearActionFailures(key)",
+    ),
     "a successful verification clears both budgets",
   );
   const reminders = src("modules/invoice-room/reminders.ts");

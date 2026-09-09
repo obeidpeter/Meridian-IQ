@@ -6,9 +6,7 @@ import {
   useRestoreEvalFixture,
   getListEvalFixturesQueryKey,
 } from "@workspace/api-client-react";
-import type {
-  EvalFixtureSummary,
-} from "@workspace/api-client-react";
+import type { EvalFixtureSummary } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,10 +33,7 @@ import { QueryError } from "@/components/query-error";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import {
-  formatPct,
-  pillClasses,
-} from "@/lib/format";
+import { formatPct, pillClasses } from "@/lib/format";
 import {
   EVAL_RISK_TONE,
   EVAL_OUTCOME_TONE,
@@ -187,7 +182,10 @@ export function EvalCorpusCard() {
             >
               {corpusSummary(corpus)}
             </p>
-            <ScrollRegion label="Evaluation corpus table" id="table-eval-corpus-region">
+            <ScrollRegion
+              label="Evaluation corpus table"
+              id="table-eval-corpus-region"
+            >
               <table className="w-full text-sm" data-testid="table-eval-corpus">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-muted-foreground">

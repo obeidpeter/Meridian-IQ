@@ -90,7 +90,10 @@ export function LineItemRow({
             aria-label="Remove line item"
             onClick={onRemove}
           >
-            <Trash2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            <Trash2
+              className="w-4 h-4 text-muted-foreground"
+              aria-hidden="true"
+            />
           </Button>
         )}
       </div>

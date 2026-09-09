@@ -118,7 +118,11 @@ export async function runFeedSync(
       );
     }
 
-    const pull = await connector.pullLines(config, connection.cursor, PULL_LIMIT);
+    const pull = await connector.pullLines(
+      config,
+      connection.cursor,
+      PULL_LIMIT,
+    );
 
     if (pull.lines.length === 0) {
       // Nothing new: the run succeeds with no statement and the cursor stays

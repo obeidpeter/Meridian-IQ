@@ -1,7 +1,12 @@
 import { Router, type IRouter } from "express";
 import { createHash } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
-import { getDb, cpdCoursesTable, cpdEnrollmentsTable, usersTable } from "@workspace/db";
+import {
+  getDb,
+  cpdCoursesTable,
+  cpdEnrollmentsTable,
+  usersTable,
+} from "@workspace/db";
 import {
   ListCpdCoursesResponse,
   EnrollCpdCourseParams,
@@ -11,7 +16,11 @@ import {
   ListCpdEnrollmentsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { assertCan, requireFirmScope, tenantFirmId } from "../modules/auth/rbac";
+import {
+  assertCan,
+  requireFirmScope,
+  tenantFirmId,
+} from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
@@ -23,15 +32,19 @@ import { appendAudit } from "../modules/audit/audit";
 
 const router: IRouter = Router();
 
-router.get("/certification/courses", requireFlag("white_label"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "certification.read");
-  const rows = await getDb()
-    .select()
-    .from(cpdCoursesTable)
-    .where(eq(cpdCoursesTable.active, true))
-    .orderBy(asc(cpdCoursesTable.sortOrder));
-  res.json(ListCpdCoursesResponse.parse(rows));
-});
+router.get(
+  "/certification/courses",
+  requireFlag("white_label"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "certification.read");
+    const rows = await getDb()
+      .select()
+      .from(cpdCoursesTable)
+      .where(eq(cpdCoursesTable.active, true))
+      .orderBy(asc(cpdCoursesTable.sortOrder));
+    res.json(ListCpdCoursesResponse.parse(rows));
+  },
+);
 
 router.post(
   "/certification/courses/:id/enroll",
@@ -44,7 +57,10 @@ router.post(
       .select()
       .from(cpdCoursesTable)
       .where(
-        and(eq(cpdCoursesTable.id, params.id), eq(cpdCoursesTable.active, true)),
+        and(
+          eq(cpdCoursesTable.id, params.id),
+          eq(cpdCoursesTable.active, true),
+        ),
       )
       .limit(1);
     if (!course) {
@@ -110,7 +126,11 @@ router.post(
       throw new DomainError("NOT_FOUND", "Not enrolled in this course", 404);
     }
     if (enrollment.status === "completed") {
-      throw new DomainError("ALREADY_COMPLETED", "Course already completed", 409);
+      throw new DomainError(
+        "ALREADY_COMPLETED",
+        "Course already completed",
+        409,
+      );
     }
     const completedAt = new Date();
     // Verifiable serial: deterministic over (enrollment, completion time) so a
@@ -137,29 +157,36 @@ router.post(
   },
 );
 
-router.get("/certification/enrollments", requireFlag("white_label"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "certification.read");
-  const tenant = tenantFirmId(req.principal);
-  const base = getDb()
-    .select({
-      id: cpdEnrollmentsTable.id,
-      courseId: cpdEnrollmentsTable.courseId,
-      courseTitle: cpdCoursesTable.title,
-      cpdHours: cpdCoursesTable.cpdHours,
-      userId: cpdEnrollmentsTable.userId,
-      userName: usersTable.fullName,
-      status: cpdEnrollmentsTable.status,
-      completedAt: cpdEnrollmentsTable.completedAt,
-      certificateSerial: cpdEnrollmentsTable.certificateSerial,
-      createdAt: cpdEnrollmentsTable.createdAt,
-    })
-    .from(cpdEnrollmentsTable)
-    .innerJoin(cpdCoursesTable, eq(cpdCoursesTable.id, cpdEnrollmentsTable.courseId))
-    .leftJoin(usersTable, eq(usersTable.id, cpdEnrollmentsTable.userId));
-  const rows = tenant
-    ? await base.where(eq(cpdEnrollmentsTable.firmId, tenant))
-    : await base;
-  res.json(ListCpdEnrollmentsResponse.parse(rows));
-});
+router.get(
+  "/certification/enrollments",
+  requireFlag("white_label"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "certification.read");
+    const tenant = tenantFirmId(req.principal);
+    const base = getDb()
+      .select({
+        id: cpdEnrollmentsTable.id,
+        courseId: cpdEnrollmentsTable.courseId,
+        courseTitle: cpdCoursesTable.title,
+        cpdHours: cpdCoursesTable.cpdHours,
+        userId: cpdEnrollmentsTable.userId,
+        userName: usersTable.fullName,
+        status: cpdEnrollmentsTable.status,
+        completedAt: cpdEnrollmentsTable.completedAt,
+        certificateSerial: cpdEnrollmentsTable.certificateSerial,
+        createdAt: cpdEnrollmentsTable.createdAt,
+      })
+      .from(cpdEnrollmentsTable)
+      .innerJoin(
+        cpdCoursesTable,
+        eq(cpdCoursesTable.id, cpdEnrollmentsTable.courseId),
+      )
+      .leftJoin(usersTable, eq(usersTable.id, cpdEnrollmentsTable.userId));
+    const rows = tenant
+      ? await base.where(eq(cpdEnrollmentsTable.firmId, tenant))
+      : await base;
+    res.json(ListCpdEnrollmentsResponse.parse(rows));
+  },
+);
 
 export default router;

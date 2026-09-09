@@ -1,8 +1,5 @@
 import { Router, type IRouter } from "express";
-import {
-  VerifyStampBody,
-  VerifyStampResponse,
-} from "@workspace/api-zod";
+import { VerifyStampBody, VerifyStampResponse } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { verifyStamp } from "../modules/rails/adapter";
 

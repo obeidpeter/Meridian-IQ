@@ -44,8 +44,16 @@ before(async () => {
     { id: firmB, name: `Items Firm B ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientA, type: "client_business", legalName: `Items Client A ${SALT}` },
-    { id: clientB, type: "client_business", legalName: `Items Client B ${SALT}` },
+    {
+      id: clientA,
+      type: "client_business",
+      legalName: `Items Client A ${SALT}`,
+    },
+    {
+      id: clientB,
+      type: "client_business",
+      legalName: `Items Client B ${SALT}`,
+    },
     { id: buyer, type: "buyer", legalName: `Items Buyer ${SALT}` },
   ]);
 
@@ -84,20 +92,40 @@ before(async () => {
   await mk({
     n: `LI-1-${SALT}`,
     issueDate: daysAgo(90),
-    lines: [{ description: `Retainer ${SALT} monthly`, unitPrice: "100000", vatRate: "0.075" }],
+    lines: [
+      {
+        description: `Retainer ${SALT} monthly`,
+        unitPrice: "100000",
+        vatRate: "0.075",
+      },
+    ],
   });
   await mk({
     n: `LI-2-${SALT}`,
     issueDate: daysAgo(60),
-    lines: [{ description: `Monthly retainer ${SALT}`, unitPrice: "110000", vatRate: "0.075" }],
+    lines: [
+      {
+        description: `Monthly retainer ${SALT}`,
+        unitPrice: "110000",
+        vatRate: "0.075",
+      },
+    ],
   });
   await mk({
     n: `LI-3-${SALT}`,
     issueDate: daysAgo(30),
     lines: [
-      { description: `MONTHLY RETAINER ${SALT}`, unitPrice: "105000", vatRate: "0.075" },
+      {
+        description: `MONTHLY RETAINER ${SALT}`,
+        unitPrice: "105000",
+        vatRate: "0.075",
+      },
       // A one-off line: no habit, never suggested.
-      { description: `One-off filing ${SALT}`, unitPrice: "25000", vatRate: "0.075" },
+      {
+        description: `One-off filing ${SALT}`,
+        unitPrice: "25000",
+        vatRate: "0.075",
+      },
     ],
   });
   // A cancelled invoice's lines are dead paper.
@@ -105,7 +133,13 @@ before(async () => {
     n: `LI-x-${SALT}`,
     issueDate: daysAgo(20),
     status: "cancelled",
-    lines: [{ description: `Monthly retainer ${SALT}`, unitPrice: "999999", vatRate: "0.075" }],
+    lines: [
+      {
+        description: `Monthly retainer ${SALT}`,
+        unitPrice: "999999",
+        vatRate: "0.075",
+      },
+    ],
   });
   // An item whose history is part rails-proven, part draft: the wide net
   // (suggestions) sees all three; the liveOnly baseline (pre-flight) must
@@ -113,31 +147,53 @@ before(async () => {
   await mk({
     n: `LI-af1-${SALT}`,
     issueDate: daysAgo(50),
-    lines: [{ description: `Audit fee ${SALT}`, unitPrice: "40000", vatRate: "0.075" }],
+    lines: [
+      {
+        description: `Audit fee ${SALT}`,
+        unitPrice: "40000",
+        vatRate: "0.075",
+      },
+    ],
   });
   await mk({
     n: `LI-af2-${SALT}`,
     issueDate: daysAgo(25),
-    lines: [{ description: `Audit fee ${SALT}`, unitPrice: "42000", vatRate: "0.075" }],
+    lines: [
+      {
+        description: `Audit fee ${SALT}`,
+        unitPrice: "42000",
+        vatRate: "0.075",
+      },
+    ],
   });
   await mk({
     n: `LI-af3-${SALT}`,
     issueDate: daysAgo(5),
     status: "draft",
-    lines: [{ description: `Audit fee ${SALT}`, unitPrice: "400000", vatRate: "0.075" }],
+    lines: [
+      {
+        description: `Audit fee ${SALT}`,
+        unitPrice: "400000",
+        vatRate: "0.075",
+      },
+    ],
   });
   // Client B (same firm): its habit must not leak into client A's catalogue.
   await mk({
     supplier: clientB,
     n: `LI-b1-${SALT}`,
     issueDate: daysAgo(40),
-    lines: [{ description: `Sibling item ${SALT}`, unitPrice: "5000", vatRate: "0" }],
+    lines: [
+      { description: `Sibling item ${SALT}`, unitPrice: "5000", vatRate: "0" },
+    ],
   });
   await mk({
     supplier: clientB,
     n: `LI-b2-${SALT}`,
     issueDate: daysAgo(10),
-    lines: [{ description: `Sibling item ${SALT}`, unitPrice: "5000", vatRate: "0" }],
+    lines: [
+      { description: `Sibling item ${SALT}`, unitPrice: "5000", vatRate: "0" },
+    ],
   });
 });
 
@@ -150,15 +206,39 @@ test("itemKey: order, case and punctuation are noise; short noise drops", () => 
 
 test("aggregateLineItems: habits only, newest description, median price, modal rate", () => {
   const items = aggregateLineItems([
-    { description: "Web hosting", unitPrice: 100, vatRate: 0.075, issueDate: "2026-05-01" },
-    { description: "HOSTING WEB", unitPrice: 300, vatRate: 0.075, issueDate: "2026-06-01" },
-    { description: "Web hosting renewal", unitPrice: 200, vatRate: 0, issueDate: "2026-06-15" },
-    { description: "Once only", unitPrice: 50, vatRate: 0, issueDate: "2026-06-10" },
+    {
+      description: "Web hosting",
+      unitPrice: 100,
+      vatRate: 0.075,
+      issueDate: "2026-05-01",
+    },
+    {
+      description: "HOSTING WEB",
+      unitPrice: 300,
+      vatRate: 0.075,
+      issueDate: "2026-06-01",
+    },
+    {
+      description: "Web hosting renewal",
+      unitPrice: 200,
+      vatRate: 0,
+      issueDate: "2026-06-15",
+    },
+    {
+      description: "Once only",
+      unitPrice: 50,
+      vatRate: 0,
+      issueDate: "2026-06-10",
+    },
   ]);
   assert.equal(items.length, 1, "the one-off is not a habit");
   assert.equal(items[0].description, "HOSTING WEB", "newest literal wins");
   assert.equal(items[0].count, 2);
-  assert.equal(items[0].medianUnitPrice, "200.00", "two decimals, no float noise");
+  assert.equal(
+    items[0].medianUnitPrice,
+    "200.00",
+    "two decimals, no float noise",
+  );
   assert.equal(items[0].vatRate, "0.075", "mode, not an average");
 });
 
@@ -197,12 +277,21 @@ test("linePriceIssues: flags a far-off price, stays quiet in band or thin histor
 
 test("listLineItemSuggestions: own habits only — no dead paper, no siblings, no other firms", async () => {
   const items = await listLineItemSuggestions(firmA, clientA);
-  const retainer = items.find((i) => i.key === itemKey(`Monthly retainer ${SALT}`));
-  assert.ok(retainer, "the retainer habit is found across drifted descriptions");
+  const retainer = items.find(
+    (i) => i.key === itemKey(`Monthly retainer ${SALT}`),
+  );
+  assert.ok(
+    retainer,
+    "the retainer habit is found across drifted descriptions",
+  );
   assert.equal(retainer.count, 3, "the cancelled invoice's line is excluded");
   assert.equal(retainer.medianUnitPrice, "105000.00");
   assert.equal(retainer.vatRate, "0.075");
-  assert.equal(retainer.description, `MONTHLY RETAINER ${SALT}`, "newest literal");
+  assert.equal(
+    retainer.description,
+    `MONTHLY RETAINER ${SALT}`,
+    "newest literal",
+  );
   assert.equal(
     items.find((i) => i.key === itemKey(`One-off filing ${SALT}`)),
     undefined,
@@ -226,7 +315,9 @@ test("liveOnly narrows the baseline to rails-proven documents", async () => {
   const wideFee = wide.find((i) => i.key === itemKey(`Audit fee ${SALT}`));
   assert.equal(wideFee?.count, 3, "suggestions see the draft too");
 
-  const live = await listLineItemSuggestions(firmA, clientA, { liveOnly: true });
+  const live = await listLineItemSuggestions(firmA, clientA, {
+    liveOnly: true,
+  });
   const liveFee = live.find((i) => i.key === itemKey(`Audit fee ${SALT}`));
   assert.equal(liveFee?.count, 2, "the draft cannot seed the baseline");
   assert.equal(liveFee?.medianUnitPrice, "41000.00");

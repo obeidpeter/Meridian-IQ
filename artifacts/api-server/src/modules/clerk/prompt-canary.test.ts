@@ -56,24 +56,38 @@ after(async () => {
 test("canaryVerdict: the fixed rule, in priority order", () => {
   // 1. Resistance drop = regression, even with a big accuracy gain.
   assert.equal(
-    canaryVerdict(side(), side({ accuracy: 0.99, injectionResisted: 3 })).verdict,
+    canaryVerdict(side(), side({ accuracy: 0.99, injectionResisted: 3 }))
+      .verdict,
     "regression",
   );
   // 2. Accuracy beyond the band down = regression.
-  assert.equal(canaryVerdict(side(), side({ accuracy: 0.87 })).verdict, "regression");
+  assert.equal(
+    canaryVerdict(side(), side({ accuracy: 0.87 })).verdict,
+    "regression",
+  );
   // 3. Accuracy beyond the band up = improvement.
-  assert.equal(canaryVerdict(side(), side({ accuracy: 0.93 })).verdict, "improvement");
+  assert.equal(
+    canaryVerdict(side(), side({ accuracy: 0.93 })).verdict,
+    "improvement",
+  );
   // Better resistance at comparable accuracy = improvement.
   assert.equal(
-    canaryVerdict(side({ injectionResisted: 3 }), side({ accuracy: 0.89 })).verdict,
+    canaryVerdict(side({ injectionResisted: 3 }), side({ accuracy: 0.89 }))
+      .verdict,
     "improvement",
   );
   // 4. Inside the band, equal resistance = comparable.
-  assert.equal(canaryVerdict(side(), side({ accuracy: 0.91 })).verdict, "comparable");
+  assert.equal(
+    canaryVerdict(side(), side({ accuracy: 0.91 })).verdict,
+    "comparable",
+  );
 });
 
 test("the corpus cap can never evict the injection fixtures", () => {
-  const fx = (key: string, riskLabel: EvalFixture["riskLabel"]): EvalFixture => ({
+  const fx = (
+    key: string,
+    riskLabel: EvalFixture["riskLabel"],
+  ): EvalFixture => ({
     key,
     label: key,
     riskLabel,
@@ -104,9 +118,15 @@ test("identical behaviour on both sides is comparable", async () => {
   const ok = () => JSON.stringify({ fields: [], lines: [] });
   const report = await runPromptCanary(actorId, CANDIDATE, fakeGateway(ok));
   assert.equal(report.verdict, "comparable");
-  assert.equal(report.incumbent.fieldsCompared, report.candidate.fieldsCompared);
+  assert.equal(
+    report.incumbent.fieldsCompared,
+    report.candidate.fieldsCompared,
+  );
   assert.equal(report.incumbent.fieldsCorrect, report.candidate.fieldsCorrect);
-  assert.equal(report.fixtures.some((f) => f.regressed), false);
+  assert.equal(
+    report.fixtures.some((f) => f.regressed),
+    false,
+  );
   assert.ok(report.fixtureCount > 0);
 });
 
@@ -139,11 +159,13 @@ test("candidate length bounds are checked before any model call", async () => {
   });
   await assert.rejects(
     runPromptCanary(actorId, "too short", counting),
-    (err: unknown) => err instanceof DomainError && err.code === "BAD_CANDIDATE",
+    (err: unknown) =>
+      err instanceof DomainError && err.code === "BAD_CANDIDATE",
   );
   await assert.rejects(
     runPromptCanary(actorId, "x".repeat(20_001), counting),
-    (err: unknown) => err instanceof DomainError && err.code === "BAD_CANDIDATE",
+    (err: unknown) =>
+      err instanceof DomainError && err.code === "BAD_CANDIDATE",
   );
   assert.equal(calls, 0, "no tokens spent on an unusable candidate");
 });

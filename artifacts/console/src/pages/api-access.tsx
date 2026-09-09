@@ -307,9 +307,9 @@ function SecretPanel({
             className="mt-0.5 h-3.5 w-3.5 shrink-0"
             aria-hidden="true"
           />
-          This {what} is shown once — right now. Store it in your secret
-          manager before closing this dialog; we keep only a fingerprint and
-          can never show it again.
+          This {what} is shown once — right now. Store it in your secret manager
+          before closing this dialog; we keep only a fingerprint and can never
+          show it again.
         </p>
       </div>
       <div className="rounded-md border bg-background p-2">
@@ -414,7 +414,11 @@ function ApiKeysCard() {
             <KeyRound className="w-4 h-4 text-primary" aria-hidden="true" />
             API keys
           </span>
-          <Button size="sm" onClick={openCreate} data-testid="button-new-api-key">
+          <Button
+            size="sm"
+            onClick={openCreate}
+            data-testid="button-new-api-key"
+          >
             <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New key
           </Button>
         </CardTitle>
@@ -422,10 +426,9 @@ function ApiKeysCard() {
       <CardContent>
         <p className="text-xs text-muted-foreground mb-3">
           Machine credentials for server-to-server callers (
-          <code className="text-[11px]">Authorization: Bearer mk_…</code>).
-          Each key carries exactly the capabilities you pick — nothing can
-          submit to the government rails, spend Clerk tokens or manage
-          accounts.
+          <code className="text-[11px]">Authorization: Bearer mk_…</code>). Each
+          key carries exactly the capabilities you pick — nothing can submit to
+          the government rails, spend Clerk tokens or manage accounts.
         </p>
         {isLoading ? (
           <Skeleton className="h-16" />
@@ -826,7 +829,11 @@ function WebhooksCard() {
             <Webhook className="w-4 h-4 text-primary" aria-hidden="true" />
             Webhooks
           </span>
-          <Button size="sm" onClick={openCreate} data-testid="button-new-webhook">
+          <Button
+            size="sm"
+            onClick={openCreate}
+            data-testid="button-new-webhook"
+          >
             <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add endpoint
           </Button>
         </CardTitle>
@@ -1100,9 +1107,9 @@ export function ApiAccess() {
           API &amp; webhooks
         </h1>
         <p className="text-muted-foreground mt-1">
-          Machine access for your firm: API keys your integrations
-          authenticate with, and webhook endpoints we push events to. Secrets
-          are shown once at creation and never again.
+          Machine access for your firm: API keys your integrations authenticate
+          with, and webhook endpoints we push events to. Secrets are shown once
+          at creation and never again.
         </p>
         <a
           href="/console/api-reference.html"

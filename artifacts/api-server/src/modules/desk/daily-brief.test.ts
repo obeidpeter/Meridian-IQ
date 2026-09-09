@@ -41,7 +41,9 @@ function lagosYesterdayNoonUtc(): Date {
 
 before(async () => {
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `Brief Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Brief Firm ${SALT}` });
   await db
     .insert(usersTable)
     .values({ id: userId, email: `brief-${SALT}@test.example` })
@@ -105,10 +107,7 @@ before(async () => {
 
 test("the brief counts the seeded work as lower bounds with named oldest items", async () => {
   const brief = await computeOperatorBrief(NOW);
-  const totalOpen = brief.openCases.byPriority.reduce(
-    (s, p) => s + p.count,
-    0,
-  );
+  const totalOpen = brief.openCases.byPriority.reduce((s, p) => s + p.count, 0);
   assert.ok(totalOpen >= 2, "both seeded cases (open) are counted");
   assert.ok(
     brief.openCases.byPriority.some((p) => p.priority === "high"),

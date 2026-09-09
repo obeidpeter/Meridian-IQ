@@ -67,7 +67,11 @@ export function registerSweep(
 export function registerSweep(
   name: string,
   sweep: (() => Promise<unknown>) | ((signal: AbortSignal) => Promise<unknown>),
-  opts: { timeoutMs?: number; acceptsSignal?: boolean; critical?: boolean } = {},
+  opts: {
+    timeoutMs?: number;
+    acceptsSignal?: boolean;
+    critical?: boolean;
+  } = {},
 ): void {
   if (!SWEEP_NAME.test(name)) {
     throw new Error(`Sweep name "${name}" must match ${SWEEP_NAME}`);
@@ -172,7 +176,10 @@ export async function settleOwnedWork(
         ),
       );
     } catch (err) {
-      logger.error({ err, sweep: name }, "could not record the abandoned-sweep alert");
+      logger.error(
+        { err, sweep: name },
+        "could not record the abandoned-sweep alert",
+      );
     }
   }
   return false;

@@ -123,7 +123,10 @@ function drawInvoice(
   y += 10;
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#444444");
   doc.text("DESCRIPTION", MARGIN, y, { width: 240 });
-  doc.text("AMOUNT", MARGIN + 248, y, { width: CONTENT_W - 248, align: "right" });
+  doc.text("AMOUNT", MARGIN + 248, y, {
+    width: CONTENT_W - 248,
+    align: "right",
+  });
   y += 12;
   doc.font("Helvetica").fontSize(9).fillColor("#000000");
   doc.text(lineDesc, MARGIN, y, { width: 240 });

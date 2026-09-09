@@ -180,7 +180,9 @@ describe("currentMonthStart", () => {
 
 describe("OFFBOARD_EXPLANATION", () => {
   test("states retention, access removal and the last-engagement PII rule", () => {
-    expect(OFFBOARD_EXPLANATION).toContain("Statutory invoice records are retained");
+    expect(OFFBOARD_EXPLANATION).toContain(
+      "Statutory invoice records are retained",
+    );
     expect(OFFBOARD_EXPLANATION).toContain("sign-in access is removed");
     expect(OFFBOARD_EXPLANATION).toContain("engagement is archived");
     expect(OFFBOARD_EXPLANATION).toContain("last engagement");

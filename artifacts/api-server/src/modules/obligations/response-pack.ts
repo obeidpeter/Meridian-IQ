@@ -193,5 +193,9 @@ async function phraseResponseLetter(
   );
   return data === null
     ? fallback
-    : { ...fallback, letter: RESPONSE_PHRASING.joinOutput(data), source: "clerk" };
+    : {
+        ...fallback,
+        letter: RESPONSE_PHRASING.joinOutput(data),
+        source: "clerk",
+      };
 }

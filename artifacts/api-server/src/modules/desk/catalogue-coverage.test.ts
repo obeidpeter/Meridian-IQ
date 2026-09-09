@@ -43,11 +43,7 @@ before(async () => {
     issueDate: "2026-07-01",
     status: "failed" as never,
   });
-  const attempt = async (
-    no: number,
-    errorCode: string,
-    agoDays: number,
-  ) => {
+  const attempt = async (no: number, errorCode: string, agoDays: number) => {
     await db.insert(submissionAttemptsTable).values({
       invoiceId,
       rail: "rail_primary",

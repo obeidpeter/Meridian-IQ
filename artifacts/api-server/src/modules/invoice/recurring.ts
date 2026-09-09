@@ -73,7 +73,11 @@ export async function createTemplate(
   actorId: string,
 ): Promise<RecurringInvoiceTemplate> {
   if (input.lines.length === 0) {
-    throw new DomainError("NO_LINES", "A template needs at least one line", 400);
+    throw new DomainError(
+      "NO_LINES",
+      "A template needs at least one line",
+      400,
+    );
   }
   // Same guard as createDraft: reject percent-style VAT rates at capture time
   // rather than on every future materialization.
@@ -110,7 +114,8 @@ export async function listTemplates(
   clientPartyId: string | null,
 ): Promise<RecurringInvoiceTemplate[]> {
   const conditions = [];
-  if (firmId) conditions.push(eq(recurringInvoiceTemplatesTable.firmId, firmId));
+  if (firmId)
+    conditions.push(eq(recurringInvoiceTemplatesTable.firmId, firmId));
   // SEC-03: a client_user sees only templates drafting for its own party.
   if (clientPartyId)
     conditions.push(
@@ -164,7 +169,9 @@ function invoiceNumberFor(template: RecurringInvoiceTemplate, runDate: string) {
   return `REC-${tid}-${runDate.replace(/-/g, "")}`;
 }
 
-export async function sweepRecurringInvoices(now = new Date()): Promise<number> {
+export async function sweepRecurringInvoices(
+  now = new Date(),
+): Promise<number> {
   return runInBypassContext(() => sweepInner(now));
 }
 

@@ -33,11 +33,7 @@ import {
 } from "./cases/index.ts";
 import { computeStatusLight } from "./status-light.ts";
 import { formatFact, renderProposition, askClerk } from "./ask.ts";
-import {
-  createClaimDraft,
-  submitClaim,
-  decideClaim,
-} from "./claims.ts";
+import { createClaimDraft, submitClaim, decideClaim } from "./claims.ts";
 
 // Fail-closed tests for Clerk v0 (Task #40). These verify the safety
 // invariants, not the happy paths: the kill switch blocks everything, invalid
@@ -150,7 +146,12 @@ test("normalizeExtraction flags every critical field regardless of confidence", 
 test("normalizeExtraction flags missing and low-confidence fields", () => {
   const output: ExtractionOutput = {
     fields: [
-      { field: "dueDate", value: "2026-08-01", confidence: 0.4, sourceSnippet: null },
+      {
+        field: "dueDate",
+        value: "2026-08-01",
+        confidence: 0.4,
+        sourceSnippet: null,
+      },
     ],
     lines: [],
   };

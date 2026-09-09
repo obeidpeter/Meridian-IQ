@@ -5,12 +5,7 @@
 // only: a payment flag never edits the document, and a stamp verification
 // stores its result on the bill.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithClient } from "../test-utils";
 import type {
   BillSummary,
@@ -51,7 +46,10 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     }),
     useVerifyBillStamp: () => ({
       isPending: false,
-      mutateAsync: (vars: { id: string; data: { irn: string; csid: string } }) => {
+      mutateAsync: (vars: {
+        id: string;
+        data: { irn: string; csid: string };
+      }) => {
         harness.verifyCalls.push(vars);
         return Promise.resolve(harness.verifyResult);
       },
@@ -100,7 +98,11 @@ describe("bills list", () => {
   test("rows show number, supplier, dates, status pill and verification chip", () => {
     harness.bills = [
       bill({
-        lastVerification: { valid: true, eligible: true, checkedAt: "2026-07-20T10:00:00Z" },
+        lastVerification: {
+          valid: true,
+          eligible: true,
+          checkedAt: "2026-07-20T10:00:00Z",
+        },
       }),
       bill({
         invoiceId: "b-2",
@@ -108,7 +110,11 @@ describe("bills list", () => {
         supplierName: "BUA Foods",
         payStatus: "paid",
         dueDate: null,
-        lastVerification: { valid: false, eligible: null, checkedAt: "2026-07-21T10:00:00Z" },
+        lastVerification: {
+          valid: false,
+          eligible: null,
+          checkedAt: "2026-07-21T10:00:00Z",
+        },
       }),
     ];
     renderPage();
@@ -131,7 +137,11 @@ describe("bills list", () => {
   test("status filter pills narrow the rows and carry counts", () => {
     harness.bills = [
       bill(),
-      bill({ invoiceId: "b-2", invoiceNumber: "SUP-002", payStatus: "scheduled" }),
+      bill({
+        invoiceId: "b-2",
+        invoiceNumber: "SUP-002",
+        payStatus: "scheduled",
+      }),
       bill({ invoiceId: "b-3", invoiceNumber: "SUP-003", payStatus: "paid" }),
     ];
     renderPage();
@@ -213,7 +223,11 @@ describe("payment flags", () => {
   test("a paid bill disables both flags; a scheduled bill can still be marked paid", () => {
     harness.bills = [
       bill({ payStatus: "paid" }),
-      bill({ invoiceId: "b-2", invoiceNumber: "SUP-002", payStatus: "scheduled" }),
+      bill({
+        invoiceId: "b-2",
+        invoiceNumber: "SUP-002",
+        payStatus: "scheduled",
+      }),
     ];
     renderPage();
 

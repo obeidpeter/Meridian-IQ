@@ -28,7 +28,9 @@ async function journeyPayables(page, BASE, check) {
       BASE + `/api/bills?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     if (r.status() !== 200) return null;
-    return (await r.json()).find((b) => b.invoiceNumber === "BILL-2001") ?? null;
+    return (
+      (await r.json()).find((b) => b.invoiceNumber === "BILL-2001") ?? null
+    );
   };
 
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
@@ -231,10 +233,12 @@ async function journeyBulkImport(page, BASE, check) {
   await page.waitForSelector("text=Validation preview", { timeout: 15000 });
   check(
     "validation preview flags the TIN-less row and passes the quoted-comma row",
-    ((await page.getByTestId("text-valid-count").textContent()) ?? "").trim() ===
-      "Valid: 1" &&
-      ((await page.getByTestId("text-invalid-count").textContent()) ?? "").trim() ===
-        "Invalid: 1",
+    (
+      (await page.getByTestId("text-valid-count").textContent()) ?? ""
+    ).trim() === "Valid: 1" &&
+      (
+        (await page.getByTestId("text-invalid-count").textContent()) ?? ""
+      ).trim() === "Invalid: 1",
   );
 
   await page.getByTestId("button-commit").click();
@@ -245,8 +249,9 @@ async function journeyBulkImport(page, BASE, check) {
   await page.waitForSelector("text=Import results", { timeout: 15000 });
   check(
     "commit skips the invalid row and creates the quoted-comma draft",
-    ((await page.getByTestId("text-created-count").textContent()) ?? "").trim() ===
-      "Created: 1",
+    (
+      (await page.getByTestId("text-created-count").textContent()) ?? ""
+    ).trim() === "Created: 1",
   );
   check(
     "import results offer the drafts path to Invoices",

@@ -137,7 +137,11 @@ export const DELTA_INTENTS: readonly DataIntent[] = [
         // The six underlying month numbers plus the three signed deltas —
         // every figure platform-computed, nothing model-authored.
         facts: [
-          amountFact("submitted_total", `Accepted total (${label})`, cur.totalNgn),
+          amountFact(
+            "submitted_total",
+            `Accepted total (${label})`,
+            cur.totalNgn,
+          ),
           amountFact(
             "submitted_total_prior",
             `Accepted total (${prevLabel})`,
@@ -263,7 +267,10 @@ export const DELTA_INTENTS: readonly DataIntent[] = [
         const rest = list.length - Math.min(list.length, TOP);
         return rest > 0 ? `${shown} and ${rest} more` : shown;
       };
-      const moverFacts = (list: typeof movers, prefix: string): ProtectedFact[] =>
+      const moverFacts = (
+        list: typeof movers,
+        prefix: string,
+      ): ProtectedFact[] =>
         list
           .slice(0, TOP)
           .map((m, idx) =>

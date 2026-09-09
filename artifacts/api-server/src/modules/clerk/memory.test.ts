@@ -21,10 +21,7 @@ import {
   memoryRailReady,
   searchMemory,
 } from "./memory.ts";
-import {
-  restoreClerkFlag,
-  saveAndEnableClerkFlag,
-} from "./test-support.ts";
+import { restoreClerkFlag, saveAndEnableClerkFlag } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // pgvector firm memory Phase 1: the embedding rail. What matters here:
@@ -71,7 +68,11 @@ function fakeEmbedder(): MemoryEmbedder & { calls: number } {
       embedder.calls += 1;
       return {
         vectors: texts.map((t) =>
-          t.includes("VAT") ? VAT_VECTOR : t.includes("payroll") ? PAYE_VECTOR : OTHER_VECTOR,
+          t.includes("VAT")
+            ? VAT_VECTOR
+            : t.includes("payroll")
+              ? PAYE_VECTOR
+              : OTHER_VECTOR,
         ),
         promptTokens: 42,
       };
@@ -176,7 +177,9 @@ test("the indexer embeds resolved questions per firm, charges the ledger, and is
   const embedder = fakeEmbedder();
   // Pinned to this suite's own salted firms: the indexer must not drain —
   // or spend against — other suites' candidates in the shared scratch DB.
-  const first = await indexMemoryBatch(embedder, 50, { onlyFirmIds: OUR_FIRMS });
+  const first = await indexMemoryBatch(embedder, 50, {
+    onlyFirmIds: OUR_FIRMS,
+  });
   assert.equal(first.indexed, 3, "exactly our three in-budget cases indexed");
   assert.equal(first.skippedFirms, 1, "exactly the exhausted firm skipped");
 
@@ -267,7 +270,11 @@ test("a model change re-indexes through the conflict-update path", async () => {
   const result = await indexMemoryBatch(embedder, 50, {
     onlyFirmIds: [firmA],
   });
-  assert.equal(result.indexed, 2, "both firm A rows re-offered for the new model");
+  assert.equal(
+    result.indexed,
+    2,
+    "both firm A rows re-offered for the new model",
+  );
   const rows = await runInBypassContext(() =>
     getDb()
       .select()

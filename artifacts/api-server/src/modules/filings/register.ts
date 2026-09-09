@@ -9,7 +9,10 @@ import { sweepFilingReminders } from "./reminders";
 // cadence keeps it off the minute loop while a fresh period still lands
 // within the hour. Kept out of sweep.ts so that module stays importable by
 // node --test without the pipeline worker's dependency graph.
-registerSweep("filings.mint", atMostHourly(() => sweepFilingMint()));
+registerSweep(
+  "filings.mint",
+  atMostHourly(() => sweepFilingMint()),
+);
 
 // The filing deadline-reminder sweep rides the minute loop UNWRAPPED (the
 // obligations/register.ts cadence): cheap when nothing is due — an indexed

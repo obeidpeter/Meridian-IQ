@@ -8,7 +8,10 @@ import {
   useListB2cReports,
   useSubmitB2cReport,
 } from "@workspace/api-client-react";
-import type { B2cReportBatch, B2cReportBatchStatus } from "@workspace/api-client-react";
+import type {
+  B2cReportBatch,
+  B2cReportBatchStatus,
+} from "@workspace/api-client-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -62,7 +65,10 @@ function useNow(intervalMs = 30_000): number {
   return now;
 }
 
-function countdown(deadlineAt: Date | string, now: number): {
+function countdown(
+  deadlineAt: Date | string,
+  now: number,
+): {
   label: string;
   urgent: boolean;
 } {
@@ -320,7 +326,8 @@ function BatchCard({
   const colors = useColors();
   const [expanded, setExpanded] = useState(false);
   const needsReport =
-    batch.status === "open" || (batch.status === "breached" && !batch.reportedAt);
+    batch.status === "open" ||
+    (batch.status === "breached" && !batch.reportedAt);
   const timer = countdown(batch.deadlineAt, now);
 
   return (
@@ -350,11 +357,15 @@ function BatchCard({
             <Feather
               name="clock"
               size={14}
-              color={timer.urgent ? colors.destructiveText : colors.mutedForeground}
+              color={
+                timer.urgent ? colors.destructiveText : colors.mutedForeground
+              }
             />
             <AppText
               variant="caption"
-              color={timer.urgent ? colors.destructiveText : colors.mutedForeground}
+              color={
+                timer.urgent ? colors.destructiveText : colors.mutedForeground
+              }
             >
               {timer.label}
             </AppText>
@@ -370,7 +381,11 @@ function BatchCard({
           </View>
         ) : batch.status === "breached" ? (
           <View style={styles.inlineRow}>
-            <Feather name="alert-triangle" size={14} color={colors.destructiveText} />
+            <Feather
+              name="alert-triangle"
+              size={14}
+              color={colors.destructiveText}
+            />
             <AppText variant="caption" color={colors.destructiveText}>
               Deadline missed — report now
             </AppText>

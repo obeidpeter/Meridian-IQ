@@ -111,45 +111,49 @@ export function detectPhrasingQualityDrop(
   return drops.find((d) => d.metric === "resistance") ?? drops[0] ?? null;
 }
 
-registerSweep("clerk.phrasing_auto_eval", async function sweepPhrasingAutoEval(): Promise<void> {
-  const runEval = await runInBypassContext(async () => {
-    const locked = await tryAdvisoryXactLock(PHRASING_SWEEP_LOCK_ID);
-    if (!locked) return false;
-    // Each run spends platform tokens: opt-in flag, at most once per UTC
-    // day. Race losers record a second startedBy-null row, which the
-    // due-today check then ignores for the rest of the day. The kill
-    // switch is checked HERE too (review-confirmed M2): with clerk_ai off
-    // no run row lands, so an unguarded runPhrasingEval would throw
-    // CLERK_DISABLED on every 60-second pass all day and redden the
-    // shared sweep health for the duration of an incident.
-    if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
-    if (!(await isFeatureEnabled(AUTO_PHRASING_FLAG_KEY))) return false;
-    return unattendedRunDueToday(clerkPhrasingEvalRunsTable);
-  });
-  if (!runEval) return;
+registerSweep(
+  "clerk.phrasing_auto_eval",
+  async function sweepPhrasingAutoEval(): Promise<void> {
+    const runEval = await runInBypassContext(async () => {
+      const locked = await tryAdvisoryXactLock(PHRASING_SWEEP_LOCK_ID);
+      if (!locked) return false;
+      // Each run spends platform tokens: opt-in flag, at most once per UTC
+      // day. Race losers record a second startedBy-null row, which the
+      // due-today check then ignores for the rest of the day. The kill
+      // switch is checked HERE too (review-confirmed M2): with clerk_ai off
+      // no run row lands, so an unguarded runPhrasingEval would throw
+      // CLERK_DISABLED on every 60-second pass all day and redden the
+      // shared sweep health for the duration of an incident.
+      if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
+      if (!(await isFeatureEnabled(AUTO_PHRASING_FLAG_KEY))) return false;
+      return unattendedRunDueToday(clerkPhrasingEvalRunsTable);
+    });
+    if (!runEval) return;
 
-  // Belt and braces for the TOCTOU (the flag can flip between the check
-  // and the call) and for a missing provider: either answers with a quiet
-  // log, never a failed sweep pass.
-  try {
-    const gateway = await getClerkGateway();
-    const run = await runPhrasingEval(null, gateway);
-    logger.info(
-      {
-        fixtureCount: run.fixtureCount,
-        correctCount: run.correctCount,
-        groundedCount: run.groundedCount,
-        injectionResisted: run.injectionResisted,
-      },
-      "phrasing lane: nightly eval run complete",
-    );
-  } catch (err) {
-    logger.warn(
-      { err },
-      "phrasing lane: nightly eval skipped (clerk disabled or provider unavailable)",
-    );
-  }
-}, { critical: false });
+    // Belt and braces for the TOCTOU (the flag can flip between the check
+    // and the call) and for a missing provider: either answers with a quiet
+    // log, never a failed sweep pass.
+    try {
+      const gateway = await getClerkGateway();
+      const run = await runPhrasingEval(null, gateway);
+      logger.info(
+        {
+          fixtureCount: run.fixtureCount,
+          correctCount: run.correctCount,
+          groundedCount: run.groundedCount,
+          injectionResisted: run.injectionResisted,
+        },
+        "phrasing lane: nightly eval run complete",
+      );
+    } catch (err) {
+      logger.warn(
+        { err },
+        "phrasing lane: nightly eval skipped (clerk disabled or provider unavailable)",
+      );
+    }
+  },
+  { critical: false },
+);
 
 export interface PhrasingWatchResult {
   checked: boolean;
@@ -215,4 +219,6 @@ export async function sweepPhrasingWatch(
   });
 }
 
-registerSweep("clerk.phrasing_watch", atMostHourly(sweepPhrasingWatch), { critical: false });
+registerSweep("clerk.phrasing_watch", atMostHourly(sweepPhrasingWatch), {
+  critical: false,
+});

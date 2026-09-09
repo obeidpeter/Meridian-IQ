@@ -70,7 +70,10 @@ test("record + lookup round trip, scoped to the recording firm", async () => {
     "word order is normalized away",
   );
   // SEC: memories never cross firms.
-  assert.equal(await lookupPartyAlias(otherFirmId, `DANGOTE CEM ${SALT}`), null);
+  assert.equal(
+    await lookupPartyAlias(otherFirmId, `DANGOTE CEM ${SALT}`),
+    null,
+  );
   // A name nobody taught stays unknown.
   assert.equal(await lookupPartyAlias(firmId, `BUA Cement ${SALT}`), null);
 });
@@ -90,21 +93,15 @@ test("an alias identical to the register name is not stored", async () => {
 
 test("newest confirmation wins when a name is re-pointed", async () => {
   const alias = `WACO Industries ${SALT}`;
-  await recordPartyAliases(firmId, [
-    { extractedName: alias, partyId: partyA },
-  ]);
+  await recordPartyAliases(firmId, [{ extractedName: alias, partyId: partyA }]);
   assert.equal(await lookupPartyAlias(firmId, alias), partyA);
-  await recordPartyAliases(firmId, [
-    { extractedName: alias, partyId: partyB },
-  ]);
+  await recordPartyAliases(firmId, [{ extractedName: alias, partyId: partyB }]);
   assert.equal(await lookupPartyAlias(firmId, alias), partyB);
 });
 
 test("applyAlias nominates, the candidate set decides", async () => {
   const name = `Golden Harvest ${SALT}`;
-  await recordPartyAliases(firmId, [
-    { extractedName: name, partyId: partyA },
-  ]);
+  await recordPartyAliases(firmId, [{ extractedName: name, partyId: partyA }]);
   const candidates = [
     {
       id: partyA,

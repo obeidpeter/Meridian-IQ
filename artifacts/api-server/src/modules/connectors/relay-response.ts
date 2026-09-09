@@ -38,9 +38,9 @@ export async function readBoundedJsonObject(
     throw new Error(`${source} response could not be read`);
   }
 
-  const text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString(
-    "utf8",
-  );
+  const text = Buffer.concat(
+    chunks.map((chunk) => Buffer.from(chunk)),
+  ).toString("utf8");
   let parsed: unknown;
   try {
     parsed = JSON.parse(text) as unknown;

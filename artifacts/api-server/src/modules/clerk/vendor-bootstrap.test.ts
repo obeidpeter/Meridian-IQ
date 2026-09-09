@@ -47,16 +47,18 @@ before(async () => {
     buyerName: `VB Buyer ${SALT}`,
     engagementTitle: `VB engagement ${SALT}`,
   });
-  await getDb().insert(partiesTable).values([
-    {
-      id: vendorId,
-      type: "buyer",
-      legalName: `VB New Vendor ${SALT}`,
-      createdByFirmId: firmId,
-      createdByUserId: makerId,
-    },
-    { id: strangerId, type: "buyer", legalName: `VB Stranger ${SALT}` },
-  ]);
+  await getDb()
+    .insert(partiesTable)
+    .values([
+      {
+        id: vendorId,
+        type: "buyer",
+        legalName: `VB New Vendor ${SALT}`,
+        createdByFirmId: firmId,
+        createdByUserId: makerId,
+      },
+      { id: strangerId, type: "buyer", legalName: `VB Stranger ${SALT}` },
+    ]);
 });
 
 after(async () => {
@@ -74,7 +76,12 @@ const approval = (supplierPartyId: string) => ({
   invoiceNumber: `VB-${SALT}-${supplierPartyId.slice(0, 8)}`,
   issueDate: "2026-07-01",
   lines: [
-    { description: "Cartons", quantity: "10", unitPrice: "1200", vatRate: "0.075" },
+    {
+      description: "Cartons",
+      quantity: "10",
+      unitPrice: "1200",
+      vatRate: "0.075",
+    },
   ],
 });
 
@@ -93,7 +100,11 @@ test("the first bill from a firm-created vendor approves via the provenance arm"
     .where(eq(invoicesTable.id, decided.createdInvoiceId!));
   assert.equal(invoice.status, "draft", "approval stops at a draft, as ever");
   assert.equal(invoice.supplierPartyId, vendorId);
-  assert.equal(invoice.buyerPartyId, clientId, "the engaged client is the buyer");
+  assert.equal(
+    invoice.buyerPartyId,
+    clientId,
+    "the engaged client is the buyer",
+  );
 });
 
 test("a party with no engagement, invoice or provenance still refuses", async () => {

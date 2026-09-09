@@ -352,14 +352,8 @@ test("client_breakdown ranks movers up and down by signed NGN delta", async () =
     runDataIntent("data.client_breakdown", firmP),
   );
   assert.ok(result);
-  assert.equal(
-    result.facts.find((f) => f.key === "movers_up")?.value,
-    "1",
-  );
-  assert.equal(
-    result.facts.find((f) => f.key === "movers_down")?.value,
-    "1",
-  );
+  assert.equal(result.facts.find((f) => f.key === "movers_up")?.value, "1");
+  assert.equal(result.facts.find((f) => f.key === "movers_down")?.value, "1");
   const up1 = result.facts.find((f) => f.key === "up_1");
   assert.equal(up1?.label, ALPHA_NAME);
   assert.equal(up1?.value, "+500.00");
@@ -415,7 +409,11 @@ test("a single-step plan answers in the exact flat shape, plus pins", async () =
   assert.equal(answer.dataIntent, "data.overdue_submissions");
   assert.ok(answer.proposition?.includes(ALPHA_OVD_NUM));
   assert.ok(answer.proposition?.includes(ZULU_OVD_NUM));
-  assert.deepEqual(answer.pins, {}, "an unscoped answer pins nothing — but pins present marks the case follow-up-ready by id");
+  assert.deepEqual(
+    answer.pins,
+    {},
+    "an unscoped answer pins nothing — but pins present marks the case follow-up-ready by id",
+  );
 });
 
 test("a scoped single step records ids AND labels in pins", async () => {
@@ -462,8 +460,16 @@ test("a two-step plan answers in sections with a FRESH parameter set per step", 
     return JSON.stringify({
       category: "unknown",
       steps: [
-        { key: "data.submitted_this_month", month: MONTHS[0].key, client: "none" },
-        { key: "data.submitted_this_month", month: MONTHS[1].key, client: "none" },
+        {
+          key: "data.submitted_this_month",
+          month: MONTHS[0].key,
+          client: "none",
+        },
+        {
+          key: "data.submitted_this_month",
+          month: MONTHS[1].key,
+          client: "none",
+        },
       ],
     });
   });
@@ -484,7 +490,9 @@ test("a two-step plan answers in sections with a FRESH parameter set per step", 
   );
   assert.deepEqual(answer.facts, []);
   assert.equal(answer.links, undefined);
-  assert.ok(answer.citation?.startsWith("Computed live from your firm's records on "));
+  assert.ok(
+    answer.citation?.startsWith("Computed live from your firm's records on "),
+  );
   assert.deepEqual(
     answer.plan?.map((p) => p.key),
     ["data.submitted_this_month", "data.submitted_this_month"],
@@ -588,19 +596,27 @@ test("duplicate steps dedupe app-side; a deduped single step answers flat", asyn
 
 test("a claim mixed into a multi-step plan refuses whole", async () => {
   const claimKey = `test.plan_claim_${SALT}`;
-  await getDb().insert(claimRecordsTable).values({
-    claimKey,
-    version: 1,
-    state: "active",
-    title: `Plan-mix claim ${SALT}`,
-    proposition: "The standard VAT rate is {rate}.",
-    protectedFacts: [
-      { key: "rate", label: "Standard rate", kind: "rate", value: "7.5", unit: "%" },
-    ],
-    citation: "Test Act s.1",
-    effectiveFrom: "2020-01-01",
-    createdBy: staffId,
-  });
+  await getDb()
+    .insert(claimRecordsTable)
+    .values({
+      claimKey,
+      version: 1,
+      state: "active",
+      title: `Plan-mix claim ${SALT}`,
+      proposition: "The standard VAT rate is {rate}.",
+      protectedFacts: [
+        {
+          key: "rate",
+          label: "Standard rate",
+          kind: "rate",
+          value: "7.5",
+          unit: "%",
+        },
+      ],
+      citation: "Test Act s.1",
+      effectiveFrom: "2020-01-01",
+      createdBy: staffId,
+    });
   const gateway = fakeGateway(() =>
     JSON.stringify({
       category: "unknown",
@@ -651,7 +667,11 @@ test("a refused step becomes an honest section; ALL refused steps refuse whole",
       category: "unknown",
       steps: [
         { key: "data.overdue_submissions", month: "none", client: "none" },
-        { key: "data.overdue_submissions", month: MONTHS[1].key, client: "none" },
+        {
+          key: "data.overdue_submissions",
+          month: MONTHS[1].key,
+          client: "none",
+        },
       ],
     }),
   );
@@ -683,7 +703,11 @@ test("a refused step becomes an honest section; ALL refused steps refuse whole",
     JSON.stringify({
       category: "unknown",
       steps: [
-        { key: "data.overdue_submissions", month: MONTHS[1].key, client: "none" },
+        {
+          key: "data.overdue_submissions",
+          month: MONTHS[1].key,
+          client: "none",
+        },
         { key: "data.clerk_allowance", month: "none", client: "c1" },
       ],
     }),
@@ -868,7 +892,8 @@ test("a pre-0.56 case (no pins) still threads via label matching", async () => {
 test("a multi-part previous answer threads its LAST plan step with its pins", async () => {
   const caseId = await insertPreviousCase({
     answered: true,
-    proposition: "This question has 2 parts — each is answered separately below.",
+    proposition:
+      "This question has 2 parts — each is answered separately below.",
     facts: [],
     citation: "seed",
     plan: [
@@ -887,7 +912,11 @@ test("a multi-part previous answer threads its LAST plan step with its pins", as
     return JSON.stringify({
       category: "unknown",
       steps: [
-        { key: "data.submitted_this_month", month: MONTHS[1].key, client: "c1" },
+        {
+          key: "data.submitted_this_month",
+          month: MONTHS[1].key,
+          client: "c1",
+        },
       ],
     });
   });

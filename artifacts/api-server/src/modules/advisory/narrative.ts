@@ -98,7 +98,6 @@ const BAND_PHRASES: Record<ReadinessFindings["band"], string> = {
     "Your current setup needs attention in several areas before you can meet the e-invoicing mandate confidently.",
 };
 
-
 // Deterministic letter bodies — also the grounding shown to the model. Gap
 // prompts and remediation text are PLATFORM questionnaire template strings;
 // firm-typed notes are deliberately excluded from both paths.
@@ -114,7 +113,9 @@ export function buildReadinessTemplate(f: ReadinessFindings): string {
     const high = f.gaps.filter((g) => g.severity === "high").length;
     const lead = f.gaps
       .slice()
-      .sort((a, b) => (a.severity === "high" ? -1 : b.severity === "high" ? 1 : 0))
+      .sort((a, b) =>
+        a.severity === "high" ? -1 : b.severity === "high" ? 1 : 0,
+      )
       .slice(0, 3)
       .map((g) => g.prompt)
       .join("; ");

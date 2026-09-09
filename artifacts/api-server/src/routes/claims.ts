@@ -66,11 +66,7 @@ router.patch("/claims/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.write");
   const params = parseOrThrow(UpdateClaimParams, req.params);
   const parsed = parseOrThrow(UpdateClaimBody, req.body);
-  const claim = await updateClaimDraft(
-    params.id,
-    parsed,
-    req.principal.userId,
-  );
+  const claim = await updateClaimDraft(params.id, parsed, req.principal.userId);
   await appendAudit({
     actorId: req.principal.userId,
     action: "claim.update",
@@ -90,7 +86,11 @@ router.post("/claims/:id/submit", async (req, res): Promise<void> => {
     action: "claim.submit",
     entityType: "claim_record",
     entityId: claim.id,
-    after: { claimKey: claim.claimKey, version: claim.version, state: claim.state },
+    after: {
+      claimKey: claim.claimKey,
+      version: claim.version,
+      state: claim.state,
+    },
   });
   res.json(SubmitClaimResponse.parse(claim));
 });

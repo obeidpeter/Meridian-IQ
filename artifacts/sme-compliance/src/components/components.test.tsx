@@ -61,9 +61,9 @@ describe("ClerkUsageBreakdown", () => {
         }))}
       />,
     );
-    expect(
-      screen.getByTestId("breakdown-clerk-usage").children,
-    ).toHaveLength(5); // 4 rows + the fold line
+    expect(screen.getByTestId("breakdown-clerk-usage").children).toHaveLength(
+      5,
+    ); // 4 rows + the fold line
     expect(screen.getByTestId("text-usage-purpose-more").textContent).toBe(
       "+2 more",
     );
@@ -120,9 +120,8 @@ describe("FilePickerButton", () => {
       <FilePickerButton accept=".csv" label="Upload CSV" onFile={onFile} />,
     );
     expect(screen.getByRole("button").textContent).toContain("Upload CSV");
-    const input = container.querySelector<HTMLInputElement>(
-      'input[type="file"]',
-    )!;
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]')!;
     expect(input.getAttribute("accept")).toBe(".csv");
     const file = new File(["a,b"], "rows.csv", { type: "text/csv" });
     fireEvent.change(input, { target: { files: [file] } });
@@ -162,9 +161,7 @@ describe("RejectionRiskCard", () => {
   test("renders each signal with its code, scope chip, frequency and catalogue text", () => {
     render(<RejectionRiskCard report={report} />);
     const card = screen.getByTestId("card-rejection-risk");
-    expect(card.textContent).toContain(
-      "worth checking before you submit",
-    );
+    expect(card.textContent).toContain("worth checking before you submit");
     const supplierRow = screen.getByTestId("row-risk-TIN-MISMATCH-supplier");
     expect(supplierRow.textContent).toContain("TIN-MISMATCH");
     expect(supplierRow.textContent).toContain("this supplier");

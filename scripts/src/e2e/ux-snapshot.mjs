@@ -50,11 +50,7 @@ const PAGES = [
   ["sme-vat", "/app/vat", "owner@adaezefoods.example"],
   ["console-portfolio", "/console", "demo.admin@valo.example"],
   ["console-pipeline", "/console/pipeline", "demo.admin@valo.example"],
-  [
-    "console-invitations",
-    "/console/invitations",
-    "demo.admin@valo.example",
-  ],
+  ["console-invitations", "/console/invitations", "demo.admin@valo.example"],
   ["console-advisory", "/console/advisory", "demo.admin@valo.example"],
   [
     "console-access-review",

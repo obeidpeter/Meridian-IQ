@@ -60,44 +60,56 @@ const router: IRouter = Router();
 // would intercept every request that merely flows past this router
 // (including the principal-less machine rails).
 
-router.get("/obligations", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "obligation.read");
-  const query = parseOrThrow(ListObligationsQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  // SEC-03: a client_user is pinned to its own party whatever the filter
-  // says; firm staff keep the filter they asked for (or none — firm-wide).
-  const clientPartyId = narrowToClientPartyScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const obligations = await listObligations(firmId, {
-    clientPartyId,
-    status: query.status,
-    limit: query.limit,
-    offset: query.offset,
-  });
-  res.json(ListObligationsResponse.parse({ obligations }));
-});
+router.get(
+  "/obligations",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "obligation.read");
+    const query = parseOrThrow(ListObligationsQueryParams, req.query);
+    const firmId = requireFirmScope(req.principal);
+    // SEC-03: a client_user is pinned to its own party whatever the filter
+    // says; firm staff keep the filter they asked for (or none — firm-wide).
+    const clientPartyId = narrowToClientPartyScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const obligations = await listObligations(firmId, {
+      clientPartyId,
+      status: query.status,
+      limit: query.limit,
+      offset: query.offset,
+    });
+    res.json(ListObligationsResponse.parse({ obligations }));
+  },
+);
 
-router.post("/obligations", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "obligation.write");
-  const body = parseOrThrow(CreateObligationBody, req.body);
-  const firmId = requireFirmScope(req.principal);
-  // WRITE surface: the party must be one the firm actually engages (the
-  // cross-tenant IDOR wall), not merely a plausible uuid.
-  await assertPartyAccess(req.principal, body.clientPartyId);
-  const row = await createObligation(firmId, body, req.principal.userId);
-  res.status(201).json(CreateObligationResponse.parse(row));
-});
+router.post(
+  "/obligations",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "obligation.write");
+    const body = parseOrThrow(CreateObligationBody, req.body);
+    const firmId = requireFirmScope(req.principal);
+    // WRITE surface: the party must be one the firm actually engages (the
+    // cross-tenant IDOR wall), not merely a plausible uuid.
+    await assertPartyAccess(req.principal, body.clientPartyId);
+    const row = await createObligation(firmId, body, req.principal.userId);
+    res.status(201).json(CreateObligationResponse.parse(row));
+  },
+);
 
-router.get("/obligations/:id", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "obligation.read");
-  const params = parseOrThrow(GetObligationParams, req.params);
-  // 404 non-disclosure (the loadBillForScope posture), one-homed with the
-  // Response Desk facts assembly in the obligations module.
-  const row = await loadObligationForScope(params.id, req.principal);
-  res.json(GetObligationResponse.parse(row));
-});
+router.get(
+  "/obligations/:id",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "obligation.read");
+    const params = parseOrThrow(GetObligationParams, req.params);
+    // 404 non-disclosure (the loadBillForScope posture), one-homed with the
+    // Response Desk facts assembly in the obligations module.
+    const row = await loadObligationForScope(params.id, req.principal);
+    res.json(GetObligationResponse.parse(row));
+  },
+);
 
 // Response Desk (Task #207, contract 0.59.0): the response bundle PDF and
 // the letter draft. Both are obligation.write surfaces — FIRM work product
@@ -110,41 +122,46 @@ router.get("/obligations/:id", requireFlag("statutory_desks"), async (req, res):
 // the generated client names — the compliance-pack precedent). Deterministic
 // SQL + rendering end to end, zero model calls (the renderer's input has no
 // letter field by construction).
-router.get("/obligation-response-pack", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "obligation.write");
-  const query = parseOrThrow(GetObligationResponsePackQueryParams, req.query);
-  requireFirmScope(req.principal);
-  const { obligation, pack, monthStart } = await computeObligationResponseFacts(
-    query.obligationId,
-    req.principal,
-    query.month,
-  );
-  const { theme } = await loadFirmBrand(pack.firmId);
-  const pdf = await renderObligationResponsePdf({
-    obligation,
-    pack,
-    monthStart,
-    theme,
-  });
-  // Pointer-only audit (SEC-12): which obligation's bundle, which month —
-  // never notice contents or figures.
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId: obligation.firmId,
-    action: "obligation.response_pack",
-    entityType: "obligation",
-    entityId: obligation.id,
-    after: { month: monthStart },
-  });
-  // The reference is authority free text; sendPdfAttachment sanitizes the
-  // filename before it reaches the header.
-  const refPart = obligation.reference ?? obligation.id.slice(0, 8);
-  sendPdfAttachment(
-    res,
-    `obligation-response-${refPart}-${monthStart.slice(0, 7)}.pdf`,
-    pdf,
-  );
-});
+router.get(
+  "/obligation-response-pack",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "obligation.write");
+    const query = parseOrThrow(GetObligationResponsePackQueryParams, req.query);
+    requireFirmScope(req.principal);
+    const { obligation, pack, monthStart } =
+      await computeObligationResponseFacts(
+        query.obligationId,
+        req.principal,
+        query.month,
+      );
+    const { theme } = await loadFirmBrand(pack.firmId);
+    const pdf = await renderObligationResponsePdf({
+      obligation,
+      pack,
+      monthStart,
+      theme,
+    });
+    // Pointer-only audit (SEC-12): which obligation's bundle, which month —
+    // never notice contents or figures.
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId: obligation.firmId,
+      action: "obligation.response_pack",
+      entityType: "obligation",
+      entityId: obligation.id,
+      after: { month: monthStart },
+    });
+    // The reference is authority free text; sendPdfAttachment sanitizes the
+    // filename before it reaches the header.
+    const refPart = obligation.reference ?? obligation.id.slice(0, 8);
+    sendPdfAttachment(
+      res,
+      `obligation-response-${refPart}-${monthStart.slice(0, 7)}.pdf`,
+      pdf,
+    );
+  },
+);
 
 // Digest-posture letter draft: ONE phrasing call that stays inside the
 // request transaction, and the template always answers (no gateway, kill
@@ -169,24 +186,28 @@ router.post(
   },
 );
 
-router.post("/obligations/:id/status", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "obligation.write");
-  const params = parseOrThrow(UpdateObligationStatusParams, req.params);
-  const body = parseOrThrow(UpdateObligationStatusBody, req.body);
-  const firmId = requireFirmScope(req.principal);
-  // The module's UPDATE carries the firm predicate (compare-and-set): a
-  // foreign tenant's id updates zero rows and 404s without disclosure.
-  const row = await updateObligationStatus(
-    params.id,
-    firmId,
-    body.status,
-    body.notes,
-    req.principal.userId,
-  );
-  if (!row) {
-    throw new DomainError("NOT_FOUND", "Obligation not found", 404);
-  }
-  res.json(UpdateObligationStatusResponse.parse(row));
-});
+router.post(
+  "/obligations/:id/status",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "obligation.write");
+    const params = parseOrThrow(UpdateObligationStatusParams, req.params);
+    const body = parseOrThrow(UpdateObligationStatusBody, req.body);
+    const firmId = requireFirmScope(req.principal);
+    // The module's UPDATE carries the firm predicate (compare-and-set): a
+    // foreign tenant's id updates zero rows and 404s without disclosure.
+    const row = await updateObligationStatus(
+      params.id,
+      firmId,
+      body.status,
+      body.notes,
+      req.principal.userId,
+    );
+    if (!row) {
+      throw new DomainError("NOT_FOUND", "Obligation not found", 404);
+    }
+    res.json(UpdateObligationStatusResponse.parse(row));
+  },
+);
 
 export default router;

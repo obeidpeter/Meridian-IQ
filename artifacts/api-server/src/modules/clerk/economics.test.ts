@@ -130,9 +130,9 @@ test("supplierAccuracy groups the corrections exhaust by register supplier", asy
     .insert(usersTable)
     .values({ id: userId, email: `econ-${SALT}@test.example` })
     .onConflictDoNothing();
-  await db.insert(partiesTable).values([
-    { id: supplierId, type: "client_business", legalName: SUPPLIER },
-  ]);
+  await db
+    .insert(partiesTable)
+    .values([{ id: supplierId, type: "client_business", legalName: SUPPLIER }]);
   await db.insert(invoicesTable).values({
     id: invoiceId,
     firmId,

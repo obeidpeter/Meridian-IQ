@@ -18,7 +18,12 @@ import {
 // share maths and the per-period upsert.
 
 // Invoice statuses that count as processed volume for billing/overages.
-const BILLED_STATUSES = ["submitted", "stamped", "confirmed", "settled"] as const;
+const BILLED_STATUSES = [
+  "submitted",
+  "stamped",
+  "confirmed",
+  "settled",
+] as const;
 
 // --- Billing helpers --------------------------------------------------------
 // Tier resolution AND the base+overage fee core are shared with the monthly

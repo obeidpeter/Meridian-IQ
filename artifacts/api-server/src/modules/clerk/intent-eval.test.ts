@@ -69,9 +69,7 @@ function scriptedGateway(wrong: Set<string>, prompts?: CompletionRequest[]) {
     if (wrong.has(fixture.key)) {
       return JSON.stringify({
         category: "unknown",
-        steps: [
-          { key: "data.clerk_allowance", month: "none", client: "none" },
-        ],
+        steps: [{ key: "data.clerk_allowance", month: "none", client: "none" }],
       });
     }
     return planAnswer(fixture);
@@ -110,7 +108,10 @@ test("a run scores deterministically and stores the counts", async () => {
   }
 
   const runs = await listIntentEvalRuns();
-  assert.ok(runs.some((r) => r.id === run.id), "the run is stored");
+  assert.ok(
+    runs.some((r) => r.id === run.id),
+    "the run is stored",
+  );
 });
 
 test("month/client pins are part of correctness", async () => {

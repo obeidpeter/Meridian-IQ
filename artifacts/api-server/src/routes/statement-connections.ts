@@ -255,7 +255,10 @@ router.post(
       action: "statement.connection_created",
       entityType: "statement_connection",
       entityId: row.id,
-      after: { connectorKey: row.connectorKey, clientPartyId: row.clientPartyId },
+      after: {
+        connectorKey: row.connectorKey,
+        clientPartyId: row.clientPartyId,
+      },
     });
     res.json(
       CreateStatementConnectionResponse.parse(
@@ -281,7 +284,11 @@ router.post(
     }
     assertSameTenant(req.principal, connection.firmId);
     if (connection.status === "disabled") {
-      throw new DomainError("CONNECTION_DISABLED", "Connection is disabled", 409);
+      throw new DomainError(
+        "CONNECTION_DISABLED",
+        "Connection is disabled",
+        409,
+      );
     }
     // Create the run marker synchronously so the caller has something to
     // watch, then hand the pull to the worker via the outbox — both inserts
@@ -295,12 +302,14 @@ router.post(
         status: "running",
       })
       .returning();
-    await getDb().insert(outboxTable).values({
-      aggregateType: "statement_connection",
-      aggregateId: connection.id,
-      type: "statement.feed_sync",
-      payload: { connectionId: connection.id, requestRunId: run.id },
-    });
+    await getDb()
+      .insert(outboxTable)
+      .values({
+        aggregateType: "statement_connection",
+        aggregateId: connection.id,
+        type: "statement.feed_sync",
+        payload: { connectionId: connection.id, requestRunId: run.id },
+      });
     await appendAudit({
       actorId: req.principal.userId,
       firmId: connection.firmId,

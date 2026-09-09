@@ -66,7 +66,9 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `brief-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Brief Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Brief Firm ${SALT}` });
   await db.insert(partiesTable).values([
     {
       id: clientId,
@@ -189,10 +191,7 @@ test("sections compose the platform's own numbers, evidence-cited", async () => 
 });
 
 test("template headline triage: overdue beats due-soon beats clear", () => {
-  const mk = (
-    overdue: number,
-    dueSoon: number,
-  ): AdvisoryBriefSection[] => [
+  const mk = (overdue: number, dueSoon: number): AdvisoryBriefSection[] => [
     {
       key: "statutory",
       title: "Statutory position",
@@ -200,8 +199,18 @@ test("template headline triage: overdue beats due-soon beats clear", () => {
       // The DERIVED-TOTAL facts are what the template triages on (they are
       // also what makes the headline's numeral groundable).
       facts: [
-        { key: "statutory_overdue_total", label: "x", kind: "count", value: String(overdue) },
-        { key: "statutory_due_soon_total", label: "x", kind: "count", value: String(dueSoon) },
+        {
+          key: "statutory_overdue_total",
+          label: "x",
+          kind: "count",
+          value: String(overdue),
+        },
+        {
+          key: "statutory_due_soon_total",
+          label: "x",
+          kind: "count",
+          value: String(dueSoon),
+        },
       ],
       sourceReport: "s",
     },
@@ -353,7 +362,11 @@ test("sweep: live month once per engaged client, anti-join idempotent, per-firm 
   await runInBypassContext(async () => {
     await getDb()
       .insert(featureFlagOverridesTable)
-      .values({ flagKey: BRIEF_FLAG_KEY, firmId: overrideFirmId, enabled: false })
+      .values({
+        flagKey: BRIEF_FLAG_KEY,
+        firmId: overrideFirmId,
+        enabled: false,
+      })
       .onConflictDoNothing();
   });
   try {
@@ -439,11 +452,17 @@ test("computeChangesSection: deltas, triage counts, honest skips", () => {
     sourceReport: "s",
   });
   const prev = [
-    section("statutory", [["statutory_overdue_total", "3"], ["unfiled", "2"]]),
+    section("statutory", [
+      ["statutory_overdue_total", "3"],
+      ["unfiled", "2"],
+    ]),
     section("hygiene", [["hygiene_attention_total", "1"]]),
   ];
   const cur = [
-    section("statutory", [["statutory_overdue_total", "1"], ["unfiled", "2"]]),
+    section("statutory", [
+      ["statutory_overdue_total", "1"],
+      ["unfiled", "2"],
+    ]),
     section("hygiene", [["hygiene_attention_total", "2"]]),
   ];
   const changes = computeChangesSection(prev, cur);

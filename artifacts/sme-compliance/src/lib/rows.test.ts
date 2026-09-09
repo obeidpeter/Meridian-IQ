@@ -17,8 +17,20 @@ describe("idMap", () => {
   });
 
   it("returns an empty map for null/undefined lists", () => {
-    expect(idMap(null, () => "x", () => "y").size).toBe(0);
-    expect(idMap(undefined, () => "x", () => "y").size).toBe(0);
+    expect(
+      idMap(
+        null,
+        () => "x",
+        () => "y",
+      ).size,
+    ).toBe(0);
+    expect(
+      idMap(
+        undefined,
+        () => "x",
+        () => "y",
+      ).size,
+    ).toBe(0);
   });
 
   it("lets later entries win on duplicate ids", () => {

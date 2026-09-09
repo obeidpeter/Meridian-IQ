@@ -87,7 +87,10 @@ export interface SoakReport {
     stampedVia: Record<Rail, number>;
     perInvoiceMs: { p50: number; p95: number; max: number };
     throughputPerSecond: number;
-    breakers: Record<Rail, { state: string; failureCount: number; lastErrorCode: string | null }>;
+    breakers: Record<
+      Rail,
+      { state: string; failureCount: number; lastErrorCode: string | null }
+    >;
     railCalls: { primary: number; secondary: number };
   };
 }
@@ -134,7 +137,8 @@ function scriptScenario(
   primary: FakeRail,
   secondary: FakeRail,
 ): void {
-  const on = (rail: FakeRail, fault: RailFault) => rail.script(invoiceNumber, fault);
+  const on = (rail: FakeRail, fault: RailFault) =>
+    rail.script(invoiceNumber, fault);
   switch (scenario) {
     case "accept":
       return;
@@ -186,7 +190,10 @@ const RAIL_ENV_KEYS = [
 
 function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil((p / 100) * sorted.length) - 1),
+  );
   return sorted[idx] ?? 0;
 }
 
@@ -216,7 +223,9 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
   const log = opts.log ?? (() => undefined);
   const random = prng(opts.seed);
   const salt = randomUUID().slice(0, 8);
-  const saved = Object.fromEntries(RAIL_ENV_KEYS.map((k) => [k, process.env[k]]));
+  const saved = Object.fromEntries(
+    RAIL_ENV_KEYS.map((k) => [k, process.env[k]]),
+  );
   const primaryToken = `soak-primary-${salt}`;
   const secondaryToken = `soak-secondary-${salt}`;
   const primary = await startFakeRail({ token: primaryToken });
@@ -245,27 +254,31 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
     const numbers = new Map<string, string>();
     const ids: string[] = [];
     await runInBypassContext(async () => {
-      await getDb().insert(firmsTable).values({ id: firmId, name: `soak-${salt}` });
-      await getDb().insert(partiesTable).values([
-        {
-          id: supplierId,
-          type: "client_business",
-          legalName: `Soak Supplier ${salt}`,
-          tin: `soak-${salt}-s`,
-          tinValidated: true,
-          street: "1 Soak Road",
-          city: "Lagos",
-        },
-        {
-          id: buyerId,
-          type: "buyer",
-          legalName: `Soak Buyer ${salt}`,
-          tin: `soak-${salt}-b`,
-          tinValidated: true,
-          street: "2 Soak Road",
-          city: "Lagos",
-        },
-      ]);
+      await getDb()
+        .insert(firmsTable)
+        .values({ id: firmId, name: `soak-${salt}` });
+      await getDb()
+        .insert(partiesTable)
+        .values([
+          {
+            id: supplierId,
+            type: "client_business",
+            legalName: `Soak Supplier ${salt}`,
+            tin: `soak-${salt}-s`,
+            tinValidated: true,
+            street: "1 Soak Road",
+            city: "Lagos",
+          },
+          {
+            id: buyerId,
+            type: "buyer",
+            legalName: `Soak Buyer ${salt}`,
+            tin: `soak-${salt}-b`,
+            tinValidated: true,
+            street: "2 Soak Road",
+            city: "Lagos",
+          },
+        ]);
       const CHUNK = 200;
       for (let i = 0; i < opts.invoices; i += CHUNK) {
         const size = Math.min(CHUNK, opts.invoices - i);
@@ -279,41 +292,47 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
           scriptScenario(scenario, invoiceNumber, primary, secondary);
           return { id, invoiceNumber };
         });
-        await getDb().insert(invoicesTable).values(
-          batch.map(({ id, invoiceNumber }) => ({
-            id,
-            firmId,
-            supplierPartyId: supplierId,
-            buyerPartyId: buyerId,
-            invoiceNumber,
-            issueDate: "2026-08-01",
-            dueDate: "2026-08-31",
-            status: "submitted" as const,
-            subtotal: "100000.00",
-            vatTotal: "7500.00",
-            grandTotal: "107500.00",
-          })),
-        );
-        await getDb().insert(invoiceLinesTable).values(
-          batch.map(({ id }) => ({
-            invoiceId: id,
-            lineNo: 1,
-            description: `Soak ${salt}`,
-            quantity: "1.0000",
-            unitPrice: "100000.00",
-            vatRate: "0.0750",
-            lineExtension: "100000.00",
-            vatAmount: "7500.00",
-          })),
-        );
-        await getDb().insert(outboxTable).values(
-          batch.map(({ id }) => ({
-            aggregateType: "invoice",
-            aggregateId: id,
-            type: "invoice.submit",
-            payload: { invoiceId: id },
-          })),
-        );
+        await getDb()
+          .insert(invoicesTable)
+          .values(
+            batch.map(({ id, invoiceNumber }) => ({
+              id,
+              firmId,
+              supplierPartyId: supplierId,
+              buyerPartyId: buyerId,
+              invoiceNumber,
+              issueDate: "2026-08-01",
+              dueDate: "2026-08-31",
+              status: "submitted" as const,
+              subtotal: "100000.00",
+              vatTotal: "7500.00",
+              grandTotal: "107500.00",
+            })),
+          );
+        await getDb()
+          .insert(invoiceLinesTable)
+          .values(
+            batch.map(({ id }) => ({
+              invoiceId: id,
+              lineNo: 1,
+              description: `Soak ${salt}`,
+              quantity: "1.0000",
+              unitPrice: "100000.00",
+              vatRate: "0.0750",
+              lineExtension: "100000.00",
+              vatAmount: "7500.00",
+            })),
+          );
+        await getDb()
+          .insert(outboxTable)
+          .values(
+            batch.map(({ id }) => ({
+              aggregateType: "invoice",
+              aggregateId: id,
+              type: "invoice.submit",
+              payload: { invoiceId: id },
+            })),
+          );
       }
     });
     log(`seeded ${opts.invoices} invoices (${salt}); ${opts.workers} workers`);
@@ -366,7 +385,8 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
     settled = settled || (await liveCount()) === 0;
     const wallMs = Date.now() - started;
     log(`drained in ${wallMs} ms; settled=${settled}`);
-    if (!settled) violations.push(`did not settle within ${opts.deadlineMs} ms`);
+    if (!settled)
+      violations.push(`did not settle within ${opts.deadlineMs} ms`);
 
     // ---- Verify ----
     const report = await runInBypassContext(async () => {
@@ -390,7 +410,10 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
         .from(invoiceLifecycleEventsTable)
         .where(inArray(invoiceLifecycleEventsTable.invoiceId, ids));
       const audits = await getDb()
-        .select({ entityId: auditEventsTable.entityId, action: auditEventsTable.action })
+        .select({
+          entityId: auditEventsTable.entityId,
+          action: auditEventsTable.action,
+        })
         .from(auditEventsTable)
         .where(
           and(
@@ -413,13 +436,21 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
       const breakers = await getDb().select().from(railStatesTable);
 
       const stampByInvoice = new Map(stamps.map((s) => [s.invoiceId, s]));
-      const byScenario = Object.fromEntries(MIX.map(([s]) => [s, 0])) as Record<SoakScenario, number>;
-      const stampedVia: Record<Rail, number> = { rail_primary: 0, rail_secondary: 0 };
+      const byScenario = Object.fromEntries(MIX.map(([s]) => [s, 0])) as Record<
+        SoakScenario,
+        number
+      >;
+      const stampedVia: Record<Rail, number> = {
+        rail_primary: 0,
+        rail_secondary: 0,
+      };
       let stamped = 0;
       let failed = 0;
       let recoveredStamps = 0;
       const durations: number[] = [];
-      const outboxByInvoice = new Map(outbox.map((row) => [row.aggregateId, row]));
+      const outboxByInvoice = new Map(
+        outbox.map((row) => [row.aggregateId, row]),
+      );
 
       for (const invoice of invoices) {
         const scenario = scenarios.get(invoice.id) ?? "accept";
@@ -427,90 +458,174 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
         const expectFailed = scenario === "reject";
         if (invoice.status === "stamped") stamped += 1;
         else if (invoice.status === "failed") failed += 1;
-        else violations.push(`${scenario}: invoice ${invoice.id} ended ${invoice.status}`);
+        else
+          violations.push(
+            `${scenario}: invoice ${invoice.id} ended ${invoice.status}`,
+          );
         if (expectFailed && invoice.status !== "failed") {
-          violations.push(`${scenario}: invoice ${invoice.id} should have failed, ended ${invoice.status}`);
+          violations.push(
+            `${scenario}: invoice ${invoice.id} should have failed, ended ${invoice.status}`,
+          );
         }
         if (!expectFailed && invoice.status !== "stamped") {
-          violations.push(`${scenario}: invoice ${invoice.id} should have stamped, ended ${invoice.status}`);
+          violations.push(
+            `${scenario}: invoice ${invoice.id} should have stamped, ended ${invoice.status}`,
+          );
         }
         const stamp = stampByInvoice.get(invoice.id);
         if (invoice.status === "stamped") {
-          if (!stamp) violations.push(`${scenario}: stamped invoice ${invoice.id} has no stamp record`);
+          if (!stamp)
+            violations.push(
+              `${scenario}: stamped invoice ${invoice.id} has no stamp record`,
+            );
           else {
             stampedVia[stamp.rail] += 1;
             const key = `${invoice.id}:${numbers.get(invoice.id)}`;
-            const held = (stamp.rail === "rail_primary" ? primary : secondary).held.get(key);
-            if (!held) violations.push(`${scenario}: ${stamp.rail} does not hold key ${key}`);
+            const held = (
+              stamp.rail === "rail_primary" ? primary : secondary
+            ).held.get(key);
+            if (!held)
+              violations.push(
+                `${scenario}: ${stamp.rail} does not hold key ${key}`,
+              );
             else if (held.irn !== stamp.irn || held.csid !== stamp.csid) {
-              violations.push(`${scenario}: stamp for ${invoice.id} differs from what ${stamp.rail} holds`);
+              violations.push(
+                `${scenario}: stamp for ${invoice.id} differs from what ${stamp.rail} holds`,
+              );
             }
             if (stamp.provider !== "http" || stamp.environment !== "sandbox") {
-              violations.push(`${scenario}: stamp for ${invoice.id} carries ${stamp.provider}/${stamp.environment}`);
+              violations.push(
+                `${scenario}: stamp for ${invoice.id} carries ${stamp.provider}/${stamp.environment}`,
+              );
             }
           }
         } else if (stamp) {
-          violations.push(`${scenario}: ${invoice.status} invoice ${invoice.id} has a stamp record`);
+          violations.push(
+            `${scenario}: ${invoice.status} invoice ${invoice.id} has a stamp record`,
+          );
         }
         const transitions = lifecycle.filter((l) => l.invoiceId === invoice.id);
-        const terminal = transitions.filter((l) => l.toStatus === "stamped" || l.toStatus === "failed");
+        const terminal = transitions.filter(
+          (l) => l.toStatus === "stamped" || l.toStatus === "failed",
+        );
         if (terminal.length !== 1) {
-          violations.push(`${scenario}: invoice ${invoice.id} has ${terminal.length} terminal lifecycle transitions`);
+          violations.push(
+            `${scenario}: invoice ${invoice.id} has ${terminal.length} terminal lifecycle transitions`,
+          );
         }
-        const actions = audits.filter((a) => a.entityId === invoice.id).map((a) => a.action);
-        const stampAudits = actions.filter((a) => a === "invoice.stamped" || a === "invoice.stamp_recovered").length;
-        const rejectAudits = actions.filter((a) => a === "invoice.rejected").length;
+        const actions = audits
+          .filter((a) => a.entityId === invoice.id)
+          .map((a) => a.action);
+        const stampAudits = actions.filter(
+          (a) => a === "invoice.stamped" || a === "invoice.stamp_recovered",
+        ).length;
+        const rejectAudits = actions.filter(
+          (a) => a === "invoice.rejected",
+        ).length;
         if (invoice.status === "stamped" && stampAudits !== 1) {
-          violations.push(`${scenario}: invoice ${invoice.id} has ${stampAudits} stamp audit rows`);
+          violations.push(
+            `${scenario}: invoice ${invoice.id} has ${stampAudits} stamp audit rows`,
+          );
         }
         if (invoice.status === "failed" && rejectAudits !== 1) {
-          violations.push(`${scenario}: invoice ${invoice.id} has ${rejectAudits} rejected audit rows`);
+          violations.push(
+            `${scenario}: invoice ${invoice.id} has ${rejectAudits} rejected audit rows`,
+          );
         }
         if (actions.includes("invoice.stamp_recovered")) recoveredStamps += 1;
         const rows = attempts.filter((a) => a.invoiceId === invoice.id);
         const acceptedSubmits = rows.filter(
-          (a) => a.status === "accepted" && !(a.requestPayload as { lookup?: boolean })?.lookup,
+          (a) =>
+            a.status === "accepted" &&
+            !(a.requestPayload as { lookup?: boolean })?.lookup,
         ).length;
         if (acceptedSubmits > 1) {
-          violations.push(`${scenario}: invoice ${invoice.id} has ${acceptedSubmits} accepted submissions`);
+          violations.push(
+            `${scenario}: invoice ${invoice.id} has ${acceptedSubmits} accepted submissions`,
+          );
         }
-        if (rows.length === 0) violations.push(`${scenario}: invoice ${invoice.id} has no attempt rows`);
-        const caseCount = cases.filter((c) => c.invoiceId === invoice.id).length;
+        if (rows.length === 0)
+          violations.push(
+            `${scenario}: invoice ${invoice.id} has no attempt rows`,
+          );
+        const caseCount = cases.filter(
+          (c) => c.invoiceId === invoice.id,
+        ).length;
         if (invoice.status === "failed" && caseCount !== 1) {
-          violations.push(`${scenario}: failed invoice ${invoice.id} has ${caseCount} Desk cases`);
+          violations.push(
+            `${scenario}: failed invoice ${invoice.id} has ${caseCount} Desk cases`,
+          );
         }
         if (invoice.status === "stamped" && caseCount !== 0) {
-          violations.push(`${scenario}: stamped invoice ${invoice.id} has a Desk case`);
+          violations.push(
+            `${scenario}: stamped invoice ${invoice.id} has a Desk case`,
+          );
         }
         const event = outboxByInvoice.get(invoice.id);
-        if (!event) violations.push(`${scenario}: invoice ${invoice.id} has no outbox row`);
+        if (!event)
+          violations.push(
+            `${scenario}: invoice ${invoice.id} has no outbox row`,
+          );
         else {
           const expectedOutbox = invoice.status === "failed" ? "dead" : "done";
           if (event.status !== expectedOutbox) {
-            violations.push(`${scenario}: outbox row for ${invoice.id} is ${event.status}, expected ${expectedOutbox}`);
+            violations.push(
+              `${scenario}: outbox row for ${invoice.id} is ${event.status}, expected ${expectedOutbox}`,
+            );
           }
           if (event.status === "processing" || event.lockedAt) {
-            violations.push(`${scenario}: outbox row for ${invoice.id} is still claimed`);
+            violations.push(
+              `${scenario}: outbox row for ${invoice.id} is still claimed`,
+            );
           }
           durations.push(event.updatedAt.getTime() - event.createdAt.getTime());
         }
       }
-      const extraOutbox = outbox.filter((row) => !invoices.some((i) => i.id === row.aggregateId));
-      if (extraOutbox.length > 0) violations.push(`${extraOutbox.length} outbox rows for unknown invoices`);
-      const multiRows = ids.filter((id) => outbox.filter((r) => r.aggregateId === id).length > 1);
-      if (multiRows.length > 0) violations.push(`${multiRows.length} invoices have more than one outbox row`);
-      const retries = outbox.reduce((sum, row) => sum + Math.max(0, row.attempts - 1), 0);
+      const extraOutbox = outbox.filter(
+        (row) => !invoices.some((i) => i.id === row.aggregateId),
+      );
+      if (extraOutbox.length > 0)
+        violations.push(
+          `${extraOutbox.length} outbox rows for unknown invoices`,
+        );
+      const multiRows = ids.filter(
+        (id) => outbox.filter((r) => r.aggregateId === id).length > 1,
+      );
+      if (multiRows.length > 0)
+        violations.push(
+          `${multiRows.length} invoices have more than one outbox row`,
+        );
+      const retries = outbox.reduce(
+        (sum, row) => sum + Math.max(0, row.attempts - 1),
+        0,
+      );
       const parks = outbox.reduce((sum, row) => sum + row.parkCount, 0);
 
-      const breakerReport = { rail_primary: { state: "?", failureCount: 0, lastErrorCode: null }, rail_secondary: { state: "?", failureCount: 0, lastErrorCode: null } } as SoakReport["stats"]["breakers"];
+      const breakerReport = {
+        rail_primary: { state: "?", failureCount: 0, lastErrorCode: null },
+        rail_secondary: { state: "?", failureCount: 0, lastErrorCode: null },
+      } as SoakReport["stats"]["breakers"];
       for (const row of breakers) {
-        if (row.rail !== "rail_primary" && row.rail !== "rail_secondary") continue;
-        breakerReport[row.rail] = { state: row.state, failureCount: row.failureCount, lastErrorCode: row.lastErrorCode };
+        if (row.rail !== "rail_primary" && row.rail !== "rail_secondary")
+          continue;
+        breakerReport[row.rail] = {
+          state: row.state,
+          failureCount: row.failureCount,
+          lastErrorCode: row.lastErrorCode,
+        };
         if (row.state === "half_open") {
-          violations.push(`${row.rail} ended half_open: a probe slot was never released`);
+          violations.push(
+            `${row.rail} ended half_open: a probe slot was never released`,
+          );
         }
-        if (row.state === "closed" && row.failureCount !== 0 && row.failureCount >= 3) {
-          violations.push(`${row.rail} is closed with failureCount ${row.failureCount}`);
+        if (
+          row.state === "closed" &&
+          row.failureCount !== 0 &&
+          row.failureCount >= 3
+        ) {
+          violations.push(
+            `${row.rail} is closed with failureCount ${row.failureCount}`,
+          );
         }
       }
 
@@ -536,11 +651,15 @@ export async function runRailSoak(opts: SoakOptions): Promise<SoakReport> {
             p95: percentile(sorted, 95),
             max: sorted[sorted.length - 1] ?? 0,
           },
-          throughputPerSecond: wallMs > 0 ? Math.round((opts.invoices / wallMs) * 1000 * 10) / 10 : 0,
+          throughputPerSecond:
+            wallMs > 0
+              ? Math.round((opts.invoices / wallMs) * 1000 * 10) / 10
+              : 0,
           breakers: breakerReport,
           railCalls: {
             primary: primary.calls.filter((c) => c.method === "POST").length,
-            secondary: secondary.calls.filter((c) => c.method === "POST").length,
+            secondary: secondary.calls.filter((c) => c.method === "POST")
+              .length,
           },
         },
       } satisfies SoakReport;

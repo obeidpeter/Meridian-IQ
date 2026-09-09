@@ -161,10 +161,7 @@ function fenceNoticeDocument(text: string): string {
   );
 }
 
-function noticeImageUserContent(
-  contentType: string,
-  b64: string,
-): UserContent {
+function noticeImageUserContent(contentType: string, b64: string): UserContent {
   return docImageUserContent("The tax-authority notice", contentType, b64);
 }
 
@@ -176,10 +173,7 @@ function noticeScanUserContent(pagesB64: string[]): UserContent {
 // builder (prompts.ts) with the invoice noun. Shared by first-time intake and
 // retries so the injection-hardening text for images is maintained in one
 // place.
-function imageUserContent(
-  contentType: string,
-  b64: string,
-): UserContent {
+function imageUserContent(contentType: string, b64: string): UserContent {
   return docImageUserContent("The invoice", contentType, b64);
 }
 

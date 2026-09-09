@@ -132,8 +132,7 @@ export async function mintFilingsForFirm(
   );
   const rows = clients.flatMap((c) =>
     FILING_KINDS.filter(
-      (kind) =>
-        kind.taxType !== "wht" || whtBuyers.has(c.clientPartyId),
+      (kind) => kind.taxType !== "wht" || whtBuyers.has(c.clientPartyId),
     ).map((kind) => ({
       firmId,
       clientPartyId: c.clientPartyId,
@@ -189,7 +188,6 @@ export interface ListFilingsFilter {
   limit?: number;
   offset?: number;
 }
-
 
 // Soonest deadline first (the register is a worklist — the next clock to
 // beat leads), id as the stable tiebreak.
@@ -286,12 +284,15 @@ export async function updateFilingStatus(
       );
     }
     assertCalendarDate(input.filedDate, "filedDate", "FILING_BAD_DATE");
-  } else if (input.filedDate !== undefined || input.filedReference !== undefined) {
+  } else if (
+    input.filedDate !== undefined ||
+    input.filedReference !== undefined
+  ) {
     // "Prepared" carries no filing evidence — accepting it here would let a
     // row look half-filed without the status that makes the claim.
     throw new DomainError(
       "FILING_UNEXPECTED_EVIDENCE",
-      "filedDate/filedReference only accompany status \"filed\"",
+      'filedDate/filedReference only accompany status "filed"',
       400,
     );
   }

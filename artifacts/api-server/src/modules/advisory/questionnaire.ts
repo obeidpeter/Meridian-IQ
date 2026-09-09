@@ -29,7 +29,8 @@ const SECTIONS: Section[] = [
     questions: [
       {
         id: "tin_valid",
-        prompt: "Does the business hold a valid Tax Identification Number (TIN)?",
+        prompt:
+          "Does the business hold a valid Tax Identification Number (TIN)?",
         helpText:
           "A validated TIN is mandatory on every invoice submitted to the MBS platform.",
         weight: 3,
@@ -39,7 +40,8 @@ const SECTIONS: Section[] = [
       {
         id: "cac_number",
         prompt: "Is the CAC company registration number on file?",
-        helpText: "The CAC number identifies the legal person on the party record.",
+        helpText:
+          "The CAC number identifies the legal person on the party record.",
         weight: 2,
         remediation:
           "Capture and verify the CAC registration number and attach it to the party record.",
@@ -82,7 +84,8 @@ const SECTIONS: Section[] = [
       {
         id: "tax_codes",
         prompt: "Are correct VAT/tax category codes applied per line item?",
-        helpText: "Tax category codes drive the VAT calculation and its validation.",
+        helpText:
+          "Tax category codes drive the VAT calculation and its validation.",
         weight: 2,
         remediation:
           "Establish a tax-code mapping for each product/service line and apply it consistently.",
@@ -105,7 +108,8 @@ const SECTIONS: Section[] = [
         id: "accounting_export",
         prompt:
           "Can the accounting/ERP system export invoices in a structured format (CSV/Excel/API)?",
-        helpText: "A structured export is required to map to the canonical model.",
+        helpText:
+          "A structured export is required to map to the canonical model.",
         weight: 2,
         remediation:
           "Enable a structured export from the accounting system or adopt the published import template.",
@@ -129,7 +133,8 @@ const SECTIONS: Section[] = [
       {
         id: "owner_assigned",
         prompt: "Is a named person responsible for e-invoicing compliance?",
-        helpText: "Clear ownership prevents missed deadlines and unresolved failures.",
+        helpText:
+          "Clear ownership prevents missed deadlines and unresolved failures.",
         weight: 1,
         remediation:
           "Assign a named compliance owner and document the escalation path.",
@@ -138,7 +143,8 @@ const SECTIONS: Section[] = [
         id: "failure_handling",
         prompt:
           "Is there a process to resolve and re-submit rejected invoices promptly?",
-        helpText: "Unresolved rejections accrue penalties and block input-VAT recovery.",
+        helpText:
+          "Unresolved rejections accrue penalties and block input-VAT recovery.",
         weight: 2,
         remediation:
           "Adopt the guided failure-resolution workflow and the error catalogue for rejections.",
@@ -147,7 +153,8 @@ const SECTIONS: Section[] = [
         id: "retention",
         prompt:
           "Are stamped invoices and records retained for the required period?",
-        helpText: "A minimum 24-month retention applies; the Valo standard is 7 years.",
+        helpText:
+          "A minimum 24-month retention applies; the Valo standard is 7 years.",
         weight: 1,
         remediation:
           "Enable long-term retention of stamped artifacts on Nigeria-resident storage.",
@@ -156,7 +163,9 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const ALL_QUESTIONS: AssessmentQuestion[] = SECTIONS.flatMap((s) => s.questions);
+const ALL_QUESTIONS: AssessmentQuestion[] = SECTIONS.flatMap(
+  (s) => s.questions,
+);
 const TOTAL_WEIGHT = ALL_QUESTIONS.reduce((sum, q) => sum + q.weight, 0);
 
 function severityForWeight(weight: number): "high" | "medium" | "low" {
@@ -236,7 +245,9 @@ export interface AssessmentComputation {
 // Compute the gap report and remediation plan from questionnaire answers. A
 // question that is unanswered is treated as a gap (control not in place), so a
 // partial submission can never inflate the readiness score.
-export function computeAssessment(answers: AnswerInput[]): AssessmentComputation {
+export function computeAssessment(
+  answers: AnswerInput[],
+): AssessmentComputation {
   const byId = new Map(answers.map((a) => [a.questionId, a]));
   const sectionOf = new Map<string, string>();
   for (const s of SECTIONS) {
@@ -260,7 +271,8 @@ export function computeAssessment(answers: AnswerInput[]): AssessmentComputation
     }
   }
 
-  const score = TOTAL_WEIGHT === 0 ? 100 : Math.round((earned / TOTAL_WEIGHT) * 100);
+  const score =
+    TOTAL_WEIGHT === 0 ? 100 : Math.round((earned / TOTAL_WEIGHT) * 100);
   const band: "ready" | "partial" | "at_risk" =
     score >= 80 ? "ready" : score >= 50 ? "partial" : "at_risk";
 

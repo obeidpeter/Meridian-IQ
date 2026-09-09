@@ -84,10 +84,7 @@ function meaningfulTokens(name: string): Set<string> {
 // Strong name evidence: at least two meaningful tokens shared between the
 // extracted name and the register name. A single shared token ("Adaeze")
 // would let any register party sharing it trigger false TIN warnings.
-function strongNameMatch(
-  extracted: string | null,
-  partyName: string,
-): boolean {
+function strongNameMatch(extracted: string | null, partyName: string): boolean {
   if (!extracted) return false;
   const a = meaningfulTokens(extracted);
   if (a.size < 2) return false;
@@ -100,10 +97,7 @@ function strongNameMatch(
 // Amounts come back as printed — "1,250,000.00" included (the shared
 // preflight.ts dialect parser).
 
-function fieldValue(
-  extraction: ClerkExtraction,
-  field: string,
-): string | null {
+function fieldValue(extraction: ClerkExtraction, field: string): string | null {
   const v = extraction.fields.find((f) => f.field === field)?.value ?? null;
   return v !== null && v.trim() === "" ? null : v;
 }

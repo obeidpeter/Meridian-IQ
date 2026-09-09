@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  ONBOARDING_STEP_LABELS,
-  onboardingStepLabel,
-} from "./onboarding-copy";
+import { ONBOARDING_STEP_LABELS, onboardingStepLabel } from "./onboarding-copy";
 
 describe("onboardingStepLabel", () => {
   test("the closed catalogue's labels; unknown keys degrade to themselves", () => {

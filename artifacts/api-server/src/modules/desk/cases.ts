@@ -71,13 +71,15 @@ export async function openInvoiceCase(input: {
     return;
   }
 
-  await getDb().insert(operatorCasesTable).values({
-    firmId: invoice.firmId,
-    clientPartyId: invoice.supplierPartyId,
-    invoiceId: invoice.id,
-    title,
-    errorCode: input.errorCode ?? null,
-    priority,
-    status: "open",
-  });
+  await getDb()
+    .insert(operatorCasesTable)
+    .values({
+      firmId: invoice.firmId,
+      clientPartyId: invoice.supplierPartyId,
+      invoiceId: invoice.id,
+      title,
+      errorCode: input.errorCode ?? null,
+      priority,
+      status: "open",
+    });
 }

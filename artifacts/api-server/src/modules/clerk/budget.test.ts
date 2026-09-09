@@ -96,13 +96,11 @@ test("provider-time permit owns no connection and settlement is exact, durable a
 test("exhausted budget never creates a reservation; ledger failures and expired uncertain spend fail closed", async () => {
   const firmId = await firm();
   const usage = await firmClerkUsage(firmId);
-  await db
-    .insert(clerkInferenceCallsTable)
-    .values({
-      ...row(firmId),
-      promptTokens: usage.budgetTokens,
-      completionTokens: 0,
-    });
+  await db.insert(clerkInferenceCallsTable).values({
+    ...row(firmId),
+    promptTokens: usage.budgetTokens,
+    completionTokens: 0,
+  });
   assert.equal(await acquireFirmClerkBudgetPermit(firmId, 1), null);
   assert.equal(
     (

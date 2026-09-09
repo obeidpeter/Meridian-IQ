@@ -136,23 +136,20 @@ router.get("/clerk/action-decisions", async (req, res): Promise<void> => {
 // Round 29: the accountability read — whether the client's approved batches
 // WORKED. Pure ledger SQL (invoice.read, the decisions surface's own gate),
 // in-transaction, nothing stored.
-router.get(
-  "/clerk/action-effectiveness",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "invoice.read");
-    const query = parseOrThrow(GetActionEffectivenessQueryParams, req.query);
-    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
-      req.principal,
-      query.clientPartyId,
-    );
-    const report = await computeActionEffectiveness(
-      firmId,
-      clientPartyId,
-      query.windowDays,
-    );
-    res.json(GetActionEffectivenessResponse.parse(report));
-  },
-);
+router.get("/clerk/action-effectiveness", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetActionEffectivenessQueryParams, req.query);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const report = await computeActionEffectiveness(
+    firmId,
+    clientPartyId,
+    query.windowDays,
+  );
+  res.json(GetActionEffectivenessResponse.parse(report));
+});
 
 // Phase 2 (round 37): the evidence backtest narrowed to ONE client — the
 // grant dialogs' consent-quality read. Same resolver, same gate, same

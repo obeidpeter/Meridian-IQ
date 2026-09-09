@@ -195,7 +195,11 @@ describe("completedStepCount / shouldShowGettingStarted", () => {
   test("shows for an empty book and while fewer than 3 steps are done", () => {
     const empty = gettingStartedSteps(FRESH_FIRM);
     expect(
-      shouldShowGettingStarted({ clientCount: 0, steps: empty, dismissed: false }),
+      shouldShowGettingStarted({
+        clientCount: 0,
+        steps: empty,
+        dismissed: false,
+      }),
     ).toBe(true);
 
     const two = gettingStartedSteps({
@@ -205,7 +209,11 @@ describe("completedStepCount / shouldShowGettingStarted", () => {
       submittedCount: 0,
     });
     expect(
-      shouldShowGettingStarted({ clientCount: 1, steps: two, dismissed: false }),
+      shouldShowGettingStarted({
+        clientCount: 1,
+        steps: two,
+        dismissed: false,
+      }),
     ).toBe(true);
   });
 
@@ -228,7 +236,11 @@ describe("completedStepCount / shouldShowGettingStarted", () => {
   test("dismissal always wins — even on an empty book", () => {
     const empty = gettingStartedSteps(FRESH_FIRM);
     expect(
-      shouldShowGettingStarted({ clientCount: 0, steps: empty, dismissed: true }),
+      shouldShowGettingStarted({
+        clientCount: 0,
+        steps: empty,
+        dismissed: true,
+      }),
     ).toBe(false);
   });
 });
@@ -262,7 +274,9 @@ describe("checklist inputs from the portfolio payload", () => {
 
 describe("getting-started dismissal storage", () => {
   test("the key is the documented console.gettingStarted.dismissed", () => {
-    expect(GETTING_STARTED_DISMISS_KEY).toBe("console.gettingStarted.dismissed");
+    expect(GETTING_STARTED_DISMISS_KEY).toBe(
+      "console.gettingStarted.dismissed",
+    );
   });
 
   test("write marks, read observes — round trip through a fake storage", () => {

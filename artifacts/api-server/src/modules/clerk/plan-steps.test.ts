@@ -20,11 +20,7 @@ import {
 import { createDraft } from "../invoice/service.ts";
 import { setFirmOverride } from "../flags/flags.ts";
 import type { Principal } from "../auth/rbac.ts";
-import {
-  ACTIONS_FLAG_KEY,
-  executeAction,
-  proposalForKind,
-} from "./actions.ts";
+import { ACTIONS_FLAG_KEY, executeAction, proposalForKind } from "./actions.ts";
 import {
   AUTO_RECONCILE_FLAG_KEY,
   MACHINE_DRAFT_PREFIX,
@@ -39,10 +35,7 @@ import {
   createPlanRunFromTemplate,
   processPlanRun,
 } from "./plan-runs.ts";
-import {
-  restoreClerkFlag,
-  saveAndEnableClerkFlag,
-} from "./test-support.ts";
+import { restoreClerkFlag, saveAndEnableClerkFlag } from "./test-support.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import {
@@ -130,7 +123,9 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `plan-steps-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Steps Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Steps Firm ${SALT}` });
   await setFirmOverride(ACTIONS_FLAG_KEY, firmId, true);
   await db.insert(membershipsTable).values({
     userId,
@@ -240,12 +235,21 @@ test("execution drafts only APPROVED pairs whose pattern still alerts", async ()
     userId,
     randomUUID(),
   );
-  assert.deepEqual(outcome, { draftIds: [], executed: 0, skipped: 1, failed: 0 });
+  assert.deepEqual(outcome, {
+    draftIds: [],
+    executed: 0,
+    skipped: 1,
+    failed: 0,
+  });
   assert.equal((await openMachineDrafts()).length, 0);
 });
 
 test("the template run raises the missing paper as drafts (end-to-end)", async () => {
-  const run = await createPlanRunFromTemplate("month_end_close", clientX, principal);
+  const run = await createPlanRunFromTemplate(
+    "month_end_close",
+    clientX,
+    principal,
+  );
   assert.equal(run.steps.length, 1, "only the draft step assembles");
   assert.equal(run.steps[0].kind, "draft_recurring");
   assert.deepEqual(run.steps[0].buyerTargets, [stepTargetKey(buyerP, "NGN")]);
@@ -259,7 +263,11 @@ test("the template run raises the missing paper as drafts (end-to-end)", async (
   assert.equal(step.executedCount, 1);
   assert.equal(step.failedCount, 0);
   assert.equal(step.skippedCount, 0);
-  assert.equal(step.decisionId, null, "no decision row for a deterministic step");
+  assert.equal(
+    step.decisionId,
+    null,
+    "no decision row for a deterministic step",
+  );
   assert.equal(step.draftIds?.length, 1, "the created draft is the evidence");
 
   const [draft] = await getDb()
@@ -274,7 +282,11 @@ test("the template run raises the missing paper as drafts (end-to-end)", async (
     "a placeholder number the client replaces at review",
   );
   assert.equal(draft.issueDate, lagosDateString());
-  assert.equal(Number(draft.grandTotal), 2150, "2000 + 7.5% VAT, never invented");
+  assert.equal(
+    Number(draft.grandTotal),
+    2150,
+    "2000 + 7.5% VAT, never invented",
+  );
   const lines = await getDb()
     .select()
     .from(invoiceLinesTable)
@@ -320,7 +332,12 @@ test("the wall holds at both proposal and execution; an ordinary draft passes it
       issueDate: daysAgo(10),
       dueDate: null,
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "500", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "500",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -328,7 +345,10 @@ test("the wall holds at both proposal and execution; an ordinary draft passes it
   const [machineDraft] = await openMachineDrafts();
   const proposal = await proposalForKind("submit_overdue", firmId, clientX);
   const proposedIds = (proposal?.targets ?? []).map((t) => t.invoiceId);
-  assert.ok(proposedIds.includes(ordinary.id), "ordinary overdue drafts propose");
+  assert.ok(
+    proposedIds.includes(ordinary.id),
+    "ordinary overdue drafts propose",
+  );
   assert.ok(
     !proposedIds.includes(machineDraft.id),
     "a machine draft is never proposed for submission",
@@ -392,7 +412,12 @@ async function seedReconcileWorld() {
         issueDate: daysAgo(15),
         dueDate: null,
         lines: [
-          { description: "Services", quantity: "1", unitPrice, vatRate: "0.075" },
+          {
+            description: "Services",
+            quantity: "1",
+            unitPrice,
+            vatRate: "0.075",
+          },
         ],
       },
       userId,
@@ -415,7 +440,12 @@ async function seedReconcileWorld() {
       issueDate: daysAgo(15),
       dueDate: null,
       lines: [
-        { description: "Vendor svc", quantity: "1", unitPrice: "500", vatRate: "0.075" },
+        {
+          description: "Vendor svc",
+          quantity: "1",
+          unitPrice: "500",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -465,7 +495,11 @@ async function seedReconcileWorld() {
       rawLine: "raw-c",
     },
   ]);
-  const proposal = async (statementLineId: string, invoiceId: string, confidence: string) => {
+  const proposal = async (
+    statementLineId: string,
+    invoiceId: string,
+    confidence: string,
+  ) => {
     const [row] = await db
       .insert(matchProposalsTable)
       .values({ firmId, statementLineId, invoiceId, confidence })
@@ -522,7 +556,11 @@ test("a POLICY-MINTED run gets the plan WITHOUT the reconcile step (round-35 rev
 });
 
 test("the reconcile step settles through the ordinary accept path (end-to-end)", async () => {
-  const run = await createPlanRunFromTemplate("month_end_close", clientX, principal);
+  const run = await createPlanRunFromTemplate(
+    "month_end_close",
+    clientX,
+    principal,
+  );
   assert.equal(run.steps.length, 1, "only the reconcile step assembles");
   assert.equal(run.steps[0].kind, "reconcile_matches");
   assert.deepEqual(run.steps[0].proposalTargets, [pStrong]);
@@ -544,15 +582,28 @@ test("the reconcile step settles through the ordinary accept path (end-to-end)",
   const statuses = new Map(
     (
       await getDb()
-        .select({ id: matchProposalsTable.id, status: matchProposalsTable.status })
+        .select({
+          id: matchProposalsTable.id,
+          status: matchProposalsTable.status,
+        })
         .from(matchProposalsTable)
         .where(
-          inArray(matchProposalsTable.id, [pStrong, pSibling, pDupLine, pBill, pWeak]),
+          inArray(matchProposalsTable.id, [
+            pStrong,
+            pSibling,
+            pDupLine,
+            pBill,
+            pWeak,
+          ]),
         )
     ).map((r) => [r.id, r.status]),
   );
   assert.equal(statuses.get(pStrong), "accepted");
-  assert.equal(statuses.get(pSibling), "superseded", "one line settles one invoice");
+  assert.equal(
+    statuses.get(pSibling),
+    "superseded",
+    "one line settles one invoice",
+  );
   assert.equal(
     statuses.get(pDupLine),
     "proposed",
@@ -579,7 +630,12 @@ test("an approver who loses the OPTIONAL capability mid-run skips the step, neve
       issueDate: daysAgo(15),
       dueDate: null,
       lines: [
-        { description: "Services", quantity: "1", unitPrice: "500", vatRate: "0.075" },
+        {
+          description: "Services",
+          quantity: "1",
+          unitPrice: "500",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -597,7 +653,11 @@ test("an approver who loses the OPTIONAL capability mid-run skips the step, neve
       confidence: "0.9400",
     })
     .returning({ id: matchProposalsTable.id });
-  const run = await createPlanRunFromTemplate("month_end_close", clientX, principal);
+  const run = await createPlanRunFromTemplate(
+    "month_end_close",
+    clientX,
+    principal,
+  );
   assert.deepEqual(run.steps[0].proposalTargets, [pLate.id]);
   // Demote the approver to a client login: invoice.write survives,
   // reconciliation.act does not — creation would simply have omitted the
@@ -606,7 +666,10 @@ test("an approver who loses the OPTIONAL capability mid-run skips the step, neve
     .update(membershipsTable)
     .set({ role: "client_user", clientPartyId: clientX })
     .where(
-      and(eq(membershipsTable.userId, userId), eq(membershipsTable.firmId, firmId)),
+      and(
+        eq(membershipsTable.userId, userId),
+        eq(membershipsTable.firmId, firmId),
+      ),
     );
   try {
     await driveToTerminal(run.id);
@@ -624,7 +687,10 @@ test("an approver who loses the OPTIONAL capability mid-run skips the step, neve
       .update(membershipsTable)
       .set({ role: "firm_admin", clientPartyId: null })
       .where(
-        and(eq(membershipsTable.userId, userId), eq(membershipsTable.firmId, firmId)),
+        and(
+          eq(membershipsTable.userId, userId),
+          eq(membershipsTable.firmId, firmId),
+        ),
       );
   }
 });
@@ -644,6 +710,9 @@ test("every terminal template-run path signals the close pack (round 35)", () =>
 
 test("templates never outgrow the plan-step cap", () => {
   for (const t of Object.values(PLAN_TEMPLATES)) {
-    assert.ok(t.kinds.length <= MAX_PLAN_STEPS, `${t.title} exceeds MAX_PLAN_STEPS`);
+    assert.ok(
+      t.kinds.length <= MAX_PLAN_STEPS,
+      `${t.title} exceeds MAX_PLAN_STEPS`,
+    );
   }
 });

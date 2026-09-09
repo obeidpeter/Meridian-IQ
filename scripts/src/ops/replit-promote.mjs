@@ -51,7 +51,11 @@ function withManifestChecksum(env, root) {
     "pilot Publish needs release/build-manifest.json.sha256 beside the staged manifest (or RELEASE_MANIFEST_SHA256)",
   );
   const checksum = readFileSync(sidecar, "utf8").trim().split(/\s+/)[0] ?? "";
-  assert.match(checksum, /^[a-f0-9]{64}$/, "malformed manifest checksum sidecar");
+  assert.match(
+    checksum,
+    /^[a-f0-9]{64}$/,
+    "malformed manifest checksum sidecar",
+  );
   return { ...env, RELEASE_MANIFEST_SHA256: checksum };
 }
 
@@ -134,8 +138,7 @@ export function promoteReplit(
   const profile = releaseProfile(env);
   const manifest = stagedManifest(app, env, root);
   const state = app === "api-server" ? runtimeState(env) : undefined;
-  const mode =
-    app === "api-server" ? env.RELEASE_RECOVERY_MODE : undefined;
+  const mode = app === "api-server" ? env.RELEASE_RECOVERY_MODE : undefined;
   if (app === "api-server" && profile === "governed")
     logExecutionContext(maintenanceIdentity(manifest, env), env);
   if (
@@ -356,11 +359,7 @@ export async function startReplitService(app, env = process.env, root = ROOT) {
 export const startReplitApi = (env = process.env, root = ROOT) =>
   startReplitService("api-server", env, root);
 
-export function releaseEnvForCli(
-  extra,
-  env = process.env,
-  app = "api-server",
-) {
+export function releaseEnvForCli(extra, env = process.env, app = "api-server") {
   if (app !== "api-server") {
     assert.equal(
       extra.length,

@@ -8,7 +8,11 @@ import {
   invoicesTable,
   submissionAttemptsTable,
 } from "@workspace/db";
-import { draftVatCoverNote, templateVatNote, vatNoteFacts } from "./vat-note.ts";
+import {
+  draftVatCoverNote,
+  templateVatNote,
+  vatNoteFacts,
+} from "./vat-note.ts";
 import { computeVatPack } from "./vat-pack.ts";
 import { lagosMonthStart } from "./client-statement.ts";
 import {
@@ -83,9 +87,16 @@ test("clerk path phrases; invalid output and missing gateway fall back", async (
   );
   assert.equal(drafted.source, "clerk");
   assert.equal(drafted.note, `Phrased note ${SALT}`);
-  assert.ok(drafted.disclosure.includes("preparation aid"), "disclosure rides along");
+  assert.ok(
+    drafted.disclosure.includes("preparation aid"),
+    "disclosure rides along",
+  );
 
-  const invalid = await draftVatCoverNote(firmId, MONTH, fakeGateway(() => "not json"));
+  const invalid = await draftVatCoverNote(
+    firmId,
+    MONTH,
+    fakeGateway(() => "not json"),
+  );
   assert.equal(invalid.source, "template");
   assert.ok(invalid.note.length > 0);
 

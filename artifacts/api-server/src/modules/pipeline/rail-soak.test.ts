@@ -35,5 +35,8 @@ test("soak: 60 invoices, 4 workers, the seeded fault mix — every invariant hol
   assert.equal(report.stats.failed, report.stats.byScenario.reject);
   assert.ok(report.stats.retries > 0, "the mix produced retries");
   assert.ok(report.stats.recoveredStamps > 0, "the mix produced recoveries");
-  assert.ok(report.stats.stampedVia.rail_secondary > 0, "failover stamped on the secondary rail");
+  assert.ok(
+    report.stats.stampedVia.rail_secondary > 0,
+    "failover stamped on the secondary rail",
+  );
 });

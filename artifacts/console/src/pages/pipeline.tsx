@@ -67,7 +67,9 @@ export function Pipeline() {
   // A prospect moved to Active (or an Active card's button) opens the
   // client-book dialog prefilled with the prospect's name — the won lead
   // becomes a client without retyping it in the portfolio.
-  const [addClientFor, setAddClientFor] = useState<OnboardingProspect | null>(null);
+  const [addClientFor, setAddClientFor] = useState<OnboardingProspect | null>(
+    null,
+  );
   const [, navigate] = useLocation();
   // Per-card pending state: while a stage change is in flight the affected
   // Select keeps showing the chosen stage instead of snapping back, and only
@@ -117,7 +119,10 @@ export function Pipeline() {
     );
   };
 
-  const advanceStage = (p: OnboardingProspect, newStage: ProspectInputStage) => {
+  const advanceStage = (
+    p: OnboardingProspect,
+    newStage: ProspectInputStage,
+  ) => {
     setPendingMove({ id: p.id, stage: newStage });
     updateProspect.mutate(
       { id: p.id, data: { stage: newStage } },
@@ -157,7 +162,10 @@ export function Pipeline() {
       />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+          <h1
+            className="text-2xl md:text-3xl font-bold"
+            data-testid="text-page-title"
+          >
             Onboarding pipeline
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -200,7 +208,10 @@ export function Pipeline() {
                     value={stage}
                     onValueChange={(v) => setStage(v as ProspectInputStage)}
                   >
-                    <SelectTrigger id="p-stage" data-testid="select-prospect-stage">
+                    <SelectTrigger
+                      id="p-stage"
+                      data-testid="select-prospect-stage"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -317,7 +328,10 @@ export function Pipeline() {
                                 onClick={() => setAddClientFor(p)}
                                 data-testid={`button-add-to-clients-${p.id}`}
                               >
-                                <UserPlus className="w-4 h-4 mr-1.5" aria-hidden="true" />
+                                <UserPlus
+                                  className="w-4 h-4 mr-1.5"
+                                  aria-hidden="true"
+                                />
                                 Add to client book
                               </Button>
                             )}

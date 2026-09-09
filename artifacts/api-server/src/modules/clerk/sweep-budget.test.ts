@@ -26,7 +26,10 @@ test("the model-call budget is the provider client's own timeout", () => {
     "utf8",
   );
   // 60000 is written 60_000 in the client; compare the literal form.
-  const literal = MODEL_CALL_BUDGET_MS.toLocaleString("en-US").replace(/,/g, "_");
+  const literal = MODEL_CALL_BUDGET_MS.toLocaleString("en-US").replace(
+    /,/g,
+    "_",
+  );
   assert.ok(
     client.includes(`timeout: ${literal}`),
     `MODEL_CALL_BUDGET_MS (${literal}) must equal the model client's timeout`,
@@ -35,7 +38,10 @@ test("the model-call budget is the provider client's own timeout", () => {
 
 test("a generation budget leaves room for at least a few worst-case calls", () => {
   assert.ok(GENERATION_SWEEP_TIMEOUT_MS >= 4 * MODEL_CALL_BUDGET_MS);
-  assert.ok(GENERATION_SWEEP_TIMEOUT_MS > 120_000, "above the default sweep timeout");
+  assert.ok(
+    GENERATION_SWEEP_TIMEOUT_MS > 120_000,
+    "above the default sweep timeout",
+  );
 });
 
 test("the deadline is the budget less one worst-case call and the margin", () => {
@@ -45,7 +51,13 @@ test("the deadline is the budget less one worst-case call and the margin", () =>
   );
   const before = Date.now();
   const deadline = generationDeadline();
-  assert.ok(deadline >= before + GENERATION_SWEEP_TIMEOUT_MS - MODEL_CALL_BUDGET_MS - SLICE_MARGIN_MS);
+  assert.ok(
+    deadline >=
+      before +
+        GENERATION_SWEEP_TIMEOUT_MS -
+        MODEL_CALL_BUDGET_MS -
+        SLICE_MARGIN_MS,
+  );
 });
 
 test("a loop stops before its next model call once aborted or past the deadline", () => {

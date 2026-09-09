@@ -4,10 +4,7 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollRegion } from "@/components/scroll-region";
-import {
-  formatDateTime,
-  formatPct,
-} from "@/lib/format";
+import { formatDateTime, formatPct } from "@/lib/format";
 import {
   overrideRateClass,
   shapeExample,
@@ -46,13 +43,12 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  For approved cases, how often operators KEPT the model's
-                  value at each confidence band (
-                  {metrics.calibration.sampleFields} compared fields).
-                  Well-calibrated extraction keeps the two columns close; a
-                  band where kept-rate falls far below the confidence says
-                  the review-flagging threshold is trusting numbers it
-                  shouldn't.
+                  For approved cases, how often operators KEPT the model's value
+                  at each confidence band ({metrics.calibration.sampleFields}{" "}
+                  compared fields). Well-calibrated extraction keeps the two
+                  columns close; a band where kept-rate falls far below the
+                  confidence says the review-flagging threshold is trusting
+                  numbers it shouldn't.
                 </p>
                 <ScrollRegion label="Confidence calibration table">
                   <table
@@ -178,64 +174,58 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
             </CardContent>
           </Card>
 
-          {metrics.correctionShapes &&
-            metrics.correctionShapes.length > 0 && (
-              <Card data-testid="section-correction-shapes">
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Correction shapes
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    What KIND of mistake each override was — recurring
-                    correction patterns from the same exhaust, with an
-                    example of the change operators made.
-                  </p>
-                  <ScrollRegion label="Correction shapes table">
-                    <table
-                      className="w-full text-sm"
-                      data-testid="table-correction-shapes"
-                    >
-                      <thead>
-                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                          <th className="py-2 pr-3 font-medium">Field</th>
-                          <th className="py-2 pr-3 font-medium">Shape</th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Count
-                          </th>
-                          <th className="py-2 font-medium">Example</th>
+          {metrics.correctionShapes && metrics.correctionShapes.length > 0 && (
+            <Card data-testid="section-correction-shapes">
+              <CardHeader>
+                <CardTitle className="text-base">Correction shapes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  What KIND of mistake each override was — recurring correction
+                  patterns from the same exhaust, with an example of the change
+                  operators made.
+                </p>
+                <ScrollRegion label="Correction shapes table">
+                  <table
+                    className="w-full text-sm"
+                    data-testid="table-correction-shapes"
+                  >
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Field</th>
+                        <th className="py-2 pr-3 font-medium">Shape</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Count
+                        </th>
+                        <th className="py-2 font-medium">Example</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.correctionShapes.map((s) => (
+                        <tr
+                          key={`${s.field}-${s.shape}`}
+                          data-testid={`row-correction-shape-${s.field}-${s.shape}`}
+                        >
+                          <td className="py-2 pr-3">
+                            <code className="text-xs">{s.field}</code>
+                          </td>
+                          <td className="py-2 pr-3">
+                            {s.shape.replace(/_/g, " ")}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {s.count}
+                          </td>
+                          <td className="py-2 text-xs text-muted-foreground">
+                            {shapeExample(s.exampleExtracted, s.exampleFinal)}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {metrics.correctionShapes.map((s) => (
-                          <tr
-                            key={`${s.field}-${s.shape}`}
-                            data-testid={`row-correction-shape-${s.field}-${s.shape}`}
-                          >
-                            <td className="py-2 pr-3">
-                              <code className="text-xs">{s.field}</code>
-                            </td>
-                            <td className="py-2 pr-3">
-                              {s.shape.replace(/_/g, " ")}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {s.count}
-                            </td>
-                            <td className="py-2 text-xs text-muted-foreground">
-                              {shapeExample(
-                                s.exampleExtracted,
-                                s.exampleFinal,
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </ScrollRegion>
-                </CardContent>
-              </Card>
-            )}
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollRegion>
+              </CardContent>
+            </Card>
+          )}
 
           <Card data-testid="section-supplier-accuracy">
             <CardHeader>
@@ -281,10 +271,7 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
                     </thead>
                     <tbody className="divide-y">
                       {metrics.supplierAccuracy.map((s, i) => (
-                        <tr
-                          key={i}
-                          data-testid={`row-supplier-accuracy-${i}`}
-                        >
+                        <tr key={i} data-testid={`row-supplier-accuracy-${i}`}>
                           <td className="py-2 pr-3">{s.supplierName}</td>
                           <td className="py-2 pr-3 text-muted-foreground">
                             {s.firmName ?? "—"}
@@ -321,9 +308,9 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  From the corrections exhaust — the share of compared
-                  fields operators KEPT unchanged when approving, by month.
-                  Pure SQL, no model involved in the judgment.
+                  From the corrections exhaust — the share of compared fields
+                  operators KEPT unchanged when approving, by month. Pure SQL,
+                  no model involved in the judgment.
                 </p>
                 <ScrollRegion label="Kept-rate by month table">
                   <table
@@ -344,9 +331,7 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
                     <tbody className="divide-y">
                       {(metrics.keptRateTrend ?? []).map((m) => (
                         <tr key={m.month}>
-                          <td className="py-2 pr-3 tabular-nums">
-                            {m.month}
-                          </td>
+                          <td className="py-2 pr-3 tabular-nums">{m.month}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">
                             {m.fields}
                           </td>

@@ -138,9 +138,7 @@ export async function computeAdoptionReport(
       fieldsKept: Number(r.kept),
       keptRate: rate(Number(r.kept), Number(r.fields)),
       avgReviewMinutes:
-        r.avg_minutes != null
-          ? Number(Number(r.avg_minutes).toFixed(1))
-          : null,
+        r.avg_minutes != null ? Number(Number(r.avg_minutes).toFixed(1)) : null,
       lastApprovedAt: r.last_approved,
     })),
   };

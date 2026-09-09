@@ -356,9 +356,7 @@ export interface DecisionResult {
   settlementEventId: string | null;
 }
 
-async function loadProposal(
-  proposalId: string,
-): Promise<{
+async function loadProposal(proposalId: string): Promise<{
   proposal: MatchProposal;
   line: BankStatementLine;
   statement: BankStatement;

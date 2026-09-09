@@ -51,8 +51,8 @@ describe("deliveryDetail", () => {
   });
 
   test("a detail-less non-failed row humanizes its status", () => {
-    expect(
-      deliveryDetail(result({ status: "skipped", detail: null })),
-    ).toBe("Skipped");
+    expect(deliveryDetail(result({ status: "skipped", detail: null }))).toBe(
+      "Skipped",
+    );
   });
 });

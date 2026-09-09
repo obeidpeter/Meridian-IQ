@@ -14,10 +14,7 @@ import {
   rasterizePdfScan,
 } from "../clerk/cases";
 import { docScanUserContent, fenceUntrusted } from "../clerk/prompts";
-import {
-  GENERIC_CSV_FORMAT_KEY,
-  renderGenericStatementCsv,
-} from "./parsers";
+import { GENERIC_CSV_FORMAT_KEY, renderGenericStatementCsv } from "./parsers";
 
 // Scanned bank-statement intake. Clients hand their accountant PDF statements
 // far more often than CSV exports; instead of rejecting them, ONE model call
@@ -91,7 +88,13 @@ const STATEMENT_JSON_SCHEMA: Record<string, unknown> = {
           amount: { type: "string" },
           direction: { type: "string", enum: ["credit", "debit"] },
         },
-        required: ["valueDate", "narration", "reference", "amount", "direction"],
+        required: [
+          "valueDate",
+          "narration",
+          "reference",
+          "amount",
+          "direction",
+        ],
       },
     },
   },
@@ -181,17 +184,19 @@ export async function proposeStatementLinesFromPdf(
   }
 
   gateway ??= await getClerkGateway();
-  const result = await gateway.infer<z.infer<typeof statementExtractionSchema>>({
-    purpose: "extract_statement",
-    firmId,
-    promptVersion: STATEMENT_EXTRACT_PROMPT_VERSION,
-    system: STATEMENT_SYSTEM,
-    user,
-    schemaName: "statement_line_extraction",
-    jsonSchema: STATEMENT_JSON_SCHEMA,
-    validator: statementExtractionSchema,
-    inputForHash,
-  });
+  const result = await gateway.infer<z.infer<typeof statementExtractionSchema>>(
+    {
+      purpose: "extract_statement",
+      firmId,
+      promptVersion: STATEMENT_EXTRACT_PROMPT_VERSION,
+      system: STATEMENT_SYSTEM,
+      user,
+      schemaName: "statement_line_extraction",
+      jsonSchema: STATEMENT_JSON_SCHEMA,
+      validator: statementExtractionSchema,
+      inputForHash,
+    },
+  );
   if (!result.ok) {
     // Fail closed: invalid output is discarded, provider errors (including
     // the gateway's budget backstop, should a parallel burst race past the

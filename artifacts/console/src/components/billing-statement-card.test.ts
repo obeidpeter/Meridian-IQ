@@ -25,23 +25,39 @@ describe("billingCardState", () => {
   test("hidden until the first statement loads — the initial render-on-success gate", () => {
     // Initial fetch in flight: nothing to show yet.
     expect(
-      billingCardState({ hasStatement: false, isError: false, isFetching: true }),
+      billingCardState({
+        hasStatement: false,
+        isError: false,
+        isFetching: true,
+      }),
     ).toBe("hidden");
     // Initial fetch failed (403/404): the section stays away entirely.
     expect(
-      billingCardState({ hasStatement: false, isError: true, isFetching: false }),
+      billingCardState({
+        hasStatement: false,
+        isError: true,
+        isFetching: false,
+      }),
     ).toBe("hidden");
   });
 
   test("a month switch keeps the card mounted with a loading hint", () => {
     expect(
-      billingCardState({ hasStatement: true, isError: false, isFetching: true }),
+      billingCardState({
+        hasStatement: true,
+        isError: false,
+        isFetching: true,
+      }),
     ).toBe("loading");
   });
 
   test("a failed month fetch shows an inline error, never a vanished card", () => {
     expect(
-      billingCardState({ hasStatement: true, isError: true, isFetching: false }),
+      billingCardState({
+        hasStatement: true,
+        isError: true,
+        isFetching: false,
+      }),
     ).toBe("error");
     // Even while the retry is in flight the card reports the error state —
     // the held statement stays on screen underneath.
@@ -52,7 +68,11 @@ describe("billingCardState", () => {
 
   test("a settled successful fetch renders the data plainly", () => {
     expect(
-      billingCardState({ hasStatement: true, isError: false, isFetching: false }),
+      billingCardState({
+        hasStatement: true,
+        isError: false,
+        isFetching: false,
+      }),
     ).toBe("data");
   });
 });
@@ -71,7 +91,9 @@ describe("monthCsvFilename", () => {
   });
 });
 
-const tier = (over: Partial<BillingStatementTier> = {}): BillingStatementTier => ({
+const tier = (
+  over: Partial<BillingStatementTier> = {},
+): BillingStatementTier => ({
   key: "growth",
   name: "Growth",
   monthlyPrice: "50000",
@@ -92,9 +114,9 @@ describe("tierSummary", () => {
 
   test("mentions the Clerk token allowance only when the tier sets one", () => {
     expect(tierSummary(tier())).not.toContain("Clerk tokens");
-    expect(
-      tierSummary(tier({ clerkMonthlyTokens: 2_000_000 })),
-    ).toContain("Clerk tokens/month");
+    expect(tierSummary(tier({ clerkMonthlyTokens: 2_000_000 }))).toContain(
+      "Clerk tokens/month",
+    );
   });
 });
 
@@ -125,7 +147,9 @@ describe("clerkUsageLine", () => {
 });
 
 describe("overageLine", () => {
-  const fee = (over: Partial<BillingStatementFee> = {}): BillingStatementFee => ({
+  const fee = (
+    over: Partial<BillingStatementFee> = {},
+  ): BillingStatementFee => ({
     base: "50000",
     overageInvoices: 0,
     overage: "0",

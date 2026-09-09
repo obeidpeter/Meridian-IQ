@@ -76,8 +76,7 @@ describe("useGlobalShortcuts", () => {
     const first = vi.fn();
     const second = vi.fn();
     const { rerender } = renderHook(
-      ({ run }: { run: () => void }) =>
-        useGlobalShortcuts([{ key: "n", run }]),
+      ({ run }: { run: () => void }) => useGlobalShortcuts([{ key: "n", run }]),
       { initialProps: { run: first } },
     );
     rerender({ run: second });

@@ -85,14 +85,18 @@ function titleFor(templateKey: string): string {
 // ledger carries no recipient identity for its role. The isUuid guard covers
 // the dev-header shim (a non-uuid userId like "dev-user" owns no rows and
 // must not error the uuid-column comparison).
-function recipientIdentityFor(
-  principal: Principal,
-):
-  | { column: typeof messagesTable.recipientPartyId | typeof messagesTable.recipientUserId; value: string }
-  | null {
+function recipientIdentityFor(principal: Principal): {
+  column:
+    | typeof messagesTable.recipientPartyId
+    | typeof messagesTable.recipientUserId;
+  value: string;
+} | null {
   if (principal.role === "client_user") {
     return principal.clientPartyId && isUuid(principal.clientPartyId)
-      ? { column: messagesTable.recipientPartyId, value: principal.clientPartyId }
+      ? {
+          column: messagesTable.recipientPartyId,
+          value: principal.clientPartyId,
+        }
       : null;
   }
   if (principal.role === "firm_admin" || principal.role === "firm_staff") {
@@ -107,7 +111,10 @@ function recipientIdentityFor(
   }
   if (principal.role === "buyer_user") {
     return principal.buyerPartyId && isUuid(principal.buyerPartyId)
-      ? { column: messagesTable.recipientPartyId, value: principal.buyerPartyId }
+      ? {
+          column: messagesTable.recipientPartyId,
+          value: principal.buyerPartyId,
+        }
       : null;
   }
   return null;

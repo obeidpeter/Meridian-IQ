@@ -4,12 +4,7 @@
 // server refuses pdfBase64 with commit:true), and editing the inputs drops
 // the held preview so a stale proposedCsv can never commit.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  cleanup,
-  fireEvent,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithClient } from "../test-utils";
 import type {
   BankStatement,
@@ -123,9 +118,7 @@ function pdfPreview(
 const renderPage = () => renderWithClient(<Reconciliation />);
 
 async function loadPdf(container: HTMLElement) {
-  const input = container.querySelector<HTMLInputElement>(
-    'input[type="file"]',
-  );
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]');
   expect(input).toBeTruthy();
   // Node's File, not jsdom's: fileToBase64 needs File#arrayBuffer, which
   // jsdom does not implement.
@@ -159,9 +152,9 @@ describe("scanned-statement preview → commit", () => {
     expect(harness.importCalls[0].csv).toBeUndefined();
 
     // Banner copy is truthful: the previewed rows ARE the commit.
-    expect(
-      screen.getByTestId("banner-scanned-preview").textContent,
-    ).toContain("exactly what will be committed");
+    expect(screen.getByTestId("banner-scanned-preview").textContent).toContain(
+      "exactly what will be committed",
+    );
 
     // Commit: the held proposedCsv goes back as csv, formatKey unchanged.
     harness.importResult = pdfPreview({
@@ -169,9 +162,7 @@ describe("scanned-statement preview → commit", () => {
       statementId: "st-1",
       proposedCsv: null,
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: /commit statement/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /commit statement/i }));
     await waitFor(() => expect(harness.importCalls).toHaveLength(2));
     const commitBody = harness.importCalls[1];
     expect(commitBody.commit).toBe(true);
@@ -319,7 +310,9 @@ function midBandProposal(
   };
 }
 
-function statementLine(over: Partial<BankStatementLine> = {}): BankStatementLine {
+function statementLine(
+  over: Partial<BankStatementLine> = {},
+): BankStatementLine {
   return {
     id: "ln-1",
     statementId: "st-1",
@@ -338,7 +331,9 @@ function statementLine(over: Partial<BankStatementLine> = {}): BankStatementLine
   };
 }
 
-const suggestion = (over: Partial<NonNullable<BankStatementLine["narrationSuggestion"]>> = {}) => ({
+const suggestion = (
+  over: Partial<NonNullable<BankStatementLine["narrationSuggestion"]>> = {},
+) => ({
   proposalId: "p-1" as string | null,
   invoiceId: "inv-1" as string | null,
   cue: "exact_reference" as string | null,
@@ -518,7 +513,11 @@ describe("narration match lane (render)", () => {
     harness.statements = [reconciledStatement()];
     harness.proposals = [
       midBandProposal(),
-      midBandProposal({ id: "p-2", invoiceId: "inv-2", invoiceNumber: "INV-002" }),
+      midBandProposal({
+        id: "p-2",
+        invoiceId: "inv-2",
+        invoiceNumber: "INV-002",
+      }),
     ];
     harness.lines = [statementLine({ narrationSuggestion: suggestion() })];
     await selectStatement();

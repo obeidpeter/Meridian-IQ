@@ -189,7 +189,9 @@ export async function computeCatalogueCoverage(): Promise<CatalogueCoverageRepor
     codedRejections: coded,
     mappedAttempts: Number(agg?.mapped ?? 0),
     mappedShare:
-      coded > 0 ? Math.round((Number(agg?.mapped ?? 0) / coded) * 10000) / 10000 : null,
+      coded > 0
+        ? Math.round((Number(agg?.mapped ?? 0) / coded) * 10000) / 10000
+        : null,
     uncodedRejections: Number(agg?.uncoded ?? 0),
     distinctCodes: Number(agg?.distinct_codes ?? 0),
     mappedCodes: Number(agg?.mapped_codes ?? 0),
@@ -202,11 +204,14 @@ export async function computeCatalogueCoverage(): Promise<CatalogueCoverageRepor
           ? round1(judged.reduce((s, r) => s + r.daysToMap, 0) / judged.length)
           : null,
       maxDaysToMap:
-        judged.length > 0 ? round1(Math.max(...judged.map((r) => r.daysToMap))) : null,
+        judged.length > 0
+          ? round1(Math.max(...judged.map((r) => r.daysToMap)))
+          : null,
       withinOneDayShare:
         judged.length > 0
           ? Math.round(
-              (judged.filter((r) => r.daysToMap <= 1).length / judged.length) * 10000,
+              (judged.filter((r) => r.daysToMap <= 1).length / judged.length) *
+                10000,
             ) / 10000
           : null,
       proactive,

@@ -1,12 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import {
-  getDb,
-  firmsTable,
-  partiesTable,
-  invoicesTable,
-} from "@workspace/db";
+import { getDb, firmsTable, partiesTable, invoicesTable } from "@workspace/db";
 import type { Principal } from "../auth/rbac.ts";
 import {
   chaserFacts,
@@ -172,7 +167,9 @@ test("only an outstanding receivable can be chased; tenancy is enforced", async 
     (err: Error & { code?: string }) => err.code === "NOT_CHASEABLE",
   );
   // A sibling client of the same firm is walled off (SEC-03).
-  await assert.rejects(draftPaymentChaser(outstandingId, siblingPrincipal, null));
+  await assert.rejects(
+    draftPaymentChaser(outstandingId, siblingPrincipal, null),
+  );
   await assert.rejects(
     draftPaymentChaser(randomUUID(), clientPrincipal, null),
     (err: Error & { code?: string }) => err.code === "NOT_FOUND",

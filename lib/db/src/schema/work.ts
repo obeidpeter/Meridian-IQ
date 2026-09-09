@@ -59,15 +59,8 @@ export const workItemsTable = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("work_items_firm_request_uq").on(
-      t.firmId,
-      t.clientRequestId,
-    ),
-    index("work_items_firm_status_due_idx").on(
-      t.firmId,
-      t.status,
-      t.dueAt,
-    ),
+    uniqueIndex("work_items_firm_request_uq").on(t.firmId, t.clientRequestId),
+    index("work_items_firm_status_due_idx").on(t.firmId, t.status, t.dueAt),
     index("work_items_client_status_idx").on(t.clientPartyId, t.status),
     index("work_items_assignee_status_idx").on(t.assignedTo, t.status),
   ],
@@ -103,10 +96,7 @@ export const workItemCommentsTable = pgTable(
       t.workItemId,
       t.clientRequestId,
     ),
-    index("work_item_comments_item_created_idx").on(
-      t.workItemId,
-      t.createdAt,
-    ),
+    index("work_item_comments_item_created_idx").on(t.workItemId, t.createdAt),
     index("work_item_comments_firm_idx").on(t.firmId),
   ],
 );

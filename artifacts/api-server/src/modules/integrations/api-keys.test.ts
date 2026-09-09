@@ -106,8 +106,17 @@ test("mint returns the secret once and stores only its sha256", async () => {
 
 test("mint rejects capabilities outside the machine allowlist", async () => {
   const base = await listen(appFor(admin, integrationsRouter));
-  for (const forbidden of ["clerk.use", "identity.write", "billing.write", "invoice.submit", "nonsense"]) {
-    const { status } = await mint(base, `Bad ${SALT}`, ["invoice.read", forbidden]);
+  for (const forbidden of [
+    "clerk.use",
+    "identity.write",
+    "billing.write",
+    "invoice.submit",
+    "nonsense",
+  ]) {
+    const { status } = await mint(base, `Bad ${SALT}`, [
+      "invoice.read",
+      forbidden,
+    ]);
     assert.equal(status, 400, `capability ${forbidden} must be rejected`);
   }
 });
@@ -120,7 +129,9 @@ test("management surface is firm_admin only (staff and machine principals are re
   // A machine principal (capabilities override, synthetic role) can never
   // mint more credentials — the explicit role gate excludes it.
   const adminBase = await listen(appFor(admin, integrationsRouter));
-  const { body } = await mint(adminBase, `Self-mint probe ${SALT}`, ["invoice.read"]);
+  const { body } = await mint(adminBase, `Self-mint probe ${SALT}`, [
+    "invoice.read",
+  ]);
   const machine = await resolveApiKeyPrincipal(body.secret);
   assert.ok(machine);
   const machineBase = await listen(appFor(machine, integrationsRouter));
@@ -134,7 +145,10 @@ test("management surface is firm_admin only (staff and machine principals are re
 
 test("resolveApiKeyPrincipal: accept, reject wrong secret, reject revoked", async () => {
   const base = await listen(appFor(admin, integrationsRouter));
-  const { body } = await mint(base, `Resolver ${SALT}`, ["invoice.read", "statement.write"]);
+  const { body } = await mint(base, `Resolver ${SALT}`, [
+    "invoice.read",
+    "statement.write",
+  ]);
 
   const principal = await resolveApiKeyPrincipal(body.secret);
   assert.ok(principal, "valid key must resolve");
@@ -236,7 +250,9 @@ test("list is firm-scoped and newest first", async () => {
   assert.equal(res.status, 200);
   const rows = (await res.json()) as { name: string; keyPrefix: string }[];
   const names = rows.map((r) => r.name);
-  assert.ok(names.includes(`B first ${SALT}`) && names.includes(`B second ${SALT}`));
+  assert.ok(
+    names.includes(`B first ${SALT}`) && names.includes(`B second ${SALT}`),
+  );
   assert.ok(
     names.indexOf(`B second ${SALT}`) < names.indexOf(`B first ${SALT}`),
     "newest first",
@@ -249,27 +265,40 @@ test("list is firm-scoped and newest first", async () => {
 
 test("RLS: a firm principal sees only its own keys at the data layer", async () => {
   // Real policy exercise (rls-isolation posture): meridian_app role + firm GUC.
-  const seenByA = await runRequestContext({ bypass: false, firmId: firmA }, () =>
-    getDb().select({ id: firmApiKeysTable.id, firmId: firmApiKeysTable.firmId }).from(firmApiKeysTable),
+  const seenByA = await runRequestContext(
+    { bypass: false, firmId: firmA },
+    () =>
+      getDb()
+        .select({ id: firmApiKeysTable.id, firmId: firmApiKeysTable.firmId })
+        .from(firmApiKeysTable),
   );
   assert.ok(seenByA.length > 0, "firm A sees its own keys");
   assert.ok(seenByA.every((r) => r.firmId === firmA));
 
-  const seenByB = await runRequestContext({ bypass: false, firmId: firmB }, () =>
-    getDb().select({ firmId: firmApiKeysTable.firmId }).from(firmApiKeysTable),
+  const seenByB = await runRequestContext(
+    { bypass: false, firmId: firmB },
+    () =>
+      getDb()
+        .select({ firmId: firmApiKeysTable.firmId })
+        .from(firmApiKeysTable),
   );
-  assert.ok(seenByB.every((r) => r.firmId === firmB), "firm B never sees firm A rows");
+  assert.ok(
+    seenByB.every((r) => r.firmId === firmB),
+    "firm B never sees firm A rows",
+  );
 
   // WITH CHECK: firm A cannot insert a key into firm B.
   await assert.rejects(
     runRequestContext({ bypass: false, firmId: firmA }, () =>
-      getDb().insert(firmApiKeysTable).values({
-        firmId: firmB,
-        name: `cross-write ${SALT}`,
-        capabilities: ["invoice.read"],
-        keyPrefix: "mk_ffffff",
-        secretHash: sha256Hex("nope"),
-      }),
+      getDb()
+        .insert(firmApiKeysTable)
+        .values({
+          firmId: firmB,
+          name: `cross-write ${SALT}`,
+          capabilities: ["invoice.read"],
+          keyPrefix: "mk_ffffff",
+          secretHash: sha256Hex("nope"),
+        }),
     ),
   );
 });

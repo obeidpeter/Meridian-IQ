@@ -53,8 +53,9 @@ async function checkShell(
   // label the shell carries, not whether this viewport shows it.
   check(
     `${label}: header role reads "${roleText}"`,
-    ((await page.getByTestId("text-role-context").textContent()) ?? "").trim() ===
-      roleText,
+    (
+      (await page.getByTestId("text-role-context").textContent()) ?? ""
+    ).trim() === roleText,
   );
   if (homeTestId) {
     check(
@@ -344,7 +345,8 @@ async function journeyOwnerConsent(page, BASE, check) {
     '[data-testid="button-grant-2"], [data-testid="button-revoke-2"]',
     { timeout: 10000 },
   );
-  const startedGranted = (await page.getByTestId("button-revoke-2").count()) > 0;
+  const startedGranted =
+    (await page.getByTestId("button-revoke-2").count()) > 0;
   const grant = async () => {
     await page.getByTestId("button-grant-2").click();
     await page.waitForSelector('[data-testid="button-revoke-2"]', {
@@ -397,15 +399,24 @@ async function journeyFirstLandingConsent(page, BASE, check) {
         .count()) === 0,
     );
     const cont = page.getByTestId("button-consent-continue");
-    check("consent step: Continue waits for both answers", await cont.isDisabled());
+    check(
+      "consent step: Continue waits for both answers",
+      await cont.isDisabled(),
+    );
     await page.getByTestId("button-consent-allow-1").click();
     await page.getByTestId("button-consent-decline-2").click();
-    check("consent step: Continue enables once both are answered", await cont.isEnabled());
+    check(
+      "consent step: Continue enables once both are answered",
+      await cont.isEnabled(),
+    );
     await cont.click();
     await page.waitForSelector('[data-testid="nav-today"]', { timeout: 15000 });
   }
   const after = await (await page.request.get(BASE + "/api/me")).json();
-  check("consent captured: /me reports the decision", after.consentCaptured === true);
+  check(
+    "consent captured: /me reports the decision",
+    after.consentCaptured === true,
+  );
   const records = await (
     await page.request.get(BASE + `/api/parties/${after.clientPartyId}/consent`)
   ).json();
@@ -413,13 +424,19 @@ async function journeyFirstLandingConsent(page, BASE, check) {
   check(
     "consent ledger holds one first_landing event per layer (grant 1, decline 2)",
     firstLanding.some((r) => r.layer === 1 && r.action === "grant") &&
-      firstLanding.some((r) => r.layer === 2 && r.action === "revoke" && r.basis === "declined"),
+      firstLanding.some(
+        (r) => r.layer === 2 && r.action === "revoke" && r.basis === "declined",
+      ),
   );
   await page.goto(BASE + "/app/consent", { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="consent-layer-2"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="consent-layer-2"]', {
+    timeout: 10000,
+  });
   check(
     "consent page reads the first-landing decline as Declined, not Revoked",
-    (await page.locator('[data-testid="consent-layer-2"]').innerText()).includes("Declined"),
+    (
+      await page.locator('[data-testid="consent-layer-2"]').innerText()
+    ).includes("Declined"),
   );
   // Reloading the workspace must not re-prompt: the decision is on the ledger.
   await page.goto(BASE + "/app", { waitUntil: "networkidle" });
@@ -441,7 +458,9 @@ async function journeyFirstLandingConsent(page, BASE, check) {
   check(
     "Open vault lands on the Stamped shelf of the invoice list",
     page.url().includes("filter=stamped") &&
-      (await page.getByTestId("filter-invoices-stamped").getAttribute("aria-pressed")) === "true",
+      (await page
+        .getByTestId("filter-invoices-stamped")
+        .getAttribute("aria-pressed")) === "true",
   );
   await signOutFromApp(page, BASE);
 }
@@ -455,7 +474,9 @@ const KANO = "cb000002-0000-4000-8000-0000000000b2";
 const PHARMA = "cb000003-0000-4000-8000-0000000000b3";
 async function journeyClientAssignment(page, BASE, check) {
   await apiLogin(page, BASE, "demo.admin@valo.example");
-  const team = await (await page.request.get(BASE + "/api/console/team")).json();
+  const team = await (
+    await page.request.get(BASE + "/api/console/team")
+  ).json();
   const staff = team.find((m) => m.email === "demo.staff@valo.example");
   const admin = team.find((m) => m.email === "demo.admin@valo.example");
   check("firm team lists the demo admin and staff", !!staff && !!admin);
@@ -479,12 +500,21 @@ async function journeyClientAssignment(page, BASE, check) {
     "firm admin assigns clients — status 200",
     kano.status() === 200 && pharma.status() === 200,
   );
-  const outsider = await assign(KANO, [staff.userId, "00000000-0000-4000-8000-000000000000"]);
-  check("an assignee outside the firm is refused — status 400", outsider.status() === 400);
+  const outsider = await assign(KANO, [
+    staff.userId,
+    "00000000-0000-4000-8000-000000000000",
+  ]);
+  check(
+    "an assignee outside the firm is refused — status 400",
+    outsider.status() === 400,
+  );
   // Staff may read the register but not write it.
   await apiLogin(page, BASE, "demo.staff@valo.example");
   const staffWrite = await assign(KANO, []);
-  check("staff cannot rewrite assignments — status 403", staffWrite.status() === 403);
+  check(
+    "staff cannot rewrite assignments — status 403",
+    staffWrite.status() === 403,
+  );
   await apiLogout(page, BASE);
 
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
@@ -496,24 +526,39 @@ async function journeyClientAssignment(page, BASE, check) {
   });
   check(
     "assigned staff land on My clients by default",
-    (await page.getByTestId("button-client-scope-mine").first().getAttribute("aria-pressed")) === "true",
+    (await page
+      .getByTestId("button-client-scope-mine")
+      .first()
+      .getAttribute("aria-pressed")) === "true",
   );
-  await page.waitForSelector(`[data-testid="row-client-${KANO}"]`, { timeout: 15000 });
+  await page.waitForSelector(`[data-testid="row-client-${KANO}"]`, {
+    timeout: 15000,
+  });
   check(
     "My clients hides a client assigned only to someone else",
     (await page.locator(`[data-testid="row-client-${PHARMA}"]`).count()) === 0,
   );
   await checkPageAccessibility(page, check, "portfolio, My clients");
   await page.getByTestId("button-client-scope-all").last().click();
-  await page.waitForSelector(`[data-testid="row-client-${PHARMA}"]`, { timeout: 10000 });
+  await page.waitForSelector(`[data-testid="row-client-${PHARMA}"]`, {
+    timeout: 10000,
+  });
   check("All clients restores the whole book", true);
   // Access is unchanged: the hidden client still opens by URL, and shows its team.
-  await page.goto(BASE + `/console/clients/${PHARMA}`, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="card-client-team"]', { timeout: 15000 });
+  await page.goto(BASE + `/console/clients/${PHARMA}`, {
+    waitUntil: "networkidle",
+  });
+  await page.waitForSelector('[data-testid="card-client-team"]', {
+    timeout: 15000,
+  });
   check(
     "assignment never narrows access: staff opens an unassigned-to-them client",
-    (await page.getByTestId("text-client-name").innerText()).includes("Niger Delta Pharma") &&
-      (await page.locator(`[data-testid="text-assignee-${admin.userId}"]`).count()) === 1,
+    (await page.getByTestId("text-client-name").innerText()).includes(
+      "Niger Delta Pharma",
+    ) &&
+      (await page
+        .locator(`[data-testid="text-assignee-${admin.userId}"]`)
+        .count()) === 1,
   );
   await signOutFromApp(page, BASE);
 
@@ -521,18 +566,30 @@ async function journeyClientAssignment(page, BASE, check) {
   // the Team card links straight into the invitation form with the client
   // role and this party preselected (cognitive walkthrough W-1).
   await signIn(page, BASE, "button-demo-demo.admin", "**/console/**");
-  await page.goto(BASE + `/console/clients/${PHARMA}`, { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid="link-invite-client-login"]', { timeout: 15000 });
-  const inviteHref = await page.getByTestId("link-invite-client-login").getAttribute("href");
+  await page.goto(BASE + `/console/clients/${PHARMA}`, {
+    waitUntil: "networkidle",
+  });
+  await page.waitForSelector('[data-testid="link-invite-client-login"]', {
+    timeout: 15000,
+  });
+  const inviteHref = await page
+    .getByTestId("link-invite-client-login")
+    .getAttribute("href");
   check(
     "client page offers an invite-a-client-login link scoped to that client",
-    (inviteHref ?? "").endsWith(`/invitations?role=client_user&clientPartyId=${PHARMA}`),
+    (inviteHref ?? "").endsWith(
+      `/invitations?role=client_user&clientPartyId=${PHARMA}`,
+    ),
   );
   await page.getByTestId("link-invite-client-login").click();
-  await page.waitForSelector('[data-testid="select-client"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="select-client"]', {
+    timeout: 15000,
+  });
   check(
     "invitation form opens on the client role with that client preselected",
-    (await page.getByTestId("select-client").innerText()).includes("Niger Delta Pharma"),
+    (await page.getByTestId("select-client").innerText()).includes(
+      "Niger Delta Pharma",
+    ),
   );
   await signOutFromApp(page, BASE);
 }
@@ -560,24 +617,37 @@ async function journeyAccessReview(page, BASE, check) {
   );
   check(
     "access register lists the firm's members with roles",
-    !!staff && staff.role === "firm_staff" && !!admin && admin.role === "firm_admin",
+    !!staff &&
+      staff.role === "firm_staff" &&
+      !!admin &&
+      admin.role === "firm_admin",
   );
   check(
     "access register shows the admin's sign-in and the staff assignment",
     !!admin.lastSignInAt &&
-      (await page.getByTestId(`text-member-clients-${staff.userId}`).innerText()).includes(
-        "Kano Textiles",
-      ),
+      (
+        await page
+          .getByTestId(`text-member-clients-${staff.userId}`)
+          .innerText()
+      ).includes("Kano Textiles"),
   );
   const stale = await page.request.post(
     BASE + "/api/console/access-register/attest",
     { data: { hash: "not-the-register" }, headers: CSRF },
   );
-  check("attesting a stale register hash is refused — status 409", stale.status() === 409);
+  check(
+    "attesting a stale register hash is refused — status 409",
+    stale.status() === 409,
+  );
   const attestButton = page.getByTestId("button-attest-access");
-  check("attest button is armed before the first review", await attestButton.isEnabled());
+  check(
+    "attest button is armed before the first review",
+    await attestButton.isEnabled(),
+  );
   await attestButton.click();
-  await page.waitForSelector("text=Attested — nothing changed", { timeout: 10000 });
+  await page.waitForSelector("text=Attested — nothing changed", {
+    timeout: 10000,
+  });
   const after = await (
     await page.request.get(BASE + "/api/console/access-register")
   ).json();
@@ -589,7 +659,8 @@ async function journeyAccessReview(page, BASE, check) {
   const csv = await page.request.get(BASE + "/api/console/access-register/csv");
   check(
     "access register downloads as CSV",
-    csv.status() === 200 && (await csv.text()).includes("demo.staff@valo.example"),
+    csv.status() === 200 &&
+      (await csv.text()).includes("demo.staff@valo.example"),
   );
   await signOutFromApp(page, BASE);
 }
@@ -602,11 +673,18 @@ async function journeyAccessReview(page, BASE, check) {
 async function journeyPipeline(page, BASE, check) {
   await signIn(page, BASE, "button-demo-demo.admin", "**/console/**");
   await page.goto(BASE + "/console/pipeline", { waitUntil: "networkidle" });
-  await page.waitForSelector('[data-testid^="card-prospect-"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid^="card-prospect-"]', {
+    timeout: 15000,
+  });
   const card = page
-    .locator('[data-testid^="card-prospect-"]', { hasText: "Port Harcourt Oil Services" })
+    .locator('[data-testid^="card-prospect-"]', {
+      hasText: "Port Harcourt Oil Services",
+    })
     .first();
-  const id = (await card.getAttribute("data-testid")).replace("card-prospect-", "");
+  const id = (await card.getAttribute("data-testid")).replace(
+    "card-prospect-",
+    "",
+  );
   check(
     "pipeline cards show the prospect's contact email",
     (await page.getByTestId(`text-prospect-email-${id}`).innerText()).includes(
@@ -615,7 +693,9 @@ async function journeyPipeline(page, BASE, check) {
   );
   await page.getByTestId(`select-stage-${id}`).click();
   await page.getByRole("option", { name: "Active" }).click();
-  await page.waitForSelector('[data-testid="input-add-client-name"]', { timeout: 15000 });
+  await page.waitForSelector('[data-testid="input-add-client-name"]', {
+    timeout: 15000,
+  });
   check(
     "moving a prospect to Active opens the client-book dialog prefilled with its name",
     (await page.getByTestId("input-add-client-name").inputValue()) ===
@@ -626,7 +706,9 @@ async function journeyPipeline(page, BASE, check) {
     state: "detached",
     timeout: 10000,
   });
-  await page.waitForSelector(`[data-testid="button-add-to-clients-${id}"]`, { timeout: 15000 });
+  await page.waitForSelector(`[data-testid="button-add-to-clients-${id}"]`, {
+    timeout: 15000,
+  });
   check("an Active prospect card offers Add to client book", true);
   await signOutFromApp(page, BASE);
 }
@@ -671,7 +753,8 @@ async function journeyTotp(page, BASE, check) {
   await page.getByTestId("button-footer-switch-account").click();
   check(
     "signed-in portal footer switches account by focusing sign-out",
-    (await page.evaluate(() => globalThis.document?.activeElement?.id)) === "sign-out",
+    (await page.evaluate(() => globalThis.document?.activeElement?.id)) ===
+      "sign-out",
   );
 
   // Enable: secret, otpauth URI and the 8 recovery codes are shown once.

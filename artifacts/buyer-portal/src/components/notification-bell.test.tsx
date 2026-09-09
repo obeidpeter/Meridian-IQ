@@ -253,9 +253,7 @@ describe("NotificationBell", () => {
     // and no second GET is needed.
     expect(byTestId("badge-notification-count")).toBeNull();
     expect(byTestId("button-mark-all-read")).toBeNull();
-    expect(
-      harness.calls.filter((c) => c.method === "GET").length,
-    ).toBe(1);
+    expect(harness.calls.filter((c) => c.method === "GET").length).toBe(1);
   });
 
   test("mark all read is offered only while something is unread", async () => {
@@ -299,9 +297,7 @@ describe("NotificationBell", () => {
     await click(bell());
     expect(byTestId("popover-notifications")).not.toBeNull();
     await act(async () => {
-      document.body.dispatchEvent(
-        new Event("pointerdown", { bubbles: true }),
-      );
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     });
     expect(byTestId("popover-notifications")).toBeNull();
   });

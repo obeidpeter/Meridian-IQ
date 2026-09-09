@@ -156,15 +156,51 @@ before(async () => {
     },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: supplier, type: "readiness_assessment", title: "bulk A" },
-    { firmId, clientPartyId: supplierBatch, type: "readiness_assessment", title: "bulk C" },
-    { firmId, clientPartyId: supplierNoConsent, type: "readiness_assessment", title: "bulk B" },
-    { firmId: firmApprovalId, clientPartyId: supplierApproval, type: "readiness_assessment", title: "bulk D" },
-    { firmId, clientPartyId: supplierOp, type: "readiness_assessment", title: "bulk E" },
-    { firmId, clientPartyId: supplierDeadline, type: "readiness_assessment", title: "bulk F" },
+    {
+      firmId,
+      clientPartyId: supplier,
+      type: "readiness_assessment",
+      title: "bulk A",
+    },
+    {
+      firmId,
+      clientPartyId: supplierBatch,
+      type: "readiness_assessment",
+      title: "bulk C",
+    },
+    {
+      firmId,
+      clientPartyId: supplierNoConsent,
+      type: "readiness_assessment",
+      title: "bulk B",
+    },
+    {
+      firmId: firmApprovalId,
+      clientPartyId: supplierApproval,
+      type: "readiness_assessment",
+      title: "bulk D",
+    },
+    {
+      firmId,
+      clientPartyId: supplierOp,
+      type: "readiness_assessment",
+      title: "bulk E",
+    },
+    {
+      firmId,
+      clientPartyId: supplierDeadline,
+      type: "readiness_assessment",
+      title: "bulk F",
+    },
   ]);
   // Layer-1 compliance consent for the submitting suppliers only.
-  for (const partyId of [supplier, supplierBatch, supplierApproval, supplierOp, supplierDeadline]) {
+  for (const partyId of [
+    supplier,
+    supplierBatch,
+    supplierApproval,
+    supplierOp,
+    supplierDeadline,
+  ]) {
     await grantComplianceConsent(partyId, userId);
   }
 });
@@ -253,7 +289,11 @@ test("the batch is bounded and reports what remains, oldest first", async () => 
   assert.equal(second.remaining, 0);
 
   const third = await bulkSubmit(supplierBatch, firmId, userId);
-  assert.equal(third.total, 0, "an empty queue is an empty batch, not an error");
+  assert.equal(
+    third.total,
+    0,
+    "an empty queue is an empty batch, not an error",
+  );
 });
 
 test("a supplier without layer-1 consent is refused up front", async () => {
@@ -335,12 +375,26 @@ test("the deadline stops the batch between items; untouched rows stay pending", 
   let call = 0;
   const clock = () => ticks[Math.min(call++, ticks.length - 1)];
 
-  const first = await bulkSubmit(supplierDeadline, firmId, userId, undefined, clock);
+  const first = await bulkSubmit(
+    supplierDeadline,
+    firmId,
+    userId,
+    undefined,
+    clock,
+  );
   assert.equal(first.total, 1, "only the first item was attempted");
   assert.equal(first.submittedCount, 1);
   assert.equal(first.rows[0]?.invoiceId, a.invoice.id);
-  assert.equal(first.failedCount, 0, "untouched rows are NOT reported as failures");
-  assert.equal(first.remaining, 2, "the honest pending count covers the untouched rows");
+  assert.equal(
+    first.failedCount,
+    0,
+    "untouched rows are NOT reported as failures",
+  );
+  assert.equal(
+    first.remaining,
+    2,
+    "the honest pending count covers the untouched rows",
+  );
 
   // The completed item stayed committed; a re-run with the real clock drains
   // the rest in the same oldest-first order.
@@ -356,7 +410,11 @@ test("the deadline stops the batch between items; untouched rows stay pending", 
     .select({ status: invoicesTable.status })
     .from(invoicesTable)
     .where(eq(invoicesTable.id, a.invoice.id));
-  assert.equal(aRow.status, "submitted", "the pre-deadline item stayed committed");
+  assert.equal(
+    aRow.status,
+    "submitted",
+    "the pre-deadline item stayed committed",
+  );
 });
 
 // Cross-tenant staff carry firmId null (route: tenantFirmId(principal) is

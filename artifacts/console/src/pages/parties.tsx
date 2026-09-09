@@ -72,7 +72,10 @@ export function normalizeName(name: string): string {
   // instead of silently vanishing or colliding on the one shared word.
   const raw = name
     .toLowerCase()
-    .replace(/\b(ltd|limited|plc|inc|co|company|group|enterprises|enterprise|ventures|and|the|of)\b/g, " ")
+    .replace(
+      /\b(ltd|limited|plc|inc|co|company|group|enterprises|enterprise|ventures|and|the|of)\b/g,
+      " ",
+    )
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
   const meaningful = [
@@ -123,7 +126,9 @@ export function findDuplicateGroups(parties: Party[]): DupGroup[] {
     // names say — suggesting that merge is noise that teaches operators to
     // ignore the card. A name group only stands when at most one distinct
     // TIN is present (the untinned rows are the plausible duplicates).
-    const tins = new Set(list.map((p) => p.tin).filter((t): t is string => !!t));
+    const tins = new Set(
+      list.map((p) => p.tin).filter((t): t is string => !!t),
+    );
     if (tins.size > 1) continue;
     groups.push({ key: `name:${key}`, reason: "similar name", parties: list });
   }
@@ -178,10 +183,7 @@ export function Parties() {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   useEffect(() => {
-    const handle = setTimeout(
-      () => setQ(search.trim()),
-      SEARCH_DEBOUNCE_MS,
-    );
+    const handle = setTimeout(() => setQ(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [search]);
 
@@ -189,7 +191,9 @@ export function Parties() {
   // full page means the sphere is larger than one read and the tiles below
   // describe the first PARTY_PAGE parties — the notice says so, and search
   // narrows the set.
-  const params: ListPartiesParams = q ? { q, limit: PARTY_PAGE } : { limit: PARTY_PAGE };
+  const params: ListPartiesParams = q
+    ? { q, limit: PARTY_PAGE }
+    : { limit: PARTY_PAGE };
   const {
     data: parties,
     isLoading,
@@ -299,8 +303,8 @@ export function Parties() {
           Party integrity
         </h1>
         <p className="text-muted-foreground mt-1">
-          Duplicate resolution with preserved lineage, and TIN-validation
-          status — clean parties are the fraud layer's raw material.
+          Duplicate resolution with preserved lineage, and TIN-validation status
+          — clean parties are the fraud layer's raw material.
         </p>
       </div>
 
@@ -370,8 +374,8 @@ export function Parties() {
               data-testid="text-party-page-truncated"
             >
               Showing the first {PARTY_PAGE} parties by legal name — the tiles
-              and duplicate groups below cover this page only. Search by name
-              or TIN to narrow the set.
+              and duplicate groups below cover this page only. Search by name or
+              TIN to narrow the set.
             </p>
           )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -405,8 +409,8 @@ export function Parties() {
           <Card data-testid="card-duplicates">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <GitMerge className="w-4 h-4 text-primary" aria-hidden="true" /> Duplicate
-                candidates
+                <GitMerge className="w-4 h-4 text-primary" aria-hidden="true" />{" "}
+                Duplicate candidates
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -452,7 +456,8 @@ export function Parties() {
                         }}
                         data-testid={`button-merge-${group.key}`}
                       >
-                        <GitMerge className="w-4 h-4 mr-1" aria-hidden="true" /> Merge
+                        <GitMerge className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
+                        Merge
                       </Button>
                     </div>
                   ))}
@@ -464,7 +469,11 @@ export function Parties() {
           <Card data-testid="card-tin-status">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Fingerprint className="w-4 h-4 text-primary" aria-hidden="true" /> TIN validation
+                <Fingerprint
+                  className="w-4 h-4 text-primary"
+                  aria-hidden="true"
+                />{" "}
+                TIN validation
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -511,7 +520,8 @@ export function Parties() {
             <Card data-testid="card-merge-lineage">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Undo2 className="w-4 h-4 text-primary" aria-hidden="true" /> Merge lineage
+                  <Undo2 className="w-4 h-4 text-primary" aria-hidden="true" />{" "}
+                  Merge lineage
                 </CardTitle>
               </CardHeader>
               <CardContent className="divide-y">
@@ -629,8 +639,7 @@ export function Parties() {
               {splitCandidate?.legalName ?? "This party"} becomes a live,
               separate party again — records currently folded into{" "}
               {nameOf(splitCandidate?.mergedIntoId)} stop counting as one
-              counterparty, which changes duplicate detection and fraud
-              signals.
+              counterparty, which changes duplicate detection and fraud signals.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

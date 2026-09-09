@@ -960,5 +960,9 @@ registerSweep(
       );
     }
   },
-  { critical: false, acceptsSignal: true, timeoutMs: GENERATION_SWEEP_TIMEOUT_MS },
+  {
+    critical: false,
+    acceptsSignal: true,
+    timeoutMs: GENERATION_SWEEP_TIMEOUT_MS,
+  },
 );

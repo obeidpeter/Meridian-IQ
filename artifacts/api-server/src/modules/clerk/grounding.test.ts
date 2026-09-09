@@ -73,10 +73,9 @@ test("an invented or mangled numeral is a violation", () => {
     ["50000"],
   );
   // A typo'd digit grouping is a DIFFERENT number, not a formatting choice.
-  assert.deepEqual(
-    numberGroundingViolations("NGN 45,0000 is due.", facts),
-    ["450000"],
-  );
+  assert.deepEqual(numberGroundingViolations("NGN 45,0000 is due.", facts), [
+    "450000",
+  ]);
   // Words are not checked — spelled-out numbers carry no false precision.
   assert.deepEqual(
     numberGroundingViolations("About forty-five thousand naira.", facts),
@@ -97,10 +96,7 @@ test("sign flips and non-ASCII digits are violations; ranges and dates are not",
     ["-45000"],
   );
   // Interior hyphens still split dates/ranges — no false negatives.
-  assert.deepEqual(
-    numberGroundingViolations("Due in 2026-06.", facts),
-    [],
-  );
+  assert.deepEqual(numberGroundingViolations("Due in 2026-06.", facts), []);
   // Fullwidth digits fold under NFKC and compare by value…
   assert.deepEqual(
     numberGroundingViolations("Total ４５０００ naira.", facts),
@@ -108,10 +104,9 @@ test("sign flips and non-ASCII digits are violations; ranges and dates are not",
   );
   // …while any other digit script is a violation outright — the fact
   // builders never produce one.
-  assert.deepEqual(
-    numberGroundingViolations("Total ٤٥٠٠٠ naira.", facts),
-    ["non-ascii-digit"],
-  );
+  assert.deepEqual(numberGroundingViolations("Total ٤٥٠٠٠ naira.", facts), [
+    "non-ascii-digit",
+  ]);
 });
 
 before(async () => {
@@ -124,11 +119,21 @@ after(async () => {
 test("ensureGrounded records one pointer-only audit event per violating output", async () => {
   const surface = `test_surface_${SALT}`;
   assert.equal(
-    await ensureGrounded(surface, null, "All 3 invoices accepted.", "Invoices: 3"),
+    await ensureGrounded(
+      surface,
+      null,
+      "All 3 invoices accepted.",
+      "Invoices: 3",
+    ),
     true,
   );
   assert.equal(
-    await ensureGrounded(surface, null, "All 4 invoices accepted.", "Invoices: 3"),
+    await ensureGrounded(
+      surface,
+      null,
+      "All 4 invoices accepted.",
+      "Invoices: 3",
+    ),
     false,
   );
   const rows = await getDb()

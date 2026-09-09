@@ -50,7 +50,10 @@ export interface MissingBillAlert {
 export function missingBillAlertFor(
   bills: HistoryRow[],
   todayLagos: string,
-): Omit<MissingBillAlert, "supplierPartyId" | "supplierName" | "currency"> | null {
+): Omit<
+  MissingBillAlert,
+  "supplierPartyId" | "supplierName" | "currency"
+> | null {
   return patternAlertFor(bills, todayLagos);
 }
 
@@ -71,9 +74,7 @@ export function ngnRankFor(
 ): number {
   const face = Number(medianAmount);
   if (currency === "NGN") return face;
-  return latestFxRate !== null && latestFxRate > 0
-    ? face * latestFxRate
-    : face;
+  return latestFxRate !== null && latestFxRate > 0 ? face * latestFxRate : face;
 }
 
 // One client's captured-bill history per vendor over the trailing year,
@@ -191,7 +192,11 @@ export async function listMissingRecurringBills(
           currency: entry.currency,
           ...alert,
         },
-        ngnRank: ngnRankFor(alert.medianAmount, entry.currency, entry.latestFxRate),
+        ngnRank: ngnRankFor(
+          alert.medianAmount,
+          entry.currency,
+          entry.latestFxRate,
+        ),
       });
     }
   }

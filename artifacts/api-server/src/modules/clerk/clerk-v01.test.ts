@@ -82,7 +82,9 @@ test("voice intake transcribes, extracts, and keeps only the transcript", async 
 
   // The transcription itself is ledgered like any other model call, keyed by
   // the hash of the audio payload — success recorded with transcript length.
-  const audioHash = sha256(Buffer.from(FAKE_AUDIO, "base64").toString("base64"));
+  const audioHash = sha256(
+    Buffer.from(FAKE_AUDIO, "base64").toString("base64"),
+  );
   const ledger = await getDb()
     .select()
     .from(clerkInferenceCallsTable)
@@ -141,7 +143,12 @@ test("empty transcripts are rejected, not extracted from", async () => {
 test("voice source requires audioBase64", async () => {
   const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   await assert.rejects(
-    createExtractionCase({ sourceType: "voice" }, actorId, gateway, async () => "x"),
+    createExtractionCase(
+      { sourceType: "voice" },
+      actorId,
+      gateway,
+      async () => "x",
+    ),
     isDomainError("BAD_UPLOAD"),
   );
 });
@@ -150,7 +157,10 @@ test("metrics aggregate cases and the inference ledger", async () => {
   // Guarantee at least one extraction case and its ledger rows exist.
   const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   await createExtractionCase(
-    { sourceType: "text", text: `Invoice INV-88 to someone, NGN 100 ${RUN_SALT}` },
+    {
+      sourceType: "text",
+      text: `Invoice INV-88 to someone, NGN 100 ${RUN_SALT}`,
+    },
     actorId,
     gateway,
   );

@@ -90,7 +90,11 @@ CREATE POLICY meridian_tenant_isolation ON ${t.table}
 ).join("\n")}
 `;
 
-const ALL_TABLES = [...FIRM_TABLES, "firms", ...PARTY_SCOPED.map((t) => t.table)];
+const ALL_TABLES = [
+  ...FIRM_TABLES,
+  "firms",
+  ...PARTY_SCOPED.map((t) => t.table),
+];
 
 const down = `
 ${ALL_TABLES.map(

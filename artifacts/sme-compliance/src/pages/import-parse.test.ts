@@ -82,11 +82,7 @@ describe("parseCsv", () => {
 
   test("skips blank / whitespace-only lines and keeps rowNumber contiguous", () => {
     const csv =
-      "invoiceNumber,quantity\n" +
-      "\n" +
-      "INV-1,1\n" +
-      "   \n" +
-      "INV-2,2\n";
+      "invoiceNumber,quantity\n" + "\n" + "INV-1,1\n" + "   \n" + "INV-2,2\n";
     const rows = parseCsv(csv);
     expect(rows.map((r) => r.invoiceNumber)).toEqual(["INV-1", "INV-2"]);
     // First surviving data row is rowNumber 1, not 2 — blanks were filtered
@@ -95,8 +91,7 @@ describe("parseCsv", () => {
   });
 
   test("trims the header names and each cell value", () => {
-    const csv =
-      "  invoiceNumber , buyerName \n" + "  INV-9  ,  Ada Traders  ";
+    const csv = "  invoiceNumber , buyerName \n" + "  INV-9  ,  Ada Traders  ";
     const rows = parseCsv(csv);
     expect(rows[0].invoiceNumber).toBe("INV-9");
     expect(rows[0].buyerName).toBe("Ada Traders");

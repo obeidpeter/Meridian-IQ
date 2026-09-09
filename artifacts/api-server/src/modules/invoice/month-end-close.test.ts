@@ -35,13 +35,29 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `MC Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `MC Client ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `MC Client ${SALT}`,
+    },
     { id: cleanParty, type: "client_business", legalName: `MC Clean ${SALT}` },
     { id: buyer, type: "buyer", legalName: `MC Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", status: "open", title: `mc A ${SALT}` },
-    { firmId, clientPartyId: cleanParty, type: "retainer", status: "open", title: `mc B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      status: "open",
+      title: `mc A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: cleanParty,
+      type: "retainer",
+      status: "open",
+      title: `mc B ${SALT}`,
+    },
   ]);
   // One overdue draft — exactly one item should need attention.
   await db.insert(invoicesTable).values({
@@ -94,7 +110,11 @@ test("one overdue draft turns exactly one line to attention", async () => {
 
 test("a clean client reads all clear, and scope holds", async () => {
   const close = await computeMonthEndClose(firmId, cleanParty);
-  assert.equal(close.attentionCount, 0, "the sibling's overdue paper stays out");
+  assert.equal(
+    close.attentionCount,
+    0,
+    "the sibling's overdue paper stays out",
+  );
   for (const item of close.items) assert.equal(item.status, "clear");
 });
 
@@ -143,15 +163,17 @@ test("an awaiting-note withholding credit turns the wht line (scope holds)", asy
     .select({ id: invoicesTable.id })
     .from(invoicesTable)
     .where(eq(invoicesTable.invoiceNumber, `MC-OD-${SALT}`));
-  await getDb().insert(whtCreditsTable).values({
-    firmId,
-    clientPartyId: clientParty,
-    invoiceId: invoice.id,
-    category: "services_5",
-    amount: "2325.58",
-    deductedDate: daysAgo(5),
-    source: "manual",
-  });
+  await getDb()
+    .insert(whtCreditsTable)
+    .values({
+      firmId,
+      clientPartyId: clientParty,
+      invoiceId: invoice.id,
+      category: "services_5",
+      amount: "2325.58",
+      deductedDate: daysAgo(5),
+      source: "manual",
+    });
 
   const close = await computeMonthEndClose(firmId, clientParty);
   const line = close.items.find((i) => i.key === "wht_credits");

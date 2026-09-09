@@ -9,10 +9,7 @@ import { DomainError } from "../../modules/errors";
 // The SEC-03 invoice tenancy loader, shared by every /invoices/:id group in
 // this directory and with the SME escalation routes (routes/sme/escalations.ts): one
 // definition of "this principal may reach this invoice".
-export async function loadForTenant(
-  req: { principal: Principal },
-  id: string,
-) {
+export async function loadForTenant(req: { principal: Principal }, id: string) {
   const bundle = await getInvoiceWithLines(id);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertSameTenant(req.principal, bundle.invoice.firmId);

@@ -96,7 +96,10 @@ function pluralDays(n: number): string {
 }
 
 /** Compute a wave's live status from the current date. */
-export function waveStatus(wave: ComplianceWave, now: Date = new Date()): WaveStatusInfo {
+export function waveStatus(
+  wave: ComplianceWave,
+  now: Date = new Date(),
+): WaveStatusInfo {
   const onboardingBy = parseIsoDate(wave.onboardingBy);
   const enforcementFrom = parseIsoDate(wave.enforcementFrom);
 

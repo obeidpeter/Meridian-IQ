@@ -38,8 +38,16 @@ describe("sortVatPositionRows", () => {
 
   test("equal net positions fall back to the client name", () => {
     const sorted = sortVatPositionRows([
-      row({ clientPartyId: "cp-z", clientName: "Zenith Retail", netVat: "80.00" }),
-      row({ clientPartyId: "cp-a", clientName: "Adaeze Foods", netVat: "80.00" }),
+      row({
+        clientPartyId: "cp-z",
+        clientName: "Zenith Retail",
+        netVat: "80.00",
+      }),
+      row({
+        clientPartyId: "cp-a",
+        clientName: "Adaeze Foods",
+        netVat: "80.00",
+      }),
     ]);
     expect(sorted.map((r) => r.clientPartyId)).toEqual(["cp-a", "cp-z"]);
   });

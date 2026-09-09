@@ -112,7 +112,11 @@ async function makeNoticeCase(
         : JSON.stringify(output),
   );
   return createExtractionCase(
-    { sourceType: "text", text: `Notice ${name} ${SALT}`, documentKind: "notice" },
+    {
+      sourceType: "text",
+      text: `Notice ${name} ${SALT}`,
+      documentKind: "notice",
+    },
     operatorId,
     gateway,
   );
@@ -142,7 +146,9 @@ function approval(
 }
 
 // Build a ClerkNoticeExtraction directly for the pure pre-flight unit tests.
-function nx(values: Partial<Record<NoticeField, string | null>>): ClerkNoticeExtraction {
+function nx(
+  values: Partial<Record<NoticeField, string | null>>,
+): ClerkNoticeExtraction {
   const base: Record<NoticeField, string | null> = {
     referenceNumber: "FIRS/REF/1",
     authority: "FIRS",
@@ -212,8 +218,16 @@ test("notice capture creates a kind-notice case: normalized proposal, clean pref
   const kase = await makeNoticeCase("clean-capture");
   assert.equal(kase.kind, "notice");
   assert.equal(kase.status, "extracted");
-  assert.equal(kase.extraction, null, "the invoice proposal column stays empty");
-  assert.deepEqual(kase.preflight, [], "a clean reading has no pre-flight issues");
+  assert.equal(
+    kase.extraction,
+    null,
+    "the invoice proposal column stays empty",
+  );
+  assert.deepEqual(
+    kase.preflight,
+    [],
+    "a clean reading has no pre-flight issues",
+  );
 
   const ne = kase.noticeExtraction;
   assert.ok(ne, "the notice proposal is stored");
@@ -257,9 +271,19 @@ test("a weak or missing CRITICAL field is flagged; non-critical gaps are not", a
       taxType: { value: null },
     }),
   );
-  const byField = new Map(kase.noticeExtraction!.fields.map((f) => [f.field, f]));
-  assert.equal(byField.get("authority")!.flagged, true, "low-confidence critical");
-  assert.equal(byField.get("referenceNumber")!.flagged, true, "missing critical");
+  const byField = new Map(
+    kase.noticeExtraction!.fields.map((f) => [f.field, f]),
+  );
+  assert.equal(
+    byField.get("authority")!.flagged,
+    true,
+    "low-confidence critical",
+  );
+  assert.equal(
+    byField.get("referenceNumber")!.flagged,
+    true,
+    "missing critical",
+  );
   assert.equal(
     byField.get("taxType")!.flagged,
     false,
@@ -278,13 +302,21 @@ test("fail-closed: invalid output escalates (discarded), provider error fails", 
   const notJson = await makeNoticeCase("invalid-json", "this is not json");
   assert.equal(notJson.status, "escalated");
   assert.ok(notJson.failReason);
-  assert.equal(notJson.noticeExtraction, null, "discarded output is never stored");
+  assert.equal(
+    notJson.noticeExtraction,
+    null,
+    "discarded output is never stored",
+  );
 
   const badSchema = await makeNoticeCase(
     "bad-schema",
     JSON.stringify({ noticeType: "love_letter", fields: [] }),
   );
-  assert.equal(badSchema.status, "escalated", "a type outside the closed catalogue is discarded");
+  assert.equal(
+    badSchema.status,
+    "escalated",
+    "a type outside the closed catalogue is discarded",
+  );
 
   const errored = await makeNoticeCase("provider-error", () => {
     throw new Error("upstream 500");
@@ -343,7 +375,11 @@ test("the duplicate guard is kind-agnostic: the same content as invoice then not
 });
 
 test("noticePreflightChecks: missing criticals, past due (advisory), date order, bad amount", () => {
-  assert.deepEqual(noticePreflightChecks(nx({})), [], "clean reading, no issues");
+  assert.deepEqual(
+    noticePreflightChecks(nx({})),
+    [],
+    "clean reading, no issues",
+  );
 
   const missing = noticePreflightChecks(nx({ referenceNumber: null }));
   assert.equal(missing.length, 1);
@@ -356,7 +392,9 @@ test("noticePreflightChecks: missing criticals, past due (advisory), date order,
     "whitespace-only counts as missing",
   );
 
-  const past = noticePreflightChecks(nx({ responseDueDate: lagosDateOffset(-3) }));
+  const past = noticePreflightChecks(
+    nx({ responseDueDate: lagosDateOffset(-3) }),
+  );
   assert.equal(past.length, 1);
   assert.equal(past[0].field, "responseDueDate");
   assert.equal(
@@ -369,9 +407,15 @@ test("noticePreflightChecks: missing criticals, past due (advisory), date order,
   const malformed = noticePreflightChecks(nx({ responseDueDate: "next week" }));
   assert.equal(malformed.length, 1);
   assert.equal(malformed[0].field, "responseDueDate");
-  assert.equal(malformed[0].severity, undefined, "malformed due date is blocking");
+  assert.equal(
+    malformed[0].severity,
+    undefined,
+    "malformed due date is blocking",
+  );
 
-  const impossible = noticePreflightChecks(nx({ responseDueDate: "2026-02-31" }));
+  const impossible = noticePreflightChecks(
+    nx({ responseDueDate: "2026-02-31" }),
+  );
   assert.ok(
     impossible.some((i) => i.field === "responseDueDate" && !i.severity),
     "well-formed-but-impossible dates are malformed",
@@ -397,7 +441,11 @@ test("approve creates the obligation and records corrections (incl. changed fiel
   assert.equal(result.case.decisionAction, "approve");
   assert.equal(result.case.decidedBy, operatorId);
   assert.equal(result.case.firmId, firmId);
-  assert.equal(result.case.createdInvoiceId, null, "a notice NEVER creates an invoice");
+  assert.equal(
+    result.case.createdInvoiceId,
+    null,
+    "a notice NEVER creates an invoice",
+  );
 
   const ob = result.obligation;
   assert.ok(ob, "the approve result carries the obligation");
@@ -480,11 +528,19 @@ test("approve without confirmed values names every missing field", async () => {
 test("malformed confirmed values are a clean 400, never a row", async () => {
   const kase = await makeNoticeCase("invalid-values");
   await assert.rejects(
-    decideNoticeCase(kase.id, approval({ responseDueDate: "31/12/2026" }), operatorId),
+    decideNoticeCase(
+      kase.id,
+      approval({ responseDueDate: "31/12/2026" }),
+      operatorId,
+    ),
     isDomainError("DECISION_INVALID", 400),
   );
   await assert.rejects(
-    decideNoticeCase(kase.id, approval({ issueDate: "2026-02-31" }), operatorId),
+    decideNoticeCase(
+      kase.id,
+      approval({ issueDate: "2026-02-31" }),
+      operatorId,
+    ),
     isDomainError("DECISION_INVALID", 400),
   );
   await assert.rejects(
@@ -683,7 +739,11 @@ test("retry on a failed notice case re-runs the NOTICE lane", async () => {
 
   // A successfully extracted notice case is not retryable.
   await assert.rejects(
-    retryExtraction(updated.id, operatorId, fakeGateway(() => "{}")),
+    retryExtraction(
+      updated.id,
+      operatorId,
+      fakeGateway(() => "{}"),
+    ),
     isDomainError("CASE_BAD_STATE", 409),
   );
 });
@@ -709,6 +769,10 @@ test("the stuck-pending watchdog covers the notice lane", async () => {
     .select()
     .from(clerkCasesTable)
     .where(eq(clerkCasesTable.id, stuck.id));
-  assert.equal(flipped.status, "failed", "a stranded notice case fails out too");
+  assert.equal(
+    flipped.status,
+    "failed",
+    "a stranded notice case fails out too",
+  );
   assert.match(flipped.failReason ?? "", /never completed/);
 });

@@ -33,7 +33,9 @@ const invoiceId = randomUUID();
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `Catalogue Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Catalogue Firm ${SALT}` });
   await db.insert(partiesTable).values({
     id: partyId,
     type: "client_business",
@@ -79,7 +81,11 @@ test("drafts a catalogue entry grounded in the observed rejections", async () =>
   });
   const draft = await draftCatalogueEntryWithClerk(CODE, gateway);
   assert.equal(draft.code, CODE);
-  assert.equal(draft.sampleCount, 2, "both observed rejections ground the draft");
+  assert.equal(
+    draft.sampleCount,
+    2,
+    "both observed rejections ground the draft",
+  );
   assert.equal(draft.retriable, false);
   assert.match(draft.cause, /TIN/);
   // The raw payloads travel to the model fenced as untrusted data.
@@ -147,10 +153,10 @@ test("computeCalibration folds confidence bands against the corrections exhaust"
   const result = computeCalibration([
     // High-confidence field kept; low-confidence field overridden — the
     // calibrated pattern.
-    kase(
-      [field("invoiceNumber", 0.95), field("issueDate", 0.3)],
-      { invoiceNumber: false, issueDate: true },
-    ),
+    kase([field("invoiceNumber", 0.95), field("issueDate", 0.3)], {
+      invoiceNumber: false,
+      issueDate: true,
+    }),
     // High-confidence field overridden: drags the top band's keptRate down.
     kase([field("invoiceNumber", 0.9)], { invoiceNumber: true }),
     // Line corrections are excluded from calibration.

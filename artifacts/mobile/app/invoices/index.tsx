@@ -314,7 +314,9 @@ export default function InvoiceListScreen() {
                         </AppText>
                         <Badge
                           label={r.outcome === "invalid" ? "Invalid" : "Failed"}
-                          tone={r.outcome === "invalid" ? "warning" : "critical"}
+                          tone={
+                            r.outcome === "invalid" ? "warning" : "critical"
+                          }
                         />
                       </View>
                       <AppText

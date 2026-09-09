@@ -118,9 +118,7 @@ router.post(
 // capability.
 router.get("/clerk/automation-rollup", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
-  const rollup = await computeAutomationRollup(
-    requireFirmScope(req.principal),
-  );
+  const rollup = await computeAutomationRollup(requireFirmScope(req.principal));
   res.json(GetAutomationRollupResponse.parse(rollup));
 });
 

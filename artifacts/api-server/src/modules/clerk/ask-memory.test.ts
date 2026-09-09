@@ -22,10 +22,7 @@ import {
   computeAskMemory,
 } from "./ask-memory.ts";
 import { indexMemoryBatch, MEMORY_FLAG_KEY } from "./memory.ts";
-import {
-  restoreClerkFlag,
-  saveAndEnableClerkFlag,
-} from "./test-support.ts";
+import { restoreClerkFlag, saveAndEnableClerkFlag } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Retrieval-augmented Ask (round 47): the memory note. Pinned invariants:
@@ -193,11 +190,7 @@ test("firm asker: similarity-ranked pointer items, capped, firm-funded query emb
   assert.ok(memory, "a similar past question yields a note");
   assert.equal(memory.title, ASK_MEMORY_TITLE);
   assert.ok(memory.items.length <= ASK_MEMORY_MAX_ITEMS);
-  assert.equal(
-    memory.items[0].caseId,
-    vatCase,
-    "closest question ranks first",
-  );
+  assert.equal(memory.items[0].caseId, vatCase, "closest question ranks first");
   assert.ok(memory.items[0].question.includes("VAT position"));
   assert.ok(memory.items[0].askedAt.length > 0);
   // Below-floor questions (payroll, orthogonal) never pad the list.
@@ -288,11 +281,7 @@ test("a refused question is never cited — even when legacy-indexed", async () 
     memory.items.every((i) => i.caseId !== refusedCase),
     "a refusal is no precedent",
   );
-  assert.equal(
-    memory.items[0].caseId,
-    vatCase,
-    "the top ANSWERED match leads",
-  );
+  assert.equal(memory.items[0].caseId, vatCase, "the top ANSWERED match leads");
 });
 
 test("rail dark: no note, no embed call", async () => {
@@ -418,7 +407,9 @@ test("a closed-month brief surfaces as an advisory_brief item; SEC-03 pins it to
   });
   assert.ok(owner);
   assert.ok(
-    owner.items.some((i) => i.caseId === briefId && i.kind === "advisory_brief"),
+    owner.items.some(
+      (i) => i.caseId === briefId && i.kind === "advisory_brief",
+    ),
     "the client's own brief surfaces",
   );
 
@@ -433,8 +424,7 @@ test("a closed-month brief surfaces as an advisory_brief item; SEC-03 pins it to
     embedder,
   });
   assert.ok(
-    !partyless ||
-      partyless.items.every((i) => i.kind !== "advisory_brief"),
+    !partyless || partyless.items.every((i) => i.kind !== "advisory_brief"),
     "no party, no brief items",
   );
 });

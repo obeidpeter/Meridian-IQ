@@ -633,8 +633,8 @@ export default function App() {
                   htmlFor="advisor-consent"
                   className="text-sm leading-5 text-muted-foreground"
                 >
-                  Valo may use my email, business name, and estimate to
-                  contact me about this review.
+                  Valo may use my email, business name, and estimate to contact
+                  me about this review.
                 </label>
               </div>
 
@@ -797,11 +797,10 @@ export default function App() {
         <section className="mt-12 rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
           <h2 className="text-base font-semibold">How this is calculated</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            The monetary constants below are Valo planning assumptions,
-            not an official tariff. They are deliberately shown so an advisor
-            can replace them with the current authoritative amounts when
-            reviewing your circumstances. Basis last reviewed{" "}
-            {MODEL_BASIS_REVIEWED}.
+            The monetary constants below are Valo planning assumptions, not an
+            official tariff. They are deliberately shown so an advisor can
+            replace them with the current authoritative amounts when reviewing
+            your circumstances. Basis last reviewed {MODEL_BASIS_REVIEWED}.
           </p>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>

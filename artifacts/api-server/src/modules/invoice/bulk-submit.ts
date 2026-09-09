@@ -132,12 +132,10 @@ export async function bulkSubmit(
       ? await firmSubmitApprovalRequired(firmId)
       : null;
 
-    const [{ pending }] = (
-      await getDb()
-        .select({ pending: sql<number>`count(*)::int` })
-        .from(invoicesTable)
-        .where(and(...conditions))
-    ) as { pending: number }[];
+    const [{ pending }] = (await getDb()
+      .select({ pending: sql<number>`count(*)::int` })
+      .from(invoicesTable)
+      .where(and(...conditions))) as { pending: number }[];
 
     // Oldest first: the invoices waiting longest are closest to the submission
     // deadline (SME-05), so they go first when the batch is capped.

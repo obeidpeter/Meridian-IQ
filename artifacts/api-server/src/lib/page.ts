@@ -34,7 +34,10 @@ export function pageBounds(
   opts: { defaultLimit?: number; maxLimit?: number } = {},
 ): PageBounds {
   const maxLimit = opts.maxLimit ?? LIST_MAX_LIMIT;
-  const defaultLimit = Math.min(opts.defaultLimit ?? LIST_DEFAULT_LIMIT, maxLimit);
+  const defaultLimit = Math.min(
+    opts.defaultLimit ?? LIST_DEFAULT_LIMIT,
+    maxLimit,
+  );
   return {
     limit: Math.min(query.limit ?? defaultLimit, maxLimit),
     offset: query.offset ?? 0,

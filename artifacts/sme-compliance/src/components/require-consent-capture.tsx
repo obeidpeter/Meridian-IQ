@@ -6,12 +6,7 @@ import {
   useGetMe,
   useCaptureConsent,
 } from "@workspace/api-client-react";
-import {
-  BarChart3,
-  FileCheck2,
-  Landmark,
-  ShieldCheck,
-} from "lucide-react";
+import { BarChart3, FileCheck2, Landmark, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { serverErrorMessage } from "@/lib/errors";
 

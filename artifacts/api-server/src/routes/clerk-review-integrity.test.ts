@@ -2,12 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  getDb,
-  clerkCasesTable,
-  firmsTable,
-  usersTable,
-} from "@workspace/db";
+import { getDb, clerkCasesTable, firmsTable, usersTable } from "@workspace/db";
 import clerkRouter from "./clerk/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import type { AskAnswer } from "../modules/clerk/ask.ts";
@@ -23,7 +18,11 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
-import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // Round 7 review integrity + Ask feedback. Pinned invariants:
 //  - source pages are an operator-only carve-out (clerk.use) from the blanket

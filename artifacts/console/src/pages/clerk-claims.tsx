@@ -225,7 +225,11 @@ function FactsEditor({
   return (
     <div className="space-y-2">
       {facts.map((fact, i) => (
-        <div key={i} className="grid grid-cols-12 gap-2" data-testid={`row-fact-${i}`}>
+        <div
+          key={i}
+          className="grid grid-cols-12 gap-2"
+          data-testid={`row-fact-${i}`}
+        >
           <div className="col-span-2">
             <Input
               placeholder="key"
@@ -364,8 +368,8 @@ function ClaimFormFields({
           data-testid="input-claim-proposition"
         />
         <p className="text-xs text-muted-foreground">
-          Reference facts as {"{key}"} placeholders — they are rendered
-          verbatim from the protected facts below.
+          Reference facts as {"{key}"} placeholders — they are rendered verbatim
+          from the protected facts below.
         </p>
       </div>
       <div className="space-y-1">
@@ -414,9 +418,7 @@ function ClaimFormFields({
             id="claim-review-due"
             type="date"
             value={form.reviewDueAt}
-            onChange={(e) =>
-              setForm({ ...form, reviewDueAt: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, reviewDueAt: e.target.value })}
             data-testid="input-claim-review-due"
           />
         </div>
@@ -814,8 +816,8 @@ export function ClerkClaims() {
 
       {disabledBanner && (
         <ClerkDisabledBanner>
-          The register is read-only while it is off — re-enable it under
-          Feature flags.
+          The register is read-only while it is off — re-enable it under Feature
+          flags.
         </ClerkDisabledBanner>
       )}
 
@@ -985,7 +987,9 @@ export function ClerkClaims() {
                             </button>
                           </td>
                           <td className="py-2.5 pr-3 align-top max-w-56">
-                            <span className="block truncate">{claim.title}</span>
+                            <span className="block truncate">
+                              {claim.title}
+                            </span>
                           </td>
                           <td className="py-2.5 pr-3 align-top">
                             <span
@@ -1059,9 +1063,7 @@ export function ClerkClaims() {
                                       className="w-3.5 h-3.5 mr-1"
                                       aria-hidden="true"
                                     />
-                                    {busy
-                                      ? "Submitting…"
-                                      : "Submit for review"}
+                                    {busy ? "Submitting…" : "Submit for review"}
                                   </Button>
                                 </>
                               )}
@@ -1154,10 +1156,10 @@ export function ClerkClaims() {
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
               Real client questions Ask Clerk refused because no active claim
-              covered them. Each one is a candidate for the next draft —
-              “Draft claim from this” seeds the Draft-with-Clerk panel with
-              the question, or use “New claim version” above; nothing is
-              created automatically.
+              covered them. Each one is a candidate for the next draft — “Draft
+              claim from this” seeds the Draft-with-Clerk panel with the
+              question, or use “New claim version” above; nothing is created
+              automatically.
             </p>
             {gaps.refusedTotal === 0 ? (
               <p
@@ -1242,9 +1244,8 @@ export function ClerkClaims() {
           <AlertDialogHeader>
             <AlertDialogTitle>Replace the draft panel text?</AlertDialogTitle>
             <AlertDialogDescription>
-              The Draft-with-Clerk panel already has source text in it.
-              Seeding this question replaces that text, and it is not saved
-              anywhere.
+              The Draft-with-Clerk panel already has source text in it. Seeding
+              this question replaces that text, and it is not saved anywhere.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1343,8 +1344,8 @@ export function ClerkClaims() {
               Edit draft {editing?.claimKey} v{editing?.version}
             </DialogTitle>
             <DialogDescription>
-              Only drafts can be edited. Drafts are invisible to the Clerk
-              until a second operator approves them.
+              Only drafts can be edited. Drafts are invisible to the Clerk until
+              a second operator approves them.
             </DialogDescription>
           </DialogHeader>
           <ClaimFormFields form={editForm} setForm={setEditForm} keyLocked />

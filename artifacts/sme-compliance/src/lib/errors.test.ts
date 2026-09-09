@@ -36,7 +36,9 @@ describe("serverErrorMessage", () => {
   });
 
   test("uses the generic fallback for non-string bodies and plain values", () => {
-    expect(serverErrorMessage({ data: { error: 42 } })).toBe("Please try again.");
+    expect(serverErrorMessage({ data: { error: 42 } })).toBe(
+      "Please try again.",
+    );
     expect(serverErrorMessage({ data: {} })).toBe("Please try again.");
     expect(serverErrorMessage("just a string")).toBe("Please try again.");
     expect(serverErrorMessage(null)).toBe("Please try again.");

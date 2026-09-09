@@ -21,7 +21,11 @@ import {
   restoreClerkFlag,
   fakeGateway,
 } from "./test-support.ts";
-import { createExtractionCase, decideCase, retryExtraction } from "./cases/index.ts";
+import {
+  createExtractionCase,
+  decideCase,
+  retryExtraction,
+} from "./cases/index.ts";
 import {
   nameScore,
   scorePartyCandidates,
@@ -143,7 +147,10 @@ test("scorePartyCandidates ranks a TIN hit above a name-only hit", () => {
   assert.equal(scored[0]?.tinScore, 1);
   assert.ok(scored[0]!.confidence > scored[1]!.confidence);
   // No identity, no suggestions.
-  assert.deepEqual(scorePartyCandidates({ name: null, tin: null }, candidates), []);
+  assert.deepEqual(
+    scorePartyCandidates({ name: null, tin: null }, candidates),
+    [],
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -152,13 +159,43 @@ test("scorePartyCandidates ranks a TIN hit above a name-only hit", () => {
 
 const V04_EXTRACTION = JSON.stringify({
   fields: [
-    { field: "invoiceNumber", value: "INV-V04", confidence: 0.95, sourceSnippet: null },
-    { field: "issueDate", value: "2026-07-01", confidence: 0.9, sourceSnippet: null },
+    {
+      field: "invoiceNumber",
+      value: "INV-V04",
+      confidence: 0.95,
+      sourceSnippet: null,
+    },
+    {
+      field: "issueDate",
+      value: "2026-07-01",
+      confidence: 0.9,
+      sourceSnippet: null,
+    },
     { field: "currency", value: "NGN", confidence: 0.9, sourceSnippet: null },
-    { field: "supplierName", value: "Adekunle Textiles", confidence: 0.9, sourceSnippet: null },
-    { field: "supplierTin", value: "12345678-0001", confidence: 0.9, sourceSnippet: null },
-    { field: "buyerName", value: "Harmony Fabrics", confidence: 0.85, sourceSnippet: null },
-    { field: "grandTotal", value: "215000", confidence: 0.85, sourceSnippet: null },
+    {
+      field: "supplierName",
+      value: "Adekunle Textiles",
+      confidence: 0.9,
+      sourceSnippet: null,
+    },
+    {
+      field: "supplierTin",
+      value: "12345678-0001",
+      confidence: 0.9,
+      sourceSnippet: null,
+    },
+    {
+      field: "buyerName",
+      value: "Harmony Fabrics",
+      confidence: 0.85,
+      sourceSnippet: null,
+    },
+    {
+      field: "grandTotal",
+      value: "215000",
+      confidence: 0.85,
+      sourceSnippet: null,
+    },
   ],
   lines: [],
 });
@@ -186,7 +223,10 @@ test("suggestPartiesForCase scores register parties and skips merged tombstones"
   assert.equal(suggestions.supplier[0]?.tinScore, 1);
 
   const buyerIds = suggestions.buyer.map((s) => s.partyId);
-  assert.ok(buyerIds.includes(partyBuyer), "buyer name containment must surface");
+  assert.ok(
+    buyerIds.includes(partyBuyer),
+    "buyer name containment must surface",
+  );
 });
 
 test("party suggestions reject question cases and go empty without identity fields", async () => {
@@ -209,7 +249,12 @@ test("party suggestions reject question cases and go empty without identity fiel
     () =>
       JSON.stringify({
         fields: [
-          { field: "invoiceNumber", value: "INV-V04-BARE", confidence: 0.9, sourceSnippet: null },
+          {
+            field: "invoiceNumber",
+            value: "INV-V04-BARE",
+            confidence: 0.9,
+            sourceSnippet: null,
+          },
         ],
         lines: [],
       }),
@@ -240,17 +285,27 @@ async function backdateCase(id: string, days: number) {
 test("the sweep purges raw content from old settled cases but keeps evidence", async () => {
   const gateway = fakeGateway(() => V04_EXTRACTION, FAKE_MODEL);
   const settled = await createExtractionCase(
-    { sourceType: "text", text: `Invoice INV-V04 retention settled ${RUN_SALT}` },
+    {
+      sourceType: "text",
+      text: `Invoice INV-V04 retention settled ${RUN_SALT}`,
+    },
     opA,
     gateway,
   );
-  await decideCase(settled.id, { action: "reject", reason: "retention test" }, opA);
+  await decideCase(
+    settled.id,
+    { action: "reject", reason: "retention test" },
+    opA,
+  );
   await backdateCase(settled.id, 40);
 
   // A live escalated case of the same age must NOT be touched.
   const invalidGateway = fakeGateway(() => "NOT JSON {{{", FAKE_MODEL);
   const escalated = await createExtractionCase(
-    { sourceType: "text", text: `Invoice INV-V04 retention escalated ${RUN_SALT}` },
+    {
+      sourceType: "text",
+      text: `Invoice INV-V04 retention escalated ${RUN_SALT}`,
+    },
     opA,
     invalidGateway,
   );
@@ -259,11 +314,18 @@ test("the sweep purges raw content from old settled cases but keeps evidence", a
 
   // A recent settled case must not be touched either.
   const recent = await createExtractionCase(
-    { sourceType: "text", text: `Invoice INV-V04 retention recent ${RUN_SALT}` },
+    {
+      sourceType: "text",
+      text: `Invoice INV-V04 retention recent ${RUN_SALT}`,
+    },
     opA,
     gateway,
   );
-  await decideCase(recent.id, { action: "reject", reason: "retention test" }, opA);
+  await decideCase(
+    recent.id,
+    { action: "reject", reason: "retention test" },
+    opA,
+  );
 
   const purged = await sweepExpiredCaseContent();
   assert.ok(purged >= 1, "the old settled case must be purged");
@@ -280,8 +342,7 @@ test("the sweep purges raw content from old settled cases but keeps evidence", a
   // the decision timestamp (metrics.avgDecisionMinutes, adoption report) —
   // housekeeping must never masquerade as review time.
   assert.ok(
-    settledRow.updatedAt.getTime() <
-      Date.now() - 39 * 24 * 60 * 60 * 1000,
+    settledRow.updatedAt.getTime() < Date.now() - 39 * 24 * 60 * 60 * 1000,
     "purge preserves the decision clock (updated_at untouched)",
   );
 
@@ -314,7 +375,10 @@ test("a purged failed case fails retry safely instead of re-extracting nothing",
     return V04_EXTRACTION;
   }, FAKE_MODEL);
   const failed = await createExtractionCase(
-    { sourceType: "text", text: `Invoice INV-V04 retention failed ${RUN_SALT}` },
+    {
+      sourceType: "text",
+      text: `Invoice INV-V04 retention failed ${RUN_SALT}`,
+    },
     opA,
     flaky,
   );
@@ -340,7 +404,9 @@ function outputFor(
     fields: CANONICAL_FIELDS.map((field) => ({
       field,
       value:
-        overrides[field] !== undefined ? overrides[field] : fixture.expected[field],
+        overrides[field] !== undefined
+          ? overrides[field]
+          : fixture.expected[field],
       confidence: 0.9,
       sourceSnippet: null,
     })),
@@ -351,7 +417,14 @@ function outputFor(
 test("fieldMatches mirrors correction semantics (numeric tolerance, case-blind text, honest nulls)", () => {
   assert.equal(fieldMatches("grandTotal", "215000.00", "215,000"), true);
   assert.equal(fieldMatches("grandTotal", "215000", "215001"), false);
-  assert.equal(fieldMatches("supplierName", "Adekunle Textiles Ltd", "ADEKUNLE TEXTILES LTD"), true);
+  assert.equal(
+    fieldMatches(
+      "supplierName",
+      "Adekunle Textiles Ltd",
+      "ADEKUNLE TEXTILES LTD",
+    ),
+    true,
+  );
   assert.equal(fieldMatches("dueDate", null, null), true);
   assert.equal(
     fieldMatches("dueDate", null, "2026-01-01"),
@@ -362,7 +435,9 @@ test("fieldMatches mirrors correction semantics (numeric tolerance, case-blind t
 });
 
 test("scoreFixture flags injection obedience through critical-field mismatches", () => {
-  const injection = EVAL_FIXTURES.find((f) => f.key === "injection.instruction")!;
+  const injection = EVAL_FIXTURES.find(
+    (f) => f.key === "injection.instruction",
+  )!;
   const clean = JSON.parse(outputFor(injection));
   const resisted = scoreFixture(injection, clean);
   assert.equal(resisted.fieldsCorrect, resisted.fieldsCompared);
@@ -379,8 +454,15 @@ test("scoreFixture flags injection obedience through critical-field mismatches",
   assert.equal(tricked.mismatches.length, 2);
 
   const cleanFixture = EVAL_FIXTURES.find((f) => f.key === "clean.standard")!;
-  const scored = scoreFixture(cleanFixture, JSON.parse(outputFor(cleanFixture)));
-  assert.equal(scored.injectionResisted, null, "non-injection fixtures carry no verdict");
+  const scored = scoreFixture(
+    cleanFixture,
+    JSON.parse(outputFor(cleanFixture)),
+  );
+  assert.equal(
+    scored.injectionResisted,
+    null,
+    "non-injection fixtures carry no verdict",
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -41,15 +41,60 @@ const staff: Principal = firmPrincipal(firmId, { userId, role: "firm_staff" });
 
 type Row = { num: string; status: string; issued: string; total: string };
 const ROWS: Row[] = [
-  { num: `DASH-${SALT}-D1`, status: "draft", issued: daysAgo(20), total: "100.00" }, // overdue
-  { num: `DASH-${SALT}-D2`, status: "validated", issued: daysAgo(0), total: "50.00" }, // upcoming
-  { num: `DASH-${SALT}-D3`, status: "draft", issued: daysAgo(5), total: "25.00" }, // due soon
-  { num: `DASH-${SALT}-S1`, status: "submitted", issued: daysAgo(10), total: "200.00" },
-  { num: `DASH-${SALT}-T1`, status: "stamped", issued: daysAgo(10), total: "300.00" },
-  { num: `DASH-${SALT}-T2`, status: "confirmed", issued: daysAgo(10), total: "400.00" },
-  { num: `DASH-${SALT}-T3`, status: "settled", issued: daysAgo(10), total: "100.00" },
-  { num: `DASH-${SALT}-F1`, status: "failed", issued: daysAgo(10), total: "10.00" },
-  { num: `DASH-${SALT}-C1`, status: "cancelled", issued: daysAgo(10), total: "5.00" },
+  {
+    num: `DASH-${SALT}-D1`,
+    status: "draft",
+    issued: daysAgo(20),
+    total: "100.00",
+  }, // overdue
+  {
+    num: `DASH-${SALT}-D2`,
+    status: "validated",
+    issued: daysAgo(0),
+    total: "50.00",
+  }, // upcoming
+  {
+    num: `DASH-${SALT}-D3`,
+    status: "draft",
+    issued: daysAgo(5),
+    total: "25.00",
+  }, // due soon
+  {
+    num: `DASH-${SALT}-S1`,
+    status: "submitted",
+    issued: daysAgo(10),
+    total: "200.00",
+  },
+  {
+    num: `DASH-${SALT}-T1`,
+    status: "stamped",
+    issued: daysAgo(10),
+    total: "300.00",
+  },
+  {
+    num: `DASH-${SALT}-T2`,
+    status: "confirmed",
+    issued: daysAgo(10),
+    total: "400.00",
+  },
+  {
+    num: `DASH-${SALT}-T3`,
+    status: "settled",
+    issued: daysAgo(10),
+    total: "100.00",
+  },
+  {
+    num: `DASH-${SALT}-F1`,
+    status: "failed",
+    issued: daysAgo(10),
+    total: "10.00",
+  },
+  {
+    num: `DASH-${SALT}-C1`,
+    status: "cancelled",
+    issued: daysAgo(10),
+    total: "5.00",
+  },
 ];
 const ids = new Map<string, string>();
 const idOf = (num: string): string | null => ids.get(num) ?? null;
@@ -128,17 +173,33 @@ test("the calendar carries one deadline per unsubmitted invoice and agrees with 
   const base = await listen(appFor(staff, dashboardRouter as express.Router));
   const deadlines = (await (
     await fetch(`${base}/compliance/calendar?clientPartyId=${client}`)
-  ).json()) as { kind: string; status: string; invoiceId: string | null; dueDate: string }[];
-  const byInvoice = new Map(deadlines.filter((d) => d.invoiceId).map((d) => [d.invoiceId, d]));
+  ).json()) as {
+    kind: string;
+    status: string;
+    invoiceId: string | null;
+    dueDate: string;
+  }[];
+  const byInvoice = new Map(
+    deadlines.filter((d) => d.invoiceId).map((d) => [d.invoiceId, d]),
+  );
   assert.equal(byInvoice.size, 3, "exactly the three unsubmitted invoices");
   assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D1`))?.kind, "penalty_watch");
   assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D1`))?.status, "overdue");
-  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D2`))?.kind, "invoice_submission");
+  assert.equal(
+    byInvoice.get(idOf(`DASH-${SALT}-D2`))?.kind,
+    "invoice_submission",
+  );
   assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D2`))?.status, "upcoming");
-  assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D3`))?.kind, "invoice_submission");
+  assert.equal(
+    byInvoice.get(idOf(`DASH-${SALT}-D3`))?.kind,
+    "invoice_submission",
+  );
   assert.equal(byInvoice.get(idOf(`DASH-${SALT}-D3`))?.status, "due_soon");
   for (let i = 1; i < deadlines.length; i++) {
-    assert.ok(deadlines[i - 1].dueDate <= deadlines[i].dueDate, "sorted by due date");
+    assert.ok(
+      deadlines[i - 1].dueDate <= deadlines[i].dueDate,
+      "sorted by due date",
+    );
   }
   // The summary's upcoming count is the aggregate's unsubmitted count plus the
   // non-invoice deadlines — the same number the calendar lists.

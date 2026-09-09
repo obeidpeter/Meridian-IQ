@@ -138,8 +138,7 @@ export function renderProposition(claim: ClaimRecord): string {
   });
 }
 
-const REFUSAL_PREFIX =
-  "I can only answer from the approved claims register. ";
+const REFUSAL_PREFIX = "I can only answer from the approved claims register. ";
 
 // The classifier's user prompt, assembled in ONE place. The intent eval
 // lane (intent-eval.ts) calls this with a FIXED synthetic context, so the
@@ -432,9 +431,7 @@ export async function askClerk(
             // SEC-03: firm-keyed RLS shares the firm across sibling clients,
             // so a client asker's thread must ALSO be its own — a sibling's
             // case id contributes no context, exactly like a cross-firm id.
-            ...(clientScoped
-              ? [eq(clerkCasesTable.createdBy, actorId)]
-              : []),
+            ...(clientScoped ? [eq(clerkCasesTable.createdBy, actorId)] : []),
           ),
         )
         .limit(1),
@@ -467,8 +464,7 @@ export async function askClerk(
         // name resolve to the exact party the previous answer used, where
         // label matching resolved whichever sorted first.
         prevMonthKey = pins.monthStart
-          ? (months.find((m) => m.monthStart === pins.monthStart)?.key ??
-            null)
+          ? (months.find((m) => m.monthStart === pins.monthStart)?.key ?? null)
           : null;
         prevClientKey = pins.clientPartyId
           ? (clientOptions.find((c) => c.id === pins.clientPartyId)?.key ??
@@ -485,9 +481,8 @@ export async function askClerk(
         // otherwise a same-month follow-up silently loses its month scope.
         const prevParams = prevAnswer?.dataParams;
         prevMonthKey = prevParams?.month
-          ? (months.find(
-              (m) => stripCurrentMonth(m.label) === prevParams.month,
-            )?.key ?? null)
+          ? (months.find((m) => stripCurrentMonth(m.label) === prevParams.month)
+              ?.key ?? null)
           : null;
         prevClientKey = prevParams?.client
           ? (clientOptions.find((c) => c.name === prevParams.client)?.key ??
@@ -1027,7 +1022,11 @@ export async function askClerk(
   // Deterministic applicability check: if the claim is scoped to a category
   // and the question is clearly about a different one, refuse.
   const scope = claim.applicability.category;
-  if (scope && result.data.category !== "unknown" && result.data.category !== scope) {
+  if (
+    scope &&
+    result.data.category !== "unknown" &&
+    result.data.category !== scope
+  ) {
     return refuse(
       `The matching claim applies to ${scope.toUpperCase()} transactions, but the question appears to be about ${result.data.category.toUpperCase()}. It has been escalated to an operator.`,
     );

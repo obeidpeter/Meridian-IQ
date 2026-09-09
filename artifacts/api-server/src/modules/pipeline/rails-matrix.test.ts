@@ -24,7 +24,10 @@ import {
   setRailTransport,
   type RailTransport,
 } from "../rails/adapter.ts";
-import { scriptedRail, type ScriptedRail } from "../rails/transports/scripted.ts";
+import {
+  scriptedRail,
+  type ScriptedRail,
+} from "../rails/transports/scripted.ts";
 import { computeStatusLight } from "../clerk/status-light.ts";
 import { explainInvoiceFailure } from "../clerk/explain.ts";
 import { firmPrincipal } from "../../test-helpers/principals.ts";
@@ -85,30 +88,34 @@ const invoiceNumber = (n: Cell) => `INV-MATRIX-${n}-${SALT}`;
 /** A `submitted` invoice; `createdAt` places it in reconcile's oldest-first batch. */
 async function seedInvoice(n: Cell, opts: { createdAt?: Date } = {}) {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId: firm,
-    supplierPartyId: supplier,
-    buyerPartyId: buyer,
-    invoiceNumber: invoiceNumber(n),
-    issueDate: "2026-08-01",
-    dueDate: "2026-08-31",
-    status: "submitted",
-    subtotal: "100000.00",
-    vatTotal: "7500.00",
-    grandTotal: "107500.00",
-    ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
-  });
-  await getDb().insert(invoiceLinesTable).values({
-    invoiceId: id,
-    lineNo: 1,
-    description: `Matrix ${SALT}`,
-    quantity: "1.0000",
-    unitPrice: "100000.00",
-    vatRate: "0.0750",
-    lineExtension: "100000.00",
-    vatAmount: "7500.00",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId: firm,
+      supplierPartyId: supplier,
+      buyerPartyId: buyer,
+      invoiceNumber: invoiceNumber(n),
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      status: "submitted",
+      subtotal: "100000.00",
+      vatTotal: "7500.00",
+      grandTotal: "107500.00",
+      ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
+    });
+  await getDb()
+    .insert(invoiceLinesTable)
+    .values({
+      invoiceId: id,
+      lineNo: 1,
+      description: `Matrix ${SALT}`,
+      quantity: "1.0000",
+      unitPrice: "100000.00",
+      vatRate: "0.0750",
+      lineExtension: "100000.00",
+      vatAmount: "7500.00",
+    });
   return id;
 }
 
@@ -134,7 +141,10 @@ async function enqueueSubmit(invoiceId: string): Promise<string> {
 async function drainUntilSettled(invoiceId: string) {
   for (let pass = 0; pass < 20; pass++) {
     const [row] = await getDb()
-      .select({ status: outboxTable.status, nextAttemptAt: outboxTable.nextAttemptAt })
+      .select({
+        status: outboxTable.status,
+        nextAttemptAt: outboxTable.nextAttemptAt,
+      })
       .from(outboxTable)
       .where(eq(outboxTable.aggregateId, invoiceId));
     const ready =
@@ -155,7 +165,12 @@ async function outboxRow(invoiceId: string) {
 }
 
 const invoiceStatus = async (id: string) =>
-  (await getDb().select({ status: invoicesTable.status }).from(invoicesTable).where(eq(invoicesTable.id, id)))[0]?.status;
+  (
+    await getDb()
+      .select({ status: invoicesTable.status })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, id))
+  )[0]?.status;
 
 // Rows of one try share a transaction, hence a created_at; order by the
 // facts a reader cares about instead.
@@ -200,10 +215,18 @@ const auditActions = async (id: string) =>
   ).map((r) => r.action);
 
 const casesFor = async (id: string) =>
-  getDb().select().from(operatorCasesTable).where(eq(operatorCasesTable.invoiceId, id));
+  getDb()
+    .select()
+    .from(operatorCasesTable)
+    .where(eq(operatorCasesTable.invoiceId, id));
 
 const stampFor = async (id: string) =>
-  (await getDb().select().from(stampRecordsTable).where(eq(stampRecordsTable.invoiceId, id)))[0];
+  (
+    await getDb()
+      .select()
+      .from(stampRecordsTable)
+      .where(eq(stampRecordsTable.invoiceId, id))
+  )[0];
 
 /** The fake's call log for one invoice (other suites' stuck rows drain through it too). */
 const callsFor = (fake: ScriptedRail, n: Cell) =>
@@ -226,28 +249,49 @@ async function rewind(outboxId: string) {
  * (stamped, done) rather than as a live row a later cell's drain — under that
  * cell's transport — would pick up.
  */
-async function settleRetry(fake: ScriptedRail, invoiceId: string, outboxId: string) {
+async function settleRetry(
+  fake: ScriptedRail,
+  invoiceId: string,
+  outboxId: string,
+) {
   fake.reset();
   await rewind(outboxId);
   await drainUntilSettled(invoiceId);
-  assert.equal(await invoiceStatus(invoiceId), "stamped", "the replayed backoff stamps");
+  assert.equal(
+    await invoiceStatus(invoiceId),
+    "stamped",
+    "the replayed backoff stamps",
+  );
   assert.equal((await outboxRow(invoiceId)).status, "done");
 }
 
 async function setBreaker(
   rail: Rail,
-  patch: { state: "closed" | "open"; failureCount: number; openedAt: Date | null; retryAt: Date | null },
+  patch: {
+    state: "closed" | "open";
+    failureCount: number;
+    openedAt: Date | null;
+    retryAt: Date | null;
+  },
 ) {
   await getDb()
     .insert(railStatesTable)
     .values({ rail })
     .onConflictDoNothing({ target: railStatesTable.rail });
-  await getDb().update(railStatesTable).set(patch).where(eq(railStatesTable.rail, rail));
+  await getDb()
+    .update(railStatesTable)
+    .set(patch)
+    .where(eq(railStatesTable.rail, rail));
 }
 
 async function closeBreakers(): Promise<void> {
   for (const rail of RAILS) {
-    await setBreaker(rail, { state: "closed", failureCount: 0, openedAt: null, retryAt: null });
+    await setBreaker(rail, {
+      state: "closed",
+      failureCount: 0,
+      openedAt: null,
+      retryAt: null,
+    });
   }
 }
 
@@ -262,7 +306,11 @@ async function flushReadyQueue() {
 }
 
 /** One retriable outcome on both rails: the shared shape of cells 2, 4, 5 and 6. */
-async function runRetryCell(n: number, outcome: "rate_limit" | "timeout" | "unauthorized" | "malformed", code: string) {
+async function runRetryCell(
+  n: number,
+  outcome: "rate_limit" | "timeout" | "unauthorized" | "malformed",
+  code: string,
+) {
   const id = await seedInvoice(n);
   const outboxId = await enqueueSubmit(id);
   const fake = scriptedRail({ name: FAKE });
@@ -275,11 +323,21 @@ async function runRetryCell(n: number, outcome: "rate_limit" | "timeout" | "unau
   assert.equal(row.id, outboxId);
   assert.equal(row.status, "pending", "a retriable error re-queues");
   assert.equal(row.attempts, 1);
-  assert.ok(row.nextAttemptAt.getTime() > Date.now(), "backed off into the future");
-  assert.ok(row.firstAttemptAt && row.firstAttemptAt.getTime() >= before - 1_000, "the horizon clock started");
+  assert.ok(
+    row.nextAttemptAt.getTime() > Date.now(),
+    "backed off into the future",
+  );
+  assert.ok(
+    row.firstAttemptAt && row.firstAttemptAt.getTime() >= before - 1_000,
+    "the horizon clock started",
+  );
   assert.equal(row.parkCount, 0, "a rail answer is not a park");
   assert.equal(row.lastError, code);
-  assert.equal(await invoiceStatus(id), "submitted", "the invoice is NOT failed");
+  assert.equal(
+    await invoiceStatus(id),
+    "submitted",
+    "the invoice is NOT failed",
+  );
   assert.equal(await stampFor(id), undefined);
   assert.deepEqual(
     attemptShape(await attemptRows(id)),
@@ -299,7 +357,11 @@ async function runRetryCell(n: number, outcome: "rate_limit" | "timeout" | "unau
   assert.equal((await casesFor(id)).length, 0, "no Desk case for a retry");
   for (const rail of RAILS) {
     const breaker = await breakerStatus(rail);
-    assert.equal(breaker.state, "closed", `${rail} is still under the threshold`);
+    assert.equal(
+      breaker.state,
+      "closed",
+      `${rail} is still under the threshold`,
+    );
     assert.equal(breaker.failureCount, 1, `${rail} counted the ${outcome}`);
   }
   return { id, outboxId, fake };
@@ -310,27 +372,31 @@ let restoreRailEnv: () => void = () => {};
 before(async () => {
   restoreRailEnv = clearRailEnv();
   await closeBreakers();
-  await getDb().insert(firmsTable).values({ id: firm, name: `Matrix Firm ${SALT}` });
-  await getDb().insert(partiesTable).values([
-    {
-      id: supplier,
-      type: "client_business",
-      legalName: `Matrix Supplier ${SALT}`,
-      tin: `3333-${SALT}`,
-      street: "1 Broad Street",
-      city: "Lagos",
-      countryCode: "NG",
-    },
-    {
-      id: buyer,
-      type: "buyer",
-      legalName: `Matrix Buyer ${SALT}`,
-      tin: `4444-${SALT}`,
-      street: "2 Marina",
-      city: "Lagos",
-      countryCode: "NG",
-    },
-  ]);
+  await getDb()
+    .insert(firmsTable)
+    .values({ id: firm, name: `Matrix Firm ${SALT}` });
+  await getDb()
+    .insert(partiesTable)
+    .values([
+      {
+        id: supplier,
+        type: "client_business",
+        legalName: `Matrix Supplier ${SALT}`,
+        tin: `3333-${SALT}`,
+        street: "1 Broad Street",
+        city: "Lagos",
+        countryCode: "NG",
+      },
+      {
+        id: buyer,
+        type: "buyer",
+        legalName: `Matrix Buyer ${SALT}`,
+        tin: `4444-${SALT}`,
+        street: "2 Marina",
+        city: "Lagos",
+        countryCode: "NG",
+      },
+    ]);
 });
 
 // Every cell starts from closed breakers so its failure counts are exact, and
@@ -364,12 +430,26 @@ test("cell 1 — reject MBS_INVALID_TIN: invoice failed with the code as lifecyc
   assert.equal(lifecycle.length, 1);
   assert.equal(lifecycle[0]?.fromStatus, "submitted");
   assert.equal(lifecycle[0]?.toStatus, "failed");
-  assert.equal(lifecycle[0]?.reason, "MBS_INVALID_TIN", "the rejection code is the transition reason");
+  assert.equal(
+    lifecycle[0]?.reason,
+    "MBS_INVALID_TIN",
+    "the rejection code is the transition reason",
+  );
   assert.equal(lifecycle[0]?.actorRole, "system");
   const actions = await auditActions(id);
-  assert.equal(actions.filter((a) => a === "invoice.rejected").length, 1, actions.join(","));
-  assert.deepEqual(attemptShape(await attemptRows(id)), [["rail_primary", "rejected", "MBS_INVALID_TIN", 1]]);
-  assert.deepEqual(callsFor(fake, 1), [{ op: "submit", rail: "rail_primary", outcome: "reject" }], "a rejection never fails over");
+  assert.equal(
+    actions.filter((a) => a === "invoice.rejected").length,
+    1,
+    actions.join(","),
+  );
+  assert.deepEqual(attemptShape(await attemptRows(id)), [
+    ["rail_primary", "rejected", "MBS_INVALID_TIN", 1],
+  ]);
+  assert.deepEqual(
+    callsFor(fake, 1),
+    [{ op: "submit", rail: "rail_primary", outcome: "reject" }],
+    "a rejection never fails over",
+  );
 
   const row = await outboxRow(id);
   assert.equal(row.id, outboxId);
@@ -383,12 +463,19 @@ test("cell 1 — reject MBS_INVALID_TIN: invoice failed with the code as lifecyc
   assert.equal(cases[0]?.priority, "high");
   assert.equal(cases[0]?.status, "open");
   assert.equal(cases[0]?.firmId, firm);
-  assert.ok(cases[0]?.title.includes("failed: MBS_INVALID_TIN"), cases[0]?.title);
+  assert.ok(
+    cases[0]?.title.includes("failed: MBS_INVALID_TIN"),
+    cases[0]?.title,
+  );
   assert.ok(cases[0]?.title.startsWith(invoiceNumber(1)), cases[0]?.title);
 });
 
 test("cell 2 — rate_limit on both rails: retry with backoff, invoice stays submitted, two RAIL_RATE_LIMITED attempts on one try", async () => {
-  const { id, outboxId, fake } = await runRetryCell(2, "rate_limit", "RAIL_RATE_LIMITED");
+  const { id, outboxId, fake } = await runRetryCell(
+    2,
+    "rate_limit",
+    "RAIL_RATE_LIMITED",
+  );
   await settleRetry(fake, id, outboxId);
 });
 
@@ -402,7 +489,11 @@ test("cell 3 — unavailable on rail_primary then accept: stamped via rail_secon
 
   assert.equal(await invoiceStatus(id), "stamped");
   const stamp = await stampFor(id);
-  assert.equal(stamp?.rail, "rail_secondary", "the failover rail issued the stamp");
+  assert.equal(
+    stamp?.rail,
+    "rail_secondary",
+    "the failover rail issued the stamp",
+  );
   assert.equal(stamp?.provider, FAKE);
   assert.equal(stamp?.environment, "sandbox");
   assert.deepEqual(
@@ -419,7 +510,11 @@ test("cell 3 — unavailable on rail_primary then accept: stamped via rail_secon
   );
   const primary = await breakerStatus("rail_primary");
   assert.equal(primary.state, "closed");
-  assert.equal(primary.failureCount, 1, "one transient failure counted against rail_primary");
+  assert.equal(
+    primary.failureCount,
+    1,
+    "one transient failure counted against rail_primary",
+  );
   const secondary = await breakerStatus("rail_secondary");
   assert.equal(secondary.state, "closed");
   assert.equal(secondary.failureCount, 0);
@@ -436,17 +531,29 @@ test("cell 3 — unavailable on rail_primary then accept: stamped via rail_secon
 });
 
 test("cell 4 — timeout on both rails: retry with RAIL_TIMEOUT, both breakers count one", async () => {
-  const { id, outboxId, fake } = await runRetryCell(4, "timeout", "RAIL_TIMEOUT");
+  const { id, outboxId, fake } = await runRetryCell(
+    4,
+    "timeout",
+    "RAIL_TIMEOUT",
+  );
   await settleRetry(fake, id, outboxId);
 });
 
 test("cell 5 — unauthorized: retry with RAIL_UNAUTHORIZED, the invoice is NOT failed", async () => {
-  const { id, outboxId, fake } = await runRetryCell(5, "unauthorized", "RAIL_UNAUTHORIZED");
+  const { id, outboxId, fake } = await runRetryCell(
+    5,
+    "unauthorized",
+    "RAIL_UNAUTHORIZED",
+  );
   await settleRetry(fake, id, outboxId);
 });
 
 test("cell 6 — malformed answer: retry with RAIL_PROTOCOL", async () => {
-  const { id, outboxId, fake } = await runRetryCell(6, "malformed", "RAIL_PROTOCOL");
+  const { id, outboxId, fake } = await runRetryCell(
+    6,
+    "malformed",
+    "RAIL_PROTOCOL",
+  );
   await settleRetry(fake, id, outboxId);
 });
 
@@ -462,9 +569,15 @@ test("cell 7 — non-retriable transport error (MBS_SCHEMA_INVALID as status err
     name: "schema-rail",
     environment: "sandbox",
     async submit(rail, inv, key) {
-      if (inv.invoiceNumber !== invoiceNumber(7)) return inner.submit(rail, inv, key);
+      if (inv.invoiceNumber !== invoiceNumber(7))
+        return inner.submit(rail, inv, key);
       calls.push(rail);
-      return { status: "error", rail, errorCode: "MBS_SCHEMA_INVALID", raw: {} };
+      return {
+        status: "error",
+        rail,
+        errorCode: "MBS_SCHEMA_INVALID",
+        raw: {},
+      };
     },
     async lookup(rail, inv, key) {
       return inner.lookup(rail, inv, key);
@@ -473,7 +586,11 @@ test("cell 7 — non-retriable transport error (MBS_SCHEMA_INVALID as status err
   setRailTransport(transport);
   await drainUntilSettled(id);
 
-  assert.deepEqual(calls, ["rail_primary"], "a non-retriable error does not fail over");
+  assert.deepEqual(
+    calls,
+    ["rail_primary"],
+    "a non-retriable error does not fail over",
+  );
   assert.equal(await invoiceStatus(id), "failed");
   assert.equal(await stampFor(id), undefined);
   const lifecycle = await lifecycleRows(id);
@@ -482,8 +599,13 @@ test("cell 7 — non-retriable transport error (MBS_SCHEMA_INVALID as status err
   assert.equal(lifecycle[0]?.toStatus, "failed");
   assert.equal(lifecycle[0]?.reason, "MBS_SCHEMA_INVALID");
   const actions = await auditActions(id);
-  assert.ok(!actions.includes("invoice.rejected"), `no business rejection was audited: ${actions.join(",")}`);
-  assert.deepEqual(attemptShape(await attemptRows(id)), [["rail_primary", "error", "MBS_SCHEMA_INVALID", 1]]);
+  assert.ok(
+    !actions.includes("invoice.rejected"),
+    `no business rejection was audited: ${actions.join(",")}`,
+  );
+  assert.deepEqual(attemptShape(await attemptRows(id)), [
+    ["rail_primary", "error", "MBS_SCHEMA_INVALID", 1],
+  ]);
 
   const row = await outboxRow(id);
   assert.equal(row.id, outboxId);
@@ -518,7 +640,9 @@ test("cell 8 — rail_primary breaker open, rail_secondary closed: the refusal i
     [["rail_secondary", "accepted", null, 1]],
     "exactly one attempt: a breaker refusal sent nothing",
   );
-  assert.deepEqual(callsFor(fake, 8), [{ op: "submit", rail: "rail_secondary", outcome: "accept" }]);
+  assert.deepEqual(callsFor(fake, 8), [
+    { op: "submit", rail: "rail_secondary", outcome: "accept" },
+  ]);
   const primary = await breakerStatus("rail_primary");
   assert.equal(primary.state, "open", "the refused breaker is untouched");
   assert.equal(primary.failureCount, 3);
@@ -530,7 +654,11 @@ test("cell 8 — rail_primary breaker open, rail_secondary closed: the refusal i
   assert.equal(row.id, outboxId);
   assert.equal(row.status, "done");
   assert.equal(row.attempts, 1);
-  assert.equal(row.parkCount, 0, "one open breaker is not a full outage, so no park");
+  assert.equal(
+    row.parkCount,
+    0,
+    "one open breaker is not a full outage, so no park",
+  );
 });
 
 test("cell 9 — unavailable ×2 then accept across retries: pending after the first try, stamped on the replayed backoff, attempts numbered 1,1,2", async () => {
@@ -547,13 +675,10 @@ test("cell 9 — unavailable ×2 then accept across retries: pending after the f
   assert.equal(row.lastError, "RAIL_UNAVAILABLE");
   assert.ok(row.nextAttemptAt.getTime() > Date.now());
   assert.equal(await invoiceStatus(id), "submitted");
-  assert.deepEqual(
-    attemptShape(await attemptRows(id)),
-    [
-      ["rail_primary", "error", "RAIL_UNAVAILABLE", 1],
-      ["rail_secondary", "error", "RAIL_UNAVAILABLE", 1],
-    ],
-  );
+  assert.deepEqual(attemptShape(await attemptRows(id)), [
+    ["rail_primary", "error", "RAIL_UNAVAILABLE", 1],
+    ["rail_secondary", "error", "RAIL_UNAVAILABLE", 1],
+  ]);
 
   await rewind(outboxId);
   await drainUntilSettled(id);
@@ -569,13 +694,30 @@ test("cell 9 — unavailable ×2 then accept across retries: pending after the f
     [1, 1, 2],
     "attemptNo is the try, shared by the rows of one try",
   );
-  assert.deepEqual(attemptShape(attempts)[2], ["rail_primary", "accepted", null, 2]);
+  assert.deepEqual(attemptShape(attempts)[2], [
+    "rail_primary",
+    "accepted",
+    null,
+    2,
+  ]);
   assert.deepEqual(
     callsFor(fake, 9).map((c) => `${c.rail}:${c.outcome}`),
-    ["rail_primary:unavailable", "rail_secondary:unavailable", "rail_primary:accept"],
+    [
+      "rail_primary:unavailable",
+      "rail_secondary:unavailable",
+      "rail_primary:accept",
+    ],
   );
-  assert.equal((await breakerStatus("rail_primary")).failureCount, 0, "the success reset rail_primary");
-  assert.equal((await breakerStatus("rail_secondary")).failureCount, 1, "rail_secondary still carries its one failure");
+  assert.equal(
+    (await breakerStatus("rail_primary")).failureCount,
+    0,
+    "the success reset rail_primary",
+  );
+  assert.equal(
+    (await breakerStatus("rail_secondary")).failureCount,
+    1,
+    "rail_secondary still carries its one failure",
+  );
   assert.equal((await lifecycleRows(id)).length, 1);
 });
 
@@ -592,7 +734,11 @@ test("cell 10 — rail_primary unavailable, then the transport throws on rail_se
     name: "flaky-rail",
     environment: "sandbox",
     async submit(rail, inv, key) {
-      if (!thrown && rail === "rail_secondary" && inv.invoiceNumber === invoiceNumber(10)) {
+      if (
+        !thrown &&
+        rail === "rail_secondary" &&
+        inv.invoiceNumber === invoiceNumber(10)
+      ) {
         thrown = true;
         throw new Error("boom");
       }
@@ -607,21 +753,41 @@ test("cell 10 — rail_primary unavailable, then the transport throws on rail_se
 
   assert.equal(thrown, true, "the throw hit this invoice");
   let row = await outboxRow(id);
-  assert.equal(row.status, "pending", "the claim was rolled back and the row re-queued");
+  assert.equal(
+    row.status,
+    "pending",
+    "the claim was rolled back and the row re-queued",
+  );
   assert.equal(row.attempts, 1, "the failed try still counts");
   assert.equal(row.lastError, "boom");
   assert.ok(row.nextAttemptAt.getTime() > Date.now(), "backed off");
   assert.ok(row.firstAttemptAt, "the horizon clock started");
   assert.equal(row.parkCount, 0);
   assert.equal(await invoiceStatus(id), "submitted");
-  assert.equal((await attemptRows(id)).length, 0, "no attempt row survives a rolled-back try — not even rail_primary's real 503");
-  assert.equal((await lifecycleRows(id)).length, 0, "no lifecycle row survives a rolled-back try");
-  assert.deepEqual(await auditActions(id), [], "no audit row survives a rolled-back try");
+  assert.equal(
+    (await attemptRows(id)).length,
+    0,
+    "no attempt row survives a rolled-back try — not even rail_primary's real 503",
+  );
+  assert.equal(
+    (await lifecycleRows(id)).length,
+    0,
+    "no lifecycle row survives a rolled-back try",
+  );
+  assert.deepEqual(
+    await auditActions(id),
+    [],
+    "no audit row survives a rolled-back try",
+  );
   assert.equal(await stampFor(id), undefined);
   // R102: breaker writes commit on their own (raw pool), so the failure the
   // rail really produced is remembered even though the try rolled back.
   const primaryAfter = await breakerStatus("rail_primary");
-  assert.equal(primaryAfter.failureCount, 1, "rail_primary's failure survives the rolled-back try");
+  assert.equal(
+    primaryAfter.failureCount,
+    1,
+    "rail_primary's failure survives the rolled-back try",
+  );
   assert.equal(primaryAfter.lastErrorCode, "RAIL_UNAVAILABLE");
   assert.equal((await breakerStatus("rail_secondary")).failureCount, 0);
   assert.deepEqual(
@@ -637,13 +803,21 @@ test("cell 10 — rail_primary unavailable, then the transport throws on rail_se
   assert.equal(row.status, "done");
   assert.equal(row.attempts, 2);
   assert.equal(await invoiceStatus(id), "stamped");
-  assert.deepEqual(attemptShape(await attemptRows(id)), [["rail_primary", "accepted", null, 2]], "exactly one attempt row, the acceptance");
+  assert.deepEqual(
+    attemptShape(await attemptRows(id)),
+    [["rail_primary", "accepted", null, 2]],
+    "exactly one attempt row, the acceptance",
+  );
   const lifecycle = await lifecycleRows(id);
   assert.equal(lifecycle.length, 1, "exactly one lifecycle transition");
   assert.equal(lifecycle[0]?.fromStatus, "submitted");
   assert.equal(lifecycle[0]?.toStatus, "stamped");
   const actions = await auditActions(id);
-  assert.deepEqual(actions, ["invoice.stamped"], "exactly one invoice.stamped, no duplicate rows");
+  assert.deepEqual(
+    actions,
+    ["invoice.stamped"],
+    "exactly one invoice.stamped, no duplicate rows",
+  );
   assert.deepEqual(callsFor(inner, 10), [
     { op: "submit", rail: "rail_primary", outcome: "unavailable" },
     { op: "submit", rail: "rail_primary", outcome: "accept" },
@@ -660,9 +834,17 @@ test("cell 11 — duplicate with the stamp held: recovered — stamp persisted, 
 
   assert.equal(await invoiceStatus(id), "stamped");
   const stamp = await stampFor(id);
-  assert.equal(stamp?.rail, "rail_primary", "the rail that reported the duplicate held the stamp");
+  assert.equal(
+    stamp?.rail,
+    "rail_primary",
+    "the rail that reported the duplicate held the stamp",
+  );
   assert.equal(stamp?.provider, FAKE);
-  assert.match(stamp?.irn ?? "", /^IRN-[0-9A-F]{16}$/, "the fake mints a simulator-shaped stamp");
+  assert.match(
+    stamp?.irn ?? "",
+    /^IRN-[0-9A-F]{16}$/,
+    "the fake mints a simulator-shaped stamp",
+  );
   const attempts = await attemptRows(id);
   assert.deepEqual(attemptShape(attempts), [
     ["rail_primary", "accepted", null, 1],
@@ -670,9 +852,15 @@ test("cell 11 — duplicate with the stamp held: recovered — stamp persisted, 
   ]);
   const lookup = attempts.find((a) => a.status === "accepted");
   assert.equal((lookup?.requestPayload as { lookup?: boolean })?.lookup, true);
-  assert.equal((lookup?.responsePayload as { recovered?: boolean })?.recovered, true);
+  assert.equal(
+    (lookup?.responsePayload as { recovered?: boolean })?.recovered,
+    true,
+  );
   const rejected = attempts.find((a) => a.status === "rejected");
-  assert.ok((rejected?.requestPayload as { canonical?: unknown })?.canonical, "the rejected try retains the request sent");
+  assert.ok(
+    (rejected?.requestPayload as { canonical?: unknown })?.canonical,
+    "the rejected try retains the request sent",
+  );
   assert.deepEqual(callsFor(fake, 11), [
     { op: "submit", rail: "rail_primary", outcome: "duplicate" },
     { op: "lookup", rail: "rail_primary", outcome: "lookup_hit" },
@@ -712,13 +900,28 @@ test("cell 12 — reconcile skips an invoice whose outbox row is live but PARKED
   setRailTransport(fake);
   await reconcile();
 
-  const rows = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, id));
-  assert.equal(rows.length, 1, "the parked row is on its way; nothing was re-queued beside it");
+  const rows = await getDb()
+    .select()
+    .from(outboxTable)
+    .where(eq(outboxTable.aggregateId, id));
+  assert.equal(
+    rows.length,
+    1,
+    "the parked row is on its way; nothing was re-queued beside it",
+  );
   assert.equal(rows[0]?.id, parked!.id);
   assert.equal(rows[0]?.status, "pending");
-  assert.equal(rows[0]?.parkedUntil?.getTime(), until.getTime(), "the park is untouched");
+  assert.equal(
+    rows[0]?.parkedUntil?.getTime(),
+    until.getTime(),
+    "the park is untouched",
+  );
   assert.equal(await invoiceStatus(id), "submitted");
-  assert.deepEqual(callsFor(fake, 12), [], "reconcile did not ask the rail about a submission already in flight");
+  assert.deepEqual(
+    callsFor(fake, 12),
+    [],
+    "reconcile did not ask the rail about a submission already in flight",
+  );
 
   // Wake the park and let it stamp so the shared outbox carries no live row.
   await rewind(parked!.id);
@@ -749,16 +952,35 @@ test("cell 13 — one served rail with its breaker open: the submission parks (n
   assert.equal(row.parkCount, 1);
   assert.equal(row.firstAttemptAt, null, "the horizon clock has not started");
   assert.ok(row.parkedUntil, "parked");
-  assert.ok(row.parkedUntil!.getTime() >= retryAt.getTime(), "never before the breaker's retry-at");
-  assert.ok(row.parkedUntil!.getTime() <= retryAt.getTime() + 3_000, "jitter is bounded");
+  assert.ok(
+    row.parkedUntil!.getTime() >= retryAt.getTime(),
+    "never before the breaker's retry-at",
+  );
+  assert.ok(
+    row.parkedUntil!.getTime() <= retryAt.getTime() + 3_000,
+    "jitter is bounded",
+  );
   assert.equal(row.nextAttemptAt.getTime(), row.parkedUntil!.getTime());
   assert.match(row.lastError ?? "", /^RAIL_UNAVAILABLE: parked until /);
-  assert.equal((await attemptRows(id)).length, 0, "a park is not a submission attempt");
+  assert.equal(
+    (await attemptRows(id)).length,
+    0,
+    "a park is not a submission attempt",
+  );
   assert.equal(await invoiceStatus(id), "submitted");
   assert.deepEqual(callsFor(fake, 13), [], "the rail was never called");
-  assert.equal((await breakerStatus("rail_secondary")).failureCount, 0, "the unserved rail was never considered");
+  assert.equal(
+    (await breakerStatus("rail_secondary")).failureCount,
+    0,
+    "the unserved rail was never considered",
+  );
 
-  await setBreaker("rail_primary", { state: "closed", failureCount: 0, openedAt: null, retryAt: null });
+  await setBreaker("rail_primary", {
+    state: "closed",
+    failureCount: 0,
+    openedAt: null,
+    retryAt: null,
+  });
   await rewind(outboxId);
   await drainUntilSettled(id);
 
@@ -769,7 +991,9 @@ test("cell 13 — one served rail with its breaker open: the submission parks (n
   assert.equal(row.parkedUntil, null);
   assert.equal(await invoiceStatus(id), "stamped");
   assert.equal((await stampFor(id))?.rail, "rail_primary");
-  assert.deepEqual(callsFor(fake, 13), [{ op: "submit", rail: "rail_primary", outcome: "accept" }]);
+  assert.deepEqual(callsFor(fake, 13), [
+    { op: "submit", rail: "rail_primary", outcome: "accept" },
+  ]);
 });
 
 test("cell 14 — malformed 2xx that actually stamped, on one served rail: retry with RAIL_PROTOCOL; the re-send's 409 recovers the stamp, rows in seq order", async () => {
@@ -781,8 +1005,16 @@ test("cell 14 — malformed 2xx that actually stamped, on one served rail: retry
   // of the same idempotency key is a real 409 — scripted here as the fake
   // rail server would answer it.
   const fake = scriptedRail({ name: FAKE, rails: ["rail_primary"] });
-  fake.script(invoiceNumber(14), { outcome: "malformed", holdsStamp: true, times: 1 });
-  fake.script(invoiceNumber(14), { outcome: "duplicate", holdsStamp: true, times: 1 });
+  fake.script(invoiceNumber(14), {
+    outcome: "malformed",
+    holdsStamp: true,
+    times: 1,
+  });
+  fake.script(invoiceNumber(14), {
+    outcome: "duplicate",
+    holdsStamp: true,
+    times: 1,
+  });
   setRailTransport(fake);
   await drainUntilSettled(id);
 
@@ -792,9 +1024,15 @@ test("cell 14 — malformed 2xx that actually stamped, on one served rail: retry
   assert.equal(row.attempts, 1);
   assert.equal(row.lastError, "RAIL_PROTOCOL");
   assert.ok(row.nextAttemptAt.getTime() > Date.now());
-  assert.equal(await invoiceStatus(id), "submitted", "never failed on a 2xx we could not read");
+  assert.equal(
+    await invoiceStatus(id),
+    "submitted",
+    "never failed on a 2xx we could not read",
+  );
   assert.equal(await stampFor(id), undefined);
-  assert.deepEqual(attemptShape(await attemptRows(id)), [["rail_primary", "error", "RAIL_PROTOCOL", 1]]);
+  assert.deepEqual(attemptShape(await attemptRows(id)), [
+    ["rail_primary", "error", "RAIL_PROTOCOL", 1],
+  ]);
   assert.equal((await breakerStatus("rail_primary")).failureCount, 1);
   assert.deepEqual(await auditActions(id), []);
 
@@ -814,7 +1052,10 @@ test("cell 14 — malformed 2xx that actually stamped, on one served rail: retry
   assert.equal(lifecycle[0]?.reason, "rail:rail_primary:recovered");
   const actions = await auditActions(id);
   assert.ok(actions.includes("invoice.stamp_recovered"), actions.join(","));
-  assert.ok(!actions.includes("invoice.stamped"), "recovered, not freshly stamped");
+  assert.ok(
+    !actions.includes("invoice.stamped"),
+    "recovered, not freshly stamped",
+  );
   assert.ok(!actions.includes("invoice.rejected"));
   assert.deepEqual(
     attemptShape(await attemptRowsBySeq(id)),
@@ -830,7 +1071,11 @@ test("cell 14 — malformed 2xx that actually stamped, on one served rail: retry
     { op: "submit", rail: "rail_primary", outcome: "duplicate" },
     { op: "lookup", rail: "rail_primary", outcome: "lookup_hit" },
   ]);
-  assert.equal((await breakerStatus("rail_primary")).failureCount, 0, "the answered retry reset the breaker");
+  assert.equal(
+    (await breakerStatus("rail_primary")).failureCount,
+    0,
+    "the answered retry reset the breaker",
+  );
   assert.equal((await casesFor(id)).length, 0);
 });
 
@@ -839,7 +1084,11 @@ test("cell 15 — unavailable on rail_primary then MBS_INVALID_TIN on rail_secon
   const outboxId = await enqueueSubmit(id);
   const fake = scriptedRail({ name: FAKE });
   fake.script(invoiceNumber(15), { outcome: "unavailable", times: 1 });
-  fake.script(invoiceNumber(15), { outcome: "reject", code: "MBS_INVALID_TIN", times: 1 });
+  fake.script(invoiceNumber(15), {
+    outcome: "reject",
+    code: "MBS_INVALID_TIN",
+    times: 1,
+  });
   setRailTransport(fake);
   await drainUntilSettled(id);
 
@@ -848,9 +1097,17 @@ test("cell 15 — unavailable on rail_primary then MBS_INVALID_TIN on rail_secon
   const lifecycle = await lifecycleRows(id);
   assert.equal(lifecycle.length, 1);
   assert.equal(lifecycle[0]?.toStatus, "failed");
-  assert.equal(lifecycle[0]?.reason, "MBS_INVALID_TIN", "the rejection is the reason, not the failed-over 503");
+  assert.equal(
+    lifecycle[0]?.reason,
+    "MBS_INVALID_TIN",
+    "the rejection is the reason, not the failed-over 503",
+  );
   const actions = await auditActions(id);
-  assert.equal(actions.filter((a) => a === "invoice.rejected").length, 1, actions.join(","));
+  assert.equal(
+    actions.filter((a) => a === "invoice.rejected").length,
+    1,
+    actions.join(","),
+  );
   const row = await outboxRow(id);
   assert.equal(row.id, outboxId);
   assert.equal(row.status, "dead");
@@ -858,9 +1115,16 @@ test("cell 15 — unavailable on rail_primary then MBS_INVALID_TIN on rail_secon
   const cases = await casesFor(id);
   assert.equal(cases.length, 1);
   assert.equal(cases[0]?.errorCode, "MBS_INVALID_TIN");
-  assert.deepEqual(callsFor(fake, 15).map((c) => `${c.rail}:${c.outcome}`), ["rail_primary:unavailable", "rail_secondary:reject"]);
+  assert.deepEqual(
+    callsFor(fake, 15).map((c) => `${c.rail}:${c.outcome}`),
+    ["rail_primary:unavailable", "rail_secondary:reject"],
+  );
   assert.equal((await breakerStatus("rail_primary")).failureCount, 1);
-  assert.equal((await breakerStatus("rail_secondary")).failureCount, 0, "a rejection is an answer");
+  assert.equal(
+    (await breakerStatus("rail_secondary")).failureCount,
+    0,
+    "a rejection is an answer",
+  );
 
   // The two rows of the one try: same attempt_no, same created_at (they
   // committed together), seq strictly increasing in call order.
@@ -871,15 +1135,26 @@ test("cell 15 — unavailable on rail_primary then MBS_INVALID_TIN on rail_secon
   ]);
   assert.ok(bySeq[0]!.seq != null && bySeq[1]!.seq != null);
   assert.ok(bySeq[1]!.seq > bySeq[0]!.seq, "seq is strictly increasing");
-  assert.equal(bySeq[0]!.createdAt.getTime(), bySeq[1]!.createdAt.getTime(), "created_at cannot tell them apart");
+  assert.equal(
+    bySeq[0]!.createdAt.getTime(),
+    bySeq[1]!.createdAt.getTime(),
+    "created_at cannot tell them apart",
+  );
 
   // GET /invoices/:id/attempts — the same query documents.ts runs.
   const routeOrder = await getDb()
     .select()
     .from(submissionAttemptsTable)
     .where(eq(submissionAttemptsTable.invoiceId, id))
-    .orderBy(asc(submissionAttemptsTable.attemptNo), asc(submissionAttemptsTable.seq));
-  assert.equal(routeOrder.at(-1)?.status, "rejected", "the route lists the terminal answer last");
+    .orderBy(
+      asc(submissionAttemptsTable.attemptNo),
+      asc(submissionAttemptsTable.seq),
+    );
+  assert.equal(
+    routeOrder.at(-1)?.status,
+    "rejected",
+    "the route lists the terminal answer last",
+  );
   assert.equal(routeOrder.at(-1)?.errorCode, "MBS_INVALID_TIN");
 
   // The status light reads the rows unordered (the route selects without an
@@ -892,7 +1167,10 @@ test("cell 15 — unavailable on rail_primary then MBS_INVALID_TIN on rail_secon
     stamp: null,
   });
   assert.equal(light.light, "red");
-  assert.ok(light.reasons[0]?.includes("MBS_INVALID_TIN"), light.reasons.join(" | "));
+  assert.ok(
+    light.reasons[0]?.includes("MBS_INVALID_TIN"),
+    light.reasons.join(" | "),
+  );
 
   // Clerk's explain (no provider → the grounded catalogue text) names the
   // latest row with a code — by seq, so the rejection and not the 503.
@@ -908,8 +1186,16 @@ test("cell 16 — rate_limit with Retry-After: the rail's floor holds the retry 
   const quickOutbox = await enqueueSubmit(quick);
   const fake = scriptedRail({ name: FAKE });
   // times: 2 covers both rails of the one try (scripts queue per invoice).
-  fake.script(invoiceNumber("16a"), { outcome: "rate_limit", retryAfterSeconds: 30, times: 2 });
-  fake.script(invoiceNumber("16b"), { outcome: "rate_limit", retryAfterSeconds: 1, times: 2 });
+  fake.script(invoiceNumber("16a"), {
+    outcome: "rate_limit",
+    retryAfterSeconds: 30,
+    times: 2,
+  });
+  fake.script(invoiceNumber("16b"), {
+    outcome: "rate_limit",
+    retryAfterSeconds: 1,
+    times: 2,
+  });
   setRailTransport(fake);
   const before = Date.now();
   await drainUntilSettled(slow);
@@ -924,7 +1210,10 @@ test("cell 16 — rate_limit with Retry-After: the rail's floor holds the retry 
     slowRow.nextAttemptAt.getTime() >= before + 29_000,
     `a 30 s Retry-After floors the 2-4 s backoff: ${slowRow.nextAttemptAt.getTime() - before}ms`,
   );
-  assert.ok(slowRow.nextAttemptAt.getTime() <= Date.now() + 31_000, "and is honoured as given, not inflated");
+  assert.ok(
+    slowRow.nextAttemptAt.getTime() <= Date.now() + 31_000,
+    "and is honoured as given, not inflated",
+  );
   assert.deepEqual(attemptShape(await attemptRows(slow)), [
     ["rail_primary", "error", "RAIL_RATE_LIMITED", 1],
     ["rail_secondary", "error", "RAIL_RATE_LIMITED", 1],
@@ -953,7 +1242,11 @@ test("cell 17 — duplicate, then every lookup fails: retry saying the stamp loo
   // (unbounded, as a real rail would); the first try's two lookups — the
   // reporting rail, then the other — cannot be answered.
   fake.script(invoiceNumber(17), { outcome: "duplicate", holdsStamp: true });
-  fake.script(invoiceNumber(17), { op: "lookup", outcome: "unavailable", times: 2 });
+  fake.script(invoiceNumber(17), {
+    op: "lookup",
+    outcome: "unavailable",
+    times: 2,
+  });
   setRailTransport(fake);
   await drainUntilSettled(id);
 
@@ -963,7 +1256,11 @@ test("cell 17 — duplicate, then every lookup fails: retry saying the stamp loo
   assert.equal(row.attempts, 1);
   assert.match(row.lastError ?? "", /^RAIL_UNAVAILABLE: stamp lookup failed/);
   assert.ok(row.nextAttemptAt.getTime() > Date.now());
-  assert.equal(await invoiceStatus(id), "submitted", "the invoice is NOT failed: the stamp may well exist");
+  assert.equal(
+    await invoiceStatus(id),
+    "submitted",
+    "the invoice is NOT failed: the stamp may well exist",
+  );
   assert.equal(await stampFor(id), undefined);
   assert.deepEqual(
     attemptShape(await attemptRows(id)),
@@ -971,12 +1268,19 @@ test("cell 17 — duplicate, then every lookup fails: retry saying the stamp loo
     "exactly one attempt row: the 409 stays on the record",
   );
   const actions = await auditActions(id);
-  assert.ok(!actions.includes("invoice.stamp_recovery_failed"), `no recovery-failed audit: ${actions.join(",")}`);
+  assert.ok(
+    !actions.includes("invoice.stamp_recovery_failed"),
+    `no recovery-failed audit: ${actions.join(",")}`,
+  );
   assert.ok(!actions.includes("invoice.rejected"));
   assert.equal((await lifecycleRows(id)).length, 0);
   assert.equal((await casesFor(id)).length, 0, "no Desk case for a retry");
   for (const rail of RAILS) {
-    assert.equal((await breakerStatus(rail)).failureCount, 1, `${rail} counted its unanswered lookup`);
+    assert.equal(
+      (await breakerStatus(rail)).failureCount,
+      1,
+      `${rail} counted its unanswered lookup`,
+    );
   }
   assert.deepEqual(callsFor(fake, 17), [
     { op: "submit", rail: "rail_primary", outcome: "duplicate" },
@@ -1005,7 +1309,11 @@ test("cell 17 — duplicate, then every lookup fails: retry saying the stamp loo
     { op: "submit", rail: "rail_primary", outcome: "duplicate" },
     { op: "lookup", rail: "rail_primary", outcome: "lookup_hit" },
   ]);
-  assert.equal((await breakerStatus("rail_primary")).failureCount, 0, "the answered lookup reset rail_primary");
+  assert.equal(
+    (await breakerStatus("rail_primary")).failureCount,
+    0,
+    "the answered lookup reset rail_primary",
+  );
   assert.equal((await breakerStatus("rail_secondary")).failureCount, 1);
 });
 
@@ -1017,12 +1325,22 @@ test("cell 18 — reconcile takes each stuck invoice in its own transaction: two
   // head of reconcile's oldest-first batch whatever else is stuck.
   await reconcile();
   await flushReadyQueue();
-  const a = await seedInvoice("18a", { createdAt: new Date("2000-01-01T00:00:00Z") });
-  const b = await seedInvoice("18b", { createdAt: new Date("2000-01-01T00:00:01Z") });
+  const a = await seedInvoice("18a", {
+    createdAt: new Date("2000-01-01T00:00:00Z"),
+  });
+  const b = await seedInvoice("18b", {
+    createdAt: new Date("2000-01-01T00:00:01Z"),
+  });
 
   assert.equal(await reconcile(), 2, "both unknown submissions re-queued");
-  for (const [n, id] of [["18a", a], ["18b", b]] as const) {
-    const rows = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, id));
+  for (const [n, id] of [
+    ["18a", a],
+    ["18b", b],
+  ] as const) {
+    const rows = await getDb()
+      .select()
+      .from(outboxTable)
+      .where(eq(outboxTable.aggregateId, id));
     assert.equal(rows.length, 1, `${n}: exactly one row`);
     assert.equal(rows[0]?.status, "pending");
     assert.equal(rows[0]?.type, "invoice.submit");
@@ -1043,13 +1361,27 @@ test("cell 18 — reconcile takes each stuck invoice in its own transaction: two
 
   // Neither rail can answer a lookup for the next two: each invoice's
   // failure is its own — the pass still reaches the second one.
-  const c = await seedInvoice("18c", { createdAt: new Date("2000-01-01T00:00:02Z") });
-  const d = await seedInvoice("18d", { createdAt: new Date("2000-01-01T00:00:03Z") });
+  const c = await seedInvoice("18c", {
+    createdAt: new Date("2000-01-01T00:00:02Z"),
+  });
+  const d = await seedInvoice("18d", {
+    createdAt: new Date("2000-01-01T00:00:03Z"),
+  });
   fake.script(invoiceNumber("18c"), { op: "lookup", outcome: "unavailable" });
   fake.script(invoiceNumber("18d"), { op: "lookup", outcome: "unavailable" });
-  assert.equal(await reconcile(), 2, "a lookup error re-queues; the pass is not aborted");
-  for (const [n, id] of [["18c", c], ["18d", d]] as const) {
-    const rows = await getDb().select().from(outboxTable).where(eq(outboxTable.aggregateId, id));
+  assert.equal(
+    await reconcile(),
+    2,
+    "a lookup error re-queues; the pass is not aborted",
+  );
+  for (const [n, id] of [
+    ["18c", c],
+    ["18d", d],
+  ] as const) {
+    const rows = await getDb()
+      .select()
+      .from(outboxTable)
+      .where(eq(outboxTable.aggregateId, id));
     assert.equal(rows.length, 1, `${n}: exactly one row`);
     assert.equal(rows[0]?.status, "pending");
     assert.equal(await invoiceStatus(id), "submitted");
@@ -1063,7 +1395,11 @@ test("cell 18 — reconcile takes each stuck invoice in its own transaction: two
     );
   }
   for (const rail of RAILS) {
-    assert.equal((await breakerStatus(rail)).failureCount, 2, `${rail} counted one unanswered lookup per invoice`);
+    assert.equal(
+      (await breakerStatus(rail)).failureCount,
+      2,
+      `${rail} counted one unanswered lookup per invoice`,
+    );
   }
   await drainUntilSettled(c);
   await drainUntilSettled(d);
@@ -1081,7 +1417,10 @@ test("cell 21 — R102: an event transaction holds no rail_states lock during it
     name: "lock-free",
     environment: "sandbox",
     async submit(rail, inv, key) {
-      if (rail === "rail_secondary" && inv.invoiceNumber === invoiceNumber(21)) {
+      if (
+        rail === "rail_secondary" &&
+        inv.invoiceNumber === invoiceNumber(21)
+      ) {
         // Mid-event, after rail_primary's failure was recorded: a second
         // worker writes the same breaker row on its own connection. Before
         // R102 that UPDATE queued behind this event's transaction until the
@@ -1111,7 +1450,11 @@ test("cell 21 — R102: an event transaction holds no rail_states lock during it
   await enqueueSubmit(id);
   await drainUntilSettled(id);
   assert.equal(await invoiceStatus(id), "stamped");
-  assert.equal(observedError, null, "the other worker's breaker write was not refused");
+  assert.equal(
+    observedError,
+    null,
+    "the other worker's breaker write was not refused",
+  );
   assert.ok(
     observedMs !== null && observedMs < 1_000,
     `the other worker's breaker write completed without waiting (${observedMs} ms)`,
@@ -1146,7 +1489,11 @@ test("cell 19 — stopWorker() mid-drain: the pass finishes the event in flight 
   const b = await seedInvoice("19b");
   const outB = await enqueueSubmit(b);
 
-  assert.equal(await drain(10), 1, "the event in flight finished; nothing more was claimed");
+  assert.equal(
+    await drain(10),
+    1,
+    "the event in flight finished; nothing more was claimed",
+  );
   assert.equal((await outboxRow(a)).status, "done");
   assert.equal(await invoiceStatus(a), "stamped");
   const rowB = await outboxRow(b);
@@ -1156,7 +1503,11 @@ test("cell 19 — stopWorker() mid-drain: the pass finishes the event in flight 
   assert.equal(rowB.lockedAt, null);
   assert.equal(await invoiceStatus(b), "submitted");
   assert.deepEqual(callsFor(inner, "19b"), []);
-  assert.equal(await drain(10), 0, "still stopped: a further pass claims nothing");
+  assert.equal(
+    await drain(10),
+    0,
+    "still stopped: a further pass claims nothing",
+  );
 
   resumeWorker();
   await drainUntilSettled(b);

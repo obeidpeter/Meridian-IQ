@@ -18,7 +18,10 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Draft-time rejection risk. Pinned invariants:
 //  - scoping: supplier/buyer signals come from THIS invoice's parties; the
@@ -53,7 +56,11 @@ const threeDaysAgo = new Date(Date.now() - 3 * DAY);
 
 const firmAdmin: Principal = firmPrincipal(firmA);
 const clientS1: Principal = clientPrincipal(firmA, supplier1);
-const clientS2: Principal = { ...clientS1, userId: randomUUID(), clientPartyId: supplier2 };
+const clientS2: Principal = {
+  ...clientS1,
+  userId: randomUUID(),
+  clientPartyId: supplier2,
+};
 const adminB: Principal = { ...firmAdmin, userId: randomUUID(), firmId: firmB };
 
 before(async () => {
@@ -63,8 +70,16 @@ before(async () => {
     { id: firmB, name: `RR Firm B ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: supplier1, type: "client_business", legalName: `RR Supplier 1 ${SALT}` },
-    { id: supplier2, type: "client_business", legalName: `RR Supplier 2 ${SALT}` },
+    {
+      id: supplier1,
+      type: "client_business",
+      legalName: `RR Supplier 1 ${SALT}`,
+    },
+    {
+      id: supplier2,
+      type: "client_business",
+      legalName: `RR Supplier 2 ${SALT}`,
+    },
     { id: buyerX, type: "buyer", legalName: `RR Buyer X ${SALT}` },
     { id: buyerY, type: "buyer", legalName: `RR Buyer Y ${SALT}` },
     { id: clientB, type: "client_business", legalName: `RR Client B ${SALT}` },
@@ -106,15 +121,17 @@ before(async () => {
     errorCode: string | null,
     agoDays: number,
   ) => {
-    await getDb().insert(submissionAttemptsTable).values({
-      invoiceId,
-      rail: "rail_primary",
-      attemptNo: no,
-      idempotencyKey: `rr-${invoiceId}-${no}`,
-      status: status as never,
-      errorCode,
-      createdAt: new Date(Date.now() - agoDays * DAY),
-    });
+    await getDb()
+      .insert(submissionAttemptsTable)
+      .values({
+        invoiceId,
+        rail: "rail_primary",
+        attemptNo: no,
+        idempotencyKey: `rr-${invoiceId}-${no}`,
+        status: status as never,
+        errorCode,
+        createdAt: new Date(Date.now() - agoDays * DAY),
+      });
   };
 
   inv1 = await mkInvoice(firmA, supplier1, buyerX, `RR-1-${SALT}`);

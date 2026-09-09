@@ -180,8 +180,7 @@ export async function computeTierReport(): Promise<TierReport> {
       const invalid = Number(r.invalid_count);
       const error = Number(r.error_count);
       const judged = ok + invalid + error;
-      const validRate =
-        judged === 0 ? 1 : Number((ok / judged).toFixed(4));
+      const validRate = judged === 0 ? 1 : Number((ok / judged).toFixed(4));
       // embed_memory is served by the embedding provider, not the tiered
       // completion router: modelForPurpose would report CLERK_MODEL (never
       // true) and the validity-based recommendation is meaningless for a

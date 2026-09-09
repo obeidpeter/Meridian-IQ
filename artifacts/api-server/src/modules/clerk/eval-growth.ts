@@ -111,9 +111,7 @@ export async function loadGrownFixtures(
 // fixture so supplier memory (exemplar.ts) can match future documents;
 // notice cases create no invoice, so their identity columns stay null and
 // supplier memory never serves them.
-export async function growEvalFixtures(
-  limit = GROWTH_BATCH,
-): Promise<number> {
+export async function growEvalFixtures(limit = GROWTH_BATCH): Promise<number> {
   const candidates = await getDb()
     .select({
       id: clerkCasesTable.id,

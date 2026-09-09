@@ -23,7 +23,10 @@ export function QueryError({
       <AlertTriangle className="h-4 w-4" aria-hidden="true" />
       <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-destructive dark:text-red-300" data-testid="text-error">
+          <p
+            className="text-destructive dark:text-red-300"
+            data-testid="text-error"
+          >
             Unable to load {thing}.
           </p>
           {detail ? (

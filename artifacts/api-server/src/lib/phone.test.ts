@@ -30,7 +30,11 @@ test("normalizePhone: accepted shapes", () => {
     ["  +234 803 123 4567  ", "+2348031234567"],
   ];
   for (const [input, expected] of cases) {
-    assert.equal(normalizePhone(input), expected, `normalizePhone(${JSON.stringify(input)})`);
+    assert.equal(
+      normalizePhone(input),
+      expected,
+      `normalizePhone(${JSON.stringify(input)})`,
+    );
   }
 });
 
@@ -49,7 +53,11 @@ test("normalizePhone: rejected shapes", () => {
     "+1234567890123456", // 16 digits with plus — too long
   ];
   for (const input of rejected) {
-    assert.equal(normalizePhone(input), null, `normalizePhone(${JSON.stringify(input)})`);
+    assert.equal(
+      normalizePhone(input),
+      null,
+      `normalizePhone(${JSON.stringify(input)})`,
+    );
   }
 });
 

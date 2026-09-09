@@ -132,9 +132,7 @@ describe("ClerkActionEffectivenessCard", () => {
     ).toBe("now: 2 stamped or beyond · 1 in flight · 1 failed again");
 
     // Chaser rows carry no now-line — nothing on the rails to verify.
-    expect(
-      screen.queryByTestId("effectiveness-now-draft_chasers"),
-    ).toBeNull();
+    expect(screen.queryByTestId("effectiveness-now-draft_chasers")).toBeNull();
 
     const exposure = screen.getByTestId("text-effectiveness-exposure");
     expect(exposure.textContent).toContain("₦40,000.00");

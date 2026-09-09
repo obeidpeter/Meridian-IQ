@@ -67,10 +67,7 @@ for (const method of ["Escape", "Cancel", "Close", "outside"]) {
       fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     else if (method === "outside")
       fireEvent.pointerDown(document.body, { button: 0, pointerType: "mouse" });
-    else
-      fireEvent.click(
-        screen.getByRole("button", { name: method }),
-      );
+    else fireEvent.click(screen.getByRole("button", { name: method }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
     expect(harness.submit).not.toHaveBeenCalled();
@@ -123,9 +120,7 @@ test("pending confirmation and next batch cannot dismiss onto a disabled trigger
       expect((trigger as HTMLButtonElement).disabled).toBe(false),
     );
   }
-  fireEvent.click(
-    screen.getAllByRole("button", { name: "Close" })[0],
-  );
+  fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   await waitFor(() => expect(document.activeElement).toBe(trigger));
 });

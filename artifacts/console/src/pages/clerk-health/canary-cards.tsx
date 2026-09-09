@@ -17,11 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import {
-  formatPct,
-  pillClasses,
-  type BadgeTone,
-} from "@/lib/format";
+import { formatPct, pillClasses, type BadgeTone } from "@/lib/format";
 import {
   EVAL_RISK_TONE,
   modelCanaryRowClass,

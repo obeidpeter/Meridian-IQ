@@ -58,11 +58,7 @@ async function seedBill(input: {
   return id;
 }
 
-function statementMatch(
-  invoiceId: string,
-  amount: string,
-  occurredAt: string,
-) {
+function statementMatch(invoiceId: string, amount: string, occurredAt: string) {
   return {
     invoiceId,
     source: "statement_match" as const,
@@ -76,13 +72,31 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `DP Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `DP Client ${SALT}` },
-    { id: siblingParty, type: "client_business", legalName: `DP Sibling ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `DP Client ${SALT}`,
+    },
+    {
+      id: siblingParty,
+      type: "client_business",
+      legalName: `DP Sibling ${SALT}`,
+    },
     { id: vendorParty, type: "buyer", legalName: `DP Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `dp A ${SALT}` },
-    { firmId, clientPartyId: siblingParty, type: "retainer", title: `dp B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `dp A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `dp B ${SALT}`,
+    },
   ]);
 
   // Paid twice: two DISTINCT statement-line debits, 2× the bill.
@@ -180,7 +194,11 @@ before(async () => {
 
 test("only distinct over-total bank debits flag a bill as paid twice", async () => {
   const check = await computeDoublePaymentCheck(firmId, clientParty);
-  assert.equal(check.multiPaid.length, 1, "flag+match and installments never flag");
+  assert.equal(
+    check.multiPaid.length,
+    1,
+    "flag+match and installments never flag",
+  );
   const hit = check.multiPaid[0];
   assert.equal(hit.invoiceId, paidTwiceId);
   assert.equal(hit.evidenceCount, 2);
@@ -204,9 +222,17 @@ test("duplicate pairs: both-unpaid once, paid original against each unpaid copy"
   const paidOriginal = check.duplicateCandidates.filter(
     (p) => p.pairKind === "paid_original",
   );
-  assert.equal(paidOriginal.length, 2, "the paid bill pairs with each unpaid copy");
+  assert.equal(
+    paidOriginal.length,
+    2,
+    "the paid bill pairs with each unpaid copy",
+  );
   for (const pair of paidOriginal) {
-    assert.equal(pair.first.invoiceId, paidDupId, "the paid side takes the first seat");
+    assert.equal(
+      pair.first.invoiceId,
+      paidDupId,
+      "the paid side takes the first seat",
+    );
     assert.ok([dupAId, dupBId].includes(pair.second.invoiceId));
   }
 });

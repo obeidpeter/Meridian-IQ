@@ -929,5 +929,9 @@ export async function sweepAdvisoryBriefs(
 registerSweep(
   "clerk.advisory_briefs",
   (signal) => sweepAdvisoryBriefs({ signal }),
-  { critical: false, acceptsSignal: true, timeoutMs: GENERATION_SWEEP_TIMEOUT_MS },
+  {
+    critical: false,
+    acceptsSignal: true,
+    timeoutMs: GENERATION_SWEEP_TIMEOUT_MS,
+  },
 );

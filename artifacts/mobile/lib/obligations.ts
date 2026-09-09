@@ -61,7 +61,8 @@ export function obligationBadge(
   const days = deadlineDaysUntil(todayIso, responseDueDate);
   if (Number.isNaN(days)) return { label: "Open", tone: "info" };
   if (days < 0) return { label: "Overdue", tone: "critical" };
-  if (days <= OBLIGATION_DUE_SOON_DAYS) return { label: "Due soon", tone: "warning" };
+  if (days <= OBLIGATION_DUE_SOON_DAYS)
+    return { label: "Due soon", tone: "warning" };
   return { label: "Open", tone: "info" };
 }
 

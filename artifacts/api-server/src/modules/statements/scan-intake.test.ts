@@ -60,14 +60,19 @@ const clientParty = randomUUID(); // engaged + layer-1 consent
 const noConsentParty = randomUUID(); // engaged, NO consent
 const brokeParty = randomUUID(); // firmBroke's engaged + consented party
 
-const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userId,
+  role: "firm_staff",
+});
 const staffBroke: Principal = { ...staff, firmId: firmBroke };
 
 // Minimal hand-built PDFs (the clerk-scan.test.ts builders): a textless one
 // that routes to the vision path, and one whose content stream draws real
 // text so getText() finds it and the proposal stays on the text path.
 function blankPdf(pages: number, tag: string): string {
-  const kids = Array.from({ length: pages }, (_, i) => `${3 + i} 0 R`).join(" ");
+  const kids = Array.from({ length: pages }, (_, i) => `${3 + i} 0 R`).join(
+    " ",
+  );
   const pageObjects = Array.from(
     { length: pages },
     (_, i) =>
@@ -132,14 +137,41 @@ before(async () => {
     { id: firmBroke, name: `Scan Stmt Broke Firm ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `Scan Client ${SALT}` },
-    { id: noConsentParty, type: "client_business", legalName: `Scan NoConsent ${SALT}` },
-    { id: brokeParty, type: "client_business", legalName: `Scan Broke ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `Scan Client ${SALT}`,
+    },
+    {
+      id: noConsentParty,
+      type: "client_business",
+      legalName: `Scan NoConsent ${SALT}`,
+    },
+    {
+      id: brokeParty,
+      type: "client_business",
+      legalName: `Scan Broke ${SALT}`,
+    },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `scan A ${SALT}` },
-    { firmId, clientPartyId: noConsentParty, type: "retainer", title: `scan B ${SALT}` },
-    { firmId: firmBroke, clientPartyId: brokeParty, type: "retainer", title: `scan C ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `scan A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: noConsentParty,
+      type: "retainer",
+      title: `scan B ${SALT}`,
+    },
+    {
+      firmId: firmBroke,
+      clientPartyId: brokeParty,
+      type: "retainer",
+      title: `scan C ${SALT}`,
+    },
   ]);
   await db.insert(consentRecordsTable).values([
     {
@@ -311,7 +343,8 @@ test("a textless PDF walks the vision path with the statement fence", async () =
   const req = calls[0];
   assert.ok(Array.isArray(req.user), "vision content parts");
   const parts = req.user as Array<
-    { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string } }
   >;
   const preamble = parts[0];
   assert.ok(
@@ -350,7 +383,12 @@ test("kill switch off: the proposal refuses 503 before decode or provider work",
 test("invalid model output is discarded and fails closed as 502", async () => {
   const gateway = fakeGateway(() => "not json at all");
   await assert.rejects(
-    proposeStatementLinesFromPdf(textPdf("invalid-out"), firmId, userId, gateway),
+    proposeStatementLinesFromPdf(
+      textPdf("invalid-out"),
+      firmId,
+      userId,
+      gateway,
+    ),
     (err: unknown) => {
       assert.ok(err instanceof DomainError);
       assert.equal(err.code, "SCAN_EXTRACT_FAILED");

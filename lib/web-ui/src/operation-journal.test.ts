@@ -93,11 +93,9 @@ describe("server operation reconciliation", () => {
   ])(
     "second-device history preserves authorized %s route %s without local records",
     async (command, route) => {
-      const fetcher = vi
-        .fn()
-        .mockResolvedValue({
-          operations: [serverOperation({ command, route })],
-        });
+      const fetcher = vi.fn().mockResolvedValue({
+        operations: [serverOperation({ command, route })],
+      });
       const records = await reconcileOperations(
         [],
         { fetcher },

@@ -29,10 +29,7 @@ import {
   runPlanPolicySweep,
 } from "./plan-policies.ts";
 import { lagosDateString } from "../../lib/lagos-time.ts";
-import {
-  restoreClerkFlag,
-  saveAndEnableClerkFlag,
-} from "./test-support.ts";
+import { restoreClerkFlag, saveAndEnableClerkFlag } from "./test-support.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
@@ -108,8 +105,18 @@ before(async () => {
     })),
   );
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientA, type: "readiness_assessment", title: "pa" },
-    { firmId, clientPartyId: clientB, type: "readiness_assessment", title: "pb" },
+    {
+      firmId,
+      clientPartyId: clientA,
+      type: "readiness_assessment",
+      title: "pa",
+    },
+    {
+      firmId,
+      clientPartyId: clientB,
+      type: "readiness_assessment",
+      title: "pb",
+    },
   ]);
   await grantComplianceConsent(clientA, userId);
   await grantComplianceConsent(clientB, userId);
@@ -122,7 +129,12 @@ before(async () => {
       issueDate: daysAgo(30),
       dueDate: null,
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -153,7 +165,12 @@ test("grant walls: engagement, duplicates, unknown templates", async () => {
     grantPlanPolicy(firmId, clientA, principal, "no_such_template"),
     isDomainError("UNKNOWN_TEMPLATE"),
   );
-  const policy = await grantPlanPolicy(firmId, clientA, principal, "month_end_close");
+  const policy = await grantPlanPolicy(
+    firmId,
+    clientA,
+    principal,
+    "month_end_close",
+  );
   assert.equal(policy.templateKey, "month_end_close");
   await assert.rejects(
     grantPlanPolicy(firmId, clientA, principal, "month_end_close"),
@@ -164,14 +181,29 @@ test("grant walls: engagement, duplicates, unknown templates", async () => {
   assert.ok(list.policies.some((p) => p.id === policy.id));
   // Revoked grants free the live slot — a fresh grant succeeds.
   await revokePlanPolicy(firmId, policy.id, principal);
-  const again = await grantPlanPolicy(firmId, clientA, principal, "month_end_close");
+  const again = await grantPlanPolicy(
+    firmId,
+    clientA,
+    principal,
+    "month_end_close",
+  );
   assert.notEqual(again.id, policy.id);
   await revokePlanPolicy(firmId, again.id, principal);
 });
 
 test("the sweep mints one run per month (CAS); an empty pass gives the month back until closing", async () => {
-  const withPaper = await grantPlanPolicy(firmId, clientA, principal, "month_end_close");
-  const empty = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  const withPaper = await grantPlanPolicy(
+    firmId,
+    clientA,
+    principal,
+    "month_end_close",
+  );
+  const empty = await grantPlanPolicy(
+    firmId,
+    clientB,
+    principal,
+    "month_end_close",
+  );
   try {
     // clientA has an overdue draft: whatever the calendar day, the sweep
     // mints exactly one run for it this month.
@@ -196,7 +228,11 @@ test("the sweep mints one run per month (CAS); an empty pass gives the month bac
       "skipped_empty",
     );
     const unclaimed = await loadPolicy(empty.id);
-    assert.equal(unclaimed.lastRunMonth, null, "the month is NOT consumed early");
+    assert.equal(
+      unclaimed.lastRunMonth,
+      null,
+      "the month is NOT consumed early",
+    );
     assert.equal(unclaimed.pausedAt, null);
 
     // ...and the CLOSING window consumes a still-empty month honestly:
@@ -239,7 +275,11 @@ test("the sweep mints one run per month (CAS); an empty pass gives the month bac
     assert.equal(still.lastRunId, ranA.lastRunId);
     assert.equal(still.pausedAt, null);
     const stillB = await loadPolicy(empty.id);
-    assert.equal(stillB.lastRunMonth, monthKey, "recovery honours the empty audit");
+    assert.equal(
+      stillB.lastRunMonth,
+      monthKey,
+      "recovery honours the empty audit",
+    );
   } finally {
     await revokePlanPolicy(firmId, withPaper.id, principal);
     await revokePlanPolicy(firmId, empty.id, principal);
@@ -247,7 +287,12 @@ test("the sweep mints one run per month (CAS); an empty pass gives the month bac
 });
 
 test("an orphaned month claim (crash between CAS and create) is recovered by the sweep", async () => {
-  const policy = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  const policy = await grantPlanPolicy(
+    firmId,
+    clientB,
+    principal,
+    "month_end_close",
+  );
   try {
     // Simulate the death between the CAS and the create: the month is
     // claimed, but no run and no audit exist to back it.
@@ -272,9 +317,7 @@ test("an orphaned month claim (crash between CAS and create) is recovered by the
           ),
         );
       assert.ok(
-        audits.some(
-          (a) => (a.after as { month?: string }).month === monthKey,
-        ),
+        audits.some((a) => (a.after as { month?: string }).month === monthKey),
         "a recovered closing-day claim is backed by its audit",
       );
     } else {
@@ -299,7 +342,12 @@ test("isLagosMonthClosing pins the closing window to the last Lagos day", () => 
 });
 
 test("a halted previous run pauses the policy instead of repeating it", async () => {
-  const policy = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  const policy = await grantPlanPolicy(
+    firmId,
+    clientB,
+    principal,
+    "month_end_close",
+  );
   try {
     const [haltedRun] = await getDb()
       .insert(clerkPlanRunsTable)
@@ -327,11 +375,19 @@ test("a halted previous run pauses the policy instead of repeating it", async ()
 });
 
 test("a demoted grantor pauses the policy (grantor_inactive)", async () => {
-  const policy = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  const policy = await grantPlanPolicy(
+    firmId,
+    clientB,
+    principal,
+    "month_end_close",
+  );
   const membership = await getDb()
     .delete(membershipsTable)
     .where(
-      and(eq(membershipsTable.userId, userId), eq(membershipsTable.firmId, firmId)),
+      and(
+        eq(membershipsTable.userId, userId),
+        eq(membershipsTable.firmId, firmId),
+      ),
     )
     .returning();
   try {
@@ -345,7 +401,12 @@ test("a demoted grantor pauses the policy (grantor_inactive)", async () => {
 });
 
 test("a dark flag skips without consuming the month", async () => {
-  const policy = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  const policy = await grantPlanPolicy(
+    firmId,
+    clientB,
+    principal,
+    "month_end_close",
+  );
   await setFirmOverride(ACTIONS_FLAG_KEY, firmId, false);
   try {
     await runPlanPolicySweep();
@@ -359,7 +420,12 @@ test("a dark flag skips without consuming the month", async () => {
 });
 
 test("offboarding revokes the party's plan policies", async () => {
-  const policy = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  const policy = await grantPlanPolicy(
+    firmId,
+    clientB,
+    principal,
+    "month_end_close",
+  );
   const revoked = await revokePlanPoliciesForParty(firmId, clientB, userId);
   assert.ok(revoked >= 1);
   const row = await loadPolicy(policy.id);

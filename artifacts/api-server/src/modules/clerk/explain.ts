@@ -43,7 +43,12 @@ const explainJsonSchema = {
   required: ["explanation", "nextSteps"],
   properties: {
     explanation: { type: "string" },
-    nextSteps: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3 },
+    nextSteps: {
+      type: "array",
+      items: { type: "string" },
+      minItems: 1,
+      maxItems: 3,
+    },
   },
 };
 
@@ -139,7 +144,8 @@ export async function explainInvoiceFailure(
   // Unmapped codes exist (INT-02 opens an operator case for them); the honest
   // fallback tells the client the desk is on it rather than inventing a fix.
   const cause =
-    entry?.cause ?? "The tax authority returned an error we have not mapped yet.";
+    entry?.cause ??
+    "The tax authority returned an error we have not mapped yet.";
   const fix =
     entry?.fix ??
     "Our compliance desk reviews unmapped errors — no action is needed from you right now.";

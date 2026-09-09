@@ -96,10 +96,7 @@ test("deterministic and pure: identical inputs give identical outputs", () => {
   const a = scrubDocumentText(text, identities);
   const b = scrubDocumentText(text, identities);
   assert.deepEqual(a, b);
-  assert.equal(
-    a.text,
-    "Company A (TIN 00000001-0001) sold to Company B",
-  );
+  assert.equal(a.text, "Company A (TIN 00000001-0001) sold to Company B");
 });
 
 test("a shared scrubber keeps text and expected values on the same labels", () => {

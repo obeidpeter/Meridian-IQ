@@ -23,12 +23,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { Stack, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Platform,
-  Pressable,
-  RefreshControl,
-  View,
-} from "react-native";
+import { Platform, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
@@ -171,7 +166,10 @@ export default function ReconciliationScreen() {
     },
   );
 
-  const statements = useMemo(() => statementsQuery.data ?? [], [statementsQuery.data]);
+  const statements = useMemo(
+    () => statementsQuery.data ?? [],
+    [statementsQuery.data],
+  );
   const selectedStatement = statements.find((s) => s.id === selectedId);
 
   // Auto-select the most recent statement so the matches section isn't dead on
@@ -427,7 +425,9 @@ export default function ReconciliationScreen() {
                 <Card style={{ gap: 12 }}>
                   {Platform.OS !== "web" ? (
                     <AppButton
-                      label={filename ? `File: ${filename}` : "Choose a CSV file"}
+                      label={
+                        filename ? `File: ${filename}` : "Choose a CSV file"
+                      }
                       icon="upload"
                       variant="secondary"
                       onPress={pickFile}
@@ -583,7 +583,9 @@ export default function ReconciliationScreen() {
                         style={{
                           gap: 6,
                           borderWidth: 1,
-                          borderColor: selected ? colors.primary : "transparent",
+                          borderColor: selected
+                            ? colors.primary
+                            : "transparent",
                         }}
                       >
                         <View style={rowBetween}>
@@ -602,7 +604,10 @@ export default function ReconciliationScreen() {
                             tone={STATEMENT_STATUS_TONE[s.status] ?? "neutral"}
                           />
                         </View>
-                        <AppText variant="caption" color={colors.mutedForeground}>
+                        <AppText
+                          variant="caption"
+                          color={colors.mutedForeground}
+                        >
                           {s.parsedCount} of {s.lineCount} line(s) parsed ·
                           Uploaded {formatDate(s.createdAt)}
                         </AppText>
@@ -656,7 +661,9 @@ export default function ReconciliationScreen() {
                       <Card key={p.id} style={{ gap: 8 }}>
                         <View style={rowBetween}>
                           <Pressable
-                            onPress={() => router.push(`/invoices/${p.invoiceId}`)}
+                            onPress={() =>
+                              router.push(`/invoices/${p.invoiceId}`)
+                            }
                             accessibilityRole="link"
                             accessibilityLabel={`Open invoice ${p.invoiceNumber}`}
                             hitSlop={8}
@@ -679,7 +686,10 @@ export default function ReconciliationScreen() {
                             />
                           </View>
                         </View>
-                        <AppText variant="caption" color={colors.mutedForeground}>
+                        <AppText
+                          variant="caption"
+                          color={colors.mutedForeground}
+                        >
                           {p.buyerName} · line {p.lineNo ?? "—"}
                           {p.lineDate ? ` · ${formatDate(p.lineDate)}` : ""}
                         </AppText>
@@ -695,7 +705,10 @@ export default function ReconciliationScreen() {
                         <Divider />
                         <View style={rowBetween}>
                           <View>
-                            <AppText variant="caption" color={colors.mutedForeground}>
+                            <AppText
+                              variant="caption"
+                              color={colors.mutedForeground}
+                            >
                               Bank credit
                             </AppText>
                             <AppText variant="label">
@@ -703,7 +716,10 @@ export default function ReconciliationScreen() {
                             </AppText>
                           </View>
                           <View style={{ alignItems: "flex-end" }}>
-                            <AppText variant="caption" color={colors.mutedForeground}>
+                            <AppText
+                              variant="caption"
+                              color={colors.mutedForeground}
+                            >
                               Invoice total
                             </AppText>
                             <AppText variant="label">
@@ -762,4 +778,3 @@ export default function ReconciliationScreen() {
     </>
   );
 }
-

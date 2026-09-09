@@ -187,7 +187,10 @@ for (const width of [320, 768, 1024, 1440]) {
         })
         .waitFor();
       assert.match(await page.title(), /Valo/);
-      assert.doesNotMatch(await page.locator("body").innerText(), /MeridianIQ|Meridian Today/);
+      assert.doesNotMatch(
+        await page.locator("body").innerText(),
+        /MeridianIQ|Meridian Today/,
+      );
       assert.equal(
         await page
           .getByRole("button", {

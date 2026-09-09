@@ -15,7 +15,10 @@ import { appendAudit } from "../audit/audit";
 // A malformed value (empty string → 0, garbage → NaN) must never produce
 // NaN comparisons/rates or a permanently-silent watch — fall back to the
 // default instead.
-export function envThreshold(raw: string | undefined, fallback: number): number {
+export function envThreshold(
+  raw: string | undefined,
+  fallback: number,
+): number {
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }

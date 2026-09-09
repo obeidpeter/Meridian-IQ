@@ -1,11 +1,4 @@
-import {
-  and,
-  eq,
-  inArray,
-  isNull,
-  lt,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import {
   getDb,
   invoiceRoomSessionsTable,
@@ -60,7 +53,10 @@ export async function sweepInvoiceRoomReminders(
     const lit = new Map<string, boolean>();
     for (const { share, invoice } of candidates) {
       if (!lit.has(share.firmId))
-        lit.set(share.firmId, await isFeatureEnabled("invoice_room", share.firmId));
+        lit.set(
+          share.firmId,
+          await isFeatureEnabled("invoice_room", share.firmId),
+        );
       if (!lit.get(share.firmId)) continue;
       const due = new Date(`${invoice.dueDate}T23:59:59+01:00`);
       const kind = due.getTime() < now.getTime() ? "overdue" : "due_soon";

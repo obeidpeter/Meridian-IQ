@@ -63,18 +63,13 @@ router.patch("/feature-flags/:key", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.get(
-  "/feature-flags/:key/overrides",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "flags.read");
-    const params = parseOrThrow(ListFeatureFlagOverridesParams, req.params);
-    res.json(
-      ListFeatureFlagOverridesResponse.parse(
-        await listFirmOverrides(params.key),
-      ),
-    );
-  },
-);
+router.get("/feature-flags/:key/overrides", async (req, res): Promise<void> => {
+  assertCan(req.principal, "flags.read");
+  const params = parseOrThrow(ListFeatureFlagOverridesParams, req.params);
+  res.json(
+    ListFeatureFlagOverridesResponse.parse(await listFirmOverrides(params.key)),
+  );
+});
 
 router.post("/feature-flags/:key/override", async (req, res): Promise<void> => {
   assertCan(req.principal, "flags.write");

@@ -5,15 +5,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTile } from "@/components/stat-tile";
 import { ScrollRegion } from "@/components/scroll-region";
-import {
-  formatPct,
-  pillClasses,
-} from "@/lib/format";
-import {
-  fmtTokens,
-  fmtUsd,
-  type MetricsGuard,
-} from "./format";
+import { formatPct, pillClasses } from "@/lib/format";
+import { fmtTokens, fmtUsd, type MetricsGuard } from "./format";
 
 // The Economics tab of the Clerk health page (R110: split out of the page):
 // spend and token metrics and the model-tier evidence with its own query.
@@ -122,9 +115,7 @@ export function EconomicsTab({ withMetrics }: { withMetrics: MetricsGuard }) {
                           <th className="py-2 pr-3 font-medium text-right">
                             Killed
                           </th>
-                          <th className="py-2 font-medium text-right">
-                            Error
-                          </th>
+                          <th className="py-2 font-medium text-right">Error</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -199,13 +190,12 @@ export function EconomicsTab({ withMetrics }: { withMetrics: MetricsGuard }) {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {metrics.platformSpend.firmFundedTokens.toLocaleString()}{" "}
-                tokens firm-funded ·{" "}
+                {metrics.platformSpend.firmFundedTokens.toLocaleString()} tokens
+                firm-funded ·{" "}
                 {metrics.platformSpend.platformFundedTokens.toLocaleString()}{" "}
-                platform-funded (desk tooling, evals). Ledger totals on the
-                same UTC month boundary the per-firm budgets use; cost
-                estimates need CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD
-                set.
+                platform-funded (desk tooling, evals). Ledger totals on the same
+                UTC month boundary the per-firm budgets use; cost estimates need
+                CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD set.
               </p>
             </CardContent>
           </Card>
@@ -219,33 +209,22 @@ export function EconomicsTab({ withMetrics }: { withMetrics: MetricsGuard }) {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Trailing {tierReport.windowDays} days from the inference
-              ledger, joined with the tier map in force (base model{" "}
+              Trailing {tierReport.windowDays} days from the inference ledger,
+              joined with the tier map in force (base model{" "}
               <span className="font-mono">{tierReport.baseModel}</span>).
               Recommendations are deterministic; act on them via
-              CLERK_MODEL_TIERS (takes effect on server restart) and
-              validate with a prompt canary first.
+              CLERK_MODEL_TIERS (takes effect on server restart) and validate
+              with a prompt canary first.
             </p>
             <ScrollRegion label="Model-tier evidence table">
-              <table
-                className="w-full text-sm"
-                data-testid="table-tier-report"
-              >
+              <table className="w-full text-sm" data-testid="table-tier-report">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                     <th className="py-2 pr-3 font-medium">Purpose</th>
-                    <th className="py-2 pr-3 font-medium text-right">
-                      Calls
-                    </th>
-                    <th className="py-2 pr-3 font-medium text-right">
-                      Tokens
-                    </th>
-                    <th className="py-2 pr-3 font-medium text-right">
-                      Share
-                    </th>
-                    <th className="py-2 pr-3 font-medium text-right">
-                      Valid
-                    </th>
+                    <th className="py-2 pr-3 font-medium text-right">Calls</th>
+                    <th className="py-2 pr-3 font-medium text-right">Tokens</th>
+                    <th className="py-2 pr-3 font-medium text-right">Share</th>
+                    <th className="py-2 pr-3 font-medium text-right">Valid</th>
                     <th className="py-2 pr-3 font-medium">Model</th>
                     <th className="py-2 font-medium">Recommendation</th>
                   </tr>

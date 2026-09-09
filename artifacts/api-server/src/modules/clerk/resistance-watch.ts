@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/sweeps";
-import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
+import {
+  alertOnceViaAuditLedger,
+  atMostHourly,
+  envThreshold,
+} from "./watch-shared";
 
 // Resistance-drop alert (round-8 idea #2). The injection-resistance trend
 // (metrics.injectionTrend) is a chart someone has to look at; the red team
@@ -139,4 +143,6 @@ export async function sweepResistanceWatch(
   });
 }
 
-registerSweep("clerk.resistance_watch", atMostHourly(sweepResistanceWatch), { critical: false });
+registerSweep("clerk.resistance_watch", atMostHourly(sweepResistanceWatch), {
+  critical: false,
+});

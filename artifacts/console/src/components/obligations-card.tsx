@@ -254,9 +254,7 @@ function ObligationRecordForm({
           <Input
             id="obl-reference"
             value={draft.reference}
-            onChange={(e) =>
-              setDraft({ ...draft, reference: e.target.value })
-            }
+            onChange={(e) => setDraft({ ...draft, reference: e.target.value })}
             data-testid="input-obligation-reference"
           />
         </div>
@@ -265,9 +263,7 @@ function ObligationRecordForm({
           <Input
             id="obl-amount"
             value={draft.amount}
-            onChange={(e) =>
-              setDraft({ ...draft, amount: e.target.value })
-            }
+            onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
             data-testid="input-obligation-amount"
           />
         </div>
@@ -277,9 +273,7 @@ function ObligationRecordForm({
             id="obl-issue"
             type="date"
             value={draft.issueDate}
-            onChange={(e) =>
-              setDraft({ ...draft, issueDate: e.target.value })
-            }
+            onChange={(e) => setDraft({ ...draft, issueDate: e.target.value })}
             data-testid="input-obligation-issue-date"
           />
         </div>
@@ -343,10 +337,7 @@ function ObligationResponsePanel({
           }
           data-testid={`button-response-pack-${o.id}`}
         >
-          <Download
-            className="w-3.5 h-3.5 mr-1.5"
-            aria-hidden="true"
-          />
+          <Download className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
           Download response bundle (PDF)
         </Button>
         <Button
@@ -360,9 +351,7 @@ function ObligationResponsePanel({
           disabled={draftResponse.isPending}
           data-testid={`button-response-draft-${o.id}`}
         >
-          {draftResponse.isPending
-            ? "Drafting…"
-            : "Draft response letter"}
+          {draftResponse.isPending ? "Drafting…" : "Draft response letter"}
         </Button>
       </div>
       {letter && letter.obligationId === o.id && (
@@ -387,32 +376,26 @@ function ObligationResponsePanel({
             variant="outline"
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(
-                  letter.letter,
-                );
+                await navigator.clipboard.writeText(letter.letter);
                 toast({ title: "Letter copied" });
               } catch {
                 toast({
                   title: "Could not copy",
-                  description:
-                    "Select the text and copy it manually.",
+                  description: "Select the text and copy it manually.",
                   variant: "destructive",
                 });
               }
             }}
             data-testid={`button-copy-letter-${o.id}`}
           >
-            <Copy
-              className="w-3.5 h-3.5 mr-1.5"
-              aria-hidden="true"
-            />
+            <Copy className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             Copy letter
           </Button>
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        The platform never sends or files the response — this
-        is a draft for the firm to own.
+        The platform never sends or files the response — this is a draft for the
+        firm to own.
       </p>
     </div>
   );
@@ -425,12 +408,7 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
   const queryClient = useQueryClient();
 
   const params = { clientPartyId };
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-  } = useListObligations(params, {
+  const { data, isLoading, error, refetch } = useListObligations(params, {
     query: {
       enabled: !!clientPartyId,
       queryKey: getListObligationsQueryKey(params),
@@ -534,7 +512,10 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
         )}
 
         {isLoading ? (
-          <Skeleton className="h-24 w-full" data-testid="skeleton-obligations" />
+          <Skeleton
+            className="h-24 w-full"
+            data-testid="skeleton-obligations"
+          />
         ) : error ? (
           <QueryError
             thing="authority notices"
@@ -591,9 +572,7 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
                           respondingId === o.id ? "secondary" : "outline"
                         }
                         onClick={() =>
-                          setRespondingId((cur) =>
-                            cur === o.id ? null : o.id,
-                          )
+                          setRespondingId((cur) => (cur === o.id ? null : o.id))
                         }
                         data-testid={`button-obligation-respond-${o.id}`}
                       >

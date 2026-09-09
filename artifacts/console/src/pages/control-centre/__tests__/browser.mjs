@@ -211,7 +211,10 @@ try {
           ];
           if (routeName === "clerk")
             focusTargets.push(
-              page.getByRole("link", { name: "Open review queue", exact: true }),
+              page.getByRole("link", {
+                name: "Open review queue",
+                exact: true,
+              }),
               page.getByRole("link", { name: "Detailed health", exact: true }),
               page.getByRole("link", { name: "Open", exact: true }).first(),
             );

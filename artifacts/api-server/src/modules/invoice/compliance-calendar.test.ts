@@ -46,8 +46,18 @@ before(async () => {
   // The calendar counts RECEIVABLE-oriented paper only: the supplier must be
   // an engaged client of the counting firm.
   await db.insert(engagementsTable).values([
-    { firmId: firmA, clientPartyId: clientA, type: "readiness_assessment", title: `cal A ${SALT}` },
-    { firmId: firmB, clientPartyId: clientA, type: "readiness_assessment", title: `cal B ${SALT}` },
+    {
+      firmId: firmA,
+      clientPartyId: clientA,
+      type: "readiness_assessment",
+      title: `cal A ${SALT}`,
+    },
+    {
+      firmId: firmB,
+      clientPartyId: clientA,
+      type: "readiness_assessment",
+      title: `cal B ${SALT}`,
+    },
   ]);
   const mk = (
     firmId: string,

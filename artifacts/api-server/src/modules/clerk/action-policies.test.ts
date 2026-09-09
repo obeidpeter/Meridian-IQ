@@ -212,7 +212,12 @@ before(async () => {
     { userId: grantorId, firmId, role: "firm_admin" },
     // Pinned to clientA — the SEC-03 mismatch test grants for a DIFFERENT
     // party under this user.
-    { userId: clientGrantorId, firmId, role: "client_user", clientPartyId: clientA },
+    {
+      userId: clientGrantorId,
+      firmId,
+      role: "client_user",
+      clientPartyId: clientA,
+    },
   ]);
 });
 
@@ -303,7 +308,11 @@ test("grant lifecycle: grant, duplicate-refuse, pause, resume, revoke, re-grant 
     "submit_overdue",
   );
   assert.equal(policy.kind, "submit_overdue");
-  assert.equal(policy.maxTargetsPerRun, MAX_ACTION_TARGETS, "cap defaults to the batch maximum");
+  assert.equal(
+    policy.maxTargetsPerRun,
+    MAX_ACTION_TARGETS,
+    "cap defaults to the batch maximum",
+  );
   assert.equal(policy.grantedBy, grantorId);
   assert.equal(policy.grantedByRole, "firm_admin");
   assert.equal(policy.pausedAt, null);
@@ -316,7 +325,13 @@ test("grant lifecycle: grant, duplicate-refuse, pause, resume, revoke, re-grant 
     grantActionPolicy(firmId, clientA, grantor, "submit_overdue", 5),
     isDomainError("POLICY_EXISTS", 409),
   );
-  const retry = await grantActionPolicy(firmId, clientA, grantor, "retry_failed", 10);
+  const retry = await grantActionPolicy(
+    firmId,
+    clientA,
+    grantor,
+    "retry_failed",
+    10,
+  );
   assert.equal(retry.maxTargetsPerRun, 10);
   assert.equal(
     (await listActionPolicies(firmId, clientA)).policies.length,
@@ -335,7 +350,10 @@ test("grant lifecycle: grant, duplicate-refuse, pause, resume, revoke, re-grant 
     paused.pausedAt?.getTime(),
     "pausing a paused grant keeps the existing pause",
   );
-  assert.equal((await lastAudit("clerk.action.policy_paused"))?.entityId, policy.id);
+  assert.equal(
+    (await lastAudit("clerk.action.policy_paused"))?.entityId,
+    policy.id,
+  );
 
   const resumed = await resumeActionPolicy(firmId, policy.id, grantor);
   assert.equal(resumed.pausedAt, null);
@@ -367,9 +385,18 @@ test("grant lifecycle: grant, duplicate-refuse, pause, resume, revoke, re-grant 
     pauseActionPolicy(firmId, policy.id, grantor),
     isDomainError("POLICY_REVOKED", 409),
   );
-  assert.equal((await lastAudit("clerk.action.policy_revoked"))?.entityId, policy.id);
+  assert.equal(
+    (await lastAudit("clerk.action.policy_revoked"))?.entityId,
+    policy.id,
+  );
 
-  const regrant = await grantActionPolicy(firmId, clientA, grantor, "submit_overdue", 7);
+  const regrant = await grantActionPolicy(
+    firmId,
+    clientA,
+    grantor,
+    "submit_overdue",
+    7,
+  );
   assert.notEqual(regrant.id, policy.id, "a re-grant is a new artifact");
   const listed = await listActionPolicies(firmId, clientA);
   assert.ok(
@@ -384,7 +411,12 @@ test("grant lifecycle: grant, duplicate-refuse, pause, resume, revoke, re-grant 
 });
 
 test("walls: a sibling client_user cannot touch the grant; a foreign firm cannot even see it", async () => {
-  const policy = await grantActionPolicy(firmId, clientA, grantor, "submit_overdue");
+  const policy = await grantActionPolicy(
+    firmId,
+    clientA,
+    grantor,
+    "submit_overdue",
+  );
   const sibling = clientPrincipal(firmId, randomUUID());
   await assert.rejects(
     pauseActionPolicy(firmId, policy.id, sibling),
@@ -396,7 +428,11 @@ test("walls: a sibling client_user cannot touch the grant; a foreign firm cannot
   );
   // The module's own firm match (defense-in-depth under the route's RLS).
   await assert.rejects(
-    pauseActionPolicy(foreignFirmId, policy.id, makeFirmPrincipal(foreignFirmId)),
+    pauseActionPolicy(
+      foreignFirmId,
+      policy.id,
+      makeFirmPrincipal(foreignFirmId),
+    ),
     isDomainError("NOT_FOUND", 404),
   );
   await revokeActionPolicy(firmId, policy.id, grantor);
@@ -407,14 +443,24 @@ test("sweep happy path: assembles from the live builders, claims the day, execut
   const oldest = (await draftFor(client, daysAgo(30))).invoice.id;
   const newer = (await draftFor(client, daysAgo(20))).invoice.id;
   // Cap 1: the run must take the OLDEST target only — the cap is real.
-  const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue", 1);
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "submit_overdue",
+    1,
+  );
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesRun, 1);
   assert.equal(result.policiesAutoPaused, 0);
 
   const afterRow = await policyRow(policy.id);
-  assert.equal(afterRow?.lastRunDay, lagosDateString(new Date()), "the day is claimed");
+  assert.equal(
+    afterRow?.lastRunDay,
+    lagosDateString(new Date()),
+    "the day is claimed",
+  );
   assert.ok(afterRow?.lastRunAt, "the run is timestamped");
   assert.equal(afterRow?.pausedAt, null);
 
@@ -427,7 +473,11 @@ test("sweep happy path: assembles from the live builders, claims the day, execut
   assert.equal(decision.kind, "submit_overdue");
   assert.equal(decision.requestedCount, 1, "maxTargetsPerRun caps the batch");
   assert.equal(decision.executedCount, 1);
-  assert.equal(decision.targets[0].invoiceId, oldest, "oldest first — the card's own ordering");
+  assert.equal(
+    decision.targets[0].invoiceId,
+    oldest,
+    "oldest first — the card's own ordering",
+  );
 
   const statusOf = async (id: string) =>
     (
@@ -441,10 +491,7 @@ test("sweep happy path: assembles from the live builders, claims the day, execut
 
   // The batch audit carries the policy pointer.
   const audit = await lastAudit("clerk.action.executed");
-  assert.equal(
-    (audit?.after as { policyId?: string })?.policyId,
-    policy.id,
-  );
+  assert.equal((audit?.after as { policyId?: string })?.policyId, policy.id);
 
   // Same day, second pass: the claim holds — THIS policy neither re-runs
   // nor writes a second decision (pinned on the policy's own rows, not the
@@ -462,19 +509,35 @@ test("sweep happy path: assembles from the live builders, claims the day, execut
 test("a dark flag makes the sweep skip WITHOUT consuming the day", async () => {
   const client = await seedSupplier("Dark");
   await draftFor(client, daysAgo(25));
-  const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "submit_overdue",
+  );
   await setFirmOverride(POLICIES_FLAG_KEY, firmId, false);
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesRun, 0);
   const afterRow = await policyRow(policy.id);
-  assert.equal(afterRow?.lastRunDay, null, "the day is NOT claimed — flipping the flag back on lets today still run");
-  assert.equal(afterRow?.pausedAt, null, "a dark flag is an ops state, not a policy state");
+  assert.equal(
+    afterRow?.lastRunDay,
+    null,
+    "the day is NOT claimed — flipping the flag back on lets today still run",
+  );
+  assert.equal(
+    afterRow?.pausedAt,
+    null,
+    "a dark flag is an ops state, not a policy state",
+  );
 
   await setFirmOverride(POLICIES_FLAG_KEY, firmId, true);
   const rerun = await runActionPolicySweep();
   assert.equal(rerun.policiesRun, 1, "the same policy runs once relit");
-  assert.equal((await policyRow(policy.id))?.lastRunDay, lagosDateString(new Date()));
+  assert.equal(
+    (await policyRow(policy.id))?.lastRunDay,
+    lagosDateString(new Date()),
+  );
 });
 
 test("a departed grantor pauses the policy — grantor_inactive", async () => {
@@ -505,7 +568,10 @@ test("a departed grantor pauses the policy — grantor_inactive", async () => {
   const audit = await lastAudit("clerk.action.policy_auto_paused");
   assert.equal(audit?.entityId, policy.id);
   assert.equal(audit?.actorId, "action-policy-sweep");
-  assert.equal((audit?.after as { reason?: string })?.reason, "grantor_inactive");
+  assert.equal(
+    (audit?.after as { reason?: string })?.reason,
+    "grantor_inactive",
+  );
 });
 
 test("a client_user grantor is only valid for their OWN party (SEC-03)", async () => {
@@ -588,16 +654,23 @@ test("a kind outside POLICY_KINDS pauses instead of falling through to the chase
 test("lapsed consent pauses the policy — consent_missing — and signals the staff grantor's verified channel", async () => {
   const client = await seedSupplier("Lapsed");
   await draftFor(client, daysAgo(25));
-  const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "submit_overdue",
+  );
   // The grantor's staff notification channel: verified email, opted in —
   // the digest rail's exact ownership gate.
-  await getDb().insert(staffNotificationPreferencesTable).values({
-    userId: grantorId,
-    firmId,
-    emailEnabled: true,
-    email: `policy-grantor-${SALT}@test.local`,
-    emailVerifiedAt: new Date(),
-  });
+  await getDb()
+    .insert(staffNotificationPreferencesTable)
+    .values({
+      userId: grantorId,
+      firmId,
+      emailEnabled: true,
+      email: `policy-grantor-${SALT}@test.local`,
+      emailVerifiedAt: new Date(),
+    });
   // Consent lapses AFTER the grant (the grant path itself refuses without
   // it — pinned above): the latest event wins.
   await recordConsent({
@@ -641,7 +714,10 @@ test("lapsed consent pauses the policy — consent_missing — and signals the s
   await resumeActionPolicy(firmId, policy.id, grantor);
   const rerun = await runActionPolicySweep();
   assert.equal(rerun.policiesRun, 1);
-  assert.equal((await policyRow(policy.id))?.lastRunDay, lagosDateString(new Date()));
+  assert.equal(
+    (await policyRow(policy.id))?.lastRunDay,
+    lagosDateString(new Date()),
+  );
 });
 
 test("a majority-failed run pauses the policy — failed_targets — and a dark messaging rail silences ONLY the signal", async () => {
@@ -650,7 +726,12 @@ test("a majority-failed run pauses the policy — failed_targets — and a dark 
   // so the run records 2 failed of 2 requested — past the half tripwire.
   await draftFor(client, daysAgo(30), buyerNoTin);
   await draftFor(client, daysAgo(25), buyerNoTin);
-  const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "submit_overdue",
+  );
 
   // The PL-02 pin (round-29 review MAJOR): with the platform messaging
   // rail dark, the tripwire must still pause and record — but send
@@ -677,7 +758,11 @@ test("a majority-failed run pauses the policy — failed_targets — and a dark 
 
   const afterRow = await policyRow(policy.id);
   assert.equal(afterRow?.pausedReason, "failed_targets");
-  assert.equal(afterRow?.lastRunDay, lagosDateString(new Date()), "the run consumed the day");
+  assert.equal(
+    afterRow?.lastRunDay,
+    lagosDateString(new Date()),
+    "the run consumed the day",
+  );
   const [decision] = await getDb()
     .select()
     .from(clerkActionDecisionsTable)
@@ -699,7 +784,12 @@ test("a majority-failed run pauses the policy — failed_targets — and a dark 
 
 test("an empty assembly leaves the day unclaimed — the sweep keeps watching", async () => {
   const client = await seedSupplier("Idle");
-  const policy = await grantActionPolicy(firmId, client, grantor, "retry_failed");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "retry_failed",
+  );
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesRun, 0);
@@ -729,7 +819,11 @@ test("an empty assembly leaves the day unclaimed — the sweep keeps watching", 
     .select({ status: invoicesTable.status })
     .from(invoicesTable)
     .where(eq(invoicesTable.id, failedInv));
-  assert.equal(row.status, "submitted", "the retry ran through the ordinary path");
+  assert.equal(
+    row.status,
+    "submitted",
+    "the retry ran through the ordinary path",
+  );
   const [decision] = await getDb()
     .select()
     .from(clerkActionDecisionsTable)
@@ -760,7 +854,13 @@ test("data.automation_status answers grants, pauses and cadence — and never ex
   assert.match(none!.text, /No standing approvals are in place/);
   assert.match(none!.text, /Automate daily/);
 
-  const policy = await grantActionPolicy(firmId, client, grantor, "retry_failed", 10);
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "retry_failed",
+    10,
+  );
   const active = await runDataIntent("data.automation_status", firmId, {
     clientPartyId: client,
   });

@@ -49,7 +49,10 @@ test("shares and medians follow the reminder/settlement geometry", () => {
   const report = summarizeChaseEffectiveness(
     [
       // Settled 5 days after the first reminder: a within-window success.
-      row({ fr: "2026-06-20T00:00:00.000Z", settled: "2026-06-25T00:00:00.000Z" }),
+      row({
+        fr: "2026-06-20T00:00:00.000Z",
+        settled: "2026-06-25T00:00:00.000Z",
+      }),
       // Settled 25 days after: mature, settled, but outside the window.
       row({
         fr: "2026-06-10T00:00:00.000Z",
@@ -59,7 +62,10 @@ test("shares and medians follow the reminder/settlement geometry", () => {
       // Reminded 48 days ago, never settled: mature, no credit.
       row({ fr: "2026-06-10T00:00:00.000Z" }),
       // Settled BEFORE the first reminder: never credits the reminder.
-      row({ fr: "2026-06-20T00:00:00.000Z", settled: "2026-06-15T00:00:00.000Z" }),
+      row({
+        fr: "2026-06-20T00:00:00.000Z",
+        settled: "2026-06-15T00:00:00.000Z",
+      }),
       // Unreminded settled invoices: 10 / 20 / 30 days issue-to-settle.
       row({ settled: "2026-06-11T00:00:00.000Z" }),
       row({ settled: "2026-06-21T00:00:00.000Z" }),
@@ -68,7 +74,11 @@ test("shares and medians follow the reminder/settlement geometry", () => {
     ASOF,
   );
   assert.equal(report.remindedCount, 4);
-  assert.equal(report.remindedSettledCount, 2, "the pre-reminder settlement is excluded");
+  assert.equal(
+    report.remindedSettledCount,
+    2,
+    "the pre-reminder settlement is excluded",
+  );
   // The pre-reminder-settled invoice had no window to run, so it is in
   // NEITHER side of the share: 1 within-window over 3 mature.
   assert.equal(report.settledWithinShare, 0.3333);
@@ -122,7 +132,11 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `Chase Fx ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `Chase Fx Client ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `Chase Fx Client ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `Chase Fx Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values({

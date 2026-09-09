@@ -93,142 +93,166 @@ async function loadBillForScope(
   return invoice;
 }
 
-router.get("/bills", requireFlag("money_analytics"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
-  const query = parseOrThrow(ListBillsQueryParams, req.query);
-  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const bills = await listBills(firmId, clientPartyId);
-  res.json(ListBillsResponse.parse(bills));
-});
+router.get(
+  "/bills",
+  requireFlag("money_analytics"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = parseOrThrow(ListBillsQueryParams, req.query);
+    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const bills = await listBills(firmId, clientPartyId);
+    res.json(ListBillsResponse.parse(bills));
+  },
+);
 
-router.get("/dashboard/payables", requireFlag("money_analytics"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
-  const query = parseOrThrow(GetPayablesSummaryQueryParams, req.query);
-  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const summary = await payablesSummary(firmId, clientPartyId);
-  res.json(GetPayablesSummaryResponse.parse(summary));
-});
+router.get(
+  "/dashboard/payables",
+  requireFlag("money_analytics"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = parseOrThrow(GetPayablesSummaryQueryParams, req.query);
+    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const summary = await payablesSummary(firmId, clientPartyId);
+    res.json(GetPayablesSummaryResponse.parse(summary));
+  },
+);
 
 // Double-payment guard (round-16 idea #3): bills already paid twice by the
 // evidence, and unpaid near-duplicate pairs that would become a double
 // payment. Advisory only — nothing blocked, nothing stored, no model. Same
 // scope resolution as the bills ledger above.
-router.get("/bills/double-payment-check", requireFlag("money_analytics"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
-  const query = parseOrThrow(GetDoublePaymentCheckQueryParams, req.query);
-  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const check = await computeDoublePaymentCheck(firmId, clientPartyId);
-  res.json(GetDoublePaymentCheckResponse.parse(check));
-});
+router.get(
+  "/bills/double-payment-check",
+  requireFlag("money_analytics"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = parseOrThrow(GetDoublePaymentCheckQueryParams, req.query);
+    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const check = await computeDoublePaymentCheck(firmId, clientPartyId);
+    res.json(GetDoublePaymentCheckResponse.parse(check));
+  },
+);
 
 // Missing recurring bills (round-18 idea #3): vendors with a monthly
 // capture habit and nothing captured this cycle — the payables mirror of
 // unbilled-income. Advisory only; same scope resolution as the ledger.
-router.get("/bills/missing-recurring", requireFlag("money_analytics"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
-  const query = parseOrThrow(ListMissingRecurringBillsQueryParams, req.query);
-  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const alerts = await listMissingRecurringBills(firmId, clientPartyId);
-  res.json(ListMissingRecurringBillsResponse.parse(alerts));
-});
+router.get(
+  "/bills/missing-recurring",
+  requireFlag("money_analytics"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = parseOrThrow(ListMissingRecurringBillsQueryParams, req.query);
+    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const alerts = await listMissingRecurringBills(firmId, clientPartyId);
+    res.json(ListMissingRecurringBillsResponse.parse(alerts));
+  },
+);
 
 // The payer's own payment flag (the buyer route's mirror, routes/buyer.ts
 // payment-flags): one append-only settlement event with source=payer_flag —
 // evidence only. NO status transition, ever: a bill is a draft for life, and
 // applyTransition would (correctly) 409 a draft->settled move.
-router.post("/bills/:id/payment-flag", requireFlag("money_analytics"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.write");
-  const params = parseOrThrow(FlagBillPaymentParams, req.params);
-  const body = parseOrThrow(FlagBillPaymentBody, req.body);
-  const invoice = await loadBillForScope(req.principal, params.id);
-  // The shared payment-flag amount guard (lib/parse.ts) — the same guard the
-  // buyer payment-flag route applies.
-  const amount = resolvePaymentFlagAmount(
-    body.status,
-    body.amount,
-    invoice.grandTotal,
-  );
-  const { event, created } = await appendSettlementEvent(
-    {
-      invoiceId: invoice.id,
-      source: "payer_flag",
-      amount,
-      paymentStatus: body.status,
-      actorId: req.principal.userId,
-      externalReference: `payer-flag:${invoice.id}:${req.principal.userId}:${body.status}`,
-      occurredAt: new Date(),
-    },
-    { compareOccurredAt: false },
-  );
-  if (created) {
-    await appendAudit({
-      actorId: req.principal.userId,
-      firmId: invoice.firmId,
-      action: "invoice.payment_flag",
-      entityType: "settlement_event",
-      entityId: event.id,
-      after: { paymentStatus: event.paymentStatus, amount: event.amount },
-    });
-  }
-  res.status(201).json(FlagBillPaymentResponse.parse(event));
-});
+router.post(
+  "/bills/:id/payment-flag",
+  requireFlag("money_analytics"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.write");
+    const params = parseOrThrow(FlagBillPaymentParams, req.params);
+    const body = parseOrThrow(FlagBillPaymentBody, req.body);
+    const invoice = await loadBillForScope(req.principal, params.id);
+    // The shared payment-flag amount guard (lib/parse.ts) — the same guard the
+    // buyer payment-flag route applies.
+    const amount = resolvePaymentFlagAmount(
+      body.status,
+      body.amount,
+      invoice.grandTotal,
+    );
+    const { event, created } = await appendSettlementEvent(
+      {
+        invoiceId: invoice.id,
+        source: "payer_flag",
+        amount,
+        paymentStatus: body.status,
+        actorId: req.principal.userId,
+        externalReference: `payer-flag:${invoice.id}:${req.principal.userId}:${body.status}`,
+        occurredAt: new Date(),
+      },
+      { compareOccurredAt: false },
+    );
+    if (created) {
+      await appendAudit({
+        actorId: req.principal.userId,
+        firmId: invoice.firmId,
+        action: "invoice.payment_flag",
+        entityType: "settlement_event",
+        entityId: event.id,
+        after: { paymentStatus: event.paymentStatus, amount: event.amount },
+      });
+    }
+    res.status(201).json(FlagBillPaymentResponse.parse(event));
+  },
+);
 
 // Verify a bill's stamp (IRN/CSID entered by the payer — never extracted)
 // against the national record via the ordinary verify path, and keep the
 // result on the bill so the ledger shows the input-VAT posture. A stamp the
 // platform does not know answers valid:false with a null eligibility — the
 // verification row is still recorded (that IS the posture).
-router.post("/bills/:id/verify-stamp", requireFlag("money_analytics"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.write");
-  const params = parseOrThrow(VerifyBillStampParams, req.params);
-  const body = parseOrThrow(VerifyBillStampBody, req.body);
-  const invoice = await loadBillForScope(req.principal, params.id);
-  const verification = await verifyStamp(body.irn, body.csid);
-  const [row] = await getDb()
-    .insert(billVerificationsTable)
-    .values({
+router.post(
+  "/bills/:id/verify-stamp",
+  requireFlag("money_analytics"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.write");
+    const params = parseOrThrow(VerifyBillStampParams, req.params);
+    const body = parseOrThrow(VerifyBillStampBody, req.body);
+    const invoice = await loadBillForScope(req.principal, params.id);
+    const verification = await verifyStamp(body.irn, body.csid);
+    const [row] = await getDb()
+      .insert(billVerificationsTable)
+      .values({
+        firmId: invoice.firmId,
+        invoiceId: invoice.id,
+        irn: body.irn,
+        csid: body.csid,
+        valid: verification.valid,
+        // Null when the stamp is unknown here: validity comes from the rail
+        // record; eligibility needs the invoice lifecycle behind it.
+        eligible: verification.valid ? verification.eligible : null,
+        checkedByUserId: req.principal.userId,
+      })
+      .returning();
+    // Pointer-only audit (SEC-12): the row id and outcome, never the IRN/CSID.
+    await appendAudit({
+      actorId: req.principal.userId,
       firmId: invoice.firmId,
-      invoiceId: invoice.id,
-      irn: body.irn,
-      csid: body.csid,
-      valid: verification.valid,
-      // Null when the stamp is unknown here: validity comes from the rail
-      // record; eligibility needs the invoice lifecycle behind it.
-      eligible: verification.valid ? verification.eligible : null,
-      checkedByUserId: req.principal.userId,
-    })
-    .returning();
-  // Pointer-only audit (SEC-12): the row id and outcome, never the IRN/CSID.
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId: invoice.firmId,
-    action: "bill.verify_stamp",
-    entityType: "bill_verification",
-    entityId: row.id,
-    after: { valid: row.valid, eligible: row.eligible },
-  });
-  res.status(201).json(
-    VerifyBillStampResponse.parse({
-      invoiceId: row.invoiceId,
-      irn: row.irn,
-      csid: row.csid,
-      valid: row.valid,
-      eligible: row.eligible,
-      checkedAt: row.checkedAt.toISOString(),
-    }),
-  );
-});
+      action: "bill.verify_stamp",
+      entityType: "bill_verification",
+      entityId: row.id,
+      after: { valid: row.valid, eligible: row.eligible },
+    });
+    res.status(201).json(
+      VerifyBillStampResponse.parse({
+        invoiceId: row.invoiceId,
+        irn: row.irn,
+        csid: row.csid,
+        valid: row.valid,
+        eligible: row.eligible,
+        checkedAt: row.checkedAt.toISOString(),
+      }),
+    );
+  },
+);
 
 export default router;

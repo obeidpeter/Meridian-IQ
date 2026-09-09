@@ -83,7 +83,9 @@ export function periodMonthBounds(period: string): {
   end: string;
 } {
   const [year, month] = period.split("-").map(Number);
-  const start = new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10);
+  const start = new Date(Date.UTC(year, month - 1, 1))
+    .toISOString()
+    .slice(0, 10);
   const end = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
   return { start, end };
 }

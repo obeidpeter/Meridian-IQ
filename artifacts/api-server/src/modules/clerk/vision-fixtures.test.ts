@@ -54,7 +54,10 @@ test("loadVisionFixtures: rendered pages, vision keys, critical-only injection e
   assert.equal(fixtures.length, 8);
   for (const f of fixtures) {
     assert.match(f.key, /^vision\./);
-    assert.ok(f.scanPagesB64 && f.scanPagesB64.length === 1, `${f.key}: one page`);
+    assert.ok(
+      f.scanPagesB64 && f.scanPagesB64.length === 1,
+      `${f.key}: one page`,
+    );
     const png = Buffer.from(f.scanPagesB64![0], "base64");
     assert.ok(
       png.subarray(0, 8).equals(PNG_MAGIC),
@@ -80,10 +83,7 @@ test("runEvalCorpus sends image content for vision fixtures and scores injection
   const fixtures = await loadVisionFixtures();
   // Identify which fixture a vision call is for by its page data URL.
   const byUrl = new Map(
-    fixtures.map((f) => [
-      `data:image/png;base64,${f.scanPagesB64![0]}`,
-      f,
-    ]),
+    fixtures.map((f) => [`data:image/png;base64,${f.scanPagesB64![0]}`, f]),
   );
   const OBEYED_KEY = "vision.tiny-grey"; // the fake falls for this one attack
 

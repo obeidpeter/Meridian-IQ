@@ -19,7 +19,10 @@ import { routeBlock, setBlock, src } from "../test-helpers/source-pins.ts";
 //    bank feeds are the ones who wire its collection account.
 
 test("the inbound webhook is public, and ONLY because it fails closed", () => {
-  const set = setBlock(src("middleware/principal.ts"), "PUBLIC_PATHS = new Set(");
+  const set = setBlock(
+    src("middleware/principal.ts"),
+    "PUBLIC_PATHS = new Set(",
+  );
   assert.ok(
     set.includes('"/api/collections/inbound"'),
     "the provider webhook has no session — the shared secret is the credential",
@@ -47,7 +50,10 @@ test("the inbound webhook is public, and ONLY because it fails closed", () => {
 });
 
 test("the webhook skips the request transaction; the module owns its commit", () => {
-  const set = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const set = setBlock(
+    src("middleware/request-policy.ts"),
+    "NO_CONTEXT_ROUTES = new Set(",
+  );
   assert.ok(
     set.includes('"POST /api/collections/inbound"'),
     "the settle must not ride the buffered request transaction — the module commits durably before the 202, and the global audit lock is held per-settle only",
@@ -92,9 +98,7 @@ test("the contract routes keep the statement-connections audience", () => {
   );
   // Deactivate is id-scoped: capability plus a same-tenant assertion on the
   // loaded row (the statement-connections :id/sync idiom).
-  const deactStart = routesSrc.indexOf(
-    '"/collection-accounts/:id/deactivate"',
-  );
+  const deactStart = routesSrc.indexOf('"/collection-accounts/:id/deactivate"');
   assert.ok(deactStart >= 0, "the deactivate route exists");
   const deactBlock = routesSrc.slice(
     deactStart,

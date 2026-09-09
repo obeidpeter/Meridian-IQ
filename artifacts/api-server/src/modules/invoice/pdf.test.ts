@@ -19,7 +19,10 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Branded invoice PDF. Pinned invariants:
 //  - deterministic: identical spine rows render byte-identical buffers
@@ -71,10 +74,7 @@ async function loadBundle(id: string) {
     .select()
     .from(partiesTable)
     .where(
-      inArray(partiesTable.id, [
-        invoice.supplierPartyId,
-        invoice.buyerPartyId,
-      ]),
+      inArray(partiesTable.id, [invoice.supplierPartyId, invoice.buyerPartyId]),
     );
   const supplier = parties.find((p) => p.id === invoice.supplierPartyId)!;
   const buyer = parties.find((p) => p.id === invoice.buyerPartyId)!;

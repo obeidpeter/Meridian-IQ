@@ -17,7 +17,9 @@ export function dockErrorMessage(err: unknown): string {
 const DOCK_FACT_CAP = 6;
 
 /** Scope suffix for a data answer's source line: the resolved display labels. */
-function dataAnswerScope(dataParams: Record<string, string> | undefined): string {
+function dataAnswerScope(
+  dataParams: Record<string, string> | undefined,
+): string {
   return Object.values(dataParams ?? {})
     .filter((v) => v.trim().length > 0)
     .join(" · ");
@@ -39,12 +41,18 @@ export function dockAnswerView(answer: {
   claimVersion?: number | string | null;
   facts?: { key: string; label: string; value: string; unit?: string | null }[];
   sections?: {
-    facts: { key: string; label: string; value: string; unit?: string | null }[];
+    facts: {
+      key: string;
+      label: string;
+      value: string;
+      unit?: string | null;
+    }[];
     action?: unknown;
   }[];
   links?: unknown[];
 }) {
-  const allFacts = answer.sections?.flatMap((s) => s.facts) ?? answer.facts ?? [];
+  const allFacts =
+    answer.sections?.flatMap((s) => s.facts) ?? answer.facts ?? [];
   const scope = dataAnswerScope(answer.dataParams);
   const sourceLine = answer.dataIntent
     ? `From firm records${scope ? ` (${scope})` : ""}${answer.citation ? ` · ${answer.citation}` : ""}`

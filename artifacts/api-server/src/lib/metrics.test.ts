@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Counter, Gauge, Histogram, registry, routeLabel, LabeledGauge } from "./metrics.ts";
+import {
+  Counter,
+  Gauge,
+  Histogram,
+  registry,
+  routeLabel,
+  LabeledGauge,
+} from "./metrics.ts";
 import type { Request, Response } from "express";
 
 // The hand-rolled Prometheus exposition primitives: cumulative histogram
@@ -24,7 +31,10 @@ test("gauge holds the last value and can stamp the current time", () => {
   assert.match(g.expose(), /test_gauge 42/);
   g.setToCurrentTime();
   const value = Number(g.expose().trim().split("\n").pop()!.split(" ")[1]);
-  assert.ok(value > 1_700_000_000, "should be a recent unix timestamp in seconds");
+  assert.ok(
+    value > 1_700_000_000,
+    "should be a recent unix timestamp in seconds",
+  );
 });
 
 test("histogram buckets are cumulative and +Inf equals the count", () => {
@@ -67,13 +77,18 @@ test("registry exposition includes process and app series", async () => {
 
 test("Valo metrics have byte-equivalent legacy aliases without duplicating other series", async () => {
   const lines = (await registry.metrics()).trim().split("\n");
-  const current = lines.filter((line) => /^(?:# (?:HELP|TYPE) )?valo_/.test(line));
+  const current = lines.filter((line) =>
+    /^(?:# (?:HELP|TYPE) )?valo_/.test(line),
+  );
   assert.ok(current.length > 20);
   for (const line of current) {
     const legacy = line.replace(/^((?:# (?:HELP|TYPE) )?)valo_/, "$1meridian_");
     assert.equal(lines.filter((entry) => entry === legacy).length, 1);
   }
-  assert.equal(lines.filter((line) => line.startsWith("process_uptime_seconds ")).length, 1);
+  assert.equal(
+    lines.filter((line) => line.startsWith("process_uptime_seconds ")).length,
+    1,
+  );
 });
 
 // The route label must stay bounded under hostile traffic: matched routes
@@ -105,11 +120,17 @@ test("routeLabel is bounded: pattern for matched, 'unmatched' for erroring paths
   assert.equal(routeLabel(matchedReq, matchedRes), "/api/invoices/:id");
 
   // A bot scan 404s with no matched route: one shared series, not one per path.
-  const [scanReq, scanRes] = fake({ originalUrl: "/wp-admin/setup.php", status: 404 });
+  const [scanReq, scanRes] = fake({
+    originalUrl: "/wp-admin/setup.php",
+    status: 404,
+  });
   assert.equal(routeLabel(scanReq, scanRes), "unmatched");
 
   // A 401 thrown before routing (principal middleware) likewise collapses.
-  const [authReq, authRes] = fake({ originalUrl: "/api/anything-goes-here", status: 401 });
+  const [authReq, authRes] = fake({
+    originalUrl: "/api/anything-goes-here",
+    status: 401,
+  });
   assert.equal(routeLabel(authReq, authRes), "unmatched");
 
   // A successful non-route response (static asset) keeps its bounded path,
@@ -123,7 +144,10 @@ test("routeLabel is bounded: pattern for matched, 'unmatched' for erroring paths
 
 test("a labelled gauge exposes one line per label set and nothing before the first set", () => {
   const g = new LabeledGauge("test_by_name_seconds", "help");
-  assert.equal(g.expose(), "# HELP test_by_name_seconds help\n# TYPE test_by_name_seconds gauge");
+  assert.equal(
+    g.expose(),
+    "# HELP test_by_name_seconds help\n# TYPE test_by_name_seconds gauge",
+  );
   g.set({ sweep: "a" }, 5);
   g.set({ sweep: "b" }, 7);
   g.set({ sweep: "a" }, 6);

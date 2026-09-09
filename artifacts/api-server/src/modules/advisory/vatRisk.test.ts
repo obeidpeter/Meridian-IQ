@@ -59,8 +59,22 @@ test("flags invoices without a verified stamp as input-VAT at risk", () => {
 
 test("malformed rows are reported as invalid_input and not scored", () => {
   const rows: LedgerRow[] = [
-    { supplierTin: "T1", invoiceNumber: "INV-1", irn: "IRN-1", csid: "CSID-1", invoiceAmount: 100, vatAmount: 7.5 },
-    { supplierTin: "T2", invoiceNumber: "INV-2", irn: "", csid: "CSID-2", invoiceAmount: 100, vatAmount: 7.5 },
+    {
+      supplierTin: "T1",
+      invoiceNumber: "INV-1",
+      irn: "IRN-1",
+      csid: "CSID-1",
+      invoiceAmount: 100,
+      vatAmount: 7.5,
+    },
+    {
+      supplierTin: "T2",
+      invoiceNumber: "INV-2",
+      irn: "",
+      csid: "CSID-2",
+      invoiceAmount: 100,
+      vatAmount: 7.5,
+    },
   ];
   const report = analyzeLedger(rows, new Set(), "Buyer");
   assert.equal(report.invalidCount, 1);
@@ -70,9 +84,30 @@ test("malformed rows are reported as invalid_input and not scored", () => {
 
 test("buyer-supplier graph aggregates per supplier with buyer at the centre", () => {
   const rows: LedgerRow[] = [
-    { supplierTin: "T1", invoiceNumber: "A", irn: "I1", csid: "C1", invoiceAmount: 200, vatAmount: 15 },
-    { supplierTin: "T1", invoiceNumber: "B", irn: "I2", csid: "C2", invoiceAmount: 300, vatAmount: 22.5 },
-    { supplierTin: "T2", invoiceNumber: "C", irn: "I3", csid: "C3", invoiceAmount: 100, vatAmount: 7.5 },
+    {
+      supplierTin: "T1",
+      invoiceNumber: "A",
+      irn: "I1",
+      csid: "C1",
+      invoiceAmount: 200,
+      vatAmount: 15,
+    },
+    {
+      supplierTin: "T1",
+      invoiceNumber: "B",
+      irn: "I2",
+      csid: "C2",
+      invoiceAmount: 300,
+      vatAmount: 22.5,
+    },
+    {
+      supplierTin: "T2",
+      invoiceNumber: "C",
+      irn: "I3",
+      csid: "C3",
+      invoiceAmount: 100,
+      vatAmount: 7.5,
+    },
   ];
   const report = analyzeLedger(rows, new Set(), "Buyer");
   const buyer = report.graph.nodes.find((n) => n.kind === "buyer")!;

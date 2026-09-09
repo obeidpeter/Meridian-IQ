@@ -70,8 +70,16 @@ before(async () => {
   ]);
   await db.insert(invoicesTable).values([
     // A clean monthly pattern: three invoices ~30 days apart, same amount.
-    row({ buyerPartyId: buyerMonthly, invoiceNumber: `RS-M1-${SALT}`, issueDate: daysAgo(75) }),
-    row({ buyerPartyId: buyerMonthly, invoiceNumber: `RS-M2-${SALT}`, issueDate: daysAgo(45) }),
+    row({
+      buyerPartyId: buyerMonthly,
+      invoiceNumber: `RS-M1-${SALT}`,
+      issueDate: daysAgo(75),
+    }),
+    row({
+      buyerPartyId: buyerMonthly,
+      invoiceNumber: `RS-M2-${SALT}`,
+      issueDate: daysAgo(45),
+    }),
     row({
       id: newestMonthlyId,
       buyerPartyId: buyerMonthly,
@@ -79,12 +87,32 @@ before(async () => {
       issueDate: daysAgo(15),
     }),
     // Too thin to be a pattern.
-    row({ buyerPartyId: buyerSparse, invoiceNumber: `RS-S1-${SALT}`, issueDate: daysAgo(60) }),
-    row({ buyerPartyId: buyerSparse, invoiceNumber: `RS-S2-${SALT}`, issueDate: daysAgo(30) }),
+    row({
+      buyerPartyId: buyerSparse,
+      invoiceNumber: `RS-S1-${SALT}`,
+      issueDate: daysAgo(60),
+    }),
+    row({
+      buyerPartyId: buyerSparse,
+      invoiceNumber: `RS-S2-${SALT}`,
+      issueDate: daysAgo(30),
+    }),
     // A perfect pattern — but the buyer already has a (paused) template.
-    row({ buyerPartyId: buyerCovered, invoiceNumber: `RS-C1-${SALT}`, issueDate: daysAgo(75) }),
-    row({ buyerPartyId: buyerCovered, invoiceNumber: `RS-C2-${SALT}`, issueDate: daysAgo(45) }),
-    row({ buyerPartyId: buyerCovered, invoiceNumber: `RS-C3-${SALT}`, issueDate: daysAgo(15) }),
+    row({
+      buyerPartyId: buyerCovered,
+      invoiceNumber: `RS-C1-${SALT}`,
+      issueDate: daysAgo(75),
+    }),
+    row({
+      buyerPartyId: buyerCovered,
+      invoiceNumber: `RS-C2-${SALT}`,
+      issueDate: daysAgo(45),
+    }),
+    row({
+      buyerPartyId: buyerCovered,
+      invoiceNumber: `RS-C3-${SALT}`,
+      issueDate: daysAgo(15),
+    }),
   ]);
   // Seed lines on the newest monthly invoice — the suggestion's template seed.
   await db.insert(invoiceLinesTable).values([
@@ -132,7 +160,10 @@ test("detectMonthlyPattern is conservative and pure", () => {
   assert.equal(hit.lastIssueDate, "2026-05-01");
 
   // Two invoices: silence.
-  assert.equal(detectMonthlyPattern([inv("2026-03-01"), inv("2026-04-01")]), null);
+  assert.equal(
+    detectMonthlyPattern([inv("2026-03-01"), inv("2026-04-01")]),
+    null,
+  );
   // Weekly cadence: not a monthly retainer.
   assert.equal(
     detectMonthlyPattern([

@@ -40,11 +40,7 @@ import { QueryError } from "@/components/query-error";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import {
-  formatDateTime,
-  pillClasses,
-  type BadgeTone,
-} from "@/lib/format";
+import { formatDateTime, pillClasses, type BadgeTone } from "@/lib/format";
 import {
   CheckCircle2,
   Landmark,
@@ -76,9 +72,9 @@ export function connectorConfigurationComplete(
 ): boolean {
   return Boolean(
     connector?.configured &&
-      connector.configurationFields.every(
-        (field) => !field.required || Boolean(config[field.key]?.trim()),
-      ),
+    connector.configurationFields.every(
+      (field) => !field.required || Boolean(config[field.key]?.trim()),
+    ),
   );
 }
 
@@ -108,7 +104,9 @@ export function connectorLabel(
 }
 
 export function lastSyncLabel(lastSyncAt: string | null | undefined): string {
-  return lastSyncAt ? `Last sync ${formatDateTime(lastSyncAt)}` : "Never synced";
+  return lastSyncAt
+    ? `Last sync ${formatDateTime(lastSyncAt)}`
+    : "Never synced";
 }
 
 /** One line describing a sync run for the inline after-click status. */
@@ -135,7 +133,10 @@ export function StatementConnectionsCard({
   // Render-on-success: no card at all until the server answers the list.
   if (!connections.isSuccess) return null;
   return (
-    <StatementConnectionsBody connections={connections.data} clients={clients} />
+    <StatementConnectionsBody
+      connections={connections.data}
+      clients={clients}
+    />
   );
 }
 
@@ -196,7 +197,8 @@ function StatementConnectionsBody({
       onError: (e) =>
         toast({
           title: "Could not create the connection",
-          description: serverErrorMessage(e) ?? "Check the config and try again.",
+          description:
+            serverErrorMessage(e) ?? "Check the config and try again.",
           variant: "destructive",
         }),
     },
@@ -212,7 +214,8 @@ function StatementConnectionsBody({
         toast({
           title: "Connection test failed",
           description:
-            serverErrorMessage(e) ?? "Check the provider details and try again.",
+            serverErrorMessage(e) ??
+            "Check the provider details and try again.",
           variant: "destructive",
         });
       },
@@ -254,10 +257,7 @@ function StatementConnectionsBody({
   const [openRunsId, setOpenRunsId] = useState<string | null>(null);
 
   const createDisabled =
-    create.isPending ||
-    connectorKey === "" ||
-    clientPartyId === "" ||
-    !tested;
+    create.isPending || connectorKey === "" || clientPartyId === "" || !tested;
 
   return (
     <Card
@@ -296,8 +296,7 @@ function StatementConnectionsBody({
             {connections.map((conn) => {
               const lastRun = lastRuns[conn.id];
               const runsOpen = openRunsId === conn.id;
-              const syncBusy =
-                sync.isPending && sync.variables?.id === conn.id;
+              const syncBusy = sync.isPending && sync.variables?.id === conn.id;
               return (
                 <div
                   key={conn.id}
@@ -610,7 +609,9 @@ function ConnectionRuns({ connectionId }: { connectionId: string }) {
                 {formatDateTime(r.startedAt)}
               </td>
               <td className="py-2 pr-3">
-                <span className={pillClasses(SYNC_RUN_TONE[r.status] ?? "slate")}>
+                <span
+                  className={pillClasses(SYNC_RUN_TONE[r.status] ?? "slate")}
+                >
                   {r.status}
                 </span>
               </td>

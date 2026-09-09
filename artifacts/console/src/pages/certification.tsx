@@ -53,7 +53,10 @@ function CourseCard({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-start justify-between gap-2">
           <span className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
+            <BookOpen
+              className="w-4 h-4 text-primary shrink-0"
+              aria-hidden="true"
+            />
             {course.title}
           </span>
           <span className="text-xs font-normal text-muted-foreground flex items-center gap-1 whitespace-nowrap">
@@ -98,7 +101,10 @@ function CourseCard({
             className="flex items-center gap-2 border border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40 rounded-md px-3 py-2"
             data-testid={`text-certificate-${course.key}`}
           >
-            <Award className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <Award
+              className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0"
+              aria-hidden="true"
+            />
             <div className="min-w-0">
               <p className="text-xs text-emerald-800 dark:text-emerald-300">
                 Completed {formatDate(enrollment.completedAt)}
@@ -231,7 +237,10 @@ export function Certification() {
   if (isFeatureDisabled(coursesError) || isFeatureDisabled(enrollmentsError)) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Certification
         </h1>
         <FeatureUnavailable feature="The certification portal" />
@@ -265,11 +274,13 @@ export function Certification() {
       .map((e) => [e.courseId, e] as const),
   );
 
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Certification
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -284,7 +295,10 @@ export function Certification() {
           data-testid="card-minted-certificate"
         >
           <CardContent className="pt-6 flex items-center gap-4">
-            <Award className="w-10 h-10 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+            <Award
+              className="w-10 h-10 text-emerald-700 dark:text-emerald-400 shrink-0"
+              aria-hidden="true"
+            />
             <div className="min-w-0">
               <p className="text-sm text-emerald-800 dark:text-emerald-300">
                 Certificate minted — {lastCertificate.courseTitle}
@@ -328,7 +342,10 @@ export function Certification() {
         </CardHeader>
         <CardContent>
           {(enrollments ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-empty-enrollments">
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-empty-enrollments"
+            >
               No enrollments yet. Enroll in a course above to get started.
             </p>
           ) : (

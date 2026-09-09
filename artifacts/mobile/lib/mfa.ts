@@ -59,4 +59,3 @@ export function mfaExpiryHint(issuedAt: number, now: number): string {
   if (minutes === 1) return "about a minute left";
   return `about ${minutes} minutes left`;
 }
-

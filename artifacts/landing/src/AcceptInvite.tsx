@@ -152,7 +152,10 @@ export function AcceptInvite() {
   if (!token) {
     return (
       <InviteShell>
-        <Card className="auth-flow-panel" data-testid="card-invite-missing-token">
+        <Card
+          className="auth-flow-panel"
+          data-testid="card-invite-missing-token"
+        >
           <div className="flex items-center gap-2">
             <AlertCircle
               className="h-5 w-5 text-destructive"
@@ -207,7 +210,10 @@ export function AcceptInvite() {
   if (preview.isError) {
     return (
       <InviteShell>
-        <Card className="auth-flow-panel" data-testid="card-invite-preview-error">
+        <Card
+          className="auth-flow-panel"
+          data-testid="card-invite-preview-error"
+        >
           <div className="flex items-start gap-2">
             <AlertCircle
               className="mt-0.5 h-5 w-5 shrink-0 text-destructive"
@@ -253,8 +259,12 @@ export function AcceptInvite() {
           </div>
           <p role="status" className="mt-2 text-sm text-muted-foreground">
             Your password is set. Sign in with{" "}
-            <span className="font-medium text-foreground" data-testid="text-invite-signin-email">
-              {preview.data?.email ?? "the email address this invitation was sent to"}
+            <span
+              className="font-medium text-foreground"
+              data-testid="text-invite-signin-email"
+            >
+              {preview.data?.email ??
+                "the email address this invitation was sent to"}
             </span>{" "}
             and the password you just chose.
           </p>

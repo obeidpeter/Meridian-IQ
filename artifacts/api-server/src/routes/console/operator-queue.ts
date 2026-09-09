@@ -136,8 +136,9 @@ async function caseView(row: OperatorCase) {
 // hottest operator screen and grows with open cases).
 async function caseViews(rows: OperatorCase[]) {
   if (rows.length === 0) return [];
-  const uniq = (xs: (string | null)[]) =>
-    [...new Set(xs.filter((x): x is string => x !== null))];
+  const uniq = (xs: (string | null)[]) => [
+    ...new Set(xs.filter((x): x is string => x !== null)),
+  ];
   const firmIds = uniq(rows.map((r) => r.firmId));
   const partyIds = uniq(rows.map((r) => r.clientPartyId));
   const invoiceIds = uniq(rows.map((r) => r.invoiceId));
@@ -218,14 +219,10 @@ router.get("/operator/cases", async (req, res): Promise<void> => {
     .select()
     .from(operatorCasesTable)
     .where(
-      query.status
-        ? eq(operatorCasesTable.status, query.status)
-        : undefined,
+      query.status ? eq(operatorCasesTable.status, query.status) : undefined,
     )
     .orderBy(desc(operatorCasesTable.openedAt));
-  rows.sort(
-    (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority],
-  );
+  rows.sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
   res.json(ListOperatorCasesResponse.parse(await caseViews(rows)));
 });
 
@@ -353,19 +350,16 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
 // catalogue + real attempt history and NEVER sent by the model — the operator
 // edits and presses send, and the send route is the only writer of
 // operator_reply. Platform-funded, like the other operator drafting tools.
-router.post(
-  "/escalations/:id/reply-draft",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "operator.queue.act");
-    const params = parseOrThrow(DraftEscalationReplyParams, req.params);
-    // Template posture end to end: an unconfigured provider integration must
-    // yield the deterministic template, not a 500 (same guard as the
-    // narrative and reconcile-assist routes).
-    const gateway = await gatewayOrNull();
-    const draft = await draftEscalationReply(params.id, gateway);
-    res.json(DraftEscalationReplyResponse.parse(draft));
-  },
-);
+router.post("/escalations/:id/reply-draft", async (req, res): Promise<void> => {
+  assertCan(req.principal, "operator.queue.act");
+  const params = parseOrThrow(DraftEscalationReplyParams, req.params);
+  // Template posture end to end: an unconfigured provider integration must
+  // yield the deterministic template, not a 500 (same guard as the
+  // narrative and reconcile-assist routes).
+  const gateway = await gatewayOrNull();
+  const draft = await draftEscalationReply(params.id, gateway);
+  res.json(DraftEscalationReplyResponse.parse(draft));
+});
 
 router.post("/escalations/:id/reply", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.act");

@@ -20,7 +20,10 @@ import {
   saveAndEnableClerkFlag,
 } from "../clerk/test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal as makeClientPrincipal, firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal as makeClientPrincipal,
+  firmPrincipal as makeFirmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Advisory narrative drafting (idea #10). Pinned invariants:
 //  - every number in the letter comes from the engagement's stored findings;

@@ -99,7 +99,8 @@ export async function acquireExpoPushToken(): Promise<PushTokenResult> {
       const request = await Notifications.requestPermissionsAsync();
       granted =
         request.granted ||
-        request.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+        request.ios?.status ===
+          Notifications.IosAuthorizationStatus.PROVISIONAL;
     }
 
     if (!granted) {

@@ -37,10 +37,18 @@ const firm2 = randomUUID();
 const firmBroke = randomUUID(); // budget-exhaustion firm (ledger is append-only)
 
 const clientA: Principal = clientPrincipal(firm1, randomUUID());
-const clientB: Principal = { ...clientA, userId: randomUUID(), clientPartyId: randomUUID() };
+const clientB: Principal = {
+  ...clientA,
+  userId: randomUUID(),
+  clientPartyId: randomUUID(),
+};
 const adminF1: Principal = firmPrincipal(firm1);
 const adminF2: Principal = { ...adminF1, userId: randomUUID(), firmId: firm2 };
-const adminBroke: Principal = { ...adminF1, userId: randomUUID(), firmId: firmBroke };
+const adminBroke: Principal = {
+  ...adminF1,
+  userId: randomUUID(),
+  firmId: firmBroke,
+};
 
 let caseId = "";
 
@@ -62,7 +70,11 @@ before(async () => {
   ]);
 
   const kase = await createExtractionCase(
-    { sourceType: "text", text: `Invoice CLERKSCOPE-${SALT} total 100`, name: `scope-${SALT}.txt` },
+    {
+      sourceType: "text",
+      text: `Invoice CLERKSCOPE-${SALT} total 100`,
+      name: `scope-${SALT}.txt`,
+    },
     clientA.userId,
     fakeGateway(okExtraction),
     undefined,
@@ -100,17 +112,25 @@ test("a client_user sees only its own submissions; firm staff see the firm's", a
   const asAdminF2 = await listen(appFor(adminF2, clerkRouter));
 
   const ids = async (base: string) =>
-    ((await (await fetch(`${base}/clerk/cases?kind=extraction`)).json()) as Array<{ id: string }>).map(
-      (c) => c.id,
-    );
+    (
+      (await (
+        await fetch(`${base}/clerk/cases?kind=extraction`)
+      ).json()) as Array<{ id: string }>
+    ).map((c) => c.id);
 
   assert.ok((await ids(asClientA)).includes(caseId), "creator sees the case");
   assert.ok(
     !(await ids(asClientB)).includes(caseId),
     "a sibling client_user in the same firm does NOT see it",
   );
-  assert.ok((await ids(asAdminF1)).includes(caseId), "firm admin sees the firm's case");
-  assert.ok(!(await ids(asAdminF2)).includes(caseId), "another firm does NOT see it");
+  assert.ok(
+    (await ids(asAdminF1)).includes(caseId),
+    "firm admin sees the firm's case",
+  );
+  assert.ok(
+    !(await ids(asAdminF2)).includes(caseId),
+    "another firm does NOT see it",
+  );
 });
 
 test("case detail is scoped: cross-firm and sibling-client reads 404", async () => {

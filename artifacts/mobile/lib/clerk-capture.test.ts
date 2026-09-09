@@ -100,10 +100,7 @@ test("base64ByteLength reports the decoded size, padded or not", () => {
   assert.equal(base64ByteLength(Buffer.from("AB").toString("base64")), 2);
   assert.equal(base64ByteLength(Buffer.from("ABC").toString("base64")), 3);
   const bytes = 12_345;
-  assert.equal(
-    base64ByteLength(Buffer.alloc(bytes).toString("base64")),
-    bytes,
-  );
+  assert.equal(base64ByteLength(Buffer.alloc(bytes).toString("base64")), bytes);
 });
 
 test("cameraPhotoName is deterministic UTC for an injected timestamp", () => {

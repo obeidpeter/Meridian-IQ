@@ -26,9 +26,11 @@ import {
 
 const PARAMS = { limit: 100 };
 
-
 /** A confirmation alert opens the invoice it is about; anything else stays a row. */
-function entityHref(item: { entityType?: string | null; entityId?: string | null }) {
+function entityHref(item: {
+  entityType?: string | null;
+  entityId?: string | null;
+}) {
   if (item.entityType === "invoice" && item.entityId) {
     return `/invoices/${item.entityId}`;
   }

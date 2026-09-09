@@ -1,6 +1,10 @@
 import { lagosParts } from "../../../lib/lagos-time";
 import { MONTH_NAMES } from "../text";
-import { type DataIntent, type DataIntentParams, type DataIntentResult } from "./shared";
+import {
+  type DataIntent,
+  type DataIntentParams,
+  type DataIntentResult,
+} from "./shared";
 import { SUBMISSION_INTENTS } from "./submissions";
 import { MONEY_INTENTS } from "./money";
 import { PAYABLES_INTENTS } from "./payables";

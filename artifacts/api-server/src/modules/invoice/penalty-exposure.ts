@@ -56,7 +56,9 @@ export interface PenaltyExposure {
 
 // Pure, exported for tests (and the one place the digest's floor figure is
 // computed): overdue count → per-band exposure in whole naira strings.
-export function bandExposure(overdueCount: number): Record<TurnoverBand, string> {
+export function bandExposure(
+  overdueCount: number,
+): Record<TurnoverBand, string> {
   const count = Math.max(0, Math.floor(overdueCount));
   return {
     small: String(count * S104_PER_INVOICE.small),

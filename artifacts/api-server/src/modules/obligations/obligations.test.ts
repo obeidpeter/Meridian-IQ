@@ -120,7 +120,13 @@ test("create/list/status lifecycle with audit events", async () => {
 
   // A foreign firm's id updates zero rows — the route's 404 path.
   assert.equal(
-    await updateObligationStatus(created.id, otherFirmId, "open", undefined, userId),
+    await updateObligationStatus(
+      created.id,
+      otherFirmId,
+      "open",
+      undefined,
+      userId,
+    ),
     null,
   );
   assert.equal((await getObligation(created.id))?.status, "closed");
@@ -221,7 +227,10 @@ test("listObligations orders by deadline, filters by status/client and honours l
     limit: 1,
     offset: 1,
   });
-  assert.deepEqual(page.map((o) => o.id), [mid.id]);
+  assert.deepEqual(
+    page.map((o) => o.id),
+    [mid.id],
+  );
 
   // A foreign firm sees nothing of this firm's book.
   assert.equal(

@@ -124,7 +124,9 @@ export async function recordWhtCredit(
       )}::text`,
     })
     .from(invoicesTable)
-    .where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.firmId, firmId)))
+    .where(
+      and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.firmId, firmId)),
+    )
     .limit(1);
   if (!invoice) {
     throw new DomainError("NOT_FOUND", "Invoice not found", 404);
@@ -226,7 +228,9 @@ export async function markWhtNoteReceived(
   const [existing] = await getDb()
     .select({ status: whtCreditsTable.status })
     .from(whtCreditsTable)
-    .where(and(eq(whtCreditsTable.id, creditId), eq(whtCreditsTable.firmId, firmId)))
+    .where(
+      and(eq(whtCreditsTable.id, creditId), eq(whtCreditsTable.firmId, firmId)),
+    )
     .limit(1);
   if (!existing) return null;
   if (existing.status === "note_received") {
@@ -244,7 +248,9 @@ export async function markWhtNoteReceived(
       noteDate: input.noteDate,
       updatedAt: new Date(),
     })
-    .where(and(eq(whtCreditsTable.id, creditId), eq(whtCreditsTable.firmId, firmId)))
+    .where(
+      and(eq(whtCreditsTable.id, creditId), eq(whtCreditsTable.firmId, firmId)),
+    )
     .returning({ id: whtCreditsTable.id });
   if (!row) return null;
   // Pointer-only audit (SEC-12): the walk itself — never the evidence
@@ -311,7 +317,6 @@ export interface ListWhtCreditsFilter {
   offset?: number;
 }
 
-
 // The ledger, most recent deduction first (id as the stable tiebreak), with
 // the chase totals. Totals cover the whole (firm, client) scope regardless
 // of the status filter or paging — the header numbers must not change when
@@ -349,7 +354,10 @@ export async function countWhtChase(
   clientPartyId?: string,
 ): Promise<{ awaiting: number; awaitingAmount: string }> {
   const totals = await whtCreditTotals(firmId, clientPartyId);
-  return { awaiting: totals.awaitingNote, awaitingAmount: totals.awaitingAmount };
+  return {
+    awaiting: totals.awaitingNote,
+    awaitingAmount: totals.awaitingAmount,
+  };
 }
 
 export interface OpenWhtSample {

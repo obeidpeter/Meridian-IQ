@@ -212,7 +212,10 @@ test("a 409 from a newer save refetches the record and keeps the unsaved edit (R
   h.mutate.mockRejectedValueOnce(
     Object.assign(new Error("Conflict"), {
       status: 409,
-      data: { error: "These business details changed since you loaded them. Review the latest saved values and try again." },
+      data: {
+        error:
+          "These business details changed since you loaded them. Review the latest saved values and try again.",
+      },
     }),
   );
   render(page());

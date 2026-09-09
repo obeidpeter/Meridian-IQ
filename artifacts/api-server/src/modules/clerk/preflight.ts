@@ -48,10 +48,7 @@ function vatFraction(raw: string | null): number | null {
   return n > 1 ? n / 100 : n;
 }
 
-function fieldValue(
-  extraction: ClerkExtraction,
-  field: string,
-): string | null {
+function fieldValue(extraction: ClerkExtraction, field: string): string | null {
   const hit = extraction.fields.find((f) => f.field === field);
   const v = hit?.value ?? null;
   return v !== null && v.trim() === "" ? null : v;
@@ -151,7 +148,9 @@ export function preflightChecks(extraction: ClerkExtraction): PreflightIssue[] {
       message: "No line items were found in the document",
     });
   } else {
-    extraction.lines.forEach((line, idx) => issues.push(...checkLine(line, idx)));
+    extraction.lines.forEach((line, idx) =>
+      issues.push(...checkLine(line, idx)),
+    );
   }
 
   issues.push(...totalsChecks(extraction));
@@ -173,7 +172,13 @@ function totalsChecks(extraction: ClerkExtraction): PreflightIssue[] {
     const qty = num(line.quantity);
     const price = num(line.unitPrice);
     const rate = vatFraction(line.vatRate);
-    if (qty === null || price === null || rate === null || rate < 0 || rate > 1) {
+    if (
+      qty === null ||
+      price === null ||
+      rate === null ||
+      rate < 0 ||
+      rate > 1
+    ) {
       return null;
     }
     const ext = qty * price;

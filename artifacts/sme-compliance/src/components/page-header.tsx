@@ -18,6 +18,10 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <WorkspaceHeader title={title} description={description} actions={children} />
+    <WorkspaceHeader
+      title={title}
+      description={description}
+      actions={children}
+    />
   );
 }

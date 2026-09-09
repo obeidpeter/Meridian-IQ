@@ -64,7 +64,12 @@ export async function renderObligationResponsePdf(
   // --- Brand header (the pack's block, response-titled) ----------------------
   const layout = packLayout(doc, packTheme.primary);
   const { cursor, section, kvRow, emptyLine } = layout;
-  cursor.y = drawBrandHeader(doc, packTheme, "RESPONSE BUNDLE", pack.monthLabel);
+  cursor.y = drawBrandHeader(
+    doc,
+    packTheme,
+    "RESPONSE BUNDLE",
+    pack.monthLabel,
+  );
 
   // --- Cover block: who, and what this paper answers -------------------------
   drawCoverIntro(

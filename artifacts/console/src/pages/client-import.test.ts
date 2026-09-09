@@ -17,6 +17,8 @@ describe("importResultsCsv", () => {
     const lines = csv.trim().split("\n");
     expect(lines[0]).toBe('"row","legalName","status","errors"');
     expect(lines[1]).toBe('"1","Adaeze Foods Ltd","created",""');
-    expect(lines[2]).toBe('"2","Kano ""Best"" Grains","invalid","tin: TIN must be 14 digits"');
+    expect(lines[2]).toBe(
+      '"2","Kano ""Best"" Grains","invalid","tin: TIN must be 14 digits"',
+    );
   });
 });

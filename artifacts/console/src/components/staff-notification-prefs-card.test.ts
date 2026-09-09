@@ -53,9 +53,9 @@ describe("prefsCardState", () => {
   });
 
   test("a transient failure for a firm member is ERROR, never hidden", () => {
-    expect(
-      prefsCardState({ ...base, isError: true, errorStatus: 500 }),
-    ).toBe("error");
+    expect(prefsCardState({ ...base, isError: true, errorStatus: 500 })).toBe(
+      "error",
+    );
     // Network-level failure carries no HTTP status at all.
     expect(
       prefsCardState({ ...base, isError: true, errorStatus: undefined }),
@@ -63,9 +63,9 @@ describe("prefsCardState", () => {
   });
 
   test("the server's own 403 is a final not-a-firm-member answer — hidden", () => {
-    expect(
-      prefsCardState({ ...base, isError: true, errorStatus: 403 }),
-    ).toBe("hidden");
+    expect(prefsCardState({ ...base, isError: true, errorStatus: 403 })).toBe(
+      "hidden",
+    );
   });
 
   test("loading renders nothing yet; success renders the form", () => {
@@ -152,12 +152,10 @@ describe("emailVerificationState", () => {
   };
 
   test("a blank field carries no badge at all", () => {
-    expect(
-      emailVerificationState({ formEmail: "", ...verified }),
-    ).toBe("none");
-    expect(
-      emailVerificationState({ formEmail: "   ", ...verified }),
-    ).toBe("none");
+    expect(emailVerificationState({ formEmail: "", ...verified })).toBe("none");
+    expect(emailVerificationState({ formEmail: "   ", ...verified })).toBe(
+      "none",
+    );
   });
 
   test("verified only when the on-screen email IS the saved, stamped address", () => {

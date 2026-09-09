@@ -14,7 +14,13 @@
 //  - Actions gate on the filing.write capability: a read-only viewer sees
 //    the register and its pills but no buttons that could only ever 403.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Filing } from "@workspace/api-client-react";
 
@@ -144,15 +150,24 @@ beforeEach(() => {
 describe("filings-card helpers", () => {
   test("overdue = not yet FILED past the due date; filed is never overdue", () => {
     expect(
-      filingOverdue({ status: "upcoming", dueDate: "2026-07-21" }, "2026-08-01"),
+      filingOverdue(
+        { status: "upcoming", dueDate: "2026-07-21" },
+        "2026-08-01",
+      ),
     ).toBe(true);
     // Prepared still counts — the deadline wants the filing, not the prep.
     expect(
-      filingOverdue({ status: "prepared", dueDate: "2026-07-21" }, "2026-08-01"),
+      filingOverdue(
+        { status: "prepared", dueDate: "2026-07-21" },
+        "2026-08-01",
+      ),
     ).toBe(true);
     // Due today is not overdue yet.
     expect(
-      filingOverdue({ status: "upcoming", dueDate: "2026-08-01" }, "2026-08-01"),
+      filingOverdue(
+        { status: "upcoming", dueDate: "2026-08-01" },
+        "2026-08-01",
+      ),
     ).toBe(false);
     expect(
       filingOverdue({ status: "filed", dueDate: "2026-07-21" }, "2026-08-01"),
@@ -178,7 +193,9 @@ describe("filings-card helpers", () => {
     });
     // An off-catalogue status from a newer server degrades to slate + a
     // title-cased word, never a crash.
-    expect(filingPill({ status: "in_review" as Filing["status"] }, false)).toEqual({
+    expect(
+      filingPill({ status: "in_review" as Filing["status"] }, false),
+    ).toEqual({
       tone: "slate",
       label: "In review",
     });
@@ -325,7 +342,7 @@ describe("FilingsCard", () => {
     ]);
   });
 
-  test("an empty reference is OMITTED from the filed payload, never sent as \"\"", async () => {
+  test('an empty reference is OMITTED from the filed payload, never sent as ""', async () => {
     harness.list.data = {
       filings: [filing({ id: "fil-9", status: "prepared" })],
     };

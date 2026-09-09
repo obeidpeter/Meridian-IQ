@@ -56,18 +56,20 @@ before(async () => {
   await getDb()
     .insert(firmsTable)
     .values({ id: brokeFirmId, name: `Clerk Hardening Broke Firm ${SALT}` });
-  await getDb().insert(clerkInferenceCallsTable).values({
-    firmId: brokeFirmId,
-    purpose: "extract_invoice",
-    model: "fake-model-test",
-    promptVersion: "test",
-    inputRef: `hardening-budget-${SALT}`,
-    outputJson: null,
-    schemaValid: true,
-    outcome: "ok",
-    promptTokens: 1_500_000,
-    completionTokens: 500_000,
-  });
+  await getDb()
+    .insert(clerkInferenceCallsTable)
+    .values({
+      firmId: brokeFirmId,
+      purpose: "extract_invoice",
+      model: "fake-model-test",
+      promptVersion: "test",
+      inputRef: `hardening-budget-${SALT}`,
+      outputJson: null,
+      schemaValid: true,
+      outcome: "ok",
+      promptTokens: 1_500_000,
+      completionTokens: 500_000,
+    });
 });
 
 after(async () => {
@@ -100,7 +102,11 @@ test("gateway backstop: an exhausted firm's call never reaches the provider", as
     .select({ id: clerkInferenceCallsTable.id })
     .from(clerkInferenceCallsTable)
     .where(eq(clerkInferenceCallsTable.inputRef, sha256(input)));
-  assert.equal(rows.length, 0, "a call that never left the platform is not ledgered");
+  assert.equal(
+    rows.length,
+    0,
+    "a call that never left the platform is not ledgered",
+  );
 });
 
 test("gateway backstop: capture for an exhausted firm fails the case closed", async () => {
@@ -153,7 +159,12 @@ test("concurrent decisions: exactly one wins, the loser gets a 409", async () =>
         currency: "NGN",
         category: "b2b",
         lines: [
-          { description: "Goods", quantity: "1", unitPrice: "500.00", vatRate: "0.075" },
+          {
+            description: "Goods",
+            quantity: "1",
+            unitPrice: "500.00",
+            vatRate: "0.075",
+          },
         ],
       },
       checkerId,
@@ -166,13 +177,23 @@ test("concurrent decisions: exactly one wins, the loser gets a 409", async () =>
   assert.equal(rejected.length, 1);
   const err = (rejected[0] as PromiseRejectedResult).reason as DomainError;
   assert.ok(err instanceof DomainError);
-  assert.equal(err.status, 409, "the loser is told, never silently overwritten");
+  assert.equal(
+    err.status,
+    409,
+    "the loser is told, never silently overwritten",
+  );
 
   const [row] = await getDb()
     .select()
     .from(clerkCasesTable)
     .where(
-      and(eq(clerkCasesTable.id, kase.id), eq(clerkCasesTable.status, "approved")),
+      and(
+        eq(clerkCasesTable.id, kase.id),
+        eq(clerkCasesTable.status, "approved"),
+      ),
     );
-  assert.ok(row?.createdInvoiceId, "the winner's draft is recorded on the case");
+  assert.ok(
+    row?.createdInvoiceId,
+    "the winner's draft is recorded on the case",
+  );
 });

@@ -46,7 +46,10 @@ export function AutomationRollupCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-md border p-3" data-testid="rollup-action-policies">
+          <div
+            className="rounded-md border p-3"
+            data-testid="rollup-action-policies"
+          >
             <p className="text-xs font-medium uppercase text-muted-foreground">
               Daily action approvals
             </p>
@@ -55,7 +58,10 @@ export function AutomationRollupCard() {
               {actionPaused ? <> · {actionPaused}</> : null}
             </p>
           </div>
-          <div className="rounded-md border p-3" data-testid="rollup-plan-policies">
+          <div
+            className="rounded-md border p-3"
+            data-testid="rollup-plan-policies"
+          >
             <p className="text-xs font-medium uppercase text-muted-foreground">
               Monthly plan approvals
             </p>
@@ -69,11 +75,14 @@ export function AutomationRollupCard() {
               Plan runs · 30 days
             </p>
             <p className="mt-1 text-sm tabular-nums">
-              {rollup.runs30d.total} run{rollup.runs30d.total === 1 ? "" : "s"} ·{" "}
-              {rollup.runs30d.done} done · {rollup.runs30d.halted} halted
+              {rollup.runs30d.total} run{rollup.runs30d.total === 1 ? "" : "s"}{" "}
+              · {rollup.runs30d.done} done · {rollup.runs30d.halted} halted
             </p>
           </div>
-          <div className="rounded-md border p-3" data-testid="rollup-decisions-30d">
+          <div
+            className="rounded-md border p-3"
+            data-testid="rollup-decisions-30d"
+          >
             <p className="text-xs font-medium uppercase text-muted-foreground">
               Action batches · 30 days
             </p>
@@ -87,8 +96,8 @@ export function AutomationRollupCard() {
         <p className="text-xs text-muted-foreground">
           Every automated batch traces to a standing approval or an approved
           plan run in the decision ledger. Pauses are tripwires, not errors —
-          daily approvals resume from the client&apos;s actions card; a
-          monthly plan resumes from the surface that granted it.
+          daily approvals resume from the client&apos;s actions card; a monthly
+          plan resumes from the surface that granted it.
         </p>
       </CardContent>
     </Card>

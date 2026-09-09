@@ -126,12 +126,23 @@ async function runSync(
       .where(eq(erpSyncRunsTable.id, run.id));
     await getDb()
       .update(erpConnectionsTable)
-      .set({ status: "error", lastError: auth.error ?? "authentication failed" })
+      .set({
+        status: "error",
+        lastError: auth.error ?? "authentication failed",
+      })
       .where(eq(erpConnectionsTable.id, connectionId));
-    throw new DomainError("CONNECTOR_AUTH", auth.error ?? "authentication failed", 422);
+    throw new DomainError(
+      "CONNECTOR_AUTH",
+      auth.error ?? "authentication failed",
+      422,
+    );
   }
 
-  const pull = await connector.pullInvoices(config, connection.cursor, PULL_LIMIT);
+  const pull = await connector.pullInvoices(
+    config,
+    connection.cursor,
+    PULL_LIMIT,
+  );
   const fieldMap = {
     ...connector.defaultFieldMap,
     ...(connection.fieldMap ?? {}),
@@ -139,7 +150,8 @@ async function runSync(
   const outcomes: RowOutcome[] = [];
   for (const native of pull.rows) {
     const mapped = mapRow(native, fieldMap);
-    const ref = mapped.row?.invoiceNumber ?? JSON.stringify(native).slice(0, 60);
+    const ref =
+      mapped.row?.invoiceNumber ?? JSON.stringify(native).slice(0, 60);
     if (!mapped.row) {
       outcomes.push({
         ref,

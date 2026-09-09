@@ -33,7 +33,10 @@ test("penaltyExposureLine: the singular reads as one invoice", () => {
 });
 
 test("the fix line states the exposure is removable", () => {
-  assert.match(PENALTY_EXPOSURE_FIX_LINE, /Submitting .* removes this exposure/);
+  assert.match(
+    PENALTY_EXPOSURE_FIX_LINE,
+    /Submitting .* removes this exposure/,
+  );
 });
 
 test("penaltyExposureNote: estimate-not-advice, with the as-of date", () => {

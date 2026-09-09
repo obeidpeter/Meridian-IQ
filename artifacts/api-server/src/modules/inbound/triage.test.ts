@@ -170,7 +170,9 @@ test("pdfTextHeadForTriage: real text PDF → capped head; garbage and textless 
   // valid PDF with an empty text layer all fall to null silently.
   assert.equal(await pdfTextHeadForTriage("%%%%"), null);
   assert.equal(
-    await pdfTextHeadForTriage(Buffer.from(`not a pdf ${SALT}`).toString("base64")),
+    await pdfTextHeadForTriage(
+      Buffer.from(`not a pdf ${SALT}`).toString("base64"),
+    ),
     null,
   );
   assert.equal(await pdfTextHeadForTriage(pdfWithText("")), null);
@@ -183,8 +185,7 @@ test("triageDocumentKind: closed catalogue in, lane decision out, every failure 
     messageText: null,
     pdfTextHead: null,
   };
-  const answer = (kind: string) =>
-    fakeGateway(() => JSON.stringify({ kind }));
+  const answer = (kind: string) => fakeGateway(() => JSON.stringify({ kind }));
   assert.equal(
     await triageDocumentKind(answer("notice"), firmEmail, signals),
     "notice",
@@ -367,7 +368,9 @@ test("whatsapp rail: the caption reaches triage as the message signal and flips 
         {
           filename: `firs-letter-${SALT}.png`,
           contentType: "image/png",
-          contentBase64: Buffer.from(`triage-wa-png-${SALT}`).toString("base64"),
+          contentBase64: Buffer.from(`triage-wa-png-${SALT}`).toString(
+            "base64",
+          ),
         },
       ],
     },
@@ -381,7 +384,11 @@ test("whatsapp rail: the caption reaches triage as the message signal and flips 
   assert.ok(triageReq, "the media item was triaged");
   const user = triageReq.user as string;
   assert.match(user, new RegExp(`message text: ${caption}`));
-  assert.match(user, /document text head: \(none\)/, "no pdf head for an image");
+  assert.match(
+    user,
+    /document text head: \(none\)/,
+    "no pdf head for an image",
+  );
 
   const row = await caseById(result.caseIds[0]);
   assert.equal(row.kind, "notice");
@@ -481,10 +488,12 @@ test("kill switch dark: triage makes no call and today's dark-flag skip is byte-
     // and the document is skip-recorded, not silently dropped.
     assert.equal(result.resolved, true);
     assert.deepEqual(result.caseIds, []);
-    assert.deepEqual(result.skipped, [
-      { filename, reason: "CLERK_DISABLED" },
-    ]);
-    assert.equal(providerCalls, 0, "flag dark: no call ever leaves the platform");
+    assert.deepEqual(result.skipped, [{ filename, reason: "CLERK_DISABLED" }]);
+    assert.equal(
+      providerCalls,
+      0,
+      "flag dark: no call ever leaves the platform",
+    );
     const rows = await getDb()
       .select({ id: clerkCasesTable.id })
       .from(clerkCasesTable)

@@ -24,7 +24,9 @@ describe("claimGapSummary", () => {
       "3 of 40 question(s) refused in the last 30 days.",
     );
     expect(
-      claimGapSummary(report({ windowDays: 90, totalQuestions: 1, refusedTotal: 1 })),
+      claimGapSummary(
+        report({ windowDays: 90, totalQuestions: 1, refusedTotal: 1 }),
+      ),
     ).toBe("1 of 1 question(s) refused in the last 90 days.");
   });
 
@@ -86,7 +88,10 @@ describe("shouldConfirmSeedOverwrite", () => {
 
   test("re-seeding the SAME question is not an overwrite — no interruption", () => {
     expect(
-      shouldConfirmSeedOverwrite("What is the VAT rate?", "What is the VAT rate?"),
+      shouldConfirmSeedOverwrite(
+        "What is the VAT rate?",
+        "What is the VAT rate?",
+      ),
     ).toBe(false);
     // …including when only surrounding whitespace differs.
     expect(

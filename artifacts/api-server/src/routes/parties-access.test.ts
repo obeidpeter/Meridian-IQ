@@ -196,7 +196,11 @@ test("a stale expectedUpdatedAt is refused with nothing written; the current sta
   assert.deepEqual(await read(), loaded, "a refused update writes nothing");
 
   const malformed = await patch({ city: "x", expectedUpdatedAt: "yesterday" });
-  assert.equal(malformed.status, 400, "the stamp is a date-time, not free text");
+  assert.equal(
+    malformed.status,
+    400,
+    "the stamp is a date-time, not free text",
+  );
 
   const fresh = await patch({
     city: "Fresh City",
@@ -215,7 +219,11 @@ test("a stale expectedUpdatedAt is refused with nothing written; the current sta
   assert.equal((await read()).city, "Fresh City");
 
   const legacy = await patch({ city: "Legacy City" });
-  assert.equal(legacy.status, 200, "callers without a stamp keep last-write-wins");
+  assert.equal(
+    legacy.status,
+    200,
+    "callers without a stamp keep last-write-wins",
+  );
 });
 
 test("an unrelated firm cannot discover or update another firm's buyer", async () => {

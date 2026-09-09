@@ -55,10 +55,7 @@ test("detectAgreementDrop: thin months skip, real collapses fire", () => {
     ),
     null,
   );
-  assert.equal(
-    detectAgreementDrop([month("2026-07", 12, 8)], 10, 0.2),
-    null,
-  );
+  assert.equal(detectAgreementDrop([month("2026-07", 12, 8)], 10, 0.2), null);
 });
 
 test("the sweep alerts once per degraded month and never re-alerts", async () => {
@@ -110,7 +107,9 @@ test("the operator Desk can see the new alert class", () => {
     "the action must join HEALTH_ALERT_ACTIONS or the Desk never shows it — the phrasing-watch gap, not repeated",
   );
   assert.ok(
-    src("routes/index.ts").includes('import "../modules/clerk/agreement-watch"'),
+    src("routes/index.ts").includes(
+      'import "../modules/clerk/agreement-watch"',
+    ),
     "the module must be side-effect imported or its sweep never registers",
   );
 });

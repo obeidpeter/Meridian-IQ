@@ -345,7 +345,12 @@ describe("planEvidenceLine", () => {
     expect(
       planEvidenceLine([
         // reconcile_matches is not a plan step — it never phrases a segment.
-        { kind: "reconcile_matches", sample: 40, agreed: 38, medianLeadDays: null },
+        {
+          kind: "reconcile_matches",
+          sample: 40,
+          agreed: 38,
+          medianLeadDays: null,
+        },
         { kind: "submit_overdue", sample: 2, agreed: 2, medianLeadDays: null },
         { kind: "retry_failed", sample: 0, agreed: 0, medianLeadDays: null },
         { kind: "draft_recurring", sample: 1, agreed: 1, medianLeadDays: 1 },

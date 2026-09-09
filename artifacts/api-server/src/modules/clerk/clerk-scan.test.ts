@@ -29,7 +29,9 @@ const SALT = makeRunSalt();
 // pdfjs rebuilds the table when it disagrees — and a %-comment carries the
 // run salt so the duplicate-detection hash differs between runs.
 function blankPdf(pages: number, tag: string): string {
-  const kids = Array.from({ length: pages }, (_, i) => `${3 + i} 0 R`).join(" ");
+  const kids = Array.from({ length: pages }, (_, i) => `${3 + i} 0 R`).join(
+    " ",
+  );
   const pageObjects = Array.from(
     { length: pages },
     (_, i) =>
@@ -81,8 +83,9 @@ after(async () => {
 function imageParts(req: CompletionRequest): { url: string }[] {
   if (typeof req.user === "string") return [];
   return req.user
-    .filter((p): p is { type: "image_url"; image_url: { url: string } } =>
-      p.type === "image_url",
+    .filter(
+      (p): p is { type: "image_url"; image_url: { url: string } } =>
+        p.type === "image_url",
     )
     .map((p) => p.image_url);
 }
@@ -104,7 +107,11 @@ test("a textless PDF is rendered and extracted through the vision path", async (
   );
   assert.equal(kase.status, "extracted");
   assert.equal(kase.sourceText, null, "no text layer, no sourceText");
-  assert.equal(kase.sourceScanPagesB64?.length, 1, "rendered page stored for retry");
+  assert.equal(
+    kase.sourceScanPagesB64?.length,
+    1,
+    "rendered page stored for retry",
+  );
 
   assert.equal(calls.length, 1, "extraction reached the gateway");
   const req = calls[0];
@@ -131,8 +138,16 @@ test("a PDF with a real text layer stays on the text path", async () => {
   );
   assert.equal(kase.status, "extracted");
   assert.match(kase.sourceText ?? "", /INVOICE text-path/);
-  assert.equal(kase.sourceScanPagesB64, null, "no pages rendered for a text PDF");
-  assert.equal(typeof calls[0]?.user, "string", "document travels as fenced text");
+  assert.equal(
+    kase.sourceScanPagesB64,
+    null,
+    "no pages rendered for a text PDF",
+  );
+  assert.equal(
+    typeof calls[0]?.user,
+    "string",
+    "document travels as fenced text",
+  );
 });
 
 test("a scan beyond the page cap is rejected with clear advice, before any model call", async () => {
@@ -143,7 +158,10 @@ test("a scan beyond the page cap is rejected with clear advice, before any model
   });
   await assert.rejects(
     createExtractionCase(
-      { sourceType: "pdf", pdfBase64: blankPdf(MAX_SCAN_PAGES + 1, "scan-long") },
+      {
+        sourceType: "pdf",
+        pdfBase64: blankPdf(MAX_SCAN_PAGES + 1, "scan-long"),
+      },
       actorId,
       gateway,
     ),
@@ -160,9 +178,17 @@ test("a scan beyond the page cap is rejected with clear advice, before any model
 test("the duplicate guard keys on the scan's bytes", async () => {
   const gateway = fakeGateway(okExtraction);
   const pdf = blankPdf(1, "scan-dupe");
-  await createExtractionCase({ sourceType: "pdf", pdfBase64: pdf }, actorId, gateway);
+  await createExtractionCase(
+    { sourceType: "pdf", pdfBase64: pdf },
+    actorId,
+    gateway,
+  );
   await assert.rejects(
-    createExtractionCase({ sourceType: "pdf", pdfBase64: pdf }, actorId, gateway),
+    createExtractionCase(
+      { sourceType: "pdf", pdfBase64: pdf },
+      actorId,
+      gateway,
+    ),
     (err: unknown) => {
       assert.ok(err instanceof DomainError);
       assert.equal(err.code, "DUPLICATE_SOURCE");

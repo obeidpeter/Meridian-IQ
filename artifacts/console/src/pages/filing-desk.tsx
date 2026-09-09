@@ -97,9 +97,7 @@ export function FilingDesk() {
               {matrix.totals.overdue} overdue
             </span>
           ) : (
-            <span className={pillClasses("emerald")}>
-              No overdue returns
-            </span>
+            <span className={pillClasses("emerald")}>No overdue returns</span>
           )
         }
       />

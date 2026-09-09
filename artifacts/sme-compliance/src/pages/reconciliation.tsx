@@ -44,13 +44,7 @@ import {
   isPdfStatementFile,
   statementPdfSizeError,
 } from "@/lib/statement-file";
-import {
-  Landmark,
-  ScanSearch,
-  Check,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { Landmark, ScanSearch, Check, Sparkles, X } from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -83,7 +77,9 @@ const NARRATION_CUE_LABELS: Record<string, string> = {
 };
 
 /** Human label for a narration cue; null when the cue is absent or unknown. */
-export function narrationCueLabel(cue: string | null | undefined): string | null {
+export function narrationCueLabel(
+  cue: string | null | undefined,
+): string | null {
   return (cue && NARRATION_CUE_LABELS[cue]) || null;
 }
 
@@ -173,7 +169,9 @@ export function statementImportBody(args: {
     ...(proposedCsv !== null
       ? {
           csv: proposedCsv,
-          ...(args.report?.formatKey ? { formatKey: args.report.formatKey } : {}),
+          ...(args.report?.formatKey
+            ? { formatKey: args.report.formatKey }
+            : {}),
         }
       : args.pdf
         ? { pdfBase64: args.pdf.base64 }
@@ -206,14 +204,12 @@ function ParseReportCard({
         {reportSource === "pdf" && !report.committed && (
           <Alert data-testid="banner-scanned-preview">
             <Sparkles className="h-4 w-4" aria-hidden="true" />
-            <AlertTitle>
-              Clerk read this scanned statement
-            </AlertTitle>
+            <AlertTitle>Clerk read this scanned statement</AlertTitle>
             <AlertDescription>
-              The rows below are what Clerk proposed from the PDF —
-              and exactly what will be committed. Check the dates,
-              amounts and directions against your statement; nothing
-              is saved until you press “Commit statement”.
+              The rows below are what Clerk proposed from the PDF — and exactly
+              what will be committed. Check the dates, amounts and directions
+              against your statement; nothing is saved until you press “Commit
+              statement”.
             </AlertDescription>
           </Alert>
         )}
@@ -246,8 +242,8 @@ function ParseReportCard({
         </div>
         {!report.committed && (
           <p className="text-xs text-muted-foreground">
-            Nothing has been saved yet — review the rows below, then press “Commit
-            statement”. Invalid rows are skipped on commit.
+            Nothing has been saved yet — review the rows below, then press
+            “Commit statement”. Invalid rows are skipped on commit.
           </p>
         )}
         <div className="space-y-2">
@@ -268,8 +264,7 @@ function ParseReportCard({
                     <span className="font-normal">
                       {" "}
                       · {formatDate(r.valueDate)} ·{" "}
-                      {humanize(r.direction || "—")}{" "}
-                      {formatNaira(r.amount)}
+                      {humanize(r.direction || "—")} {formatNaira(r.amount)}
                     </span>
                   ) : (
                     <span className="text-muted-foreground font-normal">
@@ -279,9 +274,13 @@ function ParseReportCard({
                   )}
                 </p>
                 {r.narration && (
-                  <p className="text-xs text-muted-foreground truncate">{r.narration}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {r.narration}
+                  </p>
                 )}
-                {r.error && <p className="text-xs text-destructive mt-1">{r.error}</p>}
+                {r.error && (
+                  <p className="text-xs text-destructive mt-1">{r.error}</p>
+                )}
               </div>
             </div>
           ))}
@@ -337,10 +336,7 @@ function ProposalCard({
               className={pillClasses("violet")}
               data-testid={`narration-chip-${p.id}`}
             >
-              <Sparkles
-                className="w-3 h-3"
-                aria-hidden="true"
-              />
+              <Sparkles className="w-3 h-3" aria-hidden="true" />
               {narrationChip}
             </span>
           )}
@@ -392,23 +388,19 @@ function ProposalCard({
           Invoice status: {statusLabel(p.invoiceStatus)}
         </span>
       </div>
-      {p.status === "proposed" &&
-        Number(p.confidence) < 0.85 &&
-        !assist && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onExplain(p)}
-            disabled={assistingId !== null}
-            data-testid={`button-assist-${p.id}`}
-          >
-            <Sparkles className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
-            {assistingId === p.id
-              ? "Asking Clerk…"
-              : "Why this match?"}
-          </Button>
-        )}
+      {p.status === "proposed" && Number(p.confidence) < 0.85 && !assist && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => onExplain(p)}
+          disabled={assistingId !== null}
+          data-testid={`button-assist-${p.id}`}
+        >
+          <Sparkles className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+          {assistingId === p.id ? "Asking Clerk…" : "Why this match?"}
+        </Button>
+      )}
       {assist && (
         <div
           className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 space-y-1"
@@ -421,9 +413,8 @@ function ProposalCard({
               : "Match evidence"}
           </p>
           <p className="text-sm">{assist.explanation}</p>
-          {(assist.ranked.find(
-            (r) => r.proposalId === p.id,
-          )?.highlights.length ?? 0) > 0 && (
+          {(assist.ranked.find((r) => r.proposalId === p.id)?.highlights
+            .length ?? 0) > 0 && (
             <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
               {assist.ranked
                 .find((r) => r.proposalId === p.id)!
@@ -433,8 +424,7 @@ function ProposalCard({
             </ul>
           )}
           <p className="text-xs text-muted-foreground">
-            Ranked by the deterministic matcher — accepting
-            stays your decision.
+            Ranked by the deterministic matcher — accepting stays your decision.
           </p>
         </div>
       )}
@@ -746,7 +736,10 @@ export function Reconciliation() {
     }
   };
 
-  const decide = async (proposal: MatchProposalView, action: "accept" | "reject") => {
+  const decide = async (
+    proposal: MatchProposalView,
+    action: "accept" | "reject",
+  ) => {
     setDecidingId(proposal.id);
     try {
       if (action === "accept") {
@@ -884,7 +877,8 @@ export function Reconciliation() {
                   <p className="text-sm text-muted-foreground">
                     {filename ? (
                       <>
-                        Loaded <span className="font-medium">{filename}</span> —{" "}
+                        Loaded <span className="font-medium">{filename}</span>{" "}
+                        —{" "}
                       </>
                     ) : null}
                     {csvLines.length} line(s) ready (including headers).
@@ -937,7 +931,10 @@ export function Reconciliation() {
                   <Skeleton className="h-14" />
                 </div>
               ) : statementsIsError ? (
-                <QueryError thing="your bank statements" onRetry={() => refetchStatements()} />
+                <QueryError
+                  thing="your bank statements"
+                  onRetry={() => refetchStatements()}
+                />
               ) : (statements || []).length === 0 ? (
                 <EmptyState
                   icon={Landmark}
@@ -966,9 +963,12 @@ export function Reconciliation() {
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {s.parsedCount} of {s.lineCount} line(s) parsed · Parse rate{" "}
-                          {s.lineCount > 0 ? formatPct(s.parsedCount / s.lineCount, 0) : "—"} · Uploaded{" "}
-                          {formatDate(s.createdAt)}
+                          {s.parsedCount} of {s.lineCount} line(s) parsed ·
+                          Parse rate{" "}
+                          {s.lineCount > 0
+                            ? formatPct(s.parsedCount / s.lineCount, 0)
+                            : "—"}{" "}
+                          · Uploaded {formatDate(s.createdAt)}
                         </p>
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">
@@ -993,8 +993,8 @@ export function Reconciliation() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Accepting a match records a settlement against the invoice and marks it as
-                  settled. Rejecting keeps the invoice outstanding.
+                  Accepting a match records a settlement against the invoice and
+                  marks it as settled. Rejecting keeps the invoice outstanding.
                 </p>
                 {(bulkEligibleCount > 0 || showNarrationSuggest) && (
                   <div className="flex flex-wrap items-center gap-2">
@@ -1045,15 +1045,22 @@ export function Reconciliation() {
                     <Skeleton className="h-16" />
                   </div>
                 ) : proposalsIsError ? (
-                  <QueryError thing="match proposals" onRetry={() => refetchProposals()} />
+                  <QueryError
+                    thing="match proposals"
+                    onRetry={() => refetchProposals()}
+                  />
                 ) : (proposals || []).length === 0 ? (
-                  <EmptyState icon={ScanSearch} className="px-0 py-8 justify-center">
-                    {selectedStatement && selectedStatement.status !== "reconciled" ? (
+                  <EmptyState
+                    icon={ScanSearch}
+                    className="px-0 py-8 justify-center"
+                  >
+                    {selectedStatement &&
+                    selectedStatement.status !== "reconciled" ? (
                       <>
                         <p className="font-semibold">Matching in progress…</p>
                         <p className="text-sm text-muted-foreground">
-                          The statement is committed; proposals appear here as soon as
-                          matching finishes (a few seconds).
+                          The statement is committed; proposals appear here as
+                          soon as matching finishes (a few seconds).
                         </p>
                       </>
                     ) : (
@@ -1062,7 +1069,8 @@ export function Reconciliation() {
                           No match proposals
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          None of this statement's credits matched an open invoice.
+                          None of this statement's credits matched an open
+                          invoice.
                         </p>
                       </>
                     )}

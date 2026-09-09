@@ -225,8 +225,8 @@ function InvoiceRoomShell({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-slate-500 sm:px-8">
           <p>
-            Valo · Invoice evidence, confirmation and payment in one
-            secure record.
+            Valo · Invoice evidence, confirmation and payment in one secure
+            record.
           </p>
           <a
             href="/login"
@@ -1074,8 +1074,8 @@ function ClaimPanel({
               aria-describedby="claim-password-help"
             />
             <p id="claim-password-help" className="mt-2 text-xs text-slate-600">
-              Use at least 12 characters. Leave blank if you already have a
-              Valo account.
+              Use at least 12 characters. Leave blank if you already have a Valo
+              account.
             </p>
           </div>
           <Button
@@ -1559,9 +1559,8 @@ export default function InvoiceRoom() {
                   Link security
                 </h2>
                 <p className="mt-2 leading-6">
-                  This room expires {formatDate(detail.room.expiresAt)}.
-                  Valo never asks for your banking password or one-time
-                  bank PIN.
+                  This room expires {formatDate(detail.room.expiresAt)}. Valo
+                  never asks for your banking password or one-time bank PIN.
                 </p>
               </section>
             </aside>

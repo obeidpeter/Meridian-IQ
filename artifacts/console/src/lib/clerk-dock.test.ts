@@ -28,12 +28,17 @@ describe("dockAnswerView", () => {
       claimVersion: 3,
       facts: [fact("a")],
     });
-    expect(view.sourceLine).toBe("Source: VAT Act s.15 · approved claim vat.rate v3");
+    expect(view.sourceLine).toBe(
+      "Source: VAT Act s.15 · approved claim vat.rate v3",
+    );
     expect(view.hasMore).toBe(false);
   });
 
   test("a proposed action or deep link means there is more in the full workspace", () => {
-    expect(dockAnswerView({ answered: true, sections: [{ facts: [], action: {} }] }).hasMore).toBe(true);
+    expect(
+      dockAnswerView({ answered: true, sections: [{ facts: [], action: {} }] })
+        .hasMore,
+    ).toBe(true);
     expect(dockAnswerView({ answered: true, links: [{}] }).hasMore).toBe(true);
   });
 });
@@ -41,12 +46,17 @@ describe("dockAnswerView", () => {
 describe("dockErrorMessage", () => {
   test("the kill switch and the monthly allowance each explain themselves", () => {
     const err = (status: number) =>
-      Object.assign(new Error(`HTTP ${status}`), { status, response: { status } });
+      Object.assign(new Error(`HTTP ${status}`), {
+        status,
+        response: { status },
+      });
     expect(dockErrorMessage(err(503))).toContain("switched off");
     expect(dockErrorMessage(err(429))).toContain("allowance");
   });
 
   test("anything else relays the server's words and says nothing changed", () => {
-    expect(dockErrorMessage(new Error("boom"))).toContain("Nothing was changed.");
+    expect(dockErrorMessage(new Error("boom"))).toContain(
+      "Nothing was changed.",
+    );
   });
 });

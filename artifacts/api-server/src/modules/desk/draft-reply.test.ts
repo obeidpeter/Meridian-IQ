@@ -54,7 +54,9 @@ const actorId = randomUUID();
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `Reply Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Reply Firm ${SALT}` });
   await db.insert(partiesTable).values({
     id: partyId,
     type: "client_business",
@@ -163,7 +165,10 @@ test("no gateway at all (unconfigured provider) still answers with the template"
 
 test("a missing escalation is a clean 404", async () => {
   await assert.rejects(
-    draftEscalationReply(randomUUID(), fakeGateway(() => "unused")),
+    draftEscalationReply(
+      randomUUID(),
+      fakeGateway(() => "unused"),
+    ),
     (err: Error & { status?: number }) => err.status === 404,
   );
 });
@@ -446,7 +451,9 @@ test("semantic reply memory: similar situations preferred over exact code, firm-
     const user = calls[0].user as string;
     assert.ok(user.includes("-----BEGIN PAST_REPLY-----"), "example fenced");
     assert.ok(
-      user.includes(`We re-registered the VAT profile and resubmitted. ${SALT}`),
+      user.includes(
+        `We re-registered the VAT profile and resubmitted. ${SALT}`,
+      ),
       "the SIMILAR reply was chosen — self at similarity 1 skipped",
     );
     assert.ok(
@@ -519,7 +526,11 @@ test("copiesExampleSpecifics: identifiers and long runs trip, style does not", (
     "Thank you for raising invoice INV-2201 for NGN 450000.00. The TIN mismatch on attempt 2 has been corrected and we will resubmit shortly.";
   // Copying the other client's invoice number trips.
   assert.equal(
-    copiesExampleSpecifics("Your invoice INV-2201 is being handled.", example, "TIN_MISMATCH"),
+    copiesExampleSpecifics(
+      "Your invoice INV-2201 is being handled.",
+      example,
+      "TIN_MISMATCH",
+    ),
     true,
   );
   // The shared catalogue code never trips (both cases legitimately name it).

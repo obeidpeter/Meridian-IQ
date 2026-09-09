@@ -42,4 +42,3 @@ export function stampRiskLabel(invoice: {
   if (!invoice.eligible) parts.push(eligibleBadge(false).label);
   return parts.length === 0 ? null : parts.join(" · ");
 }
-

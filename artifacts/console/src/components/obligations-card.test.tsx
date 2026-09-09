@@ -15,7 +15,13 @@
 //    read-only with a source-honest provenance line (clerk vs template) and
 //    a clipboard Copy. The platform never sends or files anything.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Obligation } from "@workspace/api-client-react";
 
@@ -256,9 +262,9 @@ describe("obligations-card helpers", () => {
     expect(obligationDraftIncomplete(EMPTY_OBLIGATION_DRAFT)).toBe(true);
     expect(obligationDraftIncomplete({ ...ready, noticeType: "" })).toBe(true);
     expect(obligationDraftIncomplete({ ...ready, authority: "" })).toBe(true);
-    expect(
-      obligationDraftIncomplete({ ...ready, responseDueDate: "" }),
-    ).toBe(true);
+    expect(obligationDraftIncomplete({ ...ready, responseDueDate: "" })).toBe(
+      true,
+    );
   });
 
   test("responsePackFilename: sanitized reference, else id prefix", () => {
@@ -394,12 +400,12 @@ describe("ObligationsCard", () => {
     expect(screen.getByTestId("pill-obligation-late").textContent).toBe(
       "Overdue",
     );
-    expect(
-      screen.getByTestId("pill-obligation-late").className,
-    ).toContain("red");
-    expect(
-      screen.getByTestId("row-obligation-late").className,
-    ).toContain("border-red-300");
+    expect(screen.getByTestId("pill-obligation-late").className).toContain(
+      "red",
+    );
+    expect(screen.getByTestId("row-obligation-late").className).toContain(
+      "border-red-300",
+    );
     expect(screen.getByTestId("pill-obligation-answered").textContent).toBe(
       "Responded",
     );
@@ -407,9 +413,7 @@ describe("ObligationsCard", () => {
     expect(
       screen.queryByTestId("button-obligation-responded-answered"),
     ).toBeNull();
-    expect(
-      screen.getByTestId("button-obligation-close-answered"),
-    ).toBeTruthy();
+    expect(screen.getByTestId("button-obligation-close-answered")).toBeTruthy();
   });
 
   test("status actions send the lifecycle move and refetch the list by its real key", async () => {

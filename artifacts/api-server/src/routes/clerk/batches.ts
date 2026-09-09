@@ -39,7 +39,6 @@ const stripBatch = (b: ClerkBatch) => ({
   updatedAt: b.updatedAt,
 });
 
-
 router.post("/clerk/batches", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const parsed = parseOrThrow(CreateClerkBatchBody, req.body);
@@ -52,7 +51,10 @@ router.post("/clerk/batches", async (req, res): Promise<void> => {
   });
   kickBatchProcessing(batch.id);
   res.status(202).json(
-    CreateClerkBatchResponse.parse({ ...stripBatch(batch), reviewedCases: 0 }),
+    CreateClerkBatchResponse.parse({
+      ...stripBatch(batch),
+      reviewedCases: 0,
+    }),
   );
 });
 

@@ -4,10 +4,10 @@ import { readBoundedJsonObject } from "./relay-response.ts";
 
 test("bounded relay parsing accepts a JSON object", async () => {
   const response = new Response(JSON.stringify({ ok: true, rows: [] }));
-  assert.deepEqual(
-    await readBoundedJsonObject(response, 1_024, "Test relay"),
-    { ok: true, rows: [] },
-  );
+  assert.deepEqual(await readBoundedJsonObject(response, 1_024, "Test relay"), {
+    ok: true,
+    rows: [],
+  });
 });
 
 test("bounded relay parsing rejects declared and streamed oversize bodies", async () => {

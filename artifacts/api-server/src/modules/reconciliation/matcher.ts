@@ -118,10 +118,7 @@ const DATE_WINDOW_DAYS = 60;
 // Payment usually lands on or after the issue date; score decays over a
 // 60-day window and a payment "before" the invoice (beyond 3 days of clock
 // skew) scores zero.
-export function dateScore(
-  valueDate: string | null,
-  issueDate: string,
-): number {
+export function dateScore(valueDate: string | null, issueDate: string): number {
   if (!valueDate) return 0;
   const paid = Date.parse(valueDate);
   const issued = Date.parse(issueDate);

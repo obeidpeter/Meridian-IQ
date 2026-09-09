@@ -108,7 +108,8 @@ export const FILING_TYPE_OPTIONS: FilingTypeOption[] = [
   {
     value: "access",
     label: "Systems access (s.103)",
-    description: "Tax authority could not access fiscalisation systems/records.",
+    description:
+      "Tax authority could not access fiscalisation systems/records.",
   },
   {
     value: "invoice",

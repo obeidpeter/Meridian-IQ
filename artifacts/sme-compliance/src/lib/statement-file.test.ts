@@ -13,9 +13,9 @@ describe("isPdfStatementFile", () => {
 
   test("routes by .pdf extension when the browser sends no useful type", () => {
     expect(isPdfStatementFile("gtb-march.pdf", "")).toBe(true);
-    expect(isPdfStatementFile("GTB-MARCH.PDF", "application/octet-stream")).toBe(
-      true,
-    );
+    expect(
+      isPdfStatementFile("GTB-MARCH.PDF", "application/octet-stream"),
+    ).toBe(true);
   });
 
   test("leaves CSV exports on the text path", () => {

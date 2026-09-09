@@ -2,7 +2,11 @@ import type { Rail } from "@workspace/db";
 import type { CanonicalInvoice } from "../../invoice/canonical";
 import { logger } from "../../../lib/logger";
 import type { RailTransport, StampResult } from "../contracts";
-import { RailLookupError, sanitiseRejectionCode, type StampFields } from "../faults";
+import {
+  RailLookupError,
+  sanitiseRejectionCode,
+  type StampFields,
+} from "../faults";
 
 // The HTTP rail transport (R95): the first RailTransport that leaves the
 // process. It speaks the provisional "Valo access-point profile v0"
@@ -81,7 +85,8 @@ export const HTTP_RAIL_TRANSPORT_NAME = "http";
 
 export function railTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.RAIL_TIMEOUT_MS);
-  if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_TIMEOUT_MS;
+  if (!Number.isFinite(configured) || configured <= 0)
+    return DEFAULT_TIMEOUT_MS;
   return Math.min(Math.floor(configured), MAX_TIMEOUT_MS);
 }
 
@@ -113,15 +118,22 @@ export function vettedRailUrl(
   try {
     url = new URL(value);
   } catch {
-    logger.warn("a RAIL_*_URL is not a valid URL; that rail stays unconfigured");
+    logger.warn(
+      "a RAIL_*_URL is not a valid URL; that rail stays unconfigured",
+    );
     return null;
   }
   if (url.username || url.password) {
-    logger.warn("a RAIL_*_URL carries credentials; that rail stays unconfigured");
+    logger.warn(
+      "a RAIL_*_URL carries credentials; that rail stays unconfigured",
+    );
     return null;
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    logger.warn({ protocol: url.protocol }, "a RAIL_*_URL is not http(s); that rail stays unconfigured");
+    logger.warn(
+      { protocol: url.protocol },
+      "a RAIL_*_URL is not http(s); that rail stays unconfigured",
+    );
     return null;
   }
   if (
@@ -129,7 +141,9 @@ export function vettedRailUrl(
     env.NODE_ENV === "production" &&
     !LOOPBACK_HOSTS.has(url.hostname)
   ) {
-    logger.warn("a RAIL_*_URL is plain http in production; that rail stays unconfigured");
+    logger.warn(
+      "a RAIL_*_URL is plain http in production; that rail stays unconfigured",
+    );
     return null;
   }
   return url.toString().replace(/\/+$/, "");
@@ -223,10 +237,17 @@ function isAbort(err: unknown): boolean {
 function failureReason(err: unknown): string {
   const e = err as { name?: unknown; cause?: { code?: unknown } } | null;
   const code = e?.cause?.code;
-  return typeof code === "string" ? code : typeof e?.name === "string" ? e.name : "unknown";
+  return typeof code === "string"
+    ? code
+    : typeof e?.name === "string"
+      ? e.name
+      : "unknown";
 }
 
-async function readBody(resp: Response, token: string | undefined): Promise<ReadBody> {
+async function readBody(
+  resp: Response,
+  token: string | undefined,
+): Promise<ReadBody> {
   const chunks: Uint8Array[] = [];
   let size = 0;
   let truncated = false;
@@ -241,7 +262,12 @@ async function readBody(resp: Response, token: string | undefined): Promise<Read
         size += value.byteLength;
         if (size > BODY_READ_LIMIT) {
           truncated = true;
-          chunks.push(value.subarray(0, Math.max(0, BODY_READ_LIMIT - (size - value.byteLength))));
+          chunks.push(
+            value.subarray(
+              0,
+              Math.max(0, BODY_READ_LIMIT - (size - value.byteLength)),
+            ),
+          );
           await reader.cancel().catch(() => undefined);
           break;
         }
@@ -268,7 +294,9 @@ async function readBody(resp: Response, token: string | undefined): Promise<Read
     }
   }
   const persisted =
-    parsed !== null && text.length <= RAW_BODY_LIMIT && jsonDepth(text) <= RAW_JSON_MAX_DEPTH
+    parsed !== null &&
+    text.length <= RAW_BODY_LIMIT &&
+    jsonDepth(text) <= RAW_JSON_MAX_DEPTH
       ? parsed
       : text.length > 0
         ? text.slice(0, RAW_BODY_LIMIT)
@@ -310,7 +338,10 @@ export function createHttpRailTransport(cfg: HttpRailConfig): RailTransport {
     environment: cfg.environment,
   };
 
-  function headersFor(rail: Rail, idempotencyKey?: string): Record<string, string> {
+  function headersFor(
+    rail: Rail,
+    idempotencyKey?: string,
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       accept: "application/json",
       "content-type": "application/json",
@@ -396,9 +427,17 @@ export function createHttpRailTransport(cfg: HttpRailConfig): RailTransport {
         return { status: "accepted", rail, ...stamp, raw, ...provenance };
       }
       if (httpStatus === 409) {
-        return { status: "rejected", rail, errorCode: "MBS_DUPLICATE", raw, ...provenance };
+        return {
+          status: "rejected",
+          rail,
+          errorCode: "MBS_DUPLICATE",
+          raw,
+          ...provenance,
+        };
       }
-      const code = sanitiseRejectionCode((body.parsed as { code?: unknown } | null)?.code);
+      const code = sanitiseRejectionCode(
+        (body.parsed as { code?: unknown } | null)?.code,
+      );
       if (httpStatus === 422 || (httpStatus === 400 && code)) {
         return {
           status: "rejected",
@@ -409,14 +448,18 @@ export function createHttpRailTransport(cfg: HttpRailConfig): RailTransport {
         };
       }
       let errorCode: string;
-      if (httpStatus === 401 || httpStatus === 403) errorCode = "RAIL_UNAUTHORIZED";
+      if (httpStatus === 401 || httpStatus === 403)
+        errorCode = "RAIL_UNAUTHORIZED";
       else if (httpStatus === 429) {
         errorCode = "RAIL_RATE_LIMITED";
         const retryAfterMs = parseRetryAfter(resp.headers.get("retry-after"));
         if (retryAfterMs !== undefined) raw.retryAfterMs = retryAfterMs;
       } else if (httpStatus >= 500) errorCode = "RAIL_UNAVAILABLE";
       else errorCode = "RAIL_PROTOCOL";
-      logger.warn({ rail, httpStatus, errorCode }, "rail submission not accepted");
+      logger.warn(
+        { rail, httpStatus, errorCode },
+        "rail submission not accepted",
+      );
       return errorResult(rail, errorCode, raw);
     },
 
@@ -441,7 +484,10 @@ export function createHttpRailTransport(cfg: HttpRailConfig): RailTransport {
       } catch (err) {
         const timedOut = isAbort(err);
         logger.warn({ rail, reason: failureReason(err) }, "rail lookup failed");
-        throw new RailLookupError(rail, timedOut ? "RAIL_TIMEOUT" : "RAIL_UNAVAILABLE");
+        throw new RailLookupError(
+          rail,
+          timedOut ? "RAIL_TIMEOUT" : "RAIL_UNAVAILABLE",
+        );
       }
       const httpStatus = resp.status;
       if (httpStatus === 404) {
@@ -453,7 +499,10 @@ export function createHttpRailTransport(cfg: HttpRailConfig): RailTransport {
       if (resp.ok) {
         const stamp = conformingStamp(body.parsed);
         if (!stamp) {
-          logger.warn({ rail, httpStatus }, "rail lookup answered with a non-conforming body");
+          logger.warn(
+            { rail, httpStatus },
+            "rail lookup answered with a non-conforming body",
+          );
           throw new RailLookupError(rail, "RAIL_PROTOCOL");
         }
         return {
@@ -465,7 +514,8 @@ export function createHttpRailTransport(cfg: HttpRailConfig): RailTransport {
         };
       }
       let errorCode: string;
-      if (httpStatus === 401 || httpStatus === 403) errorCode = "RAIL_UNAUTHORIZED";
+      if (httpStatus === 401 || httpStatus === 403)
+        errorCode = "RAIL_UNAUTHORIZED";
       else if (httpStatus === 429) errorCode = "RAIL_RATE_LIMITED";
       else if (httpStatus >= 500) errorCode = "RAIL_UNAVAILABLE";
       else errorCode = "RAIL_PROTOCOL";

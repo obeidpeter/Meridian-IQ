@@ -104,9 +104,8 @@ function DoublePaymentAdvisory({ clientPartyId }: { clientPartyId: string }) {
           <p key={b.invoiceId} data-testid={`multi-paid-${b.invoiceId}`}>
             {b.invoiceNumber} ({b.supplierName},{" "}
             {formatAmount(b.grandTotal, b.currency)}) is matched to{" "}
-            {b.evidenceCount} separate bank debits totalling
-            more than the bill — {formatDate(b.firstPaidAt)} and again{" "}
-            {formatDate(b.lastPaidAt)}.
+            {b.evidenceCount} separate bank debits totalling more than the bill
+            — {formatDate(b.firstPaidAt)} and again {formatDate(b.lastPaidAt)}.
           </p>
         ))}
         {check.duplicateCandidates.map((p) => (
@@ -119,16 +118,16 @@ function DoublePaymentAdvisory({ clientPartyId }: { clientPartyId: string }) {
                 {p.first.invoiceNumber} from {p.supplierName} is already paid,
                 and {p.second.invoiceNumber} looks like the same bill (
                 {formatAmount(p.grandTotal, p.currency)}, issued {p.daysApart}{" "}
-                day{p.daysApart === 1 ? "" : "s"} apart)
-                — check it is not a duplicate before paying it.
+                day{p.daysApart === 1 ? "" : "s"} apart) — check it is not a
+                duplicate before paying it.
               </>
             ) : (
               <>
                 {p.first.invoiceNumber} and {p.second.invoiceNumber} from{" "}
                 {p.supplierName} are both unpaid for the same amount (
                 {formatAmount(p.grandTotal, p.currency)}), issued {p.daysApart}{" "}
-                day{p.daysApart === 1 ? "" : "s"} apart
-                — check one is not a duplicate before paying both.
+                day{p.daysApart === 1 ? "" : "s"} apart — check one is not a
+                duplicate before paying both.
               </>
             )}
           </p>

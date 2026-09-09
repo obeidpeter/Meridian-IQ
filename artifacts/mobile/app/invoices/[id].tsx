@@ -18,11 +18,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  RefreshControl,
-  StyleSheet,
-  View,
-} from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -43,17 +39,15 @@ import {
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, errorStatus } from "@/lib/api-error";
-import {
-  formatCurrency,
-  formatDate,
-  humanize,
-  timeAgo,
-} from "@/lib/format";
+import { formatCurrency, formatDate, humanize, timeAgo } from "@/lib/format";
 import { INVOICE_STATUS_TONE } from "@/lib/invoice-status";
 
 const ATTEMPT_ICON: Record<
   string,
-  { icon: keyof typeof Feather.glyphMap; toneKey: "success" | "critical" | "muted" }
+  {
+    icon: keyof typeof Feather.glyphMap;
+    toneKey: "success" | "critical" | "muted";
+  }
 > = {
   accepted: { icon: "check-circle", toneKey: "success" },
   stamped: { icon: "check-circle", toneKey: "success" },
@@ -130,9 +124,10 @@ export default function InvoiceDetailScreen() {
 
   const validate = useValidateInvoice();
   const submit = useSubmitInvoice();
-  const [banner, setBanner] = useState<
-    { tone: "error" | "success"; message: string } | null
-  >(null);
+  const [banner, setBanner] = useState<{
+    tone: "error" | "success";
+    message: string;
+  } | null>(null);
 
   const refreshInvoice = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
@@ -392,8 +387,8 @@ export default function InvoiceDetailScreen() {
                     style={{ marginTop: 10 }}
                   >
                     This invoice was rejected by the rail
-                    {errorCode ? ` (code ${errorCode})` : ""}. You can retry
-                    the transmission below.
+                    {errorCode ? ` (code ${errorCode})` : ""}. You can retry the
+                    transmission below.
                   </AppText>
                 )}
                 {errorCode ? (
@@ -455,8 +450,8 @@ export default function InvoiceDetailScreen() {
                         color={colors.mutedForeground}
                         style={{ textAlign: "center" }}
                       >
-                        This error needs the invoice fixed first — a plain
-                        retry will fail again.
+                        This error needs the invoice fixed first — a plain retry
+                        will fail again.
                       </AppText>
                     </>
                   )}
@@ -524,8 +519,7 @@ export default function InvoiceDetailScreen() {
               ) : (
                 <Card padded={false}>
                   {attempts.map((a, i) => {
-                    const meta =
-                      ATTEMPT_ICON[a.status] ?? ATTEMPT_ICON.pending;
+                    const meta = ATTEMPT_ICON[a.status] ?? ATTEMPT_ICON.pending;
                     const iconColor =
                       meta.toneKey === "success"
                         ? colors.primary

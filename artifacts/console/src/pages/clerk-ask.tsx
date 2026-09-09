@@ -520,7 +520,9 @@ export function ClerkAskPage() {
       });
       if (!kase.answer) return;
       const stored = kase.answer;
-      setAnswer((prev) => heldAnswer(prev, { type: "success", answer: stored }));
+      setAnswer((prev) =>
+        heldAnswer(prev, { type: "success", answer: stored }),
+      );
       setAnswerCaseId(kase.id);
       if (kase.question) setQuestion(kase.question);
     } catch (error) {
@@ -739,11 +741,13 @@ export function AskPanel({
       {/* Persistent polite live region: the answer arrives asynchronously
           after "Ask", so screen readers hear it without hunting for it. */}
       <div aria-live="polite">
-        {answer && <AnswerCard
-          answer={answer}
-          caseId={answerCaseId}
-          onOpenMemory={onOpenMemory}
-        />}
+        {answer && (
+          <AnswerCard
+            answer={answer}
+            caseId={answerCaseId}
+            onOpenMemory={onOpenMemory}
+          />
+        )}
       </div>
     </div>
   );

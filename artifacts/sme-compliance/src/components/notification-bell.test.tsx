@@ -39,9 +39,7 @@ const harness = vi.hoisted(() => ({
   markRead: {
     isPending: false,
     // Arguments of the last mutate() call — the mark-all-read contract.
-    lastVariables: undefined as
-      | { data: { upToCreatedAt: string } }
-      | undefined,
+    lastVariables: undefined as { data: { upToCreatedAt: string } } | undefined,
   },
   reset() {
     this.feed.data = undefined;
@@ -123,9 +121,9 @@ describe("markReadTimestamp", () => {
   test("hands mark-read the newest item's createdAt (the feed is newest-first)", () => {
     const newest = item({ id: "newest", createdAt: "2026-07-20T10:00:00Z" });
     const older = item({ id: "older", createdAt: "2026-07-19T10:00:00Z" });
-    expect(
-      markReadTimestamp({ items: [newest, older], unreadCount: 2 }),
-    ).toBe("2026-07-20T10:00:00Z");
+    expect(markReadTimestamp({ items: [newest, older], unreadCount: 2 })).toBe(
+      "2026-07-20T10:00:00Z",
+    );
   });
 
   test("an empty or absent feed has nothing to mark", () => {
@@ -142,12 +140,10 @@ describe("NotificationBell", () => {
     };
     renderBell();
     expect(screen.queryByTestId("popover-notifications")).toBeNull();
-    expect(
-      screen.getByTestId("badge-notification-count").textContent,
-    ).toBe("3");
-    expect(bell().getAttribute("aria-label")).toBe(
-      "Notifications — 3 unread",
+    expect(screen.getByTestId("badge-notification-count").textContent).toBe(
+      "3",
     );
+    expect(bell().getAttribute("aria-label")).toBe("Notifications — 3 unread");
 
     fireEvent.click(bell());
     expect(screen.getByTestId("popover-notifications")).toBeTruthy();

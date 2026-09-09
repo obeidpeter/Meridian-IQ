@@ -230,7 +230,9 @@ export async function getReceivablesSummary(
       buckets,
     };
   });
-  groups.sort((a, b) => Number(b.outstandingTotal) - Number(a.outstandingTotal));
+  groups.sort(
+    (a, b) => Number(b.outstandingTotal) - Number(a.outstandingTotal),
+  );
 
   const topDebtors = await queryTopDebtors(
     sql`AND i.supplier_party_id = ${clientPartyId}

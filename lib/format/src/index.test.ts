@@ -27,7 +27,7 @@ import {
   summaryPillClasses,
   roleLabel,
   roleHomeHref,
-  recentQuestionRows
+  recentQuestionRows,
 } from "./index";
 
 describe("formatNaira", () => {
@@ -358,8 +358,14 @@ describe("roleLabel", () => {
 
 describe("roleHomeHref", () => {
   test("maps every principal role to its workspace and unknowns to null", () => {
-    expect(roleHomeHref("client_user")).toEqual({ href: "/app/", label: "the Compliance App" });
-    expect(roleHomeHref("buyer_user")).toEqual({ href: "/buyer/", label: "Buyer Rails" });
+    expect(roleHomeHref("client_user")).toEqual({
+      href: "/app/",
+      label: "the Compliance App",
+    });
+    expect(roleHomeHref("buyer_user")).toEqual({
+      href: "/buyer/",
+      label: "Buyer Rails",
+    });
     expect(roleHomeHref("operator")?.href).toBe("/console/operator-queue");
     expect(roleHomeHref("auditor")?.href).toBe("/console/audit");
     expect(roleHomeHref("mystery_role")).toBeNull();
@@ -368,7 +374,11 @@ describe("roleHomeHref", () => {
 });
 
 describe("recentQuestionRows", () => {
-  const row = (id: string, createdAt: string, over: Record<string, unknown> = {}) => ({
+  const row = (
+    id: string,
+    createdAt: string,
+    over: Record<string, unknown> = {},
+  ) => ({
     id,
     kind: "question",
     question: `Q ${id}`,
@@ -390,11 +400,12 @@ describe("recentQuestionRows", () => {
 
   test("caps the shortlist", () => {
     const rows = recentQuestionRows(
-      Array.from({ length: 9 }, (_, i) => row(`q${i}`, `2026-08-0${i + 1}T10:00:00Z`)),
+      Array.from({ length: 9 }, (_, i) =>
+        row(`q${i}`, `2026-08-0${i + 1}T10:00:00Z`),
+      ),
       3,
     );
     expect(rows).toHaveLength(3);
     expect(rows[0].id).toBe("q8");
   });
 });
-

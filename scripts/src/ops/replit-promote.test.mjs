@@ -675,15 +675,10 @@ test("native API promotion cannot bypass missing recovery, drift or rollback con
   ])
     assert.throws(
       () =>
-        promoteReplit(
-          "api-server",
-          { ...f.env, ...changes },
-          f.root,
-          {
-            query: () =>
-              assert.fail("rollback approval must fail before DB preflight"),
-          },
-        ),
+        promoteReplit("api-server", { ...f.env, ...changes }, f.root, {
+          query: () =>
+            assert.fail("rollback approval must fail before DB preflight"),
+        }),
       /ROLLBACK_APPROVAL|checksum mismatch|revision mismatch|unexpected untracked Publish source/,
     );
   assert.throws(
@@ -733,7 +728,10 @@ test("seven production descriptors use verified promotion and preserve developme
       // R105: the pilot profile is explicit in both phases; no HOLD pin, no
       // rollback revision, no governed evidence in the descriptor.
       assert.equal(production.match(/RELEASE_PROFILE = "pilot"/g)?.length, 2);
-      assert.doesNotMatch(production, /RELEASE_RUNTIME_STATE|RELEASE_ROLLBACK_REVISION|--hold/);
+      assert.doesNotMatch(
+        production,
+        /RELEASE_RUNTIME_STATE|RELEASE_ROLLBACK_REVISION|--hold/,
+      );
       // R111: the startup probe is readiness, not liveness — /api/healthz
       // answers 200 while the guardrail pass is still failing, so a rollout
       // probed there would "succeed" and serve 503.
@@ -1060,15 +1058,10 @@ test("expired permits refuse new Publish but bound cold starts remain admitted a
     /expired for promotion/,
   );
   assert.deepEqual(
-    promoteReplit(
-      "api-server",
-      releaseEnvForCli(["--hold"], f.env),
-      f.root,
-      {
-        query: () => recovery(),
-        catalog: () => structuredClone(catalog),
-      },
-    ),
+    promoteReplit("api-server", releaseEnvForCli(["--hold"], f.env), f.root, {
+      query: () => recovery(),
+      catalog: () => structuredClone(catalog),
+    }),
     f.manifest,
     "explicit HOLD must ignore an expired inherited RUN activation",
   );
@@ -1344,8 +1337,14 @@ test("release profile defaults to pilot, RUN by default, and refuses unknown val
   assert.equal(runtimeState({}), "RUN");
   assert.equal(runtimeState({ RELEASE_RUNTIME_STATE: "HOLD" }), "HOLD");
   assert.equal(runtimeState({ RELEASE_PROFILE: "governed" }), "HOLD");
-  assert.throws(() => releaseProfile({ RELEASE_PROFILE: "staging" }), /pilot or governed/);
-  assert.throws(() => runtimeState({ RELEASE_RUNTIME_STATE: "run" }), /HOLD or RUN/);
+  assert.throws(
+    () => releaseProfile({ RELEASE_PROFILE: "staging" }),
+    /pilot or governed/,
+  );
+  assert.throws(
+    () => runtimeState({ RELEASE_RUNTIME_STATE: "run" }),
+    /HOLD or RUN/,
+  );
 });
 
 test("pilot promotion verifies the artifact and starts RUN without deploy-time DB mutation or governed evidence", (t) => {
@@ -1353,7 +1352,8 @@ test("pilot promotion verifies the artifact and starts RUN without deploy-time D
   const env = pilotEnv(f.env);
   delete env.DATABASE_URL;
   const dependencies = {
-    query: () => assert.fail("the pilot profile never runs the governed preflight"),
+    query: () =>
+      assert.fail("the pilot profile never runs the governed preflight"),
     execute: () => assert.fail("pilot Publish must not mutate the database"),
   };
   const manifest = promoteReplit("api-server", env, f.root, dependencies);
@@ -1396,7 +1396,10 @@ test("pilot accepts the CI checksum sidecar, refuses a missing or tampered one, 
     `${digest(bytes)}  build-manifest.json\n`,
   );
   promoteReplit("landing", env, f.root, dependencies);
-  f.write("release/build-manifest.json.sha256", `${"e".repeat(64)}  build-manifest.json\n`);
+  f.write(
+    "release/build-manifest.json.sha256",
+    `${"e".repeat(64)}  build-manifest.json\n`,
+  );
   assert.throws(
     () => promoteReplit("landing", env, f.root, dependencies),
     /checksum mismatch/,
@@ -1407,11 +1410,25 @@ test("pilot accepts the CI checksum sidecar, refuses a missing or tampered one, 
     /malformed manifest checksum sidecar/,
   );
   // An explicit value wins over the sidecar.
-  promoteReplit("landing", { ...env, RELEASE_MANIFEST_SHA256: digest(bytes) }, f.root, dependencies);
+  promoteReplit(
+    "landing",
+    { ...env, RELEASE_MANIFEST_SHA256: digest(bytes) },
+    f.root,
+    dependencies,
+  );
   // Governed never falls back to the sidecar.
-  f.write("release/build-manifest.json.sha256", `${digest(bytes)}  build-manifest.json\n`);
+  f.write(
+    "release/build-manifest.json.sha256",
+    `${digest(bytes)}  build-manifest.json\n`,
+  );
   assert.throws(
-    () => promoteReplit("landing", { ...env, RELEASE_PROFILE: "governed" }, f.root, dependencies),
+    () =>
+      promoteReplit(
+        "landing",
+        { ...env, RELEASE_PROFILE: "governed" },
+        f.root,
+        dependencies,
+      ),
     /trusted CI artifact record/,
   );
 });
@@ -1437,7 +1454,10 @@ test("pilot HOLD is a plain maintenance switch: health only, no API import, no p
     assert.equal(body.apiImported, false);
     assert.equal(body.profile, "pilot");
     assert.equal(body.buildRevision, f.manifest.source.revision);
-    assert.equal((await fetch(`http://127.0.0.1:${port}/api/readyz`)).status, 503);
+    assert.equal(
+      (await fetch(`http://127.0.0.1:${port}/api/readyz`)).status,
+      503,
+    );
     assert.equal(
       (await fetch(`http://127.0.0.1:${port}/api/invoices`)).status,
       503,

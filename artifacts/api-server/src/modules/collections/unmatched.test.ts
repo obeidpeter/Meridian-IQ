@@ -37,8 +37,16 @@ before(async () => {
     { id: firmB, name: `Unmatched Firm B ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientA, type: "client_business", legalName: `Unmatched Client A ${SALT}` },
-    { id: clientB, type: "client_business", legalName: `Unmatched Client B ${SALT}` },
+    {
+      id: clientA,
+      type: "client_business",
+      legalName: `Unmatched Client A ${SALT}`,
+    },
+    {
+      id: clientB,
+      type: "client_business",
+      legalName: `Unmatched Client B ${SALT}`,
+    },
   ]);
   await db.insert(collectionAccountsTable).values([
     {

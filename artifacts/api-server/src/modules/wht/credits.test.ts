@@ -32,7 +32,10 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // The WHT credit ledger (WHT Desk). Pinned here:
@@ -84,8 +87,18 @@ before(async () => {
     { id: buyerParty, type: "buyer", legalName: `WHT Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientA, type: "retainer", title: `wht cr A ${SALT}` },
-    { firmId, clientPartyId: clientB, type: "retainer", title: `wht cr B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientA,
+      type: "retainer",
+      title: `wht cr A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: clientB,
+      type: "retainer",
+      title: `wht cr B ${SALT}`,
+    },
   ]);
   invA1 = randomUUID();
   invA2 = randomUUID();
@@ -112,13 +125,22 @@ before(async () => {
     grandTotal: subtotal,
     whtCategory,
   });
-  await db.insert(invoicesTable).values([
-    invoice(invA1, clientA, `WC-A1-${SALT}`, "100000.00", "services_5"),
-    invoice(invA2, clientA, `WC-A2-${SALT}`, "40000.00", "rent_10"),
-    invoice(invNoCat, clientA, `WC-NC-${SALT}`, "10000.00", null),
-    invoice(invB1, clientB, `WC-B1-${SALT}`, "50000.00", "goods_2"),
-    invoice(invForeign, clientA, `WC-F-${SALT}`, "9000.00", "services_5", otherFirmId),
-  ]);
+  await db
+    .insert(invoicesTable)
+    .values([
+      invoice(invA1, clientA, `WC-A1-${SALT}`, "100000.00", "services_5"),
+      invoice(invA2, clientA, `WC-A2-${SALT}`, "40000.00", "rent_10"),
+      invoice(invNoCat, clientA, `WC-NC-${SALT}`, "10000.00", null),
+      invoice(invB1, clientB, `WC-B1-${SALT}`, "50000.00", "goods_2"),
+      invoice(
+        invForeign,
+        clientA,
+        `WC-F-${SALT}`,
+        "9000.00",
+        "services_5",
+        otherFirmId,
+      ),
+    ]);
 });
 
 after(async () => {
@@ -197,25 +219,38 @@ test("recordWhtCredit defaults to the SQL-computed expectation and is idempotent
 
 test("recordWhtCredit refuses uncategorised paper, foreign invoices and bad inputs", async () => {
   await assert.rejects(
-    recordWhtCredit(firmId, invNoCat, { deductedDate: daysAgo(1), source: "manual" }),
+    recordWhtCredit(firmId, invNoCat, {
+      deductedDate: daysAgo(1),
+      source: "manual",
+    }),
     (err: unknown) =>
       err instanceof DomainError &&
       err.code === "WHT_NO_CATEGORY" &&
       err.status === 400,
   );
   const notFound = (err: unknown) =>
-    err instanceof DomainError && err.code === "NOT_FOUND" && err.status === 404;
+    err instanceof DomainError &&
+    err.code === "NOT_FOUND" &&
+    err.status === 404;
   await assert.rejects(
-    recordWhtCredit(firmId, randomUUID(), { deductedDate: daysAgo(1), source: "manual" }),
+    recordWhtCredit(firmId, randomUUID(), {
+      deductedDate: daysAgo(1),
+      source: "manual",
+    }),
     notFound,
   );
   // A foreign firm's invoice id reads as missing (the firm-scoped load).
   await assert.rejects(
-    recordWhtCredit(firmId, invForeign, { deductedDate: daysAgo(1), source: "manual" }),
+    recordWhtCredit(firmId, invForeign, {
+      deductedDate: daysAgo(1),
+      source: "manual",
+    }),
     notFound,
   );
   const badDate = (err: unknown) =>
-    err instanceof DomainError && err.code === "WHT_BAD_DATE" && err.status === 400;
+    err instanceof DomainError &&
+    err.code === "WHT_BAD_DATE" &&
+    err.status === 400;
   for (const bad of ["05/08/2026", "2026-8-2", "2026-02-30"]) {
     await assert.rejects(
       recordWhtCredit(firmId, invA2, { deductedDate: bad, source: "manual" }),
@@ -230,7 +265,9 @@ test("recordWhtCredit refuses uncategorised paper, foreign invoices and bad inpu
       source: "manual",
     }),
     (err: unknown) =>
-      err instanceof DomainError && err.code === "WHT_BAD_AMOUNT" && err.status === 400,
+      err instanceof DomainError &&
+      err.code === "WHT_BAD_AMOUNT" &&
+      err.status === 400,
   );
 });
 
@@ -244,7 +281,9 @@ test("markWhtNoteReceived walks forward once, validates the date, audits pointer
   assert.equal(credit.amount, "3500.00");
 
   const badDate = (err: unknown) =>
-    err instanceof DomainError && err.code === "WHT_BAD_DATE" && err.status === 400;
+    err instanceof DomainError &&
+    err.code === "WHT_BAD_DATE" &&
+    err.status === 400;
   await assert.rejects(
     markWhtNoteReceived(firmId, credit.id, {
       noteReference: `TPM-${SALT}`,
@@ -387,19 +426,21 @@ test("listWhtCredits orders by deduction recency with set-based totals; the fact
 test("SEC-03: the loader's 404 non-disclosure", async () => {
   const { credits } = await listWhtCredits(firmId, { clientPartyId: clientA });
   const creditA = credits[0];
-  assert.equal(
-    (await loadWhtCreditForScope(creditA.id, admin)).id,
-    creditA.id,
-  );
+  assert.equal((await loadWhtCreditForScope(creditA.id, admin)).id, creditA.id);
   const notFound = (err: unknown) =>
-    err instanceof DomainError && err.code === "NOT_FOUND" && err.status === 404;
+    err instanceof DomainError &&
+    err.code === "NOT_FOUND" &&
+    err.status === 404;
   // Missing id, foreign tenant and sibling client are indistinguishable.
   await assert.rejects(loadWhtCreditForScope(randomUUID(), admin), notFound);
   await assert.rejects(
     loadWhtCreditForScope(creditA.id, firmPrincipal(otherFirmId)),
     notFound,
   );
-  await assert.rejects(loadWhtCreditForScope(creditA.id, clientUserB), notFound);
+  await assert.rejects(
+    loadWhtCreditForScope(creditA.id, clientUserB),
+    notFound,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -433,19 +474,21 @@ test("GET /wht/credits pins a client_user to its own party (SEC-03)", async () =
 test("POST /wht/credits walls sibling paper behind 404 and answers 201 idempotently", async () => {
   // A fresh categorised invoice for clientA to record through the route.
   const invRoute = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id: invRoute,
-    firmId,
-    supplierPartyId: clientA,
-    buyerPartyId: buyerParty,
-    invoiceNumber: `WC-RT-${SALT}`,
-    status: "stamped",
-    issueDate: daysAgo(8),
-    subtotal: "20000.00",
-    vatTotal: "1500.00",
-    grandTotal: "21500.00",
-    whtCategory: "commission_5",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id: invRoute,
+      firmId,
+      supplierPartyId: clientA,
+      buyerPartyId: buyerParty,
+      invoiceNumber: `WC-RT-${SALT}`,
+      status: "stamped",
+      issueDate: daysAgo(8),
+      subtotal: "20000.00",
+      vatTotal: "1500.00",
+      grandTotal: "21500.00",
+      whtCategory: "commission_5",
+    });
 
   // A client_user of a SIBLING party: 404, not 403 — non-disclosure.
   const siblingBase = await listen(appFor(clientUserB, whtRouter));
@@ -463,7 +506,11 @@ test("POST /wht/credits walls sibling paper behind 404 and answers 201 idempoten
     body: JSON.stringify({ invoiceId: invRoute, deductedDate: daysAgo(1) }),
   });
   assert.equal(created.status, 201);
-  const row = (await created.json()) as { id: string; amount: string; source: string };
+  const row = (await created.json()) as {
+    id: string;
+    amount: string;
+    source: string;
+  };
   assert.equal(row.amount, "1000.00", "5% of 20000.00");
   assert.equal(row.source, "manual");
 

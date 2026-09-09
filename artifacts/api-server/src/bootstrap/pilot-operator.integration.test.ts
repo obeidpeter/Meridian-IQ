@@ -27,7 +27,11 @@ test("database failure rolls back operator, membership, audit and claim together
     `SELECT 1 FROM production_bootstrap_claims
       WHERE key = 'first-production-operator'`,
   );
-  assert.equal(existingClaim.rowCount, 0, "test database bootstrap already consumed");
+  assert.equal(
+    existingClaim.rowCount,
+    0,
+    "test database bootstrap already consumed",
+  );
 
   const dependencies: PilotOperatorDependencies = {
     ...productionPilotOperatorDependencies,
@@ -118,7 +122,11 @@ test("real dependencies: the locks are held, the claim short-circuits the next b
     `SELECT 1 FROM production_bootstrap_claims
       WHERE key = 'first-production-operator'`,
   );
-  assert.equal(existingClaim.rowCount, 0, "test database bootstrap already consumed");
+  assert.equal(
+    existingClaim.rowCount,
+    0,
+    "test database bootstrap already consumed",
+  );
 
   // Every dependency is the production one. The lock wrapper is the only
   // substitution: the bypass transaction each phase opens below IS the one
@@ -243,7 +251,8 @@ test("real dependencies: the locks are held, the claim short-circuits the next b
         clientPartyId: null,
         buyerPartyId: null,
       });
-      const found = await productionPilotOperatorDependencies.findRealOperator();
+      const found =
+        await productionPilotOperatorDependencies.findRealOperator();
       assert.ok(found, "a non-demo operator membership is found");
 
       assert.equal(
@@ -273,9 +282,14 @@ test("real dependencies: the locks are held, the claim short-circuits the next b
       `);
       const [consumedFor] = claim.rows;
       assert.ok(consumedFor, "the claim now names an operator");
-      assert.ok(consumedFor.operator >= 1, "the claimed operator holds an operator membership");
+      assert.ok(
+        consumedFor.operator >= 1,
+        "the claimed operator holds an operator membership",
+      );
       assert.equal(
-        (PRODUCTION_DEMO_EMAILS as readonly string[]).includes(consumedFor.email),
+        (PRODUCTION_DEMO_EMAILS as readonly string[]).includes(
+          consumedFor.email,
+        ),
         false,
         "a historical demo identity is never the claimed operator",
       );

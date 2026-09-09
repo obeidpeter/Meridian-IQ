@@ -49,19 +49,21 @@ async function seedInvoice(input: {
   createdAt?: Date;
 }): Promise<string> {
   const id = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id,
-    firmId,
-    supplierPartyId: input.supplierPartyId,
-    buyerPartyId: input.buyerPartyId,
-    invoiceNumber: input.invoiceNumber,
-    status: input.status as never,
-    issueDate: "2026-07-01",
-    grandTotal: "100.00",
-    subtotal: "100.00",
-    vatTotal: "0.00",
-    ...(input.createdAt ? { createdAt: input.createdAt } : {}),
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id,
+      firmId,
+      supplierPartyId: input.supplierPartyId,
+      buyerPartyId: input.buyerPartyId,
+      invoiceNumber: input.invoiceNumber,
+      status: input.status as never,
+      issueDate: "2026-07-01",
+      grandTotal: "100.00",
+      subtotal: "100.00",
+      vatTotal: "0.00",
+      ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+    });
   return id;
 }
 
@@ -69,14 +71,32 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `Appr Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `Appr Client ${SALT}` },
-    { id: siblingParty, type: "client_business", legalName: `Appr Sibling ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `Appr Client ${SALT}`,
+    },
+    {
+      id: siblingParty,
+      type: "client_business",
+      legalName: `Appr Sibling ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `Appr Buyer ${SALT}` },
     { id: vendorParty, type: "buyer", legalName: `Appr Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `ap A ${SALT}` },
-    { firmId, clientPartyId: siblingParty, type: "retainer", title: `ap B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `ap A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `ap B ${SALT}`,
+    },
   ]);
   // Three pre-submission receivables for the client (one old), one for the
   // sibling; a submitted invoice and a captured BILL that must never count.
@@ -144,10 +164,7 @@ test("policy on counts pre-submission receivables without a live approval", asyn
   const mine = await pendingApprovals(firmId, clientParty);
   assert.ok(mine);
   assert.equal(mine.count, 3, "the sibling's draft is outside the client pin");
-  assert.equal(
-    await awaitingApproval(invoiceRef(draftOldId)),
-    true,
-  );
+  assert.equal(await awaitingApproval(invoiceRef(draftOldId)), true);
 });
 
 test("a bill and a credit note are never 'awaiting approval'", async () => {
@@ -184,10 +201,7 @@ test("a live approval clears the wait; revoking it restores the wait", async () 
     },
     actorB,
   );
-  assert.equal(
-    await awaitingApproval(invoiceRef(draftOldId)),
-    false,
-  );
+  assert.equal(await awaitingApproval(invoiceRef(draftOldId)), false);
   const after = await pendingApprovals(firmId);
   assert.equal(after?.count, 3);
   await revokeLiveApprovals(draftOldId);

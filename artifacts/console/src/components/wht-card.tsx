@@ -20,7 +20,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
-import { formatDate, formatNaira, pillClasses, type BadgeTone } from "@/lib/format";
+import {
+  formatDate,
+  formatNaira,
+  pillClasses,
+  type BadgeTone,
+} from "@/lib/format";
 import { HandCoins } from "lucide-react";
 
 // WHT Desk for one client: the withholding-credit ledger (deductions a buyer
@@ -47,9 +52,10 @@ import { HandCoins } from "lucide-react";
  * it), emerald a received one (evidence in hand), slate anything
  * off-catalogue from a newer server.
  */
-export function whtCreditPill(
-  status: WhtCredit["status"] | string,
-): { tone: BadgeTone; label: string } {
+export function whtCreditPill(status: WhtCredit["status"] | string): {
+  tone: BadgeTone;
+  label: string;
+} {
   const tone: BadgeTone =
     status === "note_received"
       ? "emerald"
@@ -189,9 +195,7 @@ export function WhtCard({ clientPartyId }: { clientPartyId: string }) {
                     <div className="mt-2">
                       <Button
                         size="sm"
-                        variant={
-                          notePanelId === c.id ? "secondary" : "outline"
-                        }
+                        variant={notePanelId === c.id ? "secondary" : "outline"}
                         onClick={() => toggleNotePanel(c.id)}
                         data-testid={`button-wht-note-${c.id}`}
                       >
@@ -214,9 +218,7 @@ export function WhtCard({ clientPartyId }: { clientPartyId: string }) {
                             <Input
                               id={`wht-note-reference-${c.id}`}
                               value={noteReference}
-                              onChange={(e) =>
-                                setNoteReference(e.target.value)
-                              }
+                              onChange={(e) => setNoteReference(e.target.value)}
                               data-testid={`input-wht-note-reference-${c.id}`}
                             />
                           </div>
@@ -290,8 +292,8 @@ export function WhtCard({ clientPartyId }: { clientPartyId: string }) {
           </p>
         )}
         <p className="text-xs text-muted-foreground">
-          Evidence only — the ledger records the deductions and credit notes
-          as the firm sees them; the platform never claims or remits anything
+          Evidence only — the ledger records the deductions and credit notes as
+          the firm sees them; the platform never claims or remits anything
           itself.
         </p>
       </CardContent>

@@ -61,14 +61,32 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `PX Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `PX Client ${SALT}` },
-    { id: siblingParty, type: "client_business", legalName: `PX Sibling ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `PX Client ${SALT}`,
+    },
+    {
+      id: siblingParty,
+      type: "client_business",
+      legalName: `PX Sibling ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `PX Buyer ${SALT}` },
     { id: vendorParty, type: "buyer", legalName: `PX Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `px A ${SALT}` },
-    { firmId, clientPartyId: siblingParty, type: "retainer", title: `px B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `px A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `px B ${SALT}`,
+    },
   ]);
   const oldest = row({
     invoiceNumber: `PX-OLD-${SALT}`,
@@ -148,7 +166,9 @@ test("s.104 parity anchor: the calculator's source literals equal this table", (
     "the calculator's S104_PER_INVOICE literal parsed — its declaration shape changed; update this extractor with it",
   );
   const bands: Record<string, number> = {};
-  for (const m of block[1].matchAll(/\b(small|medium|large)\b\s*:\s*([\d_]+)/g)) {
+  for (const m of block[1].matchAll(
+    /\b(small|medium|large)\b\s*:\s*([\d_]+)/g,
+  )) {
     bands[m[1]] = Number(m[2].replace(/_/g, ""));
   }
   assert.deepEqual(
@@ -222,4 +242,3 @@ test("another firm sees nothing", async () => {
   assert.equal(report.overdueCount, 0);
   assert.deepEqual(report.sampleInvoices, []);
 });
-

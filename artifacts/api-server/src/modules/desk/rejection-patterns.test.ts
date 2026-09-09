@@ -38,8 +38,16 @@ before(async () => {
     { id: firmB, name: `RP Firm B ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientA1, type: "client_business", legalName: `RP Client A1 ${SALT}` },
-    { id: clientA2, type: "client_business", legalName: `RP Client A2 ${SALT}` },
+    {
+      id: clientA1,
+      type: "client_business",
+      legalName: `RP Client A1 ${SALT}`,
+    },
+    {
+      id: clientA2,
+      type: "client_business",
+      legalName: `RP Client A2 ${SALT}`,
+    },
     { id: clientB, type: "client_business", legalName: `RP Client B ${SALT}` },
     { id: buyer, type: "buyer", legalName: `RP Buyer ${SALT}` },
   ]);

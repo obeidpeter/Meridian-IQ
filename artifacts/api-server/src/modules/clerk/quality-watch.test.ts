@@ -37,10 +37,7 @@ const month = (m: string, fields: number, keptRate: number): KeptRateMonth => ({
   keptRate,
 });
 
-const correction = (
-  field: string,
-  changed: boolean,
-): ClerkCorrection => ({
+const correction = (field: string, changed: boolean): ClerkCorrection => ({
   field,
   extracted: changed ? "old" : "same",
   final: changed ? "new" : "same",
@@ -81,12 +78,18 @@ test("detectQualityDrop compares the newest two MEASURED months", () => {
 
   // A small wobble inside the noise band stays quiet.
   assert.equal(
-    detectQualityDrop([month("2026-05", 100, 0.9), month("2026-06", 100, 0.85)]),
+    detectQualityDrop([
+      month("2026-05", 100, 0.9),
+      month("2026-06", 100, 0.85),
+    ]),
     null,
   );
   // Improvement is never an alert.
   assert.equal(
-    detectQualityDrop([month("2026-05", 100, 0.7), month("2026-06", 100, 0.95)]),
+    detectQualityDrop([
+      month("2026-05", 100, 0.7),
+      month("2026-06", 100, 0.95),
+    ]),
     null,
   );
   // One measured month has nothing to compare against.
@@ -104,10 +107,10 @@ test("detectQualityDrop compares the newest two MEASURED months", () => {
   // Explicit thresholds are honoured (the env defaults are just defaults):
   // 5 fields is thin for the default floor of 50, but measured here.
   assert.ok(
-    detectQualityDrop(
-      [month("2026-05", 5, 0.95), month("2026-06", 5, 0.7)],
-      { minFields: 5, dropPoints: 0.1 },
-    ),
+    detectQualityDrop([month("2026-05", 5, 0.95), month("2026-06", 5, 0.7)], {
+      minFields: 5,
+      dropPoints: 0.1,
+    }),
   );
 });
 
@@ -202,7 +205,10 @@ test("the sweep alerts once per degraded month via the audit ledger", async () =
 
   // No drop: nothing checked out of the ordinary, nothing written.
   const quiet = await sweepQualityWatch({
-    months: async () => [month(fromMonth, 100, 0.95), month(toMonth, 100, 0.95)],
+    months: async () => [
+      month(fromMonth, 100, 0.95),
+      month(toMonth, 100, 0.95),
+    ],
   });
   assert.deepEqual(quiet, { checked: true, dropped: false, alerted: false });
 });

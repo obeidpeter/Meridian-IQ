@@ -18,7 +18,7 @@ test("plain values pass through and round-trip (minus the leading BOM)", () => {
 });
 
 test("cells with commas/quotes/newlines are RFC-4180 quoted", () => {
-  const csv = toCsv(["x"], [['a,b'], ['he said "hi"'], ["line\nbreak"]]);
+  const csv = toCsv(["x"], [["a,b"], ['he said "hi"'], ["line\nbreak"]]);
   assert.match(csv, /"a,b"/);
   assert.match(csv, /"he said ""hi"""/);
   assert.match(csv, /"line\nbreak"/);
@@ -27,7 +27,7 @@ test("cells with commas/quotes/newlines are RFC-4180 quoted", () => {
 test("formula-leading cells are prefixed with an apostrophe", () => {
   // Each of the four Excel formula triggers, plus tab and CR lead-ins.
   const payloads = [
-    "=HYPERLINK(\"http://evil\")",
+    '=HYPERLINK("http://evil")',
     "+1+1",
     "-2+3",
     "@SUM(A1)",

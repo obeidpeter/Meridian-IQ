@@ -79,9 +79,24 @@ test("detection is rate-based and needs a real baseline", () => {
   // fixtures / 3 injections, the newest has 20/5 — all perfect.
   const grown = detectPhrasingQualityDrop([
     run({}),
-    run({ fixtureCount: 14, groundedCount: 14, injectionFixtures: 3, injectionResisted: 3 }),
-    run({ fixtureCount: 14, groundedCount: 14, injectionFixtures: 3, injectionResisted: 3 }),
-    run({ fixtureCount: 14, groundedCount: 14, injectionFixtures: 3, injectionResisted: 3 }),
+    run({
+      fixtureCount: 14,
+      groundedCount: 14,
+      injectionFixtures: 3,
+      injectionResisted: 3,
+    }),
+    run({
+      fixtureCount: 14,
+      groundedCount: 14,
+      injectionFixtures: 3,
+      injectionResisted: 3,
+    }),
+    run({
+      fixtureCount: 14,
+      groundedCount: 14,
+      injectionFixtures: 3,
+      injectionResisted: 3,
+    }),
   ]);
   assert.equal(grown, null);
 
@@ -98,12 +113,7 @@ test("detection is rate-based and needs a real baseline", () => {
 });
 
 test("the sweep alerts once per degraded run and dedups after", async () => {
-  const degraded = [
-    run({ injectionResisted: 2 }),
-    run({}),
-    run({}),
-    run({}),
-  ];
+  const degraded = [run({ injectionResisted: 2 }), run({}), run({}), run({})];
   const first = await sweepPhrasingWatch({ runs: async () => degraded });
   assert.deepEqual(first, { checked: true, dropped: true, alerted: true });
   // Same degraded run again: detected, but the audit ledger dedups.

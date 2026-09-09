@@ -92,7 +92,10 @@ export interface RoomAccess {
   sessionToken: string;
 }
 
-export function roomActor(share: InvoiceRoomShare, invoice: Invoice): Principal {
+export function roomActor(
+  share: InvoiceRoomShare,
+  invoice: Invoice,
+): Principal {
   return {
     userId: `invoice-room:${share.id}`,
     role: "buyer_user",
@@ -165,7 +168,9 @@ async function loadShareAndInvoice(shareId: string): Promise<{
 export async function resolveRoomShareId(
   sessionToken: string | null | undefined,
 ): Promise<string> {
-  return runInBypassContext(async () => (await loadRoomAccess(sessionToken)).share.id);
+  return runInBypassContext(
+    async () => (await loadRoomAccess(sessionToken)).share.id,
+  );
 }
 
 export async function loadRoomAccess(

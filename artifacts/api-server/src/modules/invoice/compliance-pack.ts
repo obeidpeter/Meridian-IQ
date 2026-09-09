@@ -187,7 +187,9 @@ export function nextVatReturnDue(now: Date = new Date()): string {
   const { year, monthIndex } = lagosParts(now);
   const dueDay = statutoryDueDay("vat");
   for (const offset of [0, 1]) {
-    const due = lagosDateString(lagosMidnightFor(year, monthIndex + offset, dueDay));
+    const due = lagosDateString(
+      lagosMidnightFor(year, monthIndex + offset, dueDay),
+    );
     if (due > today) return due;
   }
   /* c8 ignore next — unreachable: next month's due day is always ahead */

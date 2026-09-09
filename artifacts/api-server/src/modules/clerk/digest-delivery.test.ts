@@ -271,9 +271,15 @@ test("delivery: a digest is offered exactly once across two passes, pointer-only
   // One email to the email-opted member, one push to the push-opted member —
   // both ledgered under the opaque user pointer.
   const emailMsgs = await digestMessagesFor(emailStaff);
-  assert.deepEqual(emailMsgs.map((m) => m.channel), ["email"]);
+  assert.deepEqual(
+    emailMsgs.map((m) => m.channel),
+    ["email"],
+  );
   const pushMsgs = await digestMessagesFor(pushStaff);
-  assert.deepEqual(pushMsgs.map((m) => m.channel), ["push"]);
+  assert.deepEqual(
+    pushMsgs.map((m) => m.channel),
+    ["push"],
+  );
 
   // Pointer-only payload (SEC-12): opaque refs, never the email address.
   for (const m of [...emailMsgs, ...pushMsgs]) {

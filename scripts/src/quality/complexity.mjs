@@ -236,7 +236,10 @@ export async function main(argv) {
   const advice = tightenable.length
     ? `\n\nbaseline can tighten (${tightenable.length} entries; run "pnpm run complexity:write"):\n- ${tightenable.join("\n- ")}`
     : "";
-  return { ok: true, message: `${summary}\n\ncomplexity ratchet passed.${advice}` };
+  return {
+    ok: true,
+    message: `${summary}\n\ncomplexity ratchet passed.${advice}`,
+  };
 }
 
 if (

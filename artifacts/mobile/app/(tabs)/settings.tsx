@@ -9,13 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import type { AlertPreferences } from "@workspace/api-client-react";
 import React, { useCallback, useRef, useState } from "react";
-import {
-  Alert,
-  Platform,
-  StyleSheet,
-  Switch,
-  View,
-} from "react-native";
+import { Alert, Platform, StyleSheet, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -99,8 +93,14 @@ function SettingRow({
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { me, clientPartyId, signOut, switchClient, setPushToken, getPushToken } =
-    useSession();
+  const {
+    me,
+    clientPartyId,
+    signOut,
+    switchClient,
+    setPushToken,
+    getPushToken,
+  } = useSession();
   const [pushBusy, setPushBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -291,7 +291,11 @@ export default function SettingsScreen() {
         { paddingBottom: insets.bottom + 100 },
       ]}
     >
-      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+      <AppText
+        variant="overline"
+        color={colors.mutedForeground}
+        style={styles.sectionLabel}
+      >
         Alert channels
       </AppText>
       {prefsQuery.isLoading ? (
@@ -340,7 +344,11 @@ export default function SettingsScreen() {
             />
           </Card>
 
-          <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+          <AppText
+            variant="overline"
+            color={colors.mutedForeground}
+            style={styles.sectionLabel}
+          >
             Alert types
           </AppText>
           <Card padded={false} style={{ paddingHorizontal: 16 }}>
@@ -378,7 +386,11 @@ export default function SettingsScreen() {
         </>
       )}
 
-      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+      <AppText
+        variant="overline"
+        color={colors.mutedForeground}
+        style={styles.sectionLabel}
+      >
         Account
       </AppText>
       <Card>

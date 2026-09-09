@@ -51,11 +51,7 @@ import {
   TestTube2,
   WalletCards,
 } from "lucide-react";
-import {
-  formatDateTime,
-  connectionBadgeClasses,
-  humanize,
-} from "@/lib/format";
+import { formatDateTime, connectionBadgeClasses, humanize } from "@/lib/format";
 import { trackUsabilityEvent } from "@workspace/web-ui";
 
 const categoryIcons = {
@@ -174,7 +170,7 @@ export function Integrations() {
             title: run.status === "failed" ? "Sync failed" : "Sync queued",
             description:
               run.status === "failed"
-                ? run.error ?? undefined
+                ? (run.error ?? undefined)
                 : "Activity will show the final import outcome.",
             variant: run.status === "failed" ? "destructive" : undefined,
           });
@@ -192,16 +188,25 @@ export function Integrations() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
         <div>
-          <p className="text-xs font-bold uppercase text-primary">Data and delivery</p>
-          <h1 className="mt-1 text-2xl font-bold md:text-3xl" data-testid="text-page-title">
+          <p className="text-xs font-bold uppercase text-primary">
+            Data and delivery
+          </p>
+          <h1
+            className="mt-1 text-2xl font-bold md:text-3xl"
+            data-testid="text-page-title"
+          >
             Connection centre
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            See what is live, test provider setup and monitor repeatable data feeds without exposing credentials.
+            See what is live, test provider setup and monitor repeatable data
+            feeds without exposing credentials.
           </p>
         </div>
         {erpEnabled ? (
-          <Button onClick={() => setShowCreate(true)} data-testid="button-new-connection">
+          <Button
+            onClick={() => setShowCreate(true)}
+            data-testid="button-new-connection"
+          >
             <Plus className="size-4" aria-hidden="true" /> Connect a client
           </Button>
         ) : null}
@@ -210,8 +215,15 @@ export function Integrations() {
       <section aria-labelledby="provider-readiness-title">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h2 id="provider-readiness-title" className="text-base font-semibold">Provider readiness</h2>
-            <p className="text-xs text-muted-foreground">Presence-only configuration; secret values never leave the server.</p>
+            <h2
+              id="provider-readiness-title"
+              className="text-base font-semibold"
+            >
+              Provider readiness
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Presence-only configuration; secret values never leave the server.
+            </p>
           </div>
           {readiness.data ? (
             <span className="rounded-md border bg-background px-2.5 py-1 text-xs font-semibold">
@@ -221,26 +233,43 @@ export function Integrations() {
         </div>
         {readiness.isLoading ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            {[0, 1, 2, 3, 4].map((key) => <Skeleton key={key} className="h-28" />)}
+            {[0, 1, 2, 3, 4].map((key) => (
+              <Skeleton key={key} className="h-28" />
+            ))}
           </div>
         ) : readiness.error ? (
-          <QueryError thing="provider readiness" onRetry={() => void readiness.refetch()} />
+          <QueryError
+            thing="provider readiness"
+            onRetry={() => void readiness.refetch()}
+          />
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {(readiness.data?.items ?? []).map((item) => {
               const Icon = categoryIcons[item.category];
               return (
-                <article key={item.key} className="rounded-md border bg-card p-3" data-testid={`readiness-${item.key}`}>
+                <article
+                  key={item.key}
+                  className="rounded-md border bg-card p-3"
+                  data-testid={`readiness-${item.key}`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <span className="grid size-8 place-items-center rounded-md bg-muted text-foreground">
                       <Icon className="size-4" aria-hidden="true" />
                     </span>
-                    <span className={item.status === "live" ? "text-xs font-bold text-emerald-700 dark:text-emerald-400" : "text-xs font-bold text-amber-700 dark:text-amber-300"}>
+                    <span
+                      className={
+                        item.status === "live"
+                          ? "text-xs font-bold text-emerald-700 dark:text-emerald-400"
+                          : "text-xs font-bold text-amber-700 dark:text-amber-300"
+                      }
+                    >
                       {item.status === "live" ? "Live" : "Sandbox"}
                     </span>
                   </div>
                   <h3 className="mt-3 text-sm font-semibold">{item.label}</h3>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.note}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {item.note}
+                  </p>
                 </article>
               );
             })}
@@ -255,25 +284,41 @@ export function Integrations() {
           <Card data-testid="card-connectors">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Plug className="size-4 text-primary" aria-hidden="true" /> Accounting adapters
+                <Plug className="size-4 text-primary" aria-hidden="true" />{" "}
+                Accounting adapters
               </CardTitle>
             </CardHeader>
             <CardContent>
               {registry.isLoading ? (
                 <Skeleton className="h-20" />
               ) : registry.error ? (
-                <QueryError thing="available connectors" onRetry={() => void registry.refetch()} />
+                <QueryError
+                  thing="available connectors"
+                  onRetry={() => void registry.refetch()}
+                />
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {(registry.data ?? []).map((connector) => (
                     <div key={connector.key} className="rounded-md border p-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium">{connector.name}</p>
-                        <span className={connector.mode === "live" ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-amber-700"}>
-                          {connector.mode === "live" ? (connector.configured ? "Live" : "Setup needed") : "Sandbox"}
+                        <span
+                          className={
+                            connector.mode === "live"
+                              ? "text-xs font-semibold text-emerald-700"
+                              : "text-xs font-semibold text-amber-700"
+                          }
+                        >
+                          {connector.mode === "live"
+                            ? connector.configured
+                              ? "Live"
+                              : "Setup needed"
+                            : "Sandbox"}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{connector.description}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {connector.description}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -282,39 +327,80 @@ export function Integrations() {
           </Card>
 
           <Card data-testid="card-connections">
-            <CardHeader><CardTitle className="text-base">Client connections</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Client connections</CardTitle>
+            </CardHeader>
             <CardContent>
               {connectionList.isLoading ? (
                 <Skeleton className="h-20" />
               ) : connectionList.error ? (
-                <QueryError thing="client connections" onRetry={() => void connectionList.refetch()} />
+                <QueryError
+                  thing="client connections"
+                  onRetry={() => void connectionList.refetch()}
+                />
               ) : (connectionList.data ?? []).length === 0 ? (
                 <div className="flex min-h-28 items-center gap-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                   <CircleDashed className="size-5" aria-hidden="true" />
-                  No client feed is connected. Test an adapter before saving the first connection.
+                  No client feed is connected. Test an adapter before saving the
+                  first connection.
                 </div>
               ) : (
                 <div className="divide-y">
                   {(connectionList.data ?? []).map((connection) => (
-                    <div key={connection.id} className="flex flex-wrap items-center justify-between gap-3 py-3" data-testid={`connection-${connection.id}`}>
+                    <div
+                      key={connection.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3"
+                      data-testid={`connection-${connection.id}`}
+                    >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">
-                          {clientName(connection.clientPartyId)} <span className="font-normal text-muted-foreground">via {connection.connectorKey}</span>
+                          {clientName(connection.clientPartyId)}{" "}
+                          <span className="font-normal text-muted-foreground">
+                            via {connection.connectorKey}
+                          </span>
                         </p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                           {connection.lastSyncAt ? (
-                            <><CheckCircle2 className="size-3 text-emerald-600" aria-hidden="true" />Last sync {formatDateTime(connection.lastSyncAt)}</>
-                          ) : "Never synced"}
+                            <>
+                              <CheckCircle2
+                                className="size-3 text-emerald-600"
+                                aria-hidden="true"
+                              />
+                              Last sync {formatDateTime(connection.lastSyncAt)}
+                            </>
+                          ) : (
+                            "Never synced"
+                          )}
                           {connection.lastError ? (
-                            <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-400"><AlertTriangle className="size-3" aria-hidden="true" />{connection.lastError}</span>
+                            <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-400">
+                              <AlertTriangle
+                                className="size-3"
+                                aria-hidden="true"
+                              />
+                              {connection.lastError}
+                            </span>
                           ) : null}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={connectionBadgeClasses(connection.status)}>{humanize(connection.status)}</span>
-                        <Button size="sm" variant="secondary" disabled={syncingId === connection.id} onClick={() => handleSync(connection)}>
-                          <RefreshCw className={`size-4 ${syncingId === connection.id ? "animate-spin" : ""}`} aria-hidden="true" />
-                          {syncingId === connection.id ? "Queueing…" : "Sync now"}
+                        <span
+                          className={connectionBadgeClasses(connection.status)}
+                        >
+                          {humanize(connection.status)}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={syncingId === connection.id}
+                          onClick={() => handleSync(connection)}
+                        >
+                          <RefreshCw
+                            className={`size-4 ${syncingId === connection.id ? "animate-spin" : ""}`}
+                            aria-hidden="true"
+                          />
+                          {syncingId === connection.id
+                            ? "Queueing…"
+                            : "Sync now"}
                         </Button>
                       </div>
                     </div>
@@ -337,17 +423,25 @@ export function Integrations() {
           <DialogHeader>
             <DialogTitle>Connect an accounting feed</DialogTitle>
             <DialogDescription>
-              Test the provider first. Saving creates a resumable feed; every imported invoice still passes normal validation.
+              Test the provider first. Saving creates a resumable feed; every
+              imported invoice still passes normal validation.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="connection-client">Client</Label>
               <Select value={clientPartyId} onValueChange={setClientPartyId}>
-                <SelectTrigger id="connection-client"><SelectValue placeholder="Pick a client" /></SelectTrigger>
+                <SelectTrigger id="connection-client">
+                  <SelectValue placeholder="Pick a client" />
+                </SelectTrigger>
                 <SelectContent>
                   {(portfolio?.clients ?? []).map((client) => (
-                    <SelectItem key={client.clientPartyId} value={client.clientPartyId}>{client.legalName}</SelectItem>
+                    <SelectItem
+                      key={client.clientPartyId}
+                      value={client.clientPartyId}
+                    >
+                      {client.legalName}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -355,11 +449,18 @@ export function Integrations() {
             <div className="space-y-1.5">
               <Label htmlFor="connection-connector">Adapter</Label>
               <Select value={connectorKey} onValueChange={chooseConnector}>
-                <SelectTrigger id="connection-connector"><SelectValue placeholder="Pick an accounting package" /></SelectTrigger>
+                <SelectTrigger id="connection-connector">
+                  <SelectValue placeholder="Pick an accounting package" />
+                </SelectTrigger>
                 <SelectContent>
                   {(registry.data ?? []).map((connector) => (
-                    <SelectItem key={connector.key} value={connector.key} disabled={!connector.configured}>
-                      {connector.name}{!connector.configured ? " · setup needed" : ""}
+                    <SelectItem
+                      key={connector.key}
+                      value={connector.key}
+                      disabled={!connector.configured}
+                    >
+                      {connector.name}
+                      {!connector.configured ? " · setup needed" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -367,14 +468,20 @@ export function Integrations() {
             </div>
             {selectedConnector?.configurationFields.map((field) => (
               <div className="space-y-1.5" key={field.key}>
-                <Label htmlFor={`connector-${field.key}`}>{field.label}{field.required ? " *" : ""}</Label>
+                <Label htmlFor={`connector-${field.key}`}>
+                  {field.label}
+                  {field.required ? " *" : ""}
+                </Label>
                 <Input
                   id={`connector-${field.key}`}
                   type={field.secret ? "password" : "text"}
                   autoComplete="off"
                   value={config[field.key] ?? ""}
                   onChange={(event) => {
-                    setConfig((current) => ({ ...current, [field.key]: event.target.value }));
+                    setConfig((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }));
                     setTested(false);
                   }}
                   placeholder={field.placeholder}
@@ -384,19 +491,34 @@ export function Integrations() {
               </div>
             ))}
             {tested ? (
-              <p className="flex items-center gap-2 text-sm font-medium text-emerald-700" role="status">
-                <CheckCircle2 className="size-4" aria-hidden="true" /> Test passed. The connection is ready to save.
+              <p
+                className="flex items-center gap-2 text-sm font-medium text-emerald-700"
+                role="status"
+              >
+                <CheckCircle2 className="size-4" aria-hidden="true" /> Test
+                passed. The connection is ready to save.
               </p>
             ) : null}
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
-            <Button variant="outline" onClick={handleTest} disabled={!clientPartyId || !requiredComplete || testConnection.isPending}>
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={
+                !clientPartyId || !requiredComplete || testConnection.isPending
+              }
+            >
               <TestTube2 className="size-4" aria-hidden="true" />
               {testConnection.isPending ? "Testing…" : "Test connection"}
             </Button>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={!tested || create.isPending}>
+              <Button variant="ghost" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={!tested || create.isPending}
+              >
                 {create.isPending ? "Connecting…" : "Save connection"}
               </Button>
             </div>

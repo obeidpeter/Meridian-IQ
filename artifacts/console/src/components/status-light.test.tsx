@@ -10,7 +10,13 @@
 //  - Clicking the trigger opens the popover carrying the server's reasons
 //    and recommendedAction verbatim.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 
 // Radix's popper positioning needs a ResizeObserver; jsdom has none.
 class ResizeObserverStub {

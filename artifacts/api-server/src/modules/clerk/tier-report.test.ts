@@ -1,6 +1,10 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { getDb, runInBypassContext, clerkInferenceCallsTable } from "@workspace/db";
+import {
+  getDb,
+  runInBypassContext,
+  clerkInferenceCallsTable,
+} from "@workspace/db";
 import {
   computeTierReport,
   tierRecommendation,
@@ -53,7 +57,12 @@ before(async () => {
 });
 
 test("tierRecommendation covers every branch deterministically", () => {
-  const base = { purpose: "segment_batch", judged: 200, validRate: 1, tiered: false };
+  const base = {
+    purpose: "segment_batch",
+    judged: 200,
+    validRate: 1,
+    tiered: false,
+  };
   assert.equal(tierRecommendation(base).recommendation, "candidate");
   assert.equal(
     tierRecommendation({ ...base, judged: TIER_MIN_CALLS - 1 }).recommendation,
@@ -76,7 +85,8 @@ test("tierRecommendation covers every branch deterministically", () => {
     "tiered",
   );
   assert.equal(
-    tierRecommendation({ ...base, tiered: true, validRate: 0.9 }).recommendation,
+    tierRecommendation({ ...base, tiered: true, validRate: 0.9 })
+      .recommendation,
     "revert",
   );
   // A tiered STAKES purpose never earns a reassuring "tiered" from validity

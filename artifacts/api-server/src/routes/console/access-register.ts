@@ -170,39 +170,36 @@ router.get("/console/access-register", async (req, res): Promise<void> => {
   res.json(GetAccessRegisterResponse.parse(await buildAccessRegister(firmId)));
 });
 
-router.get(
-  "/console/access-register/csv",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "access.review");
-    const firmId = firmScope(req.principal);
-    const register = await buildAccessRegister(firmId);
-    const csv = toCsv(
-      [
-        "user_id",
-        "full_name",
-        "email",
-        "role",
-        "client_party_id",
-        "since",
-        "last_sign_in_at",
-        "mfa_enabled",
-        "assigned_clients",
-      ],
-      register.members.map((m) => [
-        m.userId,
-        m.fullName ?? "",
-        m.email ?? "",
-        m.role,
-        m.clientPartyId ?? "",
-        m.since.toISOString(),
-        m.lastSignInAt ? m.lastSignInAt.toISOString() : "",
-        m.mfaEnabled ? "yes" : "no",
-        m.assignedClients.join("; "),
-      ]),
-    );
-    sendCsvAttachment(res, `access-register-${firmId}.csv`, csv);
-  },
-);
+router.get("/console/access-register/csv", async (req, res): Promise<void> => {
+  assertCan(req.principal, "access.review");
+  const firmId = firmScope(req.principal);
+  const register = await buildAccessRegister(firmId);
+  const csv = toCsv(
+    [
+      "user_id",
+      "full_name",
+      "email",
+      "role",
+      "client_party_id",
+      "since",
+      "last_sign_in_at",
+      "mfa_enabled",
+      "assigned_clients",
+    ],
+    register.members.map((m) => [
+      m.userId,
+      m.fullName ?? "",
+      m.email ?? "",
+      m.role,
+      m.clientPartyId ?? "",
+      m.since.toISOString(),
+      m.lastSignInAt ? m.lastSignInAt.toISOString() : "",
+      m.mfaEnabled ? "yes" : "no",
+      m.assignedClients.join("; "),
+    ]),
+  );
+  sendCsvAttachment(res, `access-register-${firmId}.csv`, csv);
+});
 
 // Attest the register as reviewed. The caller names the hash they reviewed;
 // if the register moved since (a member joined, a role changed, an

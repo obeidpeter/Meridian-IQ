@@ -37,14 +37,32 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `IS Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `IS Client ${SALT}` },
-    { id: siblingParty, type: "client_business", legalName: `IS Sibling ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `IS Client ${SALT}`,
+    },
+    {
+      id: siblingParty,
+      type: "client_business",
+      legalName: `IS Sibling ${SALT}`,
+    },
     { id: buyer, type: "buyer", legalName: `IS Buyer ${SALT}` },
     { id: vendor, type: "buyer", legalName: `IS Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `is A ${SALT}` },
-    { firmId, clientPartyId: siblingParty, type: "retainer", title: `is B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `is A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `is B ${SALT}`,
+    },
   ]);
   invoiceId = randomUUID();
   await db.insert(invoicesTable).values([
@@ -104,10 +122,9 @@ before(async () => {
 });
 
 test("extractInvoiceNumbers is conservative and date-safe", () => {
-  assert.deepEqual(
-    extractInvoiceNumbers("What is happening with INV-2041?"),
-    ["INV-2041"],
-  );
+  assert.deepEqual(extractInvoiceNumbers("What is happening with INV-2041?"), [
+    "INV-2041",
+  ]);
   assert.deepEqual(extractInvoiceNumbers("Where is invoice 7801 now?"), [
     "7801",
   ]);
@@ -124,10 +141,9 @@ test("extractInvoiceNumbers is conservative and date-safe", () => {
     2,
   );
   // Case-insensitive dedup keeps one.
-  assert.deepEqual(
-    extractInvoiceNumbers("is inv-2041 the same as INV-2041?"),
-    ["inv-2041"],
-  );
+  assert.deepEqual(extractInvoiceNumbers("is inv-2041 the same as INV-2041?"), [
+    "inv-2041",
+  ]);
   // The review-probed false positives (round-20 M3):
   // slash dates and month/fiscal shapes are dates, not numbers…
   assert.deepEqual(extractInvoiceNumbers("submitted on 2026/07/08?"), []);
@@ -144,7 +160,9 @@ test("extractInvoiceNumbers is conservative and date-safe", () => {
   );
   // …but the real number still comes through beside an excluded token.
   assert.deepEqual(
-    extractInvoiceNumbers("it failed with code E-TIN-01 — what about INV-2041?"),
+    extractInvoiceNumbers(
+      "it failed with code E-TIN-01 — what about INV-2041?",
+    ),
     ["INV-2041"],
   );
   // Ordinary words containing "no" and the bare word "no" introduce nothing.
@@ -233,17 +251,19 @@ test("scope: a client pin only sees its own paper", async () => {
 test("a duplicated number asks for the client instead of guessing", async () => {
   assert.ok(intent);
   // The sibling now captures the SAME number.
-  await getDb().insert(invoicesTable).values({
-    firmId,
-    supplierPartyId: siblingParty,
-    buyerPartyId: buyer,
-    invoiceNumber: NUM,
-    issueDate: daysAgo(3),
-    status: "draft",
-    grandTotal: "10000.00",
-    subtotal: "9302.33",
-    vatTotal: "697.67",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      firmId,
+      supplierPartyId: siblingParty,
+      buyerPartyId: buyer,
+      invoiceNumber: NUM,
+      issueDate: daysAgo(3),
+      status: "draft",
+      grandTotal: "10000.00",
+      subtotal: "9302.33",
+      vatTotal: "697.67",
+    });
   const result = await intent.run(firmId, { invoiceNumber: NUM });
   assert.match(result.text, /2 invoices share the number/);
   assert.match(result.text, /Add the client's name/);

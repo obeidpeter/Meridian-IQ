@@ -22,7 +22,13 @@ import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled, serverErrorMessage } from "@/lib/errors";
-import { Store, Clock3, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Store,
+  Clock3,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -105,7 +111,9 @@ function BatchItems({ batchId }: { batchId: string }) {
 
   if ((items || []).length === 0) {
     return (
-      <p className="text-sm text-muted-foreground pt-2">No items in this batch yet.</p>
+      <p className="text-sm text-muted-foreground pt-2">
+        No items in this batch yet.
+      </p>
     );
   }
 
@@ -216,7 +224,10 @@ export function B2cReports() {
         {isLoading ? (
           <SkeletonList count={3} itemClassName="h-24" />
         ) : isError ? (
-          <QueryError thing="your B2C reporting batches" onRetry={() => refetch()} />
+          <QueryError
+            thing="your B2C reporting batches"
+            onRetry={() => refetch()}
+          />
         ) : sorted.length === 0 ? (
           <Card>
             <EmptyState
@@ -246,8 +257,9 @@ export function B2cReports() {
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {batch.itemCount} sale(s) · {formatNaira(batch.totalAmount)} ·
-                          Deadline {formatDateTime(batch.deadlineAt)}
+                          {batch.itemCount} sale(s) ·{" "}
+                          {formatNaira(batch.totalAmount)} · Deadline{" "}
+                          {formatDateTime(batch.deadlineAt)}
                         </p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0 flex-wrap">
@@ -256,8 +268,11 @@ export function B2cReports() {
                         )}
                         {batch.reportedAt && (
                           <span className="inline-flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400">
-                            <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Reported{" "}
-                            {formatDateTime(batch.reportedAt)}
+                            <CheckCircle2
+                              className="w-4 h-4"
+                              aria-hidden="true"
+                            />{" "}
+                            Reported {formatDateTime(batch.reportedAt)}
                           </span>
                         )}
                         {batch.status === "breached" && !batch.reportedAt && (
@@ -271,7 +286,9 @@ export function B2cReports() {
                             onClick={() => markReported(batch)}
                             disabled={reportingId === batch.id}
                           >
-                            {reportingId === batch.id ? "Reporting…" : "Mark reported"}
+                            {reportingId === batch.id
+                              ? "Reporting…"
+                              : "Mark reported"}
                           </Button>
                         )}
                       </div>
@@ -283,11 +300,19 @@ export function B2cReports() {
                       aria-expanded={expanded}
                     >
                       {expanded ? (
-                        <ChevronUp className="w-4 h-4 mr-1" aria-hidden="true" />
+                        <ChevronUp
+                          className="w-4 h-4 mr-1"
+                          aria-hidden="true"
+                        />
                       ) : (
-                        <ChevronDown className="w-4 h-4 mr-1" aria-hidden="true" />
+                        <ChevronDown
+                          className="w-4 h-4 mr-1"
+                          aria-hidden="true"
+                        />
                       )}
-                      {expanded ? "Hide items" : `View items (${batch.itemCount})`}
+                      {expanded
+                        ? "Hide items"
+                        : `View items (${batch.itemCount})`}
                     </Button>
                     {expanded && <BatchItems batchId={batch.id} />}
                   </CardContent>

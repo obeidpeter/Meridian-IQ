@@ -160,10 +160,7 @@ export const productionPilotOperatorDependencies: PilotOperatorDependencies = {
     const [operator] = await getDb()
       .select({ id: usersTable.id })
       .from(usersTable)
-      .innerJoin(
-        membershipsTable,
-        eq(membershipsTable.userId, usersTable.id),
-      )
+      .innerJoin(membershipsTable, eq(membershipsTable.userId, usersTable.id))
       .where(
         and(
           eq(membershipsTable.role, "operator"),

@@ -71,4 +71,3 @@ export const erpSyncRunsTable = pgTable("erp_sync_runs", {
     .defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
-

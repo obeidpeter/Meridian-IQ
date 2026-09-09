@@ -170,9 +170,7 @@ describe("filings list", () => {
     expect(row2.textContent).toContain("PAYE remittance");
     expect(row2.textContent).toContain("Ref FIRS/PAYE/77");
     expect(screen.getByTestId("badge-status-fil-2").textContent).toBe("Filed");
-    expect(screen.getByTestId("text-due-fil-2").textContent).toContain(
-      "Filed",
-    );
+    expect(screen.getByTestId("text-due-fil-2").textContent).toContain("Filed");
   });
 
   test("an unfiled return past its due date wears the Overdue flag", () => {

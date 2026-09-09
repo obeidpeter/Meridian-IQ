@@ -285,12 +285,14 @@ test("a malformed target row degrades to the other bucket — the report never 5
   // for the whole client. Seeded on its OWN client so the main
   // expectations above stay exact.
   const oddClient = randomUUID();
-  await getDb().insert(partiesTable).values({
-    id: oddClient,
-    type: "client_business",
-    legalName: `Effect Odd ${SALT}`,
-    tin: "40000000-0003",
-  });
+  await getDb()
+    .insert(partiesTable)
+    .values({
+      id: oddClient,
+      type: "client_business",
+      legalName: `Effect Odd ${SALT}`,
+      tin: "40000000-0003",
+    });
   await seedDecision({
     kind: "submit_overdue",
     clientParty: oddClient,

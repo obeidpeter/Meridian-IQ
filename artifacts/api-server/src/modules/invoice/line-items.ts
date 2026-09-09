@@ -138,7 +138,9 @@ export async function listLineItemSuggestions(
   clientPartyId: string,
   opts: { liveOnly?: boolean } = {},
 ): Promise<LineItemSuggestion[]> {
-  const since = lagosDateString(new Date(Date.now() - LOOKBACK_DAYS * 86_400_000));
+  const since = lagosDateString(
+    new Date(Date.now() - LOOKBACK_DAYS * 86_400_000),
+  );
   const rows = await getDb()
     .select({
       description: invoiceLinesTable.description,
@@ -199,7 +201,10 @@ export function linePriceIssues(
     if (!Number.isFinite(price) || price <= 0) return;
     const usual = Number(item.medianUnitPrice);
     if (!Number.isFinite(usual) || usual <= 0) return;
-    if (price > usual * PRICE_OUTLIER_FACTOR || price < usual / PRICE_OUTLIER_FACTOR) {
+    if (
+      price > usual * PRICE_OUTLIER_FACTOR ||
+      price < usual / PRICE_OUTLIER_FACTOR
+    ) {
       issues.push({
         lineNo: index + 1,
         description: line.description,

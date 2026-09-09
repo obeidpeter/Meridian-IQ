@@ -1,12 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import {
-  getDb,
-  firmsTable,
-  partiesTable,
-  usersTable,
-} from "@workspace/db";
+import { getDb, firmsTable, partiesTable, usersTable } from "@workspace/db";
 import recurringRouter from "./recurring.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import {
@@ -33,9 +28,16 @@ const clientA = randomUUID();
 const clientB = randomUUID();
 const buyer = randomUUID();
 
-const staff: Principal = firmPrincipal(firmId, { userId: userStaff, role: "firm_staff" });
-const clientUserA: Principal = clientPrincipal(firmId, clientA, { userId: userClientA });
-const clientUserB: Principal = clientPrincipal(firmId, clientB, { userId: userClientB });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userStaff,
+  role: "firm_staff",
+});
+const clientUserA: Principal = clientPrincipal(firmId, clientA, {
+  userId: userClientA,
+});
+const clientUserB: Principal = clientPrincipal(firmId, clientB, {
+  userId: userClientB,
+});
 
 function body(supplierPartyId: string, name: string) {
   return JSON.stringify({
@@ -45,7 +47,12 @@ function body(supplierPartyId: string, name: string) {
     cadence: "monthly",
     startDate: "2026-07-01",
     lines: [
-      { description: "Retainer", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+      {
+        description: "Retainer",
+        quantity: "1",
+        unitPrice: "1000",
+        vatRate: "0.075",
+      },
     ],
   });
 }

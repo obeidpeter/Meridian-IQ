@@ -6,8 +6,10 @@
  * offline estimator's formatNaira.
  */
 
-export function formatCurrency(value: string | number | null | undefined): string {
-  const num = typeof value === "string" ? Number(value) : value ?? 0;
+export function formatCurrency(
+  value: string | number | null | undefined,
+): string {
+  const num = typeof value === "string" ? Number(value) : (value ?? 0);
   const safe = Number.isFinite(num) ? (num as number) : 0;
   const [whole, fraction] = Math.abs(safe).toFixed(2).split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");

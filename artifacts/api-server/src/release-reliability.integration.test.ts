@@ -184,20 +184,40 @@ test("main HTTP create retries and concurrent duplicate commands preserve one du
   const key = randomUUID();
   const replayHeaders = { "x-idempotency-key": key };
   const body = invoice(number);
-  const responses = await Promise.all([post("/api/invoices", body, replayHeaders), post("/api/invoices", body, replayHeaders)]);
-  assert.deepEqual(responses.map((response) => response.status), [201, 201]);
+  const responses = await Promise.all([
+    post("/api/invoices", body, replayHeaders),
+    post("/api/invoices", body, replayHeaders),
+  ]);
+  assert.deepEqual(
+    responses.map((response) => response.status),
+    [201, 201],
+  );
   const bytes = await Promise.all(responses.map((response) => response.text()));
   assert.equal(bytes[0], bytes[1]);
-  assert.equal(responses[0].headers.get("x-operation-id"), responses[1].headers.get("x-operation-id"));
+  assert.equal(
+    responses[0].headers.get("x-operation-id"),
+    responses[1].headers.get("x-operation-id"),
+  );
   // Discarding the first result does not require a second create after response loss.
   const retry = await post("/api/invoices", body, replayHeaders);
   assert.equal(retry.status, 201);
   assert.equal(await retry.text(), bytes[0]);
-  const conflict = await post("/api/invoices", { ...body, invoiceNumber: number + "-changed" }, replayHeaders);
-  assert.equal(conflict.status, 409); await conflict.text();
-  const durable = await pool.query("SELECT id FROM invoices WHERE invoice_number LIKE $1", [number + "%"]);
+  const conflict = await post(
+    "/api/invoices",
+    { ...body, invoiceNumber: number + "-changed" },
+    replayHeaders,
+  );
+  assert.equal(conflict.status, 409);
+  await conflict.text();
+  const durable = await pool.query(
+    "SELECT id FROM invoices WHERE invoice_number LIKE $1",
+    [number + "%"],
+  );
   assert.equal(durable.rowCount, 1);
-  const operations = await pool.query("SELECT status FROM operations WHERE firm_id=$1 AND actor_id=$2 AND idempotency_key=$3", [firm, actor, key]);
+  const operations = await pool.query(
+    "SELECT status FROM operations WHERE firm_id=$1 AND actor_id=$2 AND idempotency_key=$3",
+    [firm, actor, key],
+  );
   assert.equal(operations.rowCount, 1);
   assert.equal(operations.rows[0].status, "succeeded");
 });

@@ -14,7 +14,12 @@ import {
   closeAllServers,
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
-import { buyerPrincipal, clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  buyerPrincipal,
+  clientPrincipal,
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Notification inbox scoping (SEC-03). The messages ledger has NO firm key
 // and NO RLS policy, so the recipient IDENTITY equality inside
@@ -59,9 +64,14 @@ const refStaff = pointerEntityRef("usr", staffUserId);
 
 const clientA: Principal = clientPrincipal(firmId, partyA);
 const siblingClientB: Principal = clientPrincipal(firmId, partyB);
-const staff: Principal = firmPrincipal(firmId, { userId: staffUserId, role: "firm_staff" });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: staffUserId,
+  role: "firm_staff",
+});
 const operator: Principal = crossTenantPrincipal("operator");
-const operatorWithFeed: Principal = crossTenantPrincipal("operator", { userId: opUserId });
+const operatorWithFeed: Principal = crossTenantPrincipal("operator", {
+  userId: opUserId,
+});
 const buyerC: Principal = buyerPrincipal(buyerPartyC);
 const auditor: Principal = crossTenantPrincipal("auditor");
 
@@ -258,7 +268,11 @@ test("firm staff see their own user-identity rows only — never the firm's part
   const { items } = await notificationFeedFor(staff);
   assert.equal(items.length, 1);
   assert.equal(items[0].templateKey, "firm_digest_ready");
-  assert.equal(items[0].channel, "push", "the colliding-ref email row stays out");
+  assert.equal(
+    items[0].channel,
+    "push",
+    "the colliding-ref email row stays out",
+  );
   assert.equal(items[0].title, TEMPLATES.firm_digest_ready.description);
 });
 
@@ -268,7 +282,11 @@ test("an operator sees exactly its own user-identity rows — never a sibling op
   assert.equal(items[0].templateKey, "platform_health");
   assert.equal(items[0].title, TEMPLATES.platform_health.description);
   assert.equal(items[0].entityType, "health_alert");
-  assert.equal(items[0].entityId, "ops-opsout", "the pointer passes through opaque");
+  assert.equal(
+    items[0].entityId,
+    "ops-opsout",
+    "the pointer passes through opaque",
+  );
   assert.equal(unreadCount, 1);
   // Marking mine rides the same identity wall: the sibling operator's row
   // stays unread.
@@ -289,10 +307,13 @@ test("a buyer_user sees exactly its own buyer party's rows — never another buy
   assert.equal(unreadCount, 1);
   // A buyer principal missing its party scope resolves to no identity —
   // empty, never someone else's rows.
-  assert.deepEqual(await notificationFeedFor({ ...buyerC, buyerPartyId: null }), {
-    items: [],
-    unreadCount: 0,
-  });
+  assert.deepEqual(
+    await notificationFeedFor({ ...buyerC, buyerPartyId: null }),
+    {
+      items: [],
+      unreadCount: 0,
+    },
+  );
   // Marking C's feed leaves the other buyer organization's row untouched.
   const marked = await markNotificationsRead(buyerC, new Date());
   assert.equal(marked.unreadCount, 0);
@@ -316,22 +337,32 @@ test("roles without a recipient identity in the ledger get an empty feed", async
   });
   // A client_user missing its party scope resolves to no identity — empty,
   // never someone else's rows.
-  assert.deepEqual(await notificationFeedFor({ ...clientA, clientPartyId: null }), {
-    items: [],
-    unreadCount: 0,
-  });
+  assert.deepEqual(
+    await notificationFeedFor({ ...clientA, clientPartyId: null }),
+    {
+      items: [],
+      unreadCount: 0,
+    },
+  );
   // The dev-header shim's non-uuid userId owns no rows and must not error
   // the uuid-column comparison.
-  assert.deepEqual(await notificationFeedFor({ ...staff, userId: "dev-user" }), {
-    items: [],
-    unreadCount: 0,
-  });
+  assert.deepEqual(
+    await notificationFeedFor({ ...staff, userId: "dev-user" }),
+    {
+      items: [],
+      unreadCount: 0,
+    },
+  );
 });
 
 test("limit is clamped to 1..100 (unreadCount stays whole-feed, not page)", async () => {
   const one = await notificationFeedFor(clientA, 0);
   assert.equal(one.items.length, 1, "0 clamps up to 1");
-  assert.equal(one.items[0].templateKey, "some_retired_template", "and keeps newest");
+  assert.equal(
+    one.items[0].templateKey,
+    "some_retired_template",
+    "and keeps newest",
+  );
   assert.equal(one.unreadCount, 3, "the badge counts past the page limit");
   const all = await notificationFeedFor(clientA, 100_000);
   assert.equal(all.items.length, 3, "an oversized limit still answers");
@@ -343,8 +374,16 @@ test("mark-read boundary is inclusive: at the timestamp marks, after stays unrea
   assert.equal(feed.unreadCount, 1);
   const byKey = new Map(feed.items.map((i) => [i.templateKey, i.read]));
   assert.equal(byKey.get("deadline_reminder"), true);
-  assert.equal(byKey.get("invoice_stamped"), true, "created_at == boundary marks");
-  assert.equal(byKey.get("some_retired_template"), false, "later rows stay unread");
+  assert.equal(
+    byKey.get("invoice_stamped"),
+    true,
+    "created_at == boundary marks",
+  );
+  assert.equal(
+    byKey.get("some_retired_template"),
+    false,
+    "later rows stay unread",
+  );
 });
 
 test("re-marking is idempotent: already-read rows keep their first read_at", async () => {
@@ -394,7 +433,11 @@ test("marking mine never touches a sibling's, a colliding ref's, or a legacy row
         isNull(messagesTable.recipientUserId),
       ),
     );
-  assert.equal(legacyRow.readAt, null, "legacy null-identity row stays untouched");
+  assert.equal(
+    legacyRow.readAt,
+    null,
+    "legacy null-identity row stays untouched",
+  );
   const sibling = await notificationFeedFor(siblingClientB);
   assert.equal(sibling.unreadCount, 1);
 
@@ -429,13 +472,22 @@ test("GET /notifications serves the feed to any authenticated principal; bad lim
   const res = await fetch(`${base}/notifications?limit=2`);
   assert.equal(res.status, 200);
   const body = (await res.json()) as {
-    items: Array<{ templateKey: string; title: string; read: boolean; createdAt: string }>;
+    items: Array<{
+      templateKey: string;
+      title: string;
+      read: boolean;
+      createdAt: string;
+    }>;
     unreadCount: number;
   };
   assert.equal(body.items.length, 2);
   assert.equal(body.items[0].templateKey, "some_retired_template");
   assert.equal(typeof body.items[0].createdAt, "string");
-  assert.equal(body.items[0].read, false, "the boundary tests left the newest unread");
+  assert.equal(
+    body.items[0].read,
+    false,
+    "the boundary tests left the newest unread",
+  );
   assert.equal(body.unreadCount, 1);
 
   // The contract bounds limit to 1..100; out-of-range is a validation 400.

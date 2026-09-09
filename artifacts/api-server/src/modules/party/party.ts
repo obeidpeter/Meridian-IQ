@@ -8,11 +8,7 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
-import {
-  clientPartyScope,
-  tenantFirmId,
-  type Principal,
-} from "../auth/rbac";
+import { clientPartyScope, tenantFirmId, type Principal } from "../auth/rbac";
 
 // Party integrity (CORE-08): TIN/CAC validation and merge/split that preserve
 // history (rows are never deleted; lineage is recorded via mergedIntoId + audit).
@@ -20,14 +16,20 @@ import {
 // Nigerian TIN: commonly a 10-digit number, optionally with a 4-digit suffix
 // (e.g. "12345678-0001"). We normalize and structurally validate; a real
 // registry lookup would replace the simulated check.
-export function validateTin(raw: string): { valid: boolean; normalized: string } {
+export function validateTin(raw: string): {
+  valid: boolean;
+  normalized: string;
+} {
   const normalized = raw.trim().replace(/\s+/g, "");
   const valid = /^\d{8,10}(-\d{4})?$/.test(normalized);
   return { valid, normalized };
 }
 
 // CAC number: "RC" (companies) or "BN" (business names) + digits.
-export function validateCac(raw: string): { valid: boolean; normalized: string } {
+export function validateCac(raw: string): {
+  valid: boolean;
+  normalized: string;
+} {
   const normalized = raw.trim().toUpperCase().replace(/\s+/g, "");
   const valid = /^(RC|BN)\d{2,8}$/.test(normalized);
   return { valid, normalized };
@@ -335,7 +337,11 @@ export async function mergeParties(
   actorId?: string,
 ): Promise<void> {
   if (survivorId === duplicateId) {
-    throw new DomainError("INVALID_MERGE", "Cannot merge a party into itself", 400);
+    throw new DomainError(
+      "INVALID_MERGE",
+      "Cannot merge a party into itself",
+      400,
+    );
   }
   const survivor = await getParty(survivorId);
   const duplicate = await getParty(duplicateId);

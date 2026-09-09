@@ -82,9 +82,7 @@ function openingReportRows(
 
 // One compact evidence phrase per step for the checklist table — the
 // step-specific detection facts reduced to a line (never the raw jsonb).
-function stepEvidenceSummary(
-  step: OnboardingRunView["steps"][number],
-): string {
+function stepEvidenceSummary(step: OnboardingRunView["steps"][number]): string {
   if (step.status === "skipped") {
     // The reason is free text up to 500 chars — far beyond kvRow's fixed
     // row height. The checklist row points at the gaps section, where the

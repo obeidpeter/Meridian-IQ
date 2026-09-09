@@ -36,7 +36,10 @@ export interface QuarterlyReviewCoverNote {
 // The facts the model may phrase — nothing else reaches the prompt.
 export function quarterlyNoteFacts(review: QuarterlyReview): string {
   const receivables = review.receivables.groups
-    .map((g) => `${g.currency} ${g.outstandingTotal} across ${g.invoiceCount} invoice(s)`)
+    .map(
+      (g) =>
+        `${g.currency} ${g.outstandingTotal} across ${g.invoiceCount} invoice(s)`,
+    )
     .join("; ");
   const rejections =
     review.rejectionTotal > 0
@@ -58,7 +61,9 @@ export function quarterlyNoteFacts(review: QuarterlyReview): string {
     `Accepted submission attempts: ${review.submissions.accepted}`,
     ...rejections,
     ...(receivables.length > 0
-      ? [`Outstanding receivables as of ${review.receivables.asOf}: ${receivables}`]
+      ? [
+          `Outstanding receivables as of ${review.receivables.asOf}: ${receivables}`,
+        ]
       : [`Outstanding receivables as of ${review.receivables.asOf}: none`]),
     `Clerk captures opened in the quarter: ${review.clerk.captures} (${review.clerk.approved} approved, ${review.clerk.rejected} rejected)`,
     `Basis note: ${review.note}`,

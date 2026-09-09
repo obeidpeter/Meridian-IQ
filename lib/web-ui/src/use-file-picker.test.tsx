@@ -7,7 +7,8 @@ import { useFilePicker } from "./use-file-picker";
 afterEach(cleanup);
 
 function Harness({ onFile }: { onFile: (file: File) => void }) {
-  const { inputProps, openPicker, dragActive, dropProps } = useFilePicker(onFile);
+  const { inputProps, openPicker, dragActive, dropProps } =
+    useFilePicker(onFile);
   return (
     <>
       <input type="file" data-testid="input" {...inputProps} />

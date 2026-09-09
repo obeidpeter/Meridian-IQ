@@ -134,5 +134,5 @@ export const FILING_INTENTS: readonly DataIntent[] = [
         })),
       };
     },
-  }
+  },
 ];

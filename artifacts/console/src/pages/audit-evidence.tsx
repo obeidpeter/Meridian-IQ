@@ -60,7 +60,11 @@ async function verifyWholeChain(
     if (!window.valid) {
       return { valid: false, count, brokenAtSeq: window.brokenAtSeq ?? null };
     }
-    if (window.complete || window.lastSeq === null || window.lastSeq === undefined) {
+    if (
+      window.complete ||
+      window.lastSeq === null ||
+      window.lastSeq === undefined
+    ) {
       return { valid: true, count, brokenAtSeq: null };
     }
     afterSeq = window.lastSeq;
@@ -68,7 +72,10 @@ async function verifyWholeChain(
 }
 
 function useChainVerification() {
-  const [state, setState] = useState<ChainState>({ phase: "loading", count: 0 });
+  const [state, setState] = useState<ChainState>({
+    phase: "loading",
+    count: 0,
+  });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
@@ -120,12 +127,23 @@ export function AuditEvidence() {
           break;
         }
         lastSeq = window.lastSeq ?? lastSeq;
-        if (window.complete || window.lastSeq === null || window.lastSeq === undefined) break;
+        if (
+          window.complete ||
+          window.lastSeq === null ||
+          window.lastSeq === undefined
+        )
+          break;
         afterSeq = window.lastSeq;
       }
       const bundle = {
         events,
-        verification: { valid, count: checked, brokenAtSeq, lastSeq, complete: valid },
+        verification: {
+          valid,
+          count: checked,
+          brokenAtSeq,
+          lastSeq,
+          complete: valid,
+        },
         exportedAt: new Date().toISOString(),
         lastSeq,
         complete: valid,
@@ -197,9 +215,9 @@ export function AuditEvidence() {
           </CardHeader>
           <CardContent className="text-sm space-y-1">
             <p>
-              All{" "}
-              <span className="font-semibold">{verification.count}</span> audit
-              events hash-chain correctly — no row has been altered or removed.
+              All <span className="font-semibold">{verification.count}</span>{" "}
+              audit events hash-chain correctly — no row has been altered or
+              removed.
             </p>
             <p className="text-muted-foreground flex items-center gap-1.5">
               <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> Each event's

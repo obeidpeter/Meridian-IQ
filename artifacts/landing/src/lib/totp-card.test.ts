@@ -12,8 +12,10 @@ const material: TotpSetup = {
   recoveryCodes: ["aaaa-bbbb", "cccc-dddd"],
 };
 
-const step = (state: TotpCardState, ...events: Parameters<typeof totpCardTransition>[1][]) =>
-  events.reduce(totpCardTransition, state);
+const step = (
+  state: TotpCardState,
+  ...events: Parameters<typeof totpCardTransition>[1][]
+) => events.reduce(totpCardTransition, state);
 
 describe("totpCardTransition", () => {
   test("begin-success opens the setup panel with the minted material", () => {
