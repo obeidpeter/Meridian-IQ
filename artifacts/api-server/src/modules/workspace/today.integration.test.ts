@@ -630,3 +630,140 @@ test("declined consent is a recorded decision, not a submission capability or pr
     /verification is checked separately/,
   );
 });
+
+test("firm onboarding skips the oldest archived client and anchors all proofs to the next live client", async () => {
+  const scope = await makeScope(false);
+  const db = getDb();
+  const archivedInvoice = await invoice(scope, { status: "validated" });
+  await db.insert(invoiceLifecycleEventsTable).values({
+    invoiceId: archivedInvoice,
+    firmId: scope.firmId,
+    fromStatus: "draft",
+    toStatus: "validated",
+  });
+  await db
+    .update(engagementsTable)
+    .set({ status: "archived" })
+    .where(
+      and(
+        eq(engagementsTable.firmId, scope.firmId),
+        eq(engagementsTable.clientPartyId, scope.clientId),
+      ),
+    );
+  const principal = firmPrincipal(scope.firmId, { userId: scope.userId });
+  let body = await today(principal);
+  assert.equal(step(body, "first_client").complete, true);
+  assert.equal(
+    step(body, "business_identity").href,
+    `/clients/${scope.siblingId}/business`,
+  );
+  assert.equal(
+    step(body, "business_identity").complete,
+    false,
+    "the archived client's complete details are not reused",
+  );
+  for (const id of [
+    "first_customer",
+    "first_invoice",
+    "invoice_validation",
+    "invoice_evidence",
+  ]) {
+    assert.equal(
+      step(body, id).complete,
+      false,
+      `${id} must not inherit archived-client proof`,
+    );
+  }
+  await invoice(scope, {
+    supplierPartyId: scope.siblingId,
+    buyerPartyId: scope.otherBuyerId,
+  });
+  body = await today(principal);
+  assert.equal(step(body, "first_invoice").complete, true);
+  assert.equal(
+    step(body, "first_invoice").href,
+    `/clients/${scope.siblingId}?view=invoices`,
+  );
+  assert.equal(step(body, "invoice_validation").complete, false);
+  assert.equal(step(body, "invoice_evidence").complete, false);
+});
+
+test("all-archived firm onboarding stays incomplete until that firm re-engages a client", async () => {
+  const scope = await makeScope(false);
+  const other = await makeScope(false);
+  const db = getDb();
+  await invoice(scope, { status: "validated" });
+  await db
+    .update(engagementsTable)
+    .set({ status: "archived" })
+    .where(eq(engagementsTable.firmId, scope.firmId));
+  await db.insert(engagementsTable).values({
+    firmId: other.firmId,
+    clientPartyId: scope.clientId,
+    type: "retainer",
+    status: "open",
+    title: "Another firm's live relationship",
+  });
+  const principal = firmPrincipal(scope.firmId, { userId: scope.userId });
+  let body = await today(principal);
+  for (const id of [
+    "first_client",
+    "business_identity",
+    "first_customer",
+    "first_invoice",
+    "invoice_validation",
+    "invoice_evidence",
+  ]) {
+    assert.equal(
+      step(body, id).complete,
+      false,
+      `${id} requires this firm's live client`,
+    );
+  }
+  assert.equal(
+    step(body, "business_identity").href,
+    "/portfolio?action=add-client",
+  );
+  await db.insert(engagementsTable).values({
+    firmId: scope.firmId,
+    clientPartyId: scope.clientId,
+    type: "retainer",
+    status: "open",
+    title: "Re-engaged client",
+  });
+  body = await today(principal);
+  assert.equal(
+    step(body, "first_client").complete,
+    true,
+    "an archived historical engagement must not exclude a new live one",
+  );
+  assert.equal(
+    step(body, "business_identity").href,
+    `/clients/${scope.clientId}/business`,
+  );
+  assert.equal(step(body, "first_invoice").complete, true);
+});
+
+test("firm onboarding does not use a non-business engagement as its client", async () => {
+  const scope = await makeScope(false);
+  const db = getDb();
+  await db
+    .update(partiesTable)
+    .set({ createdAt: new Date("2010-01-01T00:00:00Z") })
+    .where(eq(partiesTable.id, scope.buyerId));
+  await db.insert(engagementsTable).values({
+    firmId: scope.firmId,
+    clientPartyId: scope.buyerId,
+    type: "readiness_assessment",
+    status: "open",
+    title: "Non-client party",
+  });
+  const body = await today(
+    firmPrincipal(scope.firmId, { userId: scope.userId }),
+  );
+  assert.equal(
+    step(body, "business_identity").href,
+    `/clients/${scope.clientId}/business`,
+  );
+  assert.match(step(body, "business_identity").description, /First client/);
+});

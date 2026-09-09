@@ -75,12 +75,14 @@ export async function firstInvoiceSetup(
     .where(
       and(
         isNull(partiesTable.mergedIntoId),
+        eq(partiesTable.type, "client_business"),
         clientId
           ? eq(partiesTable.id, clientId)
           : sql`exists (
         select 1 from ${engagementsTable}
         where ${engagementsTable.firmId} = ${firmId}
           and ${engagementsTable.clientPartyId} = ${partiesTable.id}
+          and ${engagementsTable.status} <> 'archived'
       )`,
       ),
     )

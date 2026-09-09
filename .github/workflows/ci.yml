@@ -381,3 +381,9 @@ jobs:
             tmp/control-centre-a11y-r198/**
             tmp/notification-trigger-contrast/**
             tmp/platform-refinement/**
+            tmp/first-invoice/**
+            tmp/business-details/**
+            tmp/workspace-usability/**
+            tmp/workspace-usability-hooks/**
+            tmp/workspace-team-work/**
+            tmp/workspace-created-task/**

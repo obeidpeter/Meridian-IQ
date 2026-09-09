@@ -216,6 +216,8 @@ export function stageSource(reservation, revision) {
       "clone",
       "--no-local",
       "--no-checkout",
+      // Persist only in the isolated clone so checkout and later gates agree.
+      "--config=core.longpaths=true",
       `--template=${template}`,
       "--",
       reservation.source,

@@ -174,6 +174,54 @@ const baseProps = {
   onComment: async () => {},
 };
 
+test("an off-page creation remains selected without changing page counts or discussion target", async () => {
+  const created = { ...task("new-task"), priority: "low" as const };
+  const onSelect = vi.fn();
+  const onComment = vi.fn(async () => {});
+  const props = {
+    ...baseProps,
+    items: Array.from({ length: 50 }, (_, index) => task(`existing-${index}`)),
+    selectedId: created.id,
+    selectedItem: created,
+    total: 126,
+    onSelect,
+    onComment,
+    onCreate: async () => {},
+  };
+  const view = render(<WorkManagement {...props} />);
+  expect(screen.getByRole("heading", { name: created.title })).toBeTruthy();
+  expect(screen.getByText("Showing 50 of 126 tasks")).toBeTruthy();
+  expect(onSelect).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "New task decision" } });
+  view.rerender(<WorkManagement {...props} error="Refresh unavailable" />);
+  expect(screen.getByDisplayValue("New task decision")).toBeTruthy();
+  expect(onSelect).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Comment", exact: true }));
+  await waitFor(() => expect(onComment).toHaveBeenCalledWith(created, "New task decision", expect.any(String)));
+});
+
+test("loaded record updates take precedence over an off-page creation snapshot", async () => {
+  const created = task("new-task");
+  const loaded = { ...created, version: 2, title: "Updated task" };
+  const onComment = vi.fn(async () => {});
+  render(<WorkManagement {...baseProps} items={[loaded]} selectedId={created.id} selectedItem={created} onCreate={async () => {}} onComment={onComment} />);
+  expect(screen.getByRole("heading", { name: "Updated task" })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "Latest version" } });
+  fireEvent.click(screen.getByRole("button", { name: "Comment", exact: true }));
+  await waitFor(() => expect(onComment).toHaveBeenCalledWith(loaded, "Latest version", expect.any(String)));
+});
+
+test("off-page selections obey filters and cannot select a different id", () => {
+  const onSelect = vi.fn();
+  const created = task("new-task");
+  const props = { ...baseProps, items: [task()], selectedId: created.id, selectedItem: created, onSelect, onCreate: async () => {} };
+  const view = render(<WorkManagement {...props} pageView="done" />);
+  expect(onSelect).toHaveBeenLastCalledWith(null);
+  view.rerender(<WorkManagement {...props} selectedId="unknown" />);
+  expect(screen.queryByRole("heading", { name: created.title })).toBeNull();
+  expect(onSelect).toHaveBeenLastCalledWith("task-a");
+});
+
 test("a task draft loads when the signed-in storage key arrives late", async () => {
   const key = "meridianiq:work-draft:test-user";
   window.localStorage.setItem(

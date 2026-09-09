@@ -8,6 +8,38 @@ import {
   checkDialogKeyboard,
 } from "./accessibility.mjs";
 
+test("icon target diagnostics identify controls and retain the strict 24px boundary", async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <html lang="en"><head><title>Icon target fixture</title>
+        <style>button { display: block; padding: 0; border: 0; margin-bottom: 16px; }</style>
+      </head><body><main><h1>Icon targets</h1>
+        <button data-testid="dismiss-warning" aria-label="Dismiss build warning" style="width:20px;height:20px"></button>
+        <button aria-label="Too narrow" style="width:23px;height:32px"></button>
+        <button aria-label="Too short" style="width:32px;height:23px"></button>
+        <button aria-label="Minimum target" style="width:24px;height:24px"></button>
+        <button aria-label="Comfortable target" style="width:32px;height:32px"></button>
+      </main></body></html>
+    `);
+    const issues = await collectAccessibilityIssues(page);
+    assert.deepEqual(
+      issues.filter((issue) => issue.startsWith("icon control smaller")),
+      [
+        'icon control smaller than 24px (20x20): button[data-testid="dismiss-warning"][aria-label="Dismiss build warning"]',
+        'icon control smaller than 24px (23x32): button[aria-label="Too narrow"]',
+        'icon control smaller than 24px (32x23): button[aria-label="Too short"]',
+      ],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("landmark checks respect modal isolation without hiding page defects", async () => {
   const browser = await chromium.launch({
     headless: true,

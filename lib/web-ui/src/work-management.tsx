@@ -177,6 +177,7 @@ export function WorkManagement({
   items,
   comments,
   selectedId,
+  selectedItem,
   clients = [],
   assignees = [],
   isLoading = false,
@@ -205,6 +206,7 @@ export function WorkManagement({
   items: CollaborativeWorkItem[];
   comments: CollaborativeWorkComment[];
   selectedId: string | null;
+  selectedItem?: CollaborativeWorkItem | null;
   clients?: CollaborativeClientOption[];
   assignees?: CollaborativeAssigneeOption[];
   isLoading?: boolean;
@@ -296,7 +298,9 @@ export function WorkManagement({
       ),
     [filter, items],
   );
-  const selected = items.find((item) => item.id === selectedId) ?? null;
+  const selected =
+    items.find((item) => item.id === selectedId) ??
+    (selectedItem?.id === selectedId ? selectedItem : null);
   const assigneesFor = (scope: string | null) =>
     assignees.filter(
       (assignee) => !assignee.clientPartyId || assignee.clientPartyId === scope,
@@ -307,9 +311,16 @@ export function WorkManagement({
   );
 
   useEffect(() => {
-    if (selectedId && filtered.some((item) => item.id === selectedId)) return;
+    if (
+      selected &&
+      (filter === "all" ||
+        (filter === "done"
+          ? selected.status === "done"
+          : selected.status !== "done"))
+    )
+      return;
     onSelect(filtered[0]?.id ?? null);
-  }, [filtered, onSelect, selectedId]);
+  }, [filter, filtered, onSelect, selected]);
 
   useEffect(() => {
     if (!draftStorageKey || loadedDraftKey.current === draftStorageKey) return;

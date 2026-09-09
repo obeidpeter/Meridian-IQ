@@ -80,6 +80,45 @@ passed. Those runner failures remain unresolved; no Node 22/Linux comparison or
 complete full-API rerun was performed. A clean canonical Linux CI run remains a
 release prerequisite. The synthetic PostgreSQL instance was stopped afterward.
 
+## Pre-Merge Release Review
+
+- Patched the existing js-yaml overrides to 3.15.2 and 4.3.2 for
+  GHSA-2883-xcg3-v3hh, preserving major-version boundaries. The production
+  dependency audit passes with its existing exceptions unchanged. pnpm 10
+  frozen-lockfile validation and repeated code generation pass without drift.
+- The canonical Linux CI full API step passed for dependency-fix revision
+  `c9a08ed29b1fa04b28051cb8d179b4682ba8762e` in run `34331727088`.
+  This supplies the previously missing Linux comparison; the final PR and
+  merged-commit CI runs remain required for the subsequent review fixes.
+- First-invoice onboarding now requires a client-business party and a live
+  engagement in the current firm. Archived clients cannot supply setup proof.
+  All 19 focused pure and PostgreSQL checks pass, including re-engagement and
+  an unrelated firm's active relationship. Only synthetic data was used.
+- Real seven-app artifact preparation exposed Windows long-path failures in
+  Python extraction and Git's source inventory. Local filesystem long-path
+  support and an isolated-clone-only Git setting resolve both without relaxing
+  archive, source, checksum, or reparse-point checks. All 21 preparation tests
+  pass, including long Expo paths and failure cleanup.
+- The complete preparation CLI then passed against the exact retained PR218
+  release with fresh authenticated GitHub provenance, all seven artifact-only
+  gates, and a repeated producer check. No service was started, no bundles were
+  rebuilt, and no database or production setting was accessed by preparation.
+- Newly created tasks retain their authorized creation response independently
+  of the loaded page, so their discussion remains available beyond the first
+  50 results and after a failed refresh. Account, firm, client and permission
+  changes reset the selection; access loss and confirmed removal clear it.
+- The Console stale-build warning dismiss control now has a 32-pixel target.
+  Accessibility diagnostics identify undersized controls without weakening
+  the existing 24-pixel minimum assertion.
+- After these corrections, the complete local quality command passes with
+  1,782 unit/pure tests. All 225 operations regressions pass. API and all five
+  web builds pass, including the final Console accessibility rebuild.
+- A combined built-page browser run passes 180 tests across landing/login,
+  all three signed-in shells, onboarding, business details, Clerk/WHT, filing,
+  customer recovery, notifications, loading states and workspace failures.
+  Its eight new creation scenarios retain the correct discussion with 125
+  higher-ranked tasks, including creation from Completed and a failed refresh.
+
 ## Important Boundaries
 
 - Pagination reflects live records, not a multi-request database snapshot.

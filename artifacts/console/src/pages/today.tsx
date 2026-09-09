@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,7 @@ import {
   useListFirmTeam,
   useListWorkItemComments,
   useUpdateWorkItem,
+  type Me,
   type WorkItem,
 } from "@workspace/api-client-react";
 import {
@@ -111,11 +112,32 @@ function asCollaborative(item: WorkItem): CollaborativeWorkItem {
 }
 
 export function WorkPage() {
+  const { data: me } = useGetMe();
+  const scope = JSON.stringify([
+    me?.userId,
+    me?.firmId,
+    me?.clientPartyId,
+    me?.role,
+    me?.capabilities,
+  ]);
+  return <ScopedWorkPage key={scope} me={me} />;
+}
+
+function ScopedWorkPage({ me }: { me: Me | undefined }) {
   usePageTitle("Team work");
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const { data: me } = useGetMe();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createdSelection, setCreatedSelection] = useState<{
+    item: WorkItem;
+    listUpdatedAt: number;
+  } | null>(null);
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setCreatedSelection((current) =>
+      current?.item.id === id ? current : null,
+    );
+  }, []);
   const [view, setView] = useState<"active" | "done" | "all">("active");
   const list = useInfiniteQuery({
     queryKey: [
@@ -138,7 +160,10 @@ export function WorkPage() {
   );
   const comments = useListWorkItemComments(selectedId ?? "", {
     query: {
-      queryKey: getListWorkItemCommentsQueryKey(selectedId ?? ""),
+      queryKey: [
+        ...getListWorkItemCommentsQueryKey(selectedId ?? ""),
+        { userId: me?.userId, firmId: me?.firmId, clientId: me?.clientPartyId },
+      ],
       enabled: Boolean(selectedId),
     },
   });
@@ -147,6 +172,46 @@ export function WorkPage() {
   const create = useCreateWorkItem();
   const update = useUpdateWorkItem();
   const addComment = useCreateWorkItemComment();
+
+  const clearUnavailableSelection = useCallback(
+    (error: unknown) => {
+      if (
+        error &&
+        typeof error === "object" &&
+        "status" in error &&
+        [401, 403, 404].includes(Number(error.status))
+      )
+        select(null);
+    },
+    [select],
+  );
+
+  useEffect(() => {
+    if (!createdSelection) return;
+    // Once the list includes the task, future removals must use list evidence.
+    if (items.some((item) => item.id === createdSelection.item.id)) {
+      setCreatedSelection(null);
+    } else if (
+      !list.isFetching &&
+      !list.error &&
+      !list.hasNextPage &&
+      list.dataUpdatedAt > createdSelection.listUpdatedAt
+    ) {
+      select(null);
+    }
+    clearUnavailableSelection(comments.error);
+    clearUnavailableSelection(list.error);
+  }, [
+    createdSelection,
+    items,
+    list.isFetching,
+    list.error,
+    list.hasNextPage,
+    list.dataUpdatedAt,
+    comments.error,
+    select,
+    clearUnavailableSelection,
+  ]);
 
   const refreshWork = useCallback(async () => {
     await queryClient.invalidateQueries({
@@ -174,6 +239,7 @@ export function WorkPage() {
       items={items.map(asCollaborative)}
       comments={comments.data ?? []}
       selectedId={selectedId}
+      selectedItem={createdSelection?.item}
       clients={(portfolio?.clients ?? []).map((client) => ({
         id: client.clientPartyId,
         name: client.legalName,
@@ -194,7 +260,7 @@ export function WorkPage() {
       }
       pageView={view}
       onPageViewChange={(next) => {
-        setSelectedId(null);
+        select(null);
         setView(next);
       }}
       total={list.data?.pages[0]?.total}
@@ -209,13 +275,15 @@ export function WorkPage() {
       draftStorageKey={
         me?.userId ? `meridianiq:work-draft:${me.userId}` : undefined
       }
-      onSelect={setSelectedId}
+      onSelect={select}
       onRetry={() => void list.refetch()}
       onCreate={async (input: CreateCollaborativeWorkInput) => {
         const created = await create.mutateAsync({
           data: input,
         });
+        setCreatedSelection({ item: created, listUpdatedAt: Date.now() });
         setSelectedId(created.id);
+        setView(created.status === "done" ? "done" : "active");
         await refreshWork();
         trackUsabilityEvent("work_item_created", "collaboration");
       }}
@@ -223,27 +291,52 @@ export function WorkPage() {
         item: CollaborativeWorkItem,
         status: CollaborativeWorkStatus,
       ) => {
-        await update.mutateAsync({
-          id: item.id,
-          data: { version: item.version, status },
-        });
+        const updated = await update
+          .mutateAsync({
+            id: item.id,
+            data: { version: item.version, status },
+          })
+          .catch((error) => {
+            clearUnavailableSelection(error);
+            throw error;
+          });
+        setCreatedSelection((current) =>
+          current?.item.id === updated.id
+            ? { ...current, item: updated }
+            : current,
+        );
         await refreshWork();
         if (status === "done") {
           trackUsabilityEvent("work_item_completed", "collaboration");
         }
       }}
       onUpdateAssignee={async (item, assignedTo) => {
-        await update.mutateAsync({
-          id: item.id,
-          data: { version: item.version, assignedTo },
-        });
+        const updated = await update
+          .mutateAsync({
+            id: item.id,
+            data: { version: item.version, assignedTo },
+          })
+          .catch((error) => {
+            clearUnavailableSelection(error);
+            throw error;
+          });
+        setCreatedSelection((current) =>
+          current?.item.id === updated.id
+            ? { ...current, item: updated }
+            : current,
+        );
         await refreshWork();
       }}
       onComment={async (item, body, clientRequestId) => {
-        await addComment.mutateAsync({
-          id: item.id,
-          data: { clientRequestId, body },
-        });
+        await addComment
+          .mutateAsync({
+            id: item.id,
+            data: { clientRequestId, body },
+          })
+          .catch((error) => {
+            clearUnavailableSelection(error);
+            throw error;
+          });
         await refreshComments(item.id);
         trackUsabilityEvent("collaboration_comment_added", "collaboration");
       }}

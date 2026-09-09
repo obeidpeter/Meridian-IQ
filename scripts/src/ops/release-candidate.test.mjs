@@ -146,7 +146,7 @@ function execute(binary, args, cwd, input) {
   return result.stdout.trim();
 }
 
-function fixture(t) {
+function fixture(t, longSourceFile) {
   const directory = temporary(t);
   const source = path.join(directory, "development");
   mkdirSync(source);
@@ -159,6 +159,7 @@ function fixture(t) {
     execute("git", ["-c", "core.autocrlf=false", ...args], source);
   write(".gitignore", "dist/\n");
   write("source.txt", "reviewed source\n");
+  if (longSourceFile) write(longSourceFile, "tracked long-path source\n");
   write("lib/db/src/schema/fixture.ts", "// schema fixture\n");
   write("artifacts/mobile/app/[id].tsx", "// bracket path fixture\n");
   const mobile = {
@@ -677,6 +678,80 @@ test("end-to-end preparation reuses all seven real pilot/RUN gates without bundl
     verifyEvidence(result.evidence, result.candidateSha256),
     /checksum/,
   );
+});
+
+test("long Expo transport paths prepare through all seven gates and cleanup", async (t) => {
+  const f = fixture(t);
+  const name =
+    "artifacts/mobile/dist/static-build/1788904986134-3589/_expo/node_modules/.pnpm/" +
+    "@expo+vector-icons@15.1.1_expo-font@14.0.12_expo@54.0.35_react-native@0.81.5_" +
+    "@babel+cor_8679ad296ddbfbe0b15babd247e2ae5e/node_modules/@expo/vector-icons/" +
+    "build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf";
+  const bytes = Buffer.from("synthetic font bytes");
+  assert.ok(name.length > 260);
+  f.write(name, bytes);
+  f.manifest.assets = assetInventory(f.source);
+  f.records.push({ name, data: bytes.toString("base64") });
+  const archive = f.zip();
+  f.evidence.artifacts[0].size_in_bytes = lstatSync(archive).size;
+  f.evidence.artifacts[0].digest = `sha256:${digest(readFileSync(archive))}`;
+  f.client.download = async (repository, artifact, destination) =>
+    copyFileSync(archive, destination);
+
+  const result = await prepareCandidate(f.options, { client: f.client });
+  assert.equal(result.status, "PREPARED");
+  assert.deepEqual(readFileSync(path.join(result.staging, name)), bytes);
+  const candidate = await verifyEvidence(result.evidence, result.candidateSha256);
+  assert.equal(candidate.gates.applications.length, 7);
+  assert.equal(candidate.gates.databaseAccess, false);
+  assert.equal(existsSync(path.join(f.options.output, "unpacked")), false);
+  assert.equal(existsSync(path.join(f.options.output, "git-template")), false);
+  assert.equal(existsSync(path.join(result.evidence, "failure.json")), false);
+});
+
+test("long tracked source paths remain complete through checkout and all seven gates", async (t) => {
+  const name = `attached_assets/${"tracked-source-".repeat(9)}.txt`;
+  const f = fixture(t, name);
+  f.options.output = path.join(f.directory, `candidate-${"nested-".repeat(12)}`);
+  assert.ok(path.join(f.options.output, "source", name).length > 260);
+  const result = await prepareCandidate(f.options, { client: f.client });
+  assert.equal(result.status, "PREPARED");
+  assert.equal(
+    readFileSync(path.join(result.staging, name), "utf8"),
+    "tracked long-path source\n",
+  );
+  assert.deepEqual(sourceIdentity(result.staging), f.manifest.source);
+  const candidate = await verifyEvidence(result.evidence, result.candidateSha256);
+  assert.equal(candidate.gates.applications.length, 7);
+  assert.equal(candidate.gates.databaseAccess, false);
+});
+
+test("long archive and extraction roots retain exclusive writes and reparse refusal", (t) => {
+  const f = fixture(t);
+  const directory = path.join(f.directory, ...Array(4).fill("nested-".repeat(10)));
+  assert.ok(directory.length > 260);
+  mkdirSync(directory, { recursive: true });
+  const archive = path.join(directory, "original.zip");
+  copyFileSync(f.archive, archive);
+  const destination = path.join(directory, "unpacked");
+  assert.deepEqual(
+    inspectArchive(archive, PYTHON, destination),
+    inspectArchive(f.archive, PYTHON),
+  );
+  const manifest = path.join(destination, "release/build-manifest.json");
+  const before = readFileSync(manifest);
+  assert.throws(() => inspectArchive(archive, PYTHON, destination));
+  assert.deepEqual(readFileSync(manifest), before);
+
+  const outside = path.join(f.directory, "outside");
+  mkdirSync(outside);
+  const link = path.join(directory, "alias");
+  symlinkSync(outside, link, process.platform === "win32" ? "junction" : "dir");
+  assert.throws(
+    () => inspectArchive(archive, PYTHON, path.join(link, "unpacked")),
+    /symlink\/reparse point refused/,
+  );
+  assert.equal(existsSync(path.join(outside, "unpacked")), false);
 });
 
 test("existing source identity gate failure removes partial stage while retaining original evidence", async (t) => {

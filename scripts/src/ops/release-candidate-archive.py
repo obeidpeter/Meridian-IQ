@@ -35,8 +35,18 @@ def safe_name(name):
     return name
 
 
+def filesystem_path(target):
+    absolute = os.path.abspath(target)
+    # Valid Expo/pnpm members exceed MAX_PATH even under a short staging root.
+    # Keep archive names unchanged; only local filesystem calls use this prefix.
+    if os.name == "nt" and not absolute.startswith("\\\\?\\"):
+        absolute = ("\\\\?\\UNC\\" + absolute[2:] if absolute.startswith("\\\\")
+                    else "\\\\?\\" + absolute)
+    return Path(absolute)
+
+
 def real_path(target):
-    target = Path(os.path.abspath(target))
+    target = filesystem_path(target)
     for item in [*reversed(target.parents), target]:
         info = item.lstat()
         require(not stat.S_ISLNK(info.st_mode)
@@ -143,7 +153,7 @@ def main():
     with zipfile.ZipFile(archive_path) as archive:
         report, files = inspect(archive)
         if len(sys.argv) == 3:
-            target = Path(os.path.abspath(sys.argv[2]))
+            target = filesystem_path(sys.argv[2])
             real_path(target.parent)
             target.mkdir(mode=0o700)  # Exclusive: no merge or overwrite, even on failure.
             for name, info in files.items():
