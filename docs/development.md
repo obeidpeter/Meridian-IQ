@@ -70,6 +70,18 @@ pnpm run check
 pnpm run build
 ```
 
+`pnpm run check` includes the complexity ratchet (R122): every function whose
+cyclomatic complexity exceeds the threshold in `complexity-baseline.json`
+(20) must appear in that baseline at or under its recorded value, keyed by
+file and by ESLint's label for the function rather than by line. A new
+hotspot or a function that has grown fails `pnpm run complexity:check`; a
+function that has come down is reported as an entry that can tighten, and
+`pnpm run complexity:write` records the measured values as the new baseline,
+so the ratchet moves down by hand and never up by accident. Accepting a
+deliberate new hotspot is the same `write`, reviewed in the diff of the
+baseline. `pnpm run complexity:report` is the unchanged advisory listing of
+everything over 10.
+
 Database-backed server and migration validation:
 
 ```bash

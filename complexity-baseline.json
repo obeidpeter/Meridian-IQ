@@ -1,0 +1,312 @@
+{
+  "threshold": 20,
+  "files": {
+    "artifacts/api-server/src/lib/op-token.ts": {
+      "Function 'authenticateOpRequest'": [21]
+    },
+    "artifacts/api-server/src/modules/clerk/actions.ts": {
+      "Async function 'executeAction'": [22]
+    },
+    "artifacts/api-server/src/modules/clerk/ask-memory.ts": {
+      "Async function 'computeAskMemoryInner'": [25]
+    },
+    "artifacts/api-server/src/modules/clerk/ask.ts": {
+      "Async function 'askClerk'": [70]
+    },
+    "artifacts/api-server/src/modules/clerk/assurance.ts": {
+      "Async function 'getClerkAssuranceWorkspace'": [40]
+    },
+    "artifacts/api-server/src/modules/clerk/batch-async.ts": {
+      "Async function 'processBatch'": [35]
+    },
+    "artifacts/api-server/src/modules/clerk/cases/decisions.ts": {
+      "Async function 'decideCase'": [21],
+      "Async function 'decideNoticeCase'": [34]
+    },
+    "artifacts/api-server/src/modules/clerk/cases/lifecycle.ts": {
+      "Async function 'createExtractionCase'": [29]
+    },
+    "artifacts/api-server/src/modules/clerk/correction-shapes.ts": {
+      "Function 'classifyCorrectionShape'": [24]
+    },
+    "artifacts/api-server/src/modules/clerk/data-intents/status.ts": {
+      "Async method 'run'": [30]
+    },
+    "artifacts/api-server/src/modules/clerk/eval-curation.ts": {
+      "Async arrow function": [36]
+    },
+    "artifacts/api-server/src/modules/clerk/metrics.ts": {
+      "Async function 'getClerkMetrics'": [46]
+    },
+    "artifacts/api-server/src/modules/clerk/plan-policies.ts": {
+      "Async function 'runOnePlanPolicy'": [24]
+    },
+    "artifacts/api-server/src/modules/clerk/plan-runs.ts": {
+      "Async function 'processPlanRun'": [28]
+    },
+    "artifacts/api-server/src/modules/clerk/register-preflight.ts": {
+      "Async function 'supplierHistoryIssues'": [22]
+    },
+    "artifacts/api-server/src/modules/clerk/status-light.ts": {
+      "Function 'computeStatusLight'": [24]
+    },
+    "artifacts/api-server/src/modules/clerk/vat-settlement.ts": {
+      "Async function 'computeVatSettlementCheck'": [27]
+    },
+    "artifacts/api-server/src/modules/credit/governance.ts": {
+      "Async function 'getCreditGovernance'": [32]
+    },
+    "artifacts/api-server/src/modules/credit/service.ts": {
+      "Async function 'loadEligibilitySource'": [33],
+      "Async function 'recordBankAccess'": [27],
+      "Async function 'runStructuralBacktest'": [23],
+      "Function 'isFacts'": [28]
+    },
+    "artifacts/api-server/src/modules/desk/activation.ts": {
+      "Async function 'getActivationMetrics'": [35]
+    },
+    "artifacts/api-server/src/modules/desk/daily-brief.ts": {
+      "Async function 'computeOperatorBrief'": [24]
+    },
+    "artifacts/api-server/src/modules/desk/draft-reply.ts": {
+      "Async function 'draftEscalationReply'": [37]
+    },
+    "artifacts/api-server/src/modules/desk/release-readiness-checks.ts": {
+      "Function 'evidenceCheck'": [28],
+      "Function 'heartbeatCheck'": [22],
+      "Function 'recoveryProvenance'": [21]
+    },
+    "artifacts/api-server/src/modules/desk/release-readiness.ts": {
+      "Async function 'getReleaseReadiness'": [23]
+    },
+    "artifacts/api-server/src/modules/integrations/webhooks.ts": {
+      "Function 'isPublicIpv4'": [28]
+    },
+    "artifacts/api-server/src/modules/invoice/confirmations.ts": {
+      "Async function 'recordConfirmation'": [25]
+    },
+    "artifacts/api-server/src/modules/pipeline/pipeline.ts": {
+      "Async function 'finalizeInvoiceSubmit'": [23]
+    },
+    "artifacts/api-server/src/modules/pipeline/soak.ts": {
+      "Async arrow function": [46]
+    },
+    "artifacts/api-server/src/modules/rails/fake-rail.ts": {
+      "Async function 'handleControl'": [24],
+      "Async function 'handleSubmit'": [33]
+    },
+    "artifacts/api-server/src/modules/rails/transports/http.ts": {
+      "Async method 'submit'": [21]
+    },
+    "artifacts/api-server/src/modules/statements/feed-contract.ts": {
+      "Arrow function": [21]
+    },
+    "artifacts/api-server/src/modules/statements/parsers.ts": {
+      "Function 'toLine'": [28]
+    },
+    "artifacts/api-server/src/modules/workspace/onboarding.ts": {
+      "Async function 'firstInvoiceSetup'": [21]
+    },
+    "artifacts/api-server/src/routes/sme/dashboard.ts": {
+      "Async function 'loadBookSummary'": [22],
+      "Function 'computeDeadlines'": [32]
+    },
+    "artifacts/api-server/src/routes/work.ts": {
+      "Async arrow function": [29, 28]
+    },
+    "artifacts/api-server/src/routes/workspace.ts": {
+      "Async arrow function": [25]
+    },
+    "artifacts/buyer-portal/src/pages/confirmations.tsx": {
+      "Function 'Confirmations'": [71]
+    },
+    "artifacts/buyer-portal/src/pages/invoice-respond.tsx": {
+      "Function 'InvoiceRespond'": [34]
+    },
+    "artifacts/console/src/components/clerk-actions-card.tsx": {
+      "Function 'ClerkActionsCard'": [31]
+    },
+    "artifacts/console/src/components/layout.tsx": {
+      "Function 'Layout'": [27]
+    },
+    "artifacts/console/src/components/onboarding-card.tsx": {
+      "Function 'OnboardingCard'": [33]
+    },
+    "artifacts/console/src/pages/access-review.tsx": {
+      "Function 'AccessReview'": [21]
+    },
+    "artifacts/console/src/pages/business-details.tsx": {
+      "Function 'BusinessDetails'": [25]
+    },
+    "artifacts/console/src/pages/catalogue.tsx": {
+      "Function 'Catalogue'": [29]
+    },
+    "artifacts/console/src/pages/clerk-claims.tsx": {
+      "Function 'ClerkClaims'": [30]
+    },
+    "artifacts/console/src/pages/clerk/case-detail.tsx": {
+      "Function 'CaseDetail'": [47]
+    },
+    "artifacts/console/src/pages/clerk/intake-column.tsx": {
+      "Function 'IntakeColumn'": [50]
+    },
+    "artifacts/console/src/pages/clerk/use-clerk-workspace.tsx": {
+      "Function 'useClerkWorkspace'": [46]
+    },
+    "artifacts/console/src/pages/client-detail.tsx": {
+      "Function 'ClientDetail'": [55]
+    },
+    "artifacts/console/src/pages/client-import.tsx": {
+      "Async arrow function": [24],
+      "Function 'ClientImport'": [29]
+    },
+    "artifacts/console/src/pages/control-centre/credit.tsx": {
+      "Function 'CreditGovernanceWorkspace'": [25]
+    },
+    "artifacts/console/src/pages/integrations.tsx": {
+      "Function 'Integrations'": [30]
+    },
+    "artifacts/console/src/pages/invitations.tsx": {
+      "Function 'Invitations'": [43]
+    },
+    "artifacts/console/src/pages/operator-queue.tsx": {
+      "Function 'CaseCard'": [27],
+      "Function 'OperatorQueue'": [45]
+    },
+    "artifacts/console/src/pages/parties.tsx": {
+      "Function 'Parties'": [23]
+    },
+    "artifacts/console/src/pages/portfolio/index.tsx": {
+      "Function 'Portfolio'": [52]
+    },
+    "artifacts/console/src/pages/today.tsx": {
+      "Function 'ScopedWorkPage'": [30]
+    },
+    "artifacts/console/src/pages/whitelabel.tsx": {
+      "Function 'WhiteLabel'": [38]
+    },
+    "artifacts/landing/src/AcceptInvite.tsx": {
+      "Function 'AcceptInvite'": [23]
+    },
+    "artifacts/landing/src/App.tsx": {
+      "Function 'SignInPanel'": [24],
+      "Function 'TotpSecurityCard'": [33]
+    },
+    "artifacts/landing/src/InvoiceRoom.tsx": {
+      "Function 'PaymentPanel'": [21]
+    },
+    "artifacts/mobile/app/(tabs)/index.tsx": {
+      "Function 'HomeScreen'": [32]
+    },
+    "artifacts/mobile/app/(tabs)/invoice.tsx": {
+      "Async arrow function": [29],
+      "Function 'InvoiceForm'": [43]
+    },
+    "artifacts/mobile/app/automation.tsx": {
+      "Function 'AutomationScreen'": [35]
+    },
+    "artifacts/mobile/app/invoices/[id].tsx": {
+      "Function 'InvoiceDetailScreen'": [55]
+    },
+    "artifacts/mobile/app/invoices/edit/[id].tsx": {
+      "Async arrow function": [38],
+      "Function 'FixInvoiceScreen'": [59]
+    },
+    "artifacts/mobile/app/invoices/index.tsx": {
+      "Function 'InvoiceListScreen'": [30]
+    },
+    "artifacts/mobile/app/reconciliation.tsx": {
+      "Function 'ReconciliationScreen'": [41]
+    },
+    "artifacts/mobile/components/buyer-picker.tsx": {
+      "Function 'BuyerPicker'": [28]
+    },
+    "artifacts/mobile/hooks/useBuyerPicker.ts": {
+      "Function 'useBuyerPicker'": [34]
+    },
+    "artifacts/mobile/lib/invoice-form.ts": {
+      "Function 'normalizeLines'": [23]
+    },
+    "artifacts/mobile/lib/invoice-intent.ts": {
+      "Async arrow function": [22]
+    },
+    "artifacts/mobile/lib/notifications.ts": {
+      "Async function 'acquireExpoPushToken'": [21]
+    },
+    "artifacts/penalty-calculator/src/App.tsx": {
+      "Function 'App'": [31]
+    },
+    "artifacts/sme-compliance/src/components/clerk-actions-card.tsx": {
+      "Function 'ClerkActionsCard'": [32]
+    },
+    "artifacts/sme-compliance/src/components/customer-directory-picker.tsx": {
+      "Function 'CustomerDirectoryPicker'": [26]
+    },
+    "artifacts/sme-compliance/src/components/invoice-draft-controls.tsx": {
+      "Function 'InvoiceDraftControls'": [28]
+    },
+    "artifacts/sme-compliance/src/components/invoice-room-card.tsx": {
+      "Function 'InvoiceRoomComposer'": [35]
+    },
+    "artifacts/sme-compliance/src/components/layout.tsx": {
+      "Function 'Layout'": [25]
+    },
+    "artifacts/sme-compliance/src/lib/invoice-draft-session.ts": {
+      "Async method 'load'": [21]
+    },
+    "artifacts/sme-compliance/src/lib/invoice-draft.ts": {
+      "Function 'listDraftRecoveries'": [25]
+    },
+    "artifacts/sme-compliance/src/pages/analytics.tsx": {
+      "Function 'Analytics'": [23]
+    },
+    "artifacts/sme-compliance/src/pages/business-details.tsx": {
+      "Function 'BusinessDetails'": [22]
+    },
+    "artifacts/sme-compliance/src/pages/clerk-ask.tsx": {
+      "Function 'AnswerCard'": [22]
+    },
+    "artifacts/sme-compliance/src/pages/clerk-capture.tsx": {
+      "Function 'CaptureContent'": [45]
+    },
+    "artifacts/sme-compliance/src/pages/dashboard/index.tsx": {
+      "Function 'Dashboard'": [117]
+    },
+    "artifacts/sme-compliance/src/pages/import.tsx": {
+      "Async arrow function": [54],
+      "Function 'Import'": [49]
+    },
+    "artifacts/sme-compliance/src/pages/invoice-detail/index.tsx": {
+      "Function 'InvoiceDetail'": [107]
+    },
+    "artifacts/sme-compliance/src/pages/invoice-new.tsx": {
+      "Async arrow function": [42],
+      "Function 'InvoiceNew'": [63]
+    },
+    "artifacts/sme-compliance/src/pages/invoices.tsx": {
+      "Function 'Invoices'": [31]
+    },
+    "artifacts/sme-compliance/src/pages/reconciliation.tsx": {
+      "Function 'Reconciliation'": [55]
+    },
+    "artifacts/sme-compliance/src/pages/today.tsx": {
+      "Function 'ScopedWorkPage'": [31]
+    },
+    "artifacts/sme-compliance/src/pages/vat.tsx": {
+      "Function 'Vat'": [25]
+    },
+    "lib/integrations-openai-ai-server/src/audio/client.ts": {
+      "Function 'detectAudioFormat'": [25]
+    },
+    "lib/web-ui/src/first-invoice-onboarding.tsx": {
+      "Function 'FirstInvoiceOnboarding'": [31]
+    },
+    "lib/web-ui/src/operation-journal.ts": {
+      "Function 'isOperation'": [23],
+      "Function 'parseServerOperation'": [22]
+    },
+    "lib/web-ui/src/work-management.tsx": {
+      "Function 'WorkManagement'": [81]
+    }
+  }
+}

@@ -85,6 +85,12 @@ jobs:
       - name: Brand copy gate
         run: pnpm run brand:check
 
+      # The complexity ratchet (R122): every function over the threshold in
+      # complexity-baseline.json must be in the baseline at or under its
+      # recorded value. New hotspots and growth fail; shrinkage is advice.
+      - name: Complexity ratchet
+        run: pnpm run complexity:check
+
       # Supply-chain gate: fail the build on a HIGH/CRITICAL advisory in a
       # production dependency so a new CVE cannot land silently. Scoped to
       # --prod (build/dev tooling is not shipped) and --audit-level=high so
