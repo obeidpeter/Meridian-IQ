@@ -72,9 +72,7 @@ export function MetricStrip({
     <section
       className={joinClasses("mi-metric-strip", className)}
       aria-label={label}
-      style={
-        { "--mi-metric-count": Children.count(children) } as CSSProperties
-      }
+      style={{ "--mi-metric-count": Children.count(children) } as CSSProperties}
     >
       {children}
     </section>
@@ -402,7 +400,9 @@ export function CommandMenu({
   }, [minimumSearchLength, open, query, remoteSearch]);
 
   useEffect(() => {
-    setActiveIndex((index) => Math.max(0, Math.min(index, filtered.length - 1)));
+    setActiveIndex((index) =>
+      Math.max(0, Math.min(index, filtered.length - 1)),
+    );
   }, [filtered.length]);
 
   const choose = (item: CommandItem) => {
@@ -510,7 +510,7 @@ export function CommandMenu({
               aria-busy={remoteState === "loading"}
             >
               {remoteState === "loading" && filtered.length === 0 ? (
-                <p className="mi-command__empty" role="status">
+                <p className="mi-command__empty">
                   Searching workspace records…
                 </p>
               ) : filtered.length === 0 ? (
@@ -544,12 +544,17 @@ export function CommandMenu({
                 ))
               )}
             </div>
+            {/* The one live region for search state, present while the
+                menu is open (R115): the searching notice above is plain
+                text inside the listbox, this announces it. */}
             <p className="mi-sr-only" role="status" aria-live="polite">
               {remoteState === "ready"
                 ? `${remoteItems.length} workspace record${remoteItems.length === 1 ? "" : "s"} found.`
                 : remoteState === "error"
                   ? "Workspace search is temporarily unavailable. Page and action results are still shown."
-                  : ""}
+                  : remoteState === "loading"
+                    ? "Searching workspace records…"
+                    : ""}
             </p>
             <footer className="mi-command__footer">
               <span>

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useId } from "react";
 import { firstInvoiceJourney } from "./first-invoice-journey";
+import { LiveStatus } from "./live-status";
 import type { TodaySetupStepView } from "./today-types";
 
 export function FirstInvoiceOnboarding({
@@ -24,10 +25,24 @@ export function FirstInvoiceOnboarding({
 }) {
   const titleId = useId();
   const nextDescriptionId = useId();
+  const stepNoteId = useId();
   const journey = firstInvoiceJourney(setup);
   const { next, completed, total, percent, blocked } = journey;
   const unavailable = Boolean(error) || loading;
   const progress = `${completed} of ${total} complete`;
+  // One live region for the whole panel, present from the first render
+  // (R115): the loading notice, the retry in flight and the progress summary
+  // are changes to it, never a freshly mounted element. The error itself is
+  // an alert below, which browsers announce on insertion.
+  const announcement = loading
+    ? error
+      ? "Checking setup records."
+      : "Loading setup records..."
+    : error || total === 0
+      ? ""
+      : `${progress}.${next ? ` Next: ${next.label}.` : ""}${
+          blocked ? ` ${blocked} steps need attention.` : ""
+        }`;
 
   return (
     <section
@@ -55,25 +70,39 @@ export function FirstInvoiceOnboarding({
         {!unavailable && percent !== null ? <strong>{percent}%</strong> : null}
       </div>
 
-      {loading ? (
-        <p className="mi-today__setup-empty" role="status">
-          Loading setup records...
-        </p>
-      ) : error ? (
+      <LiveStatus
+        className={loading && !error ? "mi-today__setup-empty" : "mi-sr-only"}
+      >
+        {announcement}
+      </LiveStatus>
+
+      {error ? (
+        // The error branch comes before the loading branch on purpose: a
+        // retry keeps this block, and the control that started it, mounted
+        // and focused while the refetch runs (R115). Only a first load with
+        // no error shows the plain loading notice above.
         <div className="mi-today__setup-empty">
           <p role="alert">Setup progress is unavailable. {error}</p>
           {onRetry ? (
             <button
               type="button"
               className="mi-today__text-action"
-              onClick={onRetry}
+              aria-busy={loading || undefined}
+              aria-disabled={loading || undefined}
+              onClick={() => {
+                if (loading) return;
+                onRetry();
+              }}
             >
-              <RefreshCw aria-hidden="true" />
+              <RefreshCw
+                className={loading ? "is-spinning" : undefined}
+                aria-hidden="true"
+              />
               Retry setup
             </button>
           ) : null}
         </div>
-      ) : total === 0 ? (
+      ) : loading ? null : total === 0 ? (
         <p className="mi-today__setup-empty">
           No setup steps apply to this role.
         </p>
@@ -128,15 +157,20 @@ export function FirstInvoiceOnboarding({
             ) : null}
           </div>
 
-          <p className="mi-sr-only" role="status">
-            {progress}. {next ? `Next: ${next.label}.` : ""}
-            {blocked ? ` ${blocked} steps need attention.` : ""}
-          </p>
-
           <ol className="mi-today__setup-list" aria-label="Setup steps">
             {journey.steps.map((step) => {
               const waiting = step.waitingFor.length > 0;
               const blocked = Boolean(step.blockedReason);
+              // The reason a step is blocked or waiting sits beside the
+              // control, not inside it (R115): text inside a disabled button
+              // is unreachable by keyboard and skipped by some readers, while
+              // a sibling note is plain content and describes the control.
+              const blockedNoteId = `${stepNoteId}-${step.id}-blocked`;
+              const waitingNoteId = `${stepNoteId}-${step.id}-waiting`;
+              const describedBy =
+                [blocked && blockedNoteId, waiting && waitingNoteId]
+                  .filter(Boolean)
+                  .join(" ") || undefined;
               return (
                 <li
                   key={step.id}
@@ -153,30 +187,39 @@ export function FirstInvoiceOnboarding({
                       <Circle />
                     )}
                   </span>
-                  <button
-                    type="button"
-                    disabled={blocked || !step.href.trim()}
-                    onClick={() => onOpen(step.href)}
-                  >
-                    {step.stage ? <small>{step.stage}</small> : null}
-                    <strong>{step.label}</strong>
-                    <span className="mi-today__step-status">
-                      {step.complete
-                        ? "Completed"
-                        : blocked
-                          ? "Blocked"
-                          : waiting
-                            ? "Waiting"
-                            : "Not completed"}
-                    </span>
-                    <small>{step.description}</small>
+                  <div className="mi-today__setup-step">
+                    <button
+                      type="button"
+                      disabled={blocked || !step.href.trim()}
+                      aria-describedby={describedBy}
+                      onClick={() => onOpen(step.href)}
+                    >
+                      {step.stage ? <small>{step.stage}</small> : null}
+                      <strong>{step.label}</strong>
+                      <span className="mi-today__step-status">
+                        {step.complete
+                          ? "Completed"
+                          : blocked
+                            ? "Blocked"
+                            : waiting
+                              ? "Waiting"
+                              : "Not completed"}
+                      </span>
+                      <small>{step.description}</small>
+                    </button>
                     {step.blockedReason ? (
-                      <small className="mi-today__step-blocker">
+                      <small
+                        id={blockedNoteId}
+                        className="mi-today__step-blocker"
+                      >
                         {step.blockedReason}
                       </small>
                     ) : null}
                     {waiting ? (
-                      <small className="mi-today__step-blocker">
+                      <small
+                        id={waitingNoteId}
+                        className="mi-today__step-blocker"
+                      >
                         Waiting for:{" "}
                         {step.waitingFor
                           .map((prerequisite) => prerequisite.label)
@@ -184,7 +227,7 @@ export function FirstInvoiceOnboarding({
                         .
                       </small>
                     ) : null}
-                  </button>
+                  </div>
                 </li>
               );
             })}

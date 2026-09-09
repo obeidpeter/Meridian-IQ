@@ -57,7 +57,11 @@ The 28 scenarios include:
 - Truncated lists with full-population counts, missing last-sync/run values,
   empty responses, deliberately held loading, HTTP 503, and successful retry.
 - Keyboard-only filter activation and retry, pressed state, unchanged summary
-  totals, investigation link destinations, and minimum 44px controls.
+  totals, investigation link destinations, and minimum 44px controls. The
+  44px floor is measured on every visible control inside the workspace
+  region; the repo-wide accessibility gate holds every icon control to the
+  24px WCAG minimum, and the app-shell stale-build banners dismiss at 44px
+  as well (R115).
 - Element-level clipping, overlapping facts/filters/status, workspace/page
   overflow, computed semantic token colors, and the existing whole-page axe,
   reduced-motion, focus, and 320px reflow checks.

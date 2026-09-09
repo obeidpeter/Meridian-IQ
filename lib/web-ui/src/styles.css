@@ -1584,6 +1584,10 @@
   color: #12613f;
 }
 
+.mi-today__setup-step {
+  min-width: 0;
+}
+
 .mi-today__setup-list button {
   min-width: 0;
   min-height: 2.75rem;
@@ -1674,9 +1678,23 @@
   color: var(--mi-warning);
 }
 
-.mi-today__setup-list li[data-blocked="true"] .mi-today__step-status,
-.mi-today__setup-list button .mi-today__step-blocker {
+.mi-today__setup-list li[data-blocked="true"] .mi-today__step-status {
   color: var(--mi-warning);
+}
+
+/* The blocked or waiting note is a sibling of the step button (R115), so it
+   carries the small-text metrics the button's own notes have. */
+.mi-today__setup-list .mi-today__step-blocker {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--mi-warning);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mi-today__setup .is-spinning {
+  animation: mi-spin 0.8s linear infinite;
 }
 
 @media (max-width: 960px) {
@@ -1742,7 +1760,10 @@
 }
 
 .mi-button-primary:disabled,
-.mi-button-quiet:disabled {
+.mi-button-quiet:disabled,
+.mi-button-primary[aria-disabled="true"],
+.mi-button-quiet[aria-disabled="true"],
+.mi-today__text-action[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -1819,7 +1840,7 @@
   background: var(--mi-canvas);
 }
 
-.mi-collaboration__list > p[role="status"] {
+.mi-collaboration__list > .mi-collaboration__count {
   margin: 0;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--mi-line);
@@ -1838,7 +1859,8 @@
   overflow-wrap: anywhere;
 }
 
-.mi-collaboration__list > .mi-button-quiet:disabled {
+.mi-collaboration__list > .mi-button-quiet:disabled,
+.mi-collaboration__list > .mi-button-quiet[aria-disabled="true"] {
   opacity: 1;
   color: var(--mi-muted);
 }
@@ -2304,7 +2326,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mi-collaboration .is-spinning,
-  .mi-work-dialog .is-spinning {
+  .mi-work-dialog .is-spinning,
+  .mi-today__setup .is-spinning {
     animation: none;
   }
 }

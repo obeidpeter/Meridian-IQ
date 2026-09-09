@@ -112,9 +112,11 @@ test("client journey recommends one access action and names completed and waitin
   expect(
     screen.getByRole("button", { name: /Business details Completed/ }),
   ).toBeTruthy();
+  // The waiting note sits beside the control and describes it (R115).
   expect(
     screen.getByRole("button", {
-      name: /Save a draft Waiting.*Waiting for: Add a customer/,
+      name: /Save a draft Waiting/,
+      description: /Waiting for: Add a customer/,
     }),
   ).toBeTruthy();
   expect(screen.getByRole("progressbar").getAttribute("aria-valuetext")).toBe(
@@ -287,9 +289,15 @@ test("record restrictions are named and skipped without blocking recorded eviden
     />,
   );
   const blocked = screen.getByRole("button", {
-    name: /Submit sandbox invoice Blocked.*A different approver is required/,
+    name: /Submit sandbox invoice Blocked/,
+    description: /A different approver is required/,
   });
   expect(blocked.hasAttribute("disabled")).toBe(true);
+  // The reason is plain content beside the disabled control, never text
+  // inside it (R115), so a reader in browse mode reaches it.
+  const reason = screen.getByText("A different approver is required.");
+  expect(reason.closest("button")).toBeNull();
+  expect(blocked.getAttribute("aria-describedby")).toBe(reason.id);
   expect(
     screen.getByRole("button", { name: "Continue: Open recorded history" }),
   ).toBeTruthy();
@@ -355,6 +363,42 @@ test("loading and errors with cached setup do not claim confirmed completion", (
   expect(screen.queryByRole("progressbar")).toBeNull();
   expect(screen.queryByText("100%")).toBeNull();
   expect(screen.getByText("Your priority queue is clear")).toBeTruthy();
+  // The retry in flight keeps the control mounted, busy and focused (R115)
+  // instead of swapping it for a loading notice.
+  rerender(
+    <TodayWorkspace
+      {...defaults}
+      setup={setup}
+      setupError="Please try again."
+      setupLoading
+      onRetrySetup={onRetrySetup}
+    />,
+  );
+  expect(document.activeElement).toBe(retry);
+  expect(retry.getAttribute("aria-busy")).toBe("true");
+  expect(screen.getByText("Checking setup records")).toBeTruthy();
+  expect(screen.getByRole("status").textContent).toBe(
+    "Checking setup records.",
+  );
+  expect(screen.queryByText("100%")).toBeNull();
+  fireEvent.click(retry);
+  expect(onRetrySetup).toHaveBeenCalledOnce();
+});
+
+test("the setup live region exists before it has anything to say (R115)", () => {
+  const setup = [step("first_invoice", "Draft saved", true)];
+  const { rerender } = render(
+    <TodayWorkspace {...defaults} setup={setup} setupLoading />,
+  );
+  const region = screen.getByRole("status");
+  expect(region.textContent).toBe("Loading setup records...");
+  rerender(<TodayWorkspace {...defaults} setup={setup} setupError="Offline" />);
+  expect(screen.getByRole("status")).toBe(region);
+  expect(region.textContent).toBe("");
+  rerender(<TodayWorkspace {...defaults} setup={setup} />);
+  expect(screen.getByRole("status")).toBe(region);
+  expect(region.textContent).toBe("1 of 1 complete.");
+  expect(region.className).toBe("mi-sr-only");
 });
 
 test("each workspace has unique accessible heading references", () => {
