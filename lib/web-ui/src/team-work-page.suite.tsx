@@ -126,17 +126,19 @@ export function runTeamWorkPageSuite<
       created = { ...created, ...data, version: created.version + 1 };
       return created;
     });
-    h.comment.mockImplementation(async ({ data }: { data: { body: string } }) => {
-      h.messages = [
-        {
-          id: "comment",
-          body: data.body,
-          authorName: "Accountant",
-          createdAt: "2026-09-09T08:00:00Z",
-        },
-      ];
-      return h.messages[0];
-    });
+    h.comment.mockImplementation(
+      async ({ data }: { data: { body: string } }) => {
+        h.messages = [
+          {
+            id: "comment",
+            body: data.body,
+            authorName: "Accountant",
+            createdAt: "2026-09-09T08:00:00Z",
+          },
+        ];
+        return h.messages[0];
+      },
+    );
     client = createQueryClient();
   });
   afterEach(() => {
@@ -177,7 +179,9 @@ export function runTeamWorkPageSuite<
     fireEvent.change(within(dialog).getByLabelText("Priority"), {
       target: { value: "low" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create task" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create task" }),
+    );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByRole("heading", { name: created.title })).toBeTruthy();
   }
@@ -188,6 +192,25 @@ export function runTeamWorkPageSuite<
       });
     });
   }
+
+  test("task drafts are saved under the user, firm and client scoped key (R116)", async () => {
+    await start();
+    fireEvent.click(header().getByRole("button", { name: "New task" }));
+    fireEvent.change(
+      within(screen.getByRole("dialog")).getByLabelText("Task title"),
+      { target: { value: "Scoped draft title" } },
+    );
+    const me = h.me!;
+    const key = `meridianiq:work-draft:${me.userId}:${me.firmId ?? "none"}:${me.clientPartyId ?? "firm"}`;
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem(key) ?? "{}").title).toBe(
+        "Scoped draft title",
+      ),
+    );
+    expect(
+      window.localStorage.getItem(`meridianiq:work-draft:${me.userId}`),
+    ).toBeNull();
+  });
 
   test("loading more shows the newest page's scoped total, not the first page's (R114)", async () => {
     const active = () => h.rows.filter((row) => row.status !== "done");
@@ -257,9 +280,9 @@ export function runTeamWorkPageSuite<
       target: { value: "blocked" },
     });
     await waitFor(() =>
-      expect((detail().getByLabelText("Status") as HTMLSelectElement).value).toBe(
-        "blocked",
-      ),
+      expect(
+        (detail().getByLabelText("Status") as HTMLSelectElement).value,
+      ).toBe("blocked"),
     );
     fireEvent.change(detail().getByLabelText("Status"), {
       target: { value: "done" },
@@ -300,7 +323,9 @@ export function runTeamWorkPageSuite<
       };
       view.rerender(page());
       await waitFor(() =>
-        expect(screen.queryByRole("heading", { name: created.title })).toBeNull(),
+        expect(
+          screen.queryByRole("heading", { name: created.title }),
+        ).toBeNull(),
       );
       expect(screen.queryByDisplayValue("Private unsent comment")).toBeNull();
       const commentQueries = client
@@ -356,7 +381,9 @@ export function runTeamWorkPageSuite<
         });
       });
       await waitFor(() =>
-        expect(screen.queryByRole("heading", { name: created.title })).toBeNull(),
+        expect(
+          screen.queryByRole("heading", { name: created.title }),
+        ).toBeNull(),
       );
     },
   );
@@ -372,7 +399,9 @@ export function runTeamWorkPageSuite<
         await client.invalidateQueries();
       });
       await waitFor(() =>
-        expect(screen.queryByRole("heading", { name: created.title })).toBeNull(),
+        expect(
+          screen.queryByRole("heading", { name: created.title }),
+        ).toBeNull(),
       );
     },
   );

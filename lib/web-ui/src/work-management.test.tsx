@@ -458,3 +458,55 @@ test("sending a comment and retrying the discussion keep keyboard focus (R115)",
   fireEvent.click(retryButton);
   expect(retry).toHaveBeenCalledOnce();
 });
+
+test("a draft under the user-only key is adopted by the scoped key once, and a scoped draft wins (R116)", async () => {
+  const legacy = "meridianiq:work-draft:user-a";
+  const scoped = "meridianiq:work-draft:user-a:firm-a:firm";
+  const draft = (title: string) =>
+    JSON.stringify({
+      title,
+      description: "",
+      clientPartyId: "",
+      priority: "normal",
+      dueDate: "",
+      assignedTo: "",
+    });
+  const attempt = JSON.stringify({
+    signature: "sig",
+    id: "6f1d4e5a-3b2c-4d8e-9f0a-1b2c3d4e5f60",
+  });
+  window.localStorage.setItem(legacy, draft("From the old key"));
+  window.localStorage.setItem(`${legacy}:attempt`, attempt);
+  const onCreate = vi.fn(async (_input: CreateCollaborativeWorkInput) => {});
+  const first = render(
+    <WorkManagement
+      {...baseProps}
+      onCreate={onCreate}
+      openNewInitially
+      draftStorageKey={scoped}
+      legacyDraftStorageKey={legacy}
+    />,
+  );
+  expect(await screen.findByDisplayValue("From the old key")).toBeTruthy();
+  expect(window.localStorage.getItem(legacy)).toBeNull();
+  expect(window.localStorage.getItem(`${legacy}:attempt`)).toBeNull();
+  expect(window.localStorage.getItem(`${scoped}:attempt`)).toBe(attempt);
+  expect(JSON.parse(window.localStorage.getItem(scoped) ?? "{}").title).toBe(
+    "From the old key",
+  );
+  first.unmount();
+
+  window.localStorage.setItem(legacy, draft("Stale legacy draft"));
+  window.localStorage.setItem(scoped, draft("Scoped draft"));
+  render(
+    <WorkManagement
+      {...baseProps}
+      onCreate={onCreate}
+      openNewInitially
+      draftStorageKey={scoped}
+      legacyDraftStorageKey={legacy}
+    />,
+  );
+  expect(await screen.findByDisplayValue("Scoped draft")).toBeTruthy();
+  expect(window.localStorage.getItem(legacy)).toBeNull();
+});

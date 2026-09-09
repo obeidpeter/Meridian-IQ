@@ -13,6 +13,12 @@ export const ARTIFACT_STORAGE_HOST_SUFFIXES = Object.freeze([
 ]);
 
 export const WORKFLOW = ".github/workflows/ci.yml";
+// The two producer-job steps whose order and timing bind the artifact to the
+// selected attempt.
+export const PRODUCER_STEPS = Object.freeze([
+  "Stamp tested immutable build manifest",
+  "Preserve tested release artifact",
+]);
 export const ENVIRONMENT = "release-production-handoff";
 export const mainWorkflowPath = (actual, expected) =>
   actual === expected || actual === `${expected}@main`;
@@ -117,10 +123,7 @@ export function validateProducer(input, evidence) {
   }
   const producer = jobs.find((job) => job.name === "e2e");
   const producerSteps = [];
-  for (const name of [
-    "Stamp tested immutable build manifest",
-    "Preserve tested release artifact",
-  ]) {
+  for (const name of PRODUCER_STEPS) {
     const steps = producer.steps.filter((step) => step.name === name);
     assert.equal(steps.length, 1, `missing/duplicate producer step: ${name}`);
     assert.equal(steps[0].status, "completed");
@@ -200,6 +203,91 @@ export function validateProducer(input, evidence) {
     );
   }
   return artifact;
+}
+
+const pick = (source, keys) =>
+  Object.fromEntries(
+    keys
+      .filter((key) => source?.[key] !== undefined)
+      .map((key) => [source && key, source[key]]),
+  );
+const RUN_FIELDS = [
+  "id",
+  "run_attempt",
+  "workflow_id",
+  "path",
+  "head_branch",
+  "head_sha",
+  "event",
+  "status",
+  "conclusion",
+  "run_started_at",
+  "html_url",
+];
+const JOB_FIELDS = [
+  "id",
+  "name",
+  "run_id",
+  "run_attempt",
+  "head_sha",
+  "status",
+  "conclusion",
+  "started_at",
+  "completed_at",
+  "html_url",
+];
+const STEP_FIELDS = [
+  "name",
+  "number",
+  "status",
+  "conclusion",
+  "started_at",
+  "completed_at",
+];
+const ARTIFACT_FIELDS = [
+  "id",
+  "name",
+  "expired",
+  "digest",
+  "size_in_bytes",
+  "created_at",
+  "updated_at",
+];
+
+// What the retained provenance file keeps (R116): the producer fields the
+// checks above consumed plus the human-facing links, never the whole API
+// responses (actors, commit messages, every step of every job, download
+// URLs). The snapshot still satisfies validateProducer, so the evidence can
+// be re-validated from the file alone.
+export function provenanceSnapshot(evidence) {
+  const runSnapshot = (item) => ({
+    ...pick(item, RUN_FIELDS),
+    repository: pick(item.repository, ["id"]),
+    head_repository: pick(item.head_repository, ["id"]),
+  });
+  return {
+    repository: pick(evidence.repository, ["id", "full_name"]),
+    workflow: pick(evidence.workflow, ["id", "path"]),
+    run: runSnapshot(evidence.run),
+    attempt: runSnapshot(evidence.attempt),
+    jobsEndpoint: evidence.jobsEndpoint,
+    jobs: evidence.jobs.map((job) => ({
+      ...pick(job, JOB_FIELDS),
+      steps: (job.steps ?? [])
+        .filter((step) => PRODUCER_STEPS.includes(step.name))
+        .map((step) => pick(step, STEP_FIELDS)),
+    })),
+    artifacts: evidence.artifacts.map((item) => ({
+      ...pick(item, ARTIFACT_FIELDS),
+      workflow_run: pick(item.workflow_run, [
+        "id",
+        "repository_id",
+        "head_repository_id",
+        "head_branch",
+        "head_sha",
+      ]),
+    })),
+  };
 }
 
 export function githubClient(token, fetchImpl = fetch) {

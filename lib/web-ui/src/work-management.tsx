@@ -129,6 +129,29 @@ function readDraft(key: string | undefined): WorkDraft {
   }
 }
 
+// Drafts written before the key carried firm and client scope (R116) move
+// to the scoped key once, so a saved draft is not lost by the change; a
+// draft already under the scoped key wins and the legacy copy is dropped.
+function adoptLegacyDraft(
+  legacyKey: string | undefined,
+  key: string | undefined,
+): void {
+  if (!legacyKey || !key || legacyKey === key || typeof window === "undefined")
+    return;
+  try {
+    for (const suffix of ["", ":attempt"]) {
+      const legacy = window.localStorage.getItem(`${legacyKey}${suffix}`);
+      if (legacy === null) continue;
+      if (window.localStorage.getItem(`${key}${suffix}`) === null) {
+        window.localStorage.setItem(`${key}${suffix}`, legacy);
+      }
+      window.localStorage.removeItem(`${legacyKey}${suffix}`);
+    }
+  } catch {
+    // Storage unavailable: there is nothing to adopt.
+  }
+}
+
 function readAttempt(key: string | undefined): WorkAttempt | null {
   if (!key || typeof window === "undefined") return null;
   try {
@@ -196,6 +219,7 @@ export function WorkManagement({
   error,
   openNewInitially = false,
   draftStorageKey,
+  legacyDraftStorageKey,
   onSelect,
   onRetry,
   onCreate,
@@ -225,6 +249,8 @@ export function WorkManagement({
   error?: string | null;
   openNewInitially?: boolean;
   draftStorageKey?: string;
+  /** The user-only key drafts were saved under before R116; adopted once. */
+  legacyDraftStorageKey?: string;
   onSelect: (id: string | null) => void;
   onRetry: () => void;
   onCreate: (input: CreateCollaborativeWorkInput) => Promise<void>;
@@ -243,7 +269,10 @@ export function WorkManagement({
   ) => Promise<void>;
   onOpenLinkedRecord?: (href: string) => void;
 }) {
-  const [initialDraft] = useState(() => readDraft(draftStorageKey));
+  const [initialDraft] = useState(() => {
+    adoptLegacyDraft(legacyDraftStorageKey, draftStorageKey);
+    return readDraft(draftStorageKey);
+  });
   const [localFilter, setFilter] = useState<"active" | "done" | "all">(
     "active",
   );
@@ -326,6 +355,7 @@ export function WorkManagement({
   useEffect(() => {
     if (!draftStorageKey || loadedDraftKey.current === draftStorageKey) return;
     loadedDraftKey.current = draftStorageKey;
+    adoptLegacyDraft(legacyDraftStorageKey, draftStorageKey);
     taskAttempt.current = readAttempt(draftStorageKey);
     if (hasDraft) return;
     const draft = readDraft(draftStorageKey);
@@ -335,7 +365,7 @@ export function WorkManagement({
     setPriority(draft.priority);
     setDueDate(draft.dueDate);
     setAssignedTo(draft.assignedTo);
-  }, [draftStorageKey, hasDraft]);
+  }, [draftStorageKey, hasDraft, legacyDraftStorageKey]);
 
   useEffect(() => {
     if (!draftStorageKey || typeof window === "undefined") return;

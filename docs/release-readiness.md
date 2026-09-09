@@ -13,9 +13,10 @@ running deployment. A production release is not complete while any check is
   migration `0048` must report Invoice Room RLS plus its append-only event
   trigger before `invoice_room` is enabled.
 - **Scheduled work:** run `pnpm --filter @workspace/scripts run ops:sweep` about
-  every five minutes from a Replit Scheduled Deployment. It signs the request
-  using `SWEEP_KEY_ID` + `SWEEP_KEY_SECRET`, the first `SWEEP_KEYS` entry, or a
-  single `SWEEP_TOKEN` as key id `legacy`.
+  every five minutes from a Replit Scheduled Deployment with `SWEEP_URL` set to
+  the deployment's `https://<host>/api/internal/sweep` (there is no default
+  host). It signs the request using `SWEEP_KEY_ID` + `SWEEP_KEY_SECRET`, the
+  first `SWEEP_KEYS` entry, or a single `SWEEP_TOKEN` as key id `legacy`.
 - **Backup:** run `ops:backup` outside the API deployment at least daily and
   copy the dump plus checksum off-box.
 - **Restore drill:** run `ops:restore-drill` against a disposable target at

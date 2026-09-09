@@ -26,6 +26,38 @@ function signingKey() {
   );
 }
 
+// The target is always explicit (R116): a public hostname default would send
+// a signed request to whatever deployment last owned that name. Plain http is
+// accepted only to a loopback receiver, and the path is the sweep endpoint.
+export function sweepUrl(env = process.env) {
+  const raw = env.SWEEP_URL?.trim();
+  if (!raw) {
+    throw new Error(
+      "Set SWEEP_URL to the deployment's https://<host>/api/internal/sweep endpoint; there is no default host.",
+    );
+  }
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("SWEEP_URL must be an absolute URL.");
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("SWEEP_URL must use https (plain http only to loopback).");
+  }
+  if (
+    !url.pathname.endsWith("/api/internal/sweep") ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error(
+      "SWEEP_URL must point at /api/internal/sweep and carry no credentials.",
+    );
+  }
+  return url;
+}
+
 function signedHeaders(url, key, timestamp = Math.floor(Date.now() / 1000)) {
   const bodyHash = createHash("sha256").update("").digest("hex");
   const digest = createHmac("sha256", key.secret)
@@ -115,11 +147,7 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
-    const url = new URL(
-      process.env.SWEEP_URL ??
-        "https://valo-platform.replit.app/api/internal/sweep",
-    );
-    const result = await pingSweep(url, signingKey());
+    const result = await pingSweep(sweepUrl(), signingKey());
     console.log(`${P}: completed`, JSON.stringify(result));
   } catch (error) {
     console.error(

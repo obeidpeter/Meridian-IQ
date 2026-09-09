@@ -27,18 +27,18 @@ test("Valo display branding preserves installed-app and deployment identities", 
   }
 });
 
-test("public Replit defaults match the reviewed mobile production domain", () => {
-  const eas = JSON.parse(read("eas.json"));
-  const origin = `https://${eas.build.production.env.EXPO_PUBLIC_DOMAIN}`;
+test("no script or route carries a public Replit hostname default", () => {
   const publicOrigins = (file: string) =>
     readFileSync(join(repoRoot, file), "utf8").match(
       /https:\/\/[a-z0-9-]+\.replit\.app\b/g,
     ) ?? [];
-  // The one reviewed default left in the repository is the sweep-ping target.
-  const sweepPing = "scripts/src/ops/sweep-ping.mjs";
-  const origins = publicOrigins(sweepPing);
-  assert.ok(origins.length > 0, `${sweepPing}: public URL default is present`);
-  assert.deepEqual(new Set(origins), new Set([origin]), sweepPing);
+  // The sweep pinger requires SWEEP_URL (R116); the mobile production
+  // domain lives in eas.json, which the test above pins.
+  assert.deepEqual(
+    publicOrigins("scripts/src/ops/sweep-ping.mjs"),
+    [],
+    "the sweep pinger carries no public URL default",
+  );
   // The API builds every link it sends on PUBLIC_APP_URL and carries no
   // default (R112): production holds readiness until the setting is safe,
   // and its architecture test refuses any deployment hostname literal.

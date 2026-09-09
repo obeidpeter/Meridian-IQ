@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pingSweep } from "./sweep-ping.mjs";
+import { pingSweep, sweepUrl } from "./sweep-ping.mjs";
 
 const url = new URL("https://scheduler.example/api/internal/sweep");
 const key = { id: "fixture", secret: "test-only-key" };
@@ -124,5 +124,34 @@ test("HTTP-date Retry-After is respected; an excessive delay exits for the next 
         Response.json({}, { status: 429, headers: { "retry-after": "3600" } }),
     }),
     /failed within 3 attempts/,
+  );
+});
+
+test("the sweep target is explicit: no default host, https or loopback only, the sweep path, no credentials (R116)", () => {
+  assert.throws(() => sweepUrl({}), /no default host/);
+  assert.throws(() => sweepUrl({ SWEEP_URL: "   " }), /no default host/);
+  assert.throws(() => sweepUrl({ SWEEP_URL: "not a url" }), /absolute URL/);
+  assert.throws(
+    () => sweepUrl({ SWEEP_URL: "http://valo.example/api/internal/sweep" }),
+    /must use https/,
+  );
+  assert.throws(
+    () => sweepUrl({ SWEEP_URL: "https://valo.example/api/healthz" }),
+    /must point at/,
+  );
+  assert.throws(
+    () =>
+      sweepUrl({
+        SWEEP_URL: "https://op:secret@valo.example/api/internal/sweep",
+      }),
+    /no credentials/,
+  );
+  assert.equal(
+    sweepUrl({ SWEEP_URL: " https://valo.example/api/internal/sweep " }).href,
+    "https://valo.example/api/internal/sweep",
+  );
+  assert.equal(
+    sweepUrl({ SWEEP_URL: "http://127.0.0.1:3000/api/internal/sweep" }).port,
+    "3000",
   );
 });

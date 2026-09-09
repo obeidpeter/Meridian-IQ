@@ -21,6 +21,7 @@ import { REPLIT_APPS } from "./replit-promote.mjs";
 import {
   githubClient,
   selection,
+  provenanceSnapshot,
   validateProducer,
   protection,
 } from "./release-candidate-github.mjs";
@@ -351,7 +352,7 @@ export async function prepareCandidate(options, dependencies = {}) {
   let archiveVerified = false;
   let phase = "producer-evidence";
   try {
-    json("provenance.json", producer);
+    json("provenance.json", provenanceSnapshot(producer));
     const archive = path.join(evidence, "original.zip");
     phase = "download";
     await client.download(chosen.repository, artifact, archive);
