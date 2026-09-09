@@ -8,7 +8,10 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "node ../../scripts/src/quality/coverage.mjs run",
+    "test:coverage:check": "node ../../scripts/src/quality/coverage.mjs check",
+    "test:coverage:write": "node ../../scripts/src/quality/coverage.mjs write"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -33,6 +36,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "@vitest/coverage-v8": "4.1.10",
     "@workspace/api-client-react": "workspace:*",
     "@workspace/api-errors": "workspace:*",
     "@workspace/format": "workspace:*",

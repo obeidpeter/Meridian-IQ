@@ -1,0 +1,55 @@
+{
+  "runner": {
+    "kind": "vitest"
+  },
+  "areas": {
+    "workspace": {
+      "paths": [
+        "src/today.tsx",
+        "src/workspace.tsx",
+        "src/work-management.tsx",
+        "src/work-comment-draft.ts",
+        "src/business-details.tsx",
+        "src/first-invoice-onboarding.tsx",
+        "src/first-invoice-journey.ts",
+        "src/live-status.tsx"
+      ],
+      "floors": {
+        "lines": 87,
+        "branches": 83
+      }
+    },
+    "operations": {
+      "paths": [
+        "src/operation-journal.ts",
+        "src/operation-status.tsx",
+        "src/operation-routes.ts",
+        "src/session-coordinator.ts",
+        "src/session-operation-recovery.tsx",
+        "src/route-recovery.tsx",
+        "src/readiness.tsx",
+        "src/use-saved-work.ts"
+      ],
+      "floors": {
+        "lines": 83,
+        "branches": 76
+      }
+    },
+    "hooks": {
+      "paths": [
+        "src/use-url-param.ts",
+        "src/use-url-tab.ts",
+        "src/use-file-picker.ts",
+        "src/use-recent-items.ts",
+        "src/use-clerk-actions-dialog.ts",
+        "src/use-action-policy-controls.ts",
+        "src/use-global-shortcuts.ts",
+        "src/use-page-title.ts"
+      ],
+      "floors": {
+        "lines": 92,
+        "branches": 81
+      }
+    }
+  }
+}

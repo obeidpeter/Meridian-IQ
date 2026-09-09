@@ -1,0 +1,25 @@
+{
+  "runner": {
+    "kind": "vitest"
+  },
+  "areas": {
+    "lib": {
+      "paths": [
+        "src/lib/**"
+      ],
+      "floors": {
+        "lines": 93,
+        "branches": 89
+      }
+    },
+    "components": {
+      "paths": [
+        "src/components/**"
+      ],
+      "floors": {
+        "lines": 50,
+        "branches": 47
+      }
+    }
+  }
+}

@@ -13,6 +13,7 @@ Roadmap R0–R2 built; R3+ dormant behind gates).
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run test` — api-server suites (tsx --test; DB-backed — needs `DATABASE_URL` with the schema pushed and guardrail migrations applied)
 - `pnpm --filter @workspace/api-server run test:coverage` — the same suite under V8 coverage with the per-area floors in `coverage-floors.json` enforced (CI runs this form; `test:coverage:write` raises the floors to the measured values)
+- `pnpm --filter @workspace/web-ui run test:coverage`, `… @workspace/console …`, `… @workspace/sme-compliance …` — the Vitest suites under V8 coverage with each package's `coverage-floors.json` enforced (CI runs these forms; same `:check` and `:write` variants)
 - `pnpm --filter @workspace/db run test` — migration rollback test (needs DATABASE_URL)
 - `pnpm --filter @workspace/api-server run benchmark [N]` — NFR-03 pipeline throughput evidence (needs DATABASE_URL)
 - Required env: `DATABASE_URL` — Postgres connection string

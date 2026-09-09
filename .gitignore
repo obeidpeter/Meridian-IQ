@@ -52,5 +52,8 @@ Thumbs.db
 .cache/
 .local/
 
-# api-server coverage output (R118); the floors file beside it is tracked
+# coverage output (R118, R121); the floors file beside each is tracked
 artifacts/api-server/coverage/
+lib/web-ui/coverage/
+artifacts/console/coverage/
+artifacts/sme-compliance/coverage/

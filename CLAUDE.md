@@ -133,12 +133,13 @@ E2E_DATABASE_DISPOSABLE=1 pnpm --filter @workspace/api-server run test:coverage 
 pnpm --filter @workspace/db run test            # migration rollback (real Postgres)
 pnpm --filter @workspace/scripts run ops:restore-drill   # backup→restore→assert round-trip (needs DRILL_DATABASE_URL scratch target)
 pnpm --filter @workspace/mobile run test
-pnpm --filter @workspace/sme-compliance run test
-pnpm --filter @workspace/console run test
+pnpm --filter @workspace/sme-compliance run test:coverage   # Vitest suite under V8 coverage; enforces the package's coverage-floors.json (CI runs this form)
+pnpm --filter @workspace/console run test:coverage          # same for the console
 pnpm --filter @workspace/buyer-portal run test
 pnpm --filter @workspace/landing run test
 pnpm --filter @workspace/penalty-calculator run test
-pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
+pnpm --filter @workspace/format --filter @workspace/api-errors run test
+pnpm --filter @workspace/web-ui run test:coverage           # same for web-ui's workspace, operations and hook modules
 pnpm --filter @workspace/scripts run test:reliability     # release/ops, worker, load-tool and journey-helper regressions
 pnpm --filter @workspace/scripts run test:accessibility   # axe engine + keyboard assertion regression
 # web builds use checked-in defaults; deployment may override BASE_PATH + PORT

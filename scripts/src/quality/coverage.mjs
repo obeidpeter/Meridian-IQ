@@ -12,7 +12,13 @@
 // that clears a floor by five points or more says so, so the floor is
 // raised in the same change.
 //
-// Usage (from artifacts/api-server, or with --cwd):
+// The floors file's `runner` says how the package's suite runs: `node-test`
+// (the api-server: Node's test runner under tsx, with an optional seed
+// script the package's pretest hook would otherwise run) or `vitest` (the
+// web packages: Vitest's V8 provider writing the same lcov). Everything
+// after the lcov is shared (R121).
+//
+// Usage (from the package directory, or with --cwd):
 //   node ../../scripts/src/quality/coverage.mjs run
 //   node ../../scripts/src/quality/coverage.mjs check
 //   node ../../scripts/src/quality/coverage.mjs write
@@ -169,6 +175,9 @@ export function renderTable(measured, areas) {
 
 export function readFloors(file) {
   const parsed = JSON.parse(readFileSync(file, "utf8"));
+  const kind = parsed.runner?.kind ?? "node-test";
+  if (!["node-test", "vitest"].includes(kind))
+    throw new Error(`runner.kind must be node-test or vitest, not ${kind}`);
   for (const [name, area] of Object.entries(parsed.areas)) {
     if (!Array.isArray(area.paths) || area.paths.length === 0)
       throw new Error(`${name}: paths must be a non-empty array`);
@@ -193,7 +202,12 @@ export function writeFloors(file, floors, measured) {
   return next;
 }
 
-function nodeArgs(floors, pattern) {
+const areaGlobs = (floors) =>
+  Object.values(floors.areas).flatMap((area) => area.paths);
+
+// Node's test runner under tsx: the lcov reporter restricted to the areas'
+// globs, test files and fixtures excluded.
+export function nodeTestArgs(floors, pattern) {
   const args = [
     "--import",
     "tsx",
@@ -208,9 +222,32 @@ function nodeArgs(floors, pattern) {
     "--test-reporter=lcov",
     "--test-reporter-destination=coverage/lcov.info",
   ];
-  for (const area of Object.values(floors.areas))
-    for (const glob of area.paths) args.push(`--test-coverage-include=${glob}`);
+  for (const glob of areaGlobs(floors))
+    args.push(`--test-coverage-include=${glob}`);
   args.push(pattern);
+  return args;
+}
+
+// Vitest's V8 provider writing lcov to coverage/, restricted the same way;
+// suites, shared suite bodies and browser fixtures never count as source.
+export function vitestArgs(floors) {
+  const args = [
+    "exec",
+    "vitest",
+    "run",
+    "--coverage.enabled",
+    "--coverage.provider=v8",
+    "--coverage.reporter=lcov",
+    "--coverage.reportsDirectory=coverage",
+  ];
+  for (const glob of areaGlobs(floors)) args.push(`--coverage.include=${glob}`);
+  for (const glob of [
+    "src/**/*.test.*",
+    "src/**/*.suite.*",
+    "src/**/*.browser.*",
+    ...(floors.runner?.exclude ?? []),
+  ])
+    args.push(`--coverage.exclude=${glob}`);
   return args;
 }
 
@@ -234,29 +271,32 @@ export function main(argv, env = process.env) {
 
   if (command === "run") {
     mkdirSync(path.dirname(lcovFile), { recursive: true });
-    // The package's `pretest` hook seeds the release flags before `test`;
-    // a direct node invocation gets no hook, so seed here the same way.
-    const seed = spawnSync(
-      process.execPath,
-      ["--import", "tsx", "./src/test-helpers/seed-release-flags.ts"],
-      { cwd, stdio: "inherit", env },
-    );
-    if (seed.status !== 0) {
-      return {
-        ok: false,
-        message: `release-flag seed failed (exit ${seed.status})`,
-      };
+    const runner = floors.runner ?? { kind: "node-test" };
+    if (runner.seed) {
+      // The package's `pretest` hook would run this before `test`; a direct
+      // node invocation gets no hook, so it runs here the same way.
+      const seed = spawnSync(
+        process.execPath,
+        ["--import", "tsx", runner.seed],
+        { cwd, stdio: "inherit", env },
+      );
+      if (seed.status !== 0) {
+        return { ok: false, message: `seed failed (exit ${seed.status})` };
+      }
     }
-    const result = spawnSync(
-      process.execPath,
-      nodeArgs(floors, option("--pattern", "src/**/*.test.ts")),
-      { cwd, stdio: "inherit", env },
-    );
+    const result =
+      runner.kind === "vitest"
+        ? spawnSync("pnpm", vitestArgs(floors), { cwd, stdio: "inherit", env })
+        : spawnSync(
+            process.execPath,
+            nodeTestArgs(
+              floors,
+              option("--pattern", runner.pattern ?? "src/**/*.test.ts"),
+            ),
+            { cwd, stdio: "inherit", env },
+          );
     if (result.status !== 0) {
-      return {
-        ok: false,
-        message: `api-server tests failed (exit ${result.status})`,
-      };
+      return { ok: false, message: `tests failed (exit ${result.status})` };
     }
   }
   if (!existsSync(lcovFile)) {
