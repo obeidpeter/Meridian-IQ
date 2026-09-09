@@ -130,3 +130,8 @@ export {
 } from "./readiness";
 export { NavigationSection } from "./navigation-section";
 export { ValoMark } from "./valo-mark";
+export {
+  BusinessDetailsForm,
+  type BusinessDetailsRecord,
+  type BusinessDetailsPatch,
+} from "./business-details";

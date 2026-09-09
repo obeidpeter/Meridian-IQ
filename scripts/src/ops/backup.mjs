@@ -36,6 +36,7 @@ import {
 import {
   privateBackupDirectory,
   recordRecoveryHeartbeat,
+  recordRecoveryFailure,
   sha256,
   snapshotDigest,
 } from "./recovery-evidence.mjs";
@@ -103,6 +104,7 @@ export async function backup(env = process.env, dependencies = {}) {
   let fd;
   let ownsArchive = false;
   let retainArchive = false;
+  let attemptedSnapshot;
   const lock = path.join(directory, ".meridian-backup-operation.lock");
   // Serialize this directory before any snapshot can be taken. An occupied or
   // abandoned lock refuses without touching another invocation's files.
@@ -122,6 +124,8 @@ export async function backup(env = process.env, dependencies = {}) {
             baseline.roleRoots.includes(role),
             "database role prerequisite missing",
           );
+        // Only a validated, exclusively claimed run may report a failure.
+        attemptedSnapshot = new Date(baseline.createdAt).toISOString();
         // Write to an exclusively opened descriptor, never truncate/follow a path.
         const result = execute(
           "pg_dump",
@@ -142,7 +146,7 @@ export async function backup(env = process.env, dependencies = {}) {
         assert.equal(
           result.status,
           0,
-          "pg_dump failed; no backup evidence recorded",
+          "pg_dump failed; no successful backup evidence recorded",
         );
         assert.ok(fstatSync(fd).size > 0, "empty backup archive");
         // pg_dump writes to stdout here, so it does not sync this archive for us.
@@ -223,6 +227,13 @@ export async function backup(env = process.env, dependencies = {}) {
     }
     return { manifestFile, manifestSha256, manifest, metadata };
   } catch (error) {
+    if (attemptedSnapshot)
+      recordRecoveryFailure(
+        env.DATABASE_URL,
+        "backup",
+        dependencies.query,
+        attemptedSnapshot,
+      );
     if (retainArchive)
       log(
         `backup: verified archive retained after failure at ${out}; inspect publication status`,

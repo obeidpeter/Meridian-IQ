@@ -315,6 +315,9 @@ jobs:
       - name: Verify signed-in workspace visuals and keyboard focus
         run: node --test lib/web-ui/src/platform-visual.browser.test.mjs
 
+      - name: Verify guided onboarding and operational workspace usability
+        run: pnpm run test:workspace-usability
+
       - name: Verify calculator startup, loading and recovery accessibility
         run: node --test scripts/src/e2e/penalty-calculator-loading.test.mjs
 

@@ -288,3 +288,75 @@ test("client assignments and mentions cannot cross client boundaries", async () 
   });
   assert.equal(mention.status, 400);
 });
+
+test("keyset pages reach all 125 tasks and reject client/filter cursor replay", async () => {
+  const due = new Date("2026-10-01T12:00:00.000Z");
+  const ids = Array.from({ length: 125 }, () => randomUUID());
+  await getDb()
+    .insert(workItemsTable)
+    .values(
+      ids.map((id, index) => ({
+        id,
+        firmId,
+        clientPartyId: clientAId,
+        createdBy: staffId,
+        clientRequestId: randomUUID(),
+        title: `Pagination task ${index}`,
+        status: "done" as const,
+        priority: index < 30 ? ("urgent" as const) : ("normal" as const),
+        dueAt: index % 2 === 0 ? due : null,
+      })),
+    );
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+  let firstCursor = "";
+  do {
+    const query = new URLSearchParams({ view: "done", limit: "17" });
+    if (cursor) query.set("cursor", cursor);
+    const response = await fetch(`${clientBase}/work-items/page?${query}`);
+    assert.equal(response.status, 200);
+    const page = (await response.json()) as {
+      total: number;
+      items: Array<{ id: string; clientPartyId: string }>;
+      nextCursor: string | null;
+    };
+    assert.equal(page.total, 125);
+    assert.ok(page.items.length <= 17);
+    for (const item of page.items) {
+      assert.equal(item.clientPartyId, clientAId);
+      assert.ok(
+        !seen.has(item.id),
+        "no duplicate rows at equal due dates or null boundary",
+      );
+      seen.add(item.id);
+    }
+    cursor = page.nextCursor;
+    firstCursor ||= cursor ?? "";
+  } while (cursor);
+  assert.deepEqual([...seen].sort(), [...ids].sort());
+  assert.equal(
+    (
+      await fetch(
+        `${clientBase}/work-items/page?view=active&cursor=${firstCursor}`,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await fetch(
+        `${staffBase}/work-items/page?view=done&cursor=${firstCursor}`,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await fetch(`${clientBase}/work-items/page?clientPartyId=${clientBId}`))
+      .status,
+    403,
+  );
+  assert.equal(
+    (await fetch(`${clientBase}/work-items/page?limit=101`)).status,
+    400,
+  );
+});

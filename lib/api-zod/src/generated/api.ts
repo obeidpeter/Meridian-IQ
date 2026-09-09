@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.100.0
+ * OpenAPI spec version: 0.101.0
  */
 import * as zod from 'zod';
 
@@ -589,6 +589,60 @@ export const CreateWorkItemResponse = zod.object({
   "completedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * Cursors are bound to the caller and filters. Pages reflect live records; refresh from the first page after mutations or to see externally reordered tasks. The legacy work-items list remains available for existing clients.
+ * @summary Page through scoped team work in priority and due-date order
+ */
+export const listWorkItemsPageQueryViewDefault = `active`;
+export const listWorkItemsPageQueryCursorMax = 1024;
+
+export const listWorkItemsPageQueryLimitDefault = 50;
+export const listWorkItemsPageQueryLimitMax = 100;
+
+
+
+export const ListWorkItemsPageQueryParams = zod.object({
+  "view": zod.enum(['active', 'done', 'all']).default(listWorkItemsPageQueryViewDefault),
+  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "cursor": zod.coerce.string().min(1).max(listWorkItemsPageQueryCursorMax).optional(),
+  "limit": zod.coerce.number().min(1).max(listWorkItemsPageQueryLimitMax).default(listWorkItemsPageQueryLimitDefault)
+})
+
+
+export const listWorkItemsPageResponseItemsMax = 100;
+
+export const listWorkItemsPageResponseTotalMin = 0;
+
+
+
+export const ListWorkItemsPageResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid().nullable(),
+  "clientName": zod.string().nullable(),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['open', 'in_progress', 'blocked', 'done']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "dueAt": zod.coerce.date().nullable(),
+  "assignedTo": zod.string().uuid().nullable(),
+  "assignedToName": zod.string().nullable(),
+  "createdBy": zod.string().uuid(),
+  "createdByName": zod.string().nullable(),
+  "entityType": zod.string().nullable(),
+  "entityId": zod.string().uuid().nullable(),
+  "href": zod.string().nullable(),
+  "version": zod.number().min(1),
+  "completedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).max(listWorkItemsPageResponseItemsMax),
+  "nextCursor": zod.string().nullable(),
+  "total": zod.number().min(listWorkItemsPageResponseTotalMin)
 })
 
 

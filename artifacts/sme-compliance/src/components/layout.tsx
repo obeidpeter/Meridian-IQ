@@ -72,7 +72,7 @@ import {
   type CommandItem,
   trackUsabilityEvent,
 } from "@workspace/web-ui";
-import { HELP_TOPICS } from "@/pages/help";
+import { HELP_TOPICS } from "@/lib/help-topics";
 
 type NavLink = {
   href: string;

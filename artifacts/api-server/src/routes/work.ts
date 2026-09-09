@@ -16,6 +16,8 @@ import {
   ListWorkItemCommentsResponse,
   ListWorkItemsQueryParams,
   ListWorkItemsResponse,
+  ListWorkItemsPageQueryParams,
+  ListWorkItemsPageResponse,
   UpdateWorkItemBody,
   UpdateWorkItemParams,
   UpdateWorkItemResponse,
@@ -35,6 +37,7 @@ import {
   getWorkItemView,
   listCommentViews,
   listWorkItemViews,
+  listWorkItemPage,
 } from "../modules/work/service";
 
 const router: IRouter = Router();
@@ -112,6 +115,16 @@ router.get("/work-items", async (req, res): Promise<void> => {
     limit: query.limit,
   });
   res.json(ListWorkItemsResponse.parse(rows));
+});
+
+router.get("/work-items/page", async (req, res): Promise<void> => {
+  assertCan(req.principal, "work.read");
+  const query = parseOrThrow(ListWorkItemsPageQueryParams, req.query);
+  res.json(
+    ListWorkItemsPageResponse.parse(
+      await listWorkItemPage(req.principal, query),
+    ),
+  );
 });
 
 router.post("/work-items", async (req, res): Promise<void> => {
@@ -215,7 +228,11 @@ router.post("/work-items", async (req, res): Promise<void> => {
       after: { clientPartyId, priority: body.priority ?? "normal" },
     });
   }
-  res.status(201).json(CreateWorkItemResponse.parse(await getWorkItemView(req.principal, id)));
+  res
+    .status(201)
+    .json(
+      CreateWorkItemResponse.parse(await getWorkItemView(req.principal, id)),
+    );
 });
 
 router.patch("/work-items/:id", async (req, res): Promise<void> => {
@@ -240,9 +257,7 @@ router.patch("/work-items/:id", async (req, res): Promise<void> => {
   }
   if (
     req.principal.role === "client_user" &&
-    changedFields.some(
-      (field) => field !== "status" && field !== "assignedTo",
-    )
+    changedFields.some((field) => field !== "status" && field !== "assignedTo")
   ) {
     throw new DomainError(
       "WORK_UPDATE_FORBIDDEN",
@@ -253,8 +268,7 @@ router.patch("/work-items/:id", async (req, res): Promise<void> => {
   if (
     req.principal.role === "client_user" &&
     body.assignedTo !== undefined &&
-    ((body.assignedTo !== null &&
-      body.assignedTo !== req.principal.userId) ||
+    ((body.assignedTo !== null && body.assignedTo !== req.principal.userId) ||
       (body.assignedTo === null &&
         current.assignedTo !== null &&
         current.assignedTo !== req.principal.userId))
@@ -272,7 +286,7 @@ router.patch("/work-items/:id", async (req, res): Promise<void> => {
   );
   const completedAt =
     body.status === "done"
-      ? current.completedAt ?? new Date()
+      ? (current.completedAt ?? new Date())
       : body.status !== undefined
         ? null
         : current.completedAt;
@@ -286,9 +300,7 @@ router.patch("/work-items/:id", async (req, res): Promise<void> => {
       ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.priority !== undefined ? { priority: body.priority } : {}),
       ...(body.dueAt !== undefined ? { dueAt: body.dueAt } : {}),
-      ...(body.assignedTo !== undefined
-        ? { assignedTo: body.assignedTo }
-        : {}),
+      ...(body.assignedTo !== undefined ? { assignedTo: body.assignedTo } : {}),
       completedAt,
       version: sql`${workItemsTable.version} + 1`,
     })
@@ -412,10 +424,7 @@ router.post("/work-items/:id/comments", async (req, res): Promise<void> => {
         .where(
           and(
             eq(workItemCommentsTable.workItemId, item.id),
-            eq(
-              workItemCommentsTable.clientRequestId,
-              body.clientRequestId,
-            ),
+            eq(workItemCommentsTable.clientRequestId, body.clientRequestId),
           ),
         )
         .limit(1)

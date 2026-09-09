@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   getDb,
@@ -10,6 +10,7 @@ import {
 import type { Principal } from "../auth/rbac";
 import { clientPartyScope, requireFirmScope } from "../auth/rbac";
 import { DomainError } from "../errors";
+import { decodeWorkCursor, encodeWorkCursor, workFilterKey } from "./cursor";
 
 const assigneeUsers = alias(usersTable, "work_assignee_users");
 const creatorUsers = alias(usersTable, "work_creator_users");
@@ -114,14 +115,115 @@ export async function listWorkItemViews(
         when 'normal' then 2 else 3 end`,
       sql`${workItemsTable.dueAt} asc nulls last`,
       desc(workItemsTable.createdAt),
+      workItemsTable.id,
     )
     .limit(options.limit);
 }
 
-export async function getWorkItemView(
+export async function listWorkItemPage(
   principal: Principal,
-  id: string,
+  options: {
+    view: "active" | "done" | "all";
+    clientPartyId?: string;
+    cursor?: string;
+    limit: number;
+  },
 ) {
+  const scopedClient = clientPartyScope(principal);
+  if (
+    scopedClient &&
+    options.clientPartyId &&
+    scopedClient !== options.clientPartyId
+  ) {
+    throw new DomainError(
+      "CROSS_CLIENT",
+      "Resource is not within your client scope",
+      403,
+    );
+  }
+  const conditions = [
+    ...scopeConditions(principal),
+    ...(options.clientPartyId
+      ? [eq(workItemsTable.clientPartyId, options.clientPartyId)]
+      : []),
+    ...(options.view === "active" ? [ne(workItemsTable.status, "done")] : []),
+    ...(options.view === "done" ? [eq(workItemsTable.status, "done")] : []),
+  ];
+  const filter = workFilterKey({
+    userId: principal.userId,
+    role: principal.role,
+    firmId: principal.firmId,
+    clientId: scopedClient,
+    clientPartyId: options.clientPartyId ?? null,
+    view: options.view,
+  });
+  const rank = sql<number>`case ${workItemsTable.priority} when 'urgent' then 0 when 'high' then 1 when 'normal' then 2 else 3 end`;
+  const cursor = options.cursor
+    ? decodeWorkCursor(options.cursor, filter)
+    : null;
+  // Match nulls-last ordering without truncating PostgreSQL timestamp precision.
+  const afterCursor = cursor
+    ? or(
+        sql`${rank} > ${cursor.rank}`,
+        and(
+          sql`${rank} = ${cursor.rank}`,
+          cursor.due === null
+            ? and(
+                isNull(workItemsTable.dueAt),
+                gt(workItemsTable.id, cursor.id),
+              )
+            : or(
+                isNull(workItemsTable.dueAt),
+                sql`${workItemsTable.dueAt} > ${cursor.due}::timestamptz`,
+                and(
+                  sql`${workItemsTable.dueAt} = ${cursor.due}::timestamptz`,
+                  gt(workItemsTable.id, cursor.id),
+                ),
+              ),
+        ),
+      )
+    : undefined;
+  const [counts, rows] = await Promise.all([
+    getDb()
+      .select({ total: sql<number>`count(*)::integer` })
+      .from(workItemsTable)
+      .where(and(...conditions)),
+    getDb()
+      .select({
+        ...itemSelection(),
+        cursorRank: rank,
+        cursorDue: sql<
+          string | null
+        >`to_char(${workItemsTable.dueAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      })
+      .from(workItemsTable)
+      .leftJoin(partiesTable, eq(partiesTable.id, workItemsTable.clientPartyId))
+      .leftJoin(assigneeUsers, eq(assigneeUsers.id, workItemsTable.assignedTo))
+      .leftJoin(creatorUsers, eq(creatorUsers.id, workItemsTable.createdBy))
+      .where(and(...conditions, afterCursor))
+      .orderBy(
+        rank,
+        sql`${workItemsTable.dueAt} asc nulls last`,
+        workItemsTable.id,
+      )
+      .limit(options.limit + 1),
+  ]);
+  const page = rows.slice(0, options.limit);
+  const last = page.at(-1);
+  return {
+    total: counts[0]?.total ?? 0,
+    items: page.map(({ cursorRank: _rank, cursorDue: _due, ...item }) => item),
+    nextCursor:
+      rows.length > options.limit && last
+        ? encodeWorkCursor(
+            { rank: last.cursorRank, due: last.cursorDue, id: last.id },
+            filter,
+          )
+        : null,
+  };
+}
+
+export async function getWorkItemView(principal: Principal, id: string) {
   const [row] = await itemQuery()
     .where(and(...scopeConditions(principal), eq(workItemsTable.id, id)))
     .limit(1);

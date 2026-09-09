@@ -16,6 +16,7 @@ import { RequireConsentCapture } from "@/components/require-consent-capture";
 const Dashboard = lazyRoute(() =>
   import("@/pages/dashboard").then((module) => ({ default: module.Dashboard })),
 );
+const BusinessDetails = lazyRoute(() => import("@/pages/business-details"));
 const Invoices = lazyRoute(() =>
   import("@/pages/invoices").then((module) => ({ default: module.Invoices })),
 );
@@ -101,11 +102,12 @@ const ActivityPage = lazyRoute(() =>
     default: module.ActivityPage,
   })),
 );
+const loadTodayWorkspace = () => import("@/pages/today");
 const Today = lazyRoute(() =>
-  import("@/pages/today").then((module) => ({ default: module.Today })),
+  loadTodayWorkspace().then((module) => ({ default: module.Today })),
 );
 const WorkPage = lazyRoute(() =>
-  import("@/pages/today").then((module) => ({ default: module.WorkPage })),
+  loadTodayWorkspace().then((module) => ({ default: module.WorkPage })),
 );
 const InvoiceRooms = lazyRoute(() =>
   import("@/pages/invoice-rooms").then((module) => ({
@@ -133,6 +135,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Today} />
         <Route path="/dashboard" component={Dashboard} />
+        <Route path="/business" component={BusinessDetails} />
         <Route path="/work" component={WorkPage} />
         <Route path="/month-end" component={MonthEnd} />
         <Route path="/collections" component={Collections} />

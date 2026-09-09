@@ -6,6 +6,7 @@ import {
 import { TodayWorkspace, trackUsabilityEvent } from "@workspace/web-ui";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { RefreshCw } from "lucide-react";
 
 export function Today() {
   usePageTitle("Today");
@@ -33,10 +34,15 @@ export function Today() {
       </div>
     );
   }
-  if (!data || error) {
+  if (!data) {
     return <QueryError thing="today's workspace" onRetry={() => void refetch()} />;
   }
   return (
+    <>
+    {error ? <div className="mi-collaboration__error" role="alert">
+      <span>Today's workspace could not be refreshed. Showing the last loaded priorities.</span>
+      <button type="button" className="mi-button-quiet" onClick={() => void refetch()}><RefreshCw aria-hidden="true" />Retry</button>
+    </div> : null}
     <TodayWorkspace
       eyebrow="Valo Today"
       title="Buyer work today"
@@ -50,5 +56,6 @@ export function Today() {
         navigate(href);
       }}
     />
+    </>
   );
 }

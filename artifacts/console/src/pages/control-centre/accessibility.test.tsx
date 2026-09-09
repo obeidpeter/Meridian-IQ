@@ -135,12 +135,18 @@ test("indeterminate progress remains indeterminate and determinate progress repo
   );
 });
 
-test("populated connection captions use readable text on their fixed white surface", () => {
+test("populated connection captions use the shared theme-aware surface and muted token", () => {
   render(<ControlCentre section="reliability" />);
-  for (const label of screen.getAllByText(
+  const connections = screen.getByRole("region", { name: "Connection estate" });
+  expect(connections.classList.contains("bg-[var(--mi-paper)]")).toBe(true);
+  const labels = within(connections).getAllByText(
     /^(Last sync|Run|Read \/ written|Row errors)$/,
-  )) {
-    expect(label.classList.contains("text-slate-600")).toBe(true);
+  );
+  expect(labels).toHaveLength(fixtures.reliability.connections.length * 4);
+  for (const label of labels) {
+    expect(label.classList.contains("text-[var(--mi-muted)]")).toBe(true);
+    expect(label.tagName).toBe("DT");
+    expect(label.nextElementSibling?.tagName).toBe("DD");
   }
 });
 

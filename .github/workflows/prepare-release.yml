@@ -1,0 +1,121 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Exact successful main CI run ID (not latest)
+        required: true
+        type: string
+      ci_attempt:
+        description: Exact successful CI run attempt
+        required: true
+        type: string
+      revision:
+        description: Full 40-character tested source SHA
+        required: true
+        type: string
+      dry_run:
+        description: Verify producer selection only; no download, staging, gates, or approval
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+
+concurrency:
+  group: release-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      candidate_sha256: ${{ steps.prepare.outputs.candidate_sha256 }}
+      evidence_id: ${{ steps.evidence.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Synthetic release preparation regression tests (no database)
+        run: node --test scripts/src/ops/release-candidate*.test.mjs
+        env:
+          RELEASE_CANDIDATE_PYTHON: python3
+      - name: Select exact CI artifact and prepare isolated matching source
+        id: prepare
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CANDIDATE_REPOSITORY: ${{ github.repository }}
+          CANDIDATE_RUN_ID: ${{ inputs.ci_run_id }}
+          CANDIDATE_ATTEMPT: ${{ inputs.ci_attempt }}
+          CANDIDATE_REVISION: ${{ inputs.revision }}
+          CANDIDATE_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [[ "$CANDIDATE_DRY_RUN" == "true" ]]; then args+=(--dry-run); fi
+          node scripts/src/ops/release-candidate.mjs \
+            --repository "$CANDIDATE_REPOSITORY" \
+            --run-id "$CANDIDATE_RUN_ID" --attempt "$CANDIDATE_ATTEMPT" \
+            --revision "$CANDIDATE_REVISION" \
+            --source "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/release-candidate" \
+            --python python3 --check-protection "${args[@]}"
+      - name: Retain original archive and preparation evidence (including failures)
+        id: evidence
+        if: always() && !inputs.dry_run
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidate/evidence/
+          include-hidden-files: true
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
+
+  handoff:
+    needs: prepare
+    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.prepare.outputs.candidate_sha256 != '' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: release-production-handoff
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Retrieve exact preparation evidence, never a name or latest match
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.evidence_id }}
+          path: ${{ runner.temp }}/candidate-evidence
+          merge-multiple: true
+      - name: Bind explicit environment review to exact checksum and checklist
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA256: ${{ needs.prepare.outputs.candidate_sha256 }}
+        run: |
+          node scripts/src/ops/release-candidate-handoff.mjs \
+            --evidence "$RUNNER_TEMP/candidate-evidence" \
+            --candidate-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/approved-handoff"
+      - name: Retain approved checklist; no deployment action
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: approved-release-handoff-${{ github.run_id }}
+          path: ${{ runner.temp }}/approved-handoff/
+          if-no-files-found: error
+          retention-days: 30

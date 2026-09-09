@@ -1,16 +1,9 @@
 import { Router, type IRouter } from "express";
-import {
-  and,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  ne,
-  or,
-} from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   bankStatementsTable,
+  confirmationsTable,
   engagementsTable,
   erpConnectionsTable,
   filingReturnsTable,
@@ -29,15 +22,35 @@ import {
   SearchWorkspaceResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { clientPartyScope, requireFirmScope } from "../modules/auth/rbac";
+import {
+  clientPartyScope,
+  requireFirmScope,
+  type Principal,
+} from "../modules/auth/rbac";
 import { hasConsentDecisions } from "../modules/consent/consent";
 import { isFeatureEnabled } from "../modules/flags/flags";
-import { listWorkItemViews } from "../modules/work/service";
+import {
+  firstInvoiceSetup,
+  type SetupStep,
+} from "../modules/workspace/onboarding";
+import {
+  addTodayCounts,
+  datePrioritySql,
+  dueDate,
+  dueDateSql,
+  dueDescription,
+  emptyTodayCounts,
+  priorityFor,
+  sortToday,
+  todayCountFields,
+  workPrioritySql,
+  type TodayCounts,
+} from "../modules/workspace/today";
 
 const router: IRouter = Router();
-const DAY_MS = 24 * 60 * 60 * 1000;
 const clientNames = alias(partiesTable, "workspace_client_names");
 const counterpartyNames = alias(partiesTable, "workspace_counterparty_names");
+const assigneeNames = alias(usersTable, "workspace_assignee_names");
 
 type TodayItem = {
   id: string;
@@ -54,35 +67,6 @@ type TodayItem = {
   entityType: string | null;
   entityId: string | null;
 };
-
-type SetupStep = {
-  id: string;
-  label: string;
-  description: string;
-  complete: boolean;
-  href: string;
-};
-
-function dueDate(value: string | null): Date | null {
-  return value ? new Date(`${value}T23:59:59+01:00`) : null;
-}
-
-function priorityFor(date: Date | null): TodayItem["priority"] {
-  if (!date) return "normal";
-  const days = Math.ceil((date.getTime() - Date.now()) / DAY_MS);
-  if (days < 0) return "urgent";
-  if (days <= 3) return "high";
-  return "normal";
-}
-
-function dueDescription(date: Date | null): string {
-  if (!date) return "No due date";
-  const days = Math.ceil((date.getTime() - Date.now()) / DAY_MS);
-  if (days < 0) return `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue`;
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  return `Due in ${days} days`;
-}
 
 function itemHref(
   role: string,
@@ -101,87 +85,49 @@ function itemHref(
   return `/clients/${clientPartyId}?view=${view}`;
 }
 
-function sortToday(items: TodayItem[]): TodayItem[] {
-  const rank = { urgent: 0, high: 1, normal: 2, low: 3 } as const;
-  return items.sort((a, b) => {
-    const priority = rank[a.priority] - rank[b.priority];
-    if (priority !== 0) return priority;
-    if (a.dueAt && b.dueAt) return a.dueAt.getTime() - b.dueAt.getTime();
-    if (a.dueAt) return -1;
-    if (b.dueAt) return 1;
-    return a.title.localeCompare(b.title);
-  });
-}
-
 async function firstRow<T>(promise: Promise<T[]>): Promise<boolean> {
   return (await promise).length > 0;
 }
 
 async function setupForFirm(
-  firmId: string,
-  userId: string,
+  principal: Principal,
   options: { canManageConnections: boolean },
 ): Promise<SetupStep[]> {
-  const [hasClient, hasInvoice, hasConnection, hasWork, users] =
-    await Promise.all([
-      firstRow(
-        getDb()
-          .select({ id: engagementsTable.id })
-          .from(engagementsTable)
-          .where(eq(engagementsTable.firmId, firmId))
-          .limit(1),
-      ),
-      firstRow(
-        getDb()
-          .select({ id: invoicesTable.id })
-          .from(invoicesTable)
-          .where(eq(invoicesTable.firmId, firmId))
-          .limit(1),
-      ),
-      options.canManageConnections
-        ? firstRow(
-            getDb()
-              .select({ id: erpConnectionsTable.id })
-              .from(erpConnectionsTable)
-              .where(eq(erpConnectionsTable.firmId, firmId))
-              .limit(1),
-          )
-        : Promise.resolve(false),
-      firstRow(
-        getDb()
-          .select({ id: workItemsTable.id })
-          .from(workItemsTable)
-          .where(eq(workItemsTable.firmId, firmId))
-          .limit(1),
-      ),
+  const firmId = requireFirmScope(principal);
+  const [invoiceSteps, hasConnection, hasWork, users] = await Promise.all([
+    firstInvoiceSetup(principal),
+    options.canManageConnections
+      ? firstRow(
+          getDb()
+            .select({ id: erpConnectionsTable.id })
+            .from(erpConnectionsTable)
+            .where(eq(erpConnectionsTable.firmId, firmId))
+            .limit(1),
+        )
+      : Promise.resolve(false),
+    firstRow(
       getDb()
-        .select({ totpEnabledAt: usersTable.totpEnabledAt })
-        .from(usersTable)
-        .where(eq(usersTable.id, userId))
+        .select({ id: workItemsTable.id })
+        .from(workItemsTable)
+        .where(eq(workItemsTable.firmId, firmId))
         .limit(1),
-    ]);
+    ),
+    getDb()
+      .select({ totpEnabledAt: usersTable.totpEnabledAt })
+      .from(usersTable)
+      .where(eq(usersTable.id, principal.userId))
+      .limit(1),
+  ]);
   const user = users[0];
   return [
-    {
-      id: "first_client",
-      label: "Add the first client",
-      description: "Create a client record and establish its engagement.",
-      complete: hasClient,
-      href: "/portfolio?action=add-client",
-    },
-    {
-      id: "first_invoice",
-      label: "Bring in invoice activity",
-      description: "Create, import or sync an invoice for a client.",
-      complete: hasInvoice,
-      href: "/clients/import",
-    },
+    ...invoiceSteps,
     ...(options.canManageConnections
       ? [
           {
             id: "first_connection",
-            label: "Connect an accounting package",
-            description: "Test a provider and set up a repeatable data feed.",
+            label: "Set up an accounting connection",
+            description:
+              "Save the connection configuration. Successful provider verification is checked separately.",
             complete: hasConnection,
             href: "/integrations",
           },
@@ -205,30 +151,14 @@ async function setupForFirm(
 }
 
 async function setupForClient(
-  firmId: string,
+  principal: Principal,
   clientPartyId: string,
-  userId: string,
   options: { reconciliationEnabled: boolean },
 ): Promise<SetupStep[]> {
-  const [parties, hasInvoice, hasStatement, users, consentComplete] =
+  const firmId = requireFirmScope(principal);
+  const [invoiceSteps, hasStatement, users, consentComplete] =
     await Promise.all([
-      getDb()
-        .select({ tin: partiesTable.tin })
-        .from(partiesTable)
-        .where(eq(partiesTable.id, clientPartyId))
-        .limit(1),
-      firstRow(
-        getDb()
-          .select({ id: invoicesTable.id })
-          .from(invoicesTable)
-          .where(
-            and(
-              eq(invoicesTable.firmId, firmId),
-              eq(invoicesTable.supplierPartyId, clientPartyId),
-            ),
-          )
-          .limit(1),
-      ),
+      firstInvoiceSetup(principal),
       options.reconciliationEnabled
         ? firstRow(
             getDb()
@@ -246,20 +176,12 @@ async function setupForClient(
       getDb()
         .select({ totpEnabledAt: usersTable.totpEnabledAt })
         .from(usersTable)
-        .where(eq(usersTable.id, userId))
+        .where(eq(usersTable.id, principal.userId))
         .limit(1),
       hasConsentDecisions(clientPartyId, [1, 2]),
     ]);
-  const party = parties[0];
   const user = users[0];
   return [
-    {
-      id: "business_identity",
-      label: "Confirm the business identity with your firm",
-      description: "Ask your accountant to verify the TIN used for stamping.",
-      complete: Boolean(party?.tin),
-      href: "/work?action=new",
-    },
     {
       id: "consent",
       label: "Choose data permissions",
@@ -267,13 +189,7 @@ async function setupForClient(
       complete: consentComplete,
       href: "/consent",
     },
-    {
-      id: "first_invoice",
-      label: "Create the first invoice",
-      description: "Validate a draft before sending it for stamping.",
-      complete: hasInvoice,
-      href: "/invoices/new",
-    },
+    ...invoiceSteps,
     ...(options.reconciliationEnabled
       ? [
           {
@@ -301,10 +217,16 @@ async function firmToday(
   clientPartyId: string | null,
   limit: number,
   statutoryEnabled: boolean,
-): Promise<TodayItem[]> {
+  now: Date,
+): Promise<{ items: TodayItem[]; summary: TodayCounts }> {
   const invoiceConditions = [
     eq(invoicesTable.firmId, firmId),
-    inArray(invoicesTable.status, ["draft", "validated", "submitted", "failed"]),
+    inArray(invoicesTable.status, [
+      "draft",
+      "validated",
+      "submitted",
+      "failed",
+    ]),
     ...(clientPartyId
       ? [eq(invoicesTable.supplierPartyId, clientPartyId)]
       : []),
@@ -323,17 +245,49 @@ async function firmToday(
       ? [eq(obligationsTable.clientPartyId, clientPartyId)]
       : []),
   ];
+  const invoiceDue = dueDateSql(invoicesTable.dueDate);
+  const filingDue = dueDateSql(filingReturnsTable.dueDate);
+  const obligationDue = dueDateSql(obligationsTable.responseDueDate);
+  const invoiceRank = datePrioritySql(invoiceDue, now, {
+    failed: eq(invoicesTable.status, "failed"),
+  });
+  const filingRank = datePrioritySql(filingDue, now);
+  const obligationRank = datePrioritySql(obligationDue, now);
+  const manualRank = workPrioritySql(workItemsTable.priority);
+  const manualDue = sql`date_trunc('milliseconds', ${workItemsTable.dueAt})`;
+  // Top K from each source suffices for global top K only when SQL and the
+  // final merge share priority, due date and ID ordering before every limit.
   const [manual, invoices, filings, obligations] = await Promise.all([
-    listWorkItemViews(
-      {
-        userId: "workspace-read",
-        role: role as "firm_admin" | "firm_staff" | "client_user",
-        firmId,
-        clientPartyId,
-        buyerPartyId: null,
-      },
-      { openOnly: true, limit },
-    ),
+    getDb()
+      .select({
+        id: workItemsTable.id,
+        title: workItemsTable.title,
+        description: workItemsTable.description,
+        priority: workItemsTable.priority,
+        status: workItemsTable.status,
+        dueAt: workItemsTable.dueAt,
+        href: workItemsTable.href,
+        clientPartyId: workItemsTable.clientPartyId,
+        clientName: clientNames.legalName,
+        assignedToName: assigneeNames.fullName,
+        entityType: workItemsTable.entityType,
+        entityId: workItemsTable.entityId,
+        ...todayCountFields(manualDue, manualRank, workItemsTable.status, now),
+      })
+      .from(workItemsTable)
+      .leftJoin(clientNames, eq(clientNames.id, workItemsTable.clientPartyId))
+      .leftJoin(assigneeNames, eq(assigneeNames.id, workItemsTable.assignedTo))
+      .where(
+        and(
+          eq(workItemsTable.firmId, firmId),
+          ne(workItemsTable.status, "done"),
+          clientPartyId
+            ? eq(workItemsTable.clientPartyId, clientPartyId)
+            : undefined,
+        ),
+      )
+      .orderBy(manualRank, sql`${manualDue} asc nulls last`, workItemsTable.id)
+      .limit(limit),
     getDb()
       .select({
         id: invoicesTable.id,
@@ -343,6 +297,7 @@ async function firmToday(
         clientPartyId: invoicesTable.supplierPartyId,
         clientName: clientNames.legalName,
         counterpartyName: counterpartyNames.legalName,
+        ...todayCountFields(invoiceDue, invoiceRank, invoicesTable.status, now),
       })
       .from(invoicesTable)
       .innerJoin(clientNames, eq(clientNames.id, invoicesTable.supplierPartyId))
@@ -351,7 +306,7 @@ async function firmToday(
         eq(counterpartyNames.id, invoicesTable.buyerPartyId),
       )
       .where(and(...invoiceConditions))
-      .orderBy(desc(invoicesTable.updatedAt))
+      .orderBy(invoiceRank, sql`${invoiceDue} asc nulls last`, invoicesTable.id)
       .limit(limit),
     statutoryEnabled
       ? getDb()
@@ -363,6 +318,12 @@ async function firmToday(
             dueDate: filingReturnsTable.dueDate,
             clientPartyId: filingReturnsTable.clientPartyId,
             clientName: clientNames.legalName,
+            ...todayCountFields(
+              filingDue,
+              filingRank,
+              filingReturnsTable.status,
+              now,
+            ),
           })
           .from(filingReturnsTable)
           .innerJoin(
@@ -370,7 +331,11 @@ async function firmToday(
             eq(clientNames.id, filingReturnsTable.clientPartyId),
           )
           .where(and(...filingConditions))
-          .orderBy(filingReturnsTable.dueDate)
+          .orderBy(
+            filingRank,
+            sql`${filingDue} asc nulls last`,
+            filingReturnsTable.id,
+          )
           .limit(limit)
       : Promise.resolve([]),
     statutoryEnabled
@@ -384,6 +349,12 @@ async function firmToday(
             dueDate: obligationsTable.responseDueDate,
             clientPartyId: obligationsTable.clientPartyId,
             clientName: clientNames.legalName,
+            ...todayCountFields(
+              obligationDue,
+              obligationRank,
+              obligationsTable.status,
+              now,
+            ),
           })
           .from(obligationsTable)
           .innerJoin(
@@ -391,7 +362,11 @@ async function firmToday(
             eq(clientNames.id, obligationsTable.clientPartyId),
           )
           .where(and(...obligationConditions))
-          .orderBy(obligationsTable.responseDueDate)
+          .orderBy(
+            obligationRank,
+            sql`${obligationDue} asc nulls last`,
+            obligationsTable.id,
+          )
           .limit(limit)
       : Promise.resolve([]),
   ]);
@@ -403,7 +378,9 @@ async function firmToday(
     title: item.title,
     description:
       item.description ??
-      (item.assignedToName ? `Assigned to ${item.assignedToName}` : "Unassigned task"),
+      (item.assignedToName
+        ? `Assigned to ${item.assignedToName}`
+        : "Unassigned task"),
     priority: item.priority,
     status: item.status,
     dueAt: item.dueAt,
@@ -423,8 +400,8 @@ async function firmToday(
       description:
         invoice.status === "failed"
           ? "Submission needs attention"
-          : `${invoice.status} · ${dueDescription(due)}`,
-      priority: invoice.status === "failed" ? "urgent" : priorityFor(due),
+          : `${invoice.status} · ${dueDescription(due, now)}`,
+      priority: invoice.status === "failed" ? "urgent" : priorityFor(due, now),
       status: invoice.status,
       dueAt: due,
       href: itemHref(role, "invoice", invoice.id, invoice.clientPartyId),
@@ -441,8 +418,8 @@ async function firmToday(
       source: "filing",
       kind: "filing",
       title: `${filing.taxType.toUpperCase()} · ${filing.period}`,
-      description: `${filing.clientName} · ${dueDescription(due)}`,
-      priority: priorityFor(due),
+      description: `${filing.clientName} · ${dueDescription(due, now)}`,
+      priority: priorityFor(due, now),
       status: filing.status,
       dueAt: due,
       href: itemHref(role, "filing", filing.id, filing.clientPartyId),
@@ -461,22 +438,40 @@ async function firmToday(
       title: obligation.reference
         ? `${obligation.authority} · ${obligation.reference}`
         : `${obligation.authority} · ${obligation.noticeType}`,
-      description: `${obligation.clientName} · ${dueDescription(due)}`,
-      priority: priorityFor(due),
+      description: `${obligation.clientName} · ${dueDescription(due, now)}`,
+      priority: priorityFor(due, now),
       status: obligation.status,
       dueAt: due,
-      href: itemHref(role, "obligation", obligation.id, obligation.clientPartyId),
+      href: itemHref(
+        role,
+        "obligation",
+        obligation.id,
+        obligation.clientPartyId,
+      ),
       clientPartyId: obligation.clientPartyId,
       clientName: obligation.clientName,
       entityType: "obligation",
       entityId: obligation.id,
     });
   }
-  return sortToday(items).slice(0, limit);
+  return {
+    items: sortToday(items).slice(0, limit),
+    summary: addTodayCounts([
+      manual[0],
+      invoices[0],
+      filings[0],
+      obligations[0],
+    ]),
+  };
 }
 
-async function buyerToday(buyerPartyId: string, limit: number) {
+async function buyerToday(buyerPartyId: string, limit: number, now: Date) {
   const suppliers = alias(partiesTable, "workspace_buyer_suppliers");
+  const due = dueDateSql(invoicesTable.dueDate);
+  const rank = datePrioritySql(due, now, {
+    failed: eq(invoicesTable.status, "failed"),
+    awaitingConfirmation: eq(invoicesTable.status, "stamped"),
+  });
   const invoices = await getDb()
     .select({
       id: invoicesTable.id,
@@ -485,6 +480,11 @@ async function buyerToday(buyerPartyId: string, limit: number) {
       supplierName: suppliers.legalName,
       status: invoicesTable.status,
       dueDate: invoicesTable.dueDate,
+      ...todayCountFields(due, rank, invoicesTable.status, now),
+      reviewed:
+        sql<number>`count(*) filter (where ${invoicesTable.status} = 'confirmed') over ()`.mapWith(
+          Number,
+        ),
     })
     .from(invoicesTable)
     .innerJoin(suppliers, eq(suppliers.id, invoicesTable.supplierPartyId))
@@ -494,9 +494,9 @@ async function buyerToday(buyerPartyId: string, limit: number) {
         inArray(invoicesTable.status, ["stamped", "confirmed", "failed"]),
       ),
     )
-    .orderBy(desc(invoicesTable.updatedAt))
+    .orderBy(rank, sql`${due} asc nulls last`, invoicesTable.id)
     .limit(limit);
-  return sortToday(
+  const items = sortToday(
     invoices.map((invoice): TodayItem => {
       const due = dueDate(invoice.dueDate);
       return {
@@ -507,8 +507,13 @@ async function buyerToday(buyerPartyId: string, limit: number) {
         description:
           invoice.status === "stamped"
             ? "Awaiting your confirmation"
-            : `${invoice.status} · ${dueDescription(due)}`,
-        priority: invoice.status === "stamped" ? "high" : priorityFor(due),
+            : `${invoice.status} · ${dueDescription(due, now)}`,
+        priority:
+          invoice.status === "failed" || priorityFor(due, now) === "urgent"
+            ? "urgent"
+            : invoice.status === "stamped"
+              ? "high"
+              : priorityFor(due, now),
         status: invoice.status,
         dueAt: due,
         href: `/invoices/${invoice.id}`,
@@ -519,13 +524,44 @@ async function buyerToday(buyerPartyId: string, limit: number) {
       };
     }),
   ).slice(0, limit);
+  // A response may have moved the invoice out of today's queue (e.g. settled).
+  // Read recorded buyer responses independently, never infer a click from rows.
+  const hasResponse = await firstRow(
+    getDb()
+      .select({ id: confirmationsTable.id })
+      .from(confirmationsTable)
+      .innerJoin(
+        invoicesTable,
+        eq(invoicesTable.id, confirmationsTable.invoiceId),
+      )
+      .where(
+        and(
+          eq(confirmationsTable.buyerPartyId, buyerPartyId),
+          eq(invoicesTable.buyerPartyId, buyerPartyId),
+          inArray(confirmationsTable.state, [
+            "confirmed",
+            "queried",
+            "rejected",
+          ]),
+        ),
+      )
+      .limit(1),
+  );
+  return {
+    items,
+    summary: addTodayCounts([invoices[0]]),
+    hasInvoices: (invoices[0]?.total ?? 0) > 0 || hasResponse,
+    hasReviewed: (invoices[0]?.reviewed ?? 0) > 0 || hasResponse,
+  };
 }
 
 router.get("/workspace/today", async (req, res): Promise<void> => {
+  const now = new Date();
   const query = parseOrThrow(GetWorkspaceTodayQueryParams, req.query);
   const { role } = req.principal;
   let items: TodayItem[] = [];
   let setup: SetupStep[] = [];
+  let summary = emptyTodayCounts();
   if (["firm_admin", "firm_staff", "client_user"].includes(role)) {
     const firmId = requireFirmScope(req.principal);
     const clientId = clientPartyScope(req.principal);
@@ -537,37 +573,45 @@ router.get("/workspace/today", async (req, res): Promise<void> => {
           ? isFeatureEnabled("erp_connectors", firmId)
           : Promise.resolve(false),
       ]);
-    items = await firmToday(
+    const today = await firmToday(
       role,
       firmId,
       clientId,
       query.limit,
       statutoryEnabled,
+      now,
     );
+    items = today.items;
+    summary = today.summary;
     setup = clientId
-      ? await setupForClient(firmId, clientId, req.principal.userId, {
+      ? await setupForClient(req.principal, clientId, {
           reconciliationEnabled,
         })
-      : await setupForFirm(firmId, req.principal.userId, {
+      : await setupForFirm(req.principal, {
           canManageConnections: erpEnabled,
         });
   } else if (role === "buyer_user" && req.principal.buyerPartyId) {
-    items = await buyerToday(req.principal.buyerPartyId, query.limit);
-    const hasInvoices = items.length > 0;
-    const hasReviewed = items.some((item) => item.status === "confirmed");
+    const today = await buyerToday(
+      req.principal.buyerPartyId,
+      query.limit,
+      now,
+    );
+    items = today.items;
+    summary = today.summary;
     setup = [
       {
         id: "review_queue",
-        label: "Review the confirmation queue",
-        description: "Open stamped invoices addressed to this buyer.",
-        complete: hasInvoices,
+        label: "Receive the first invoice",
+        description:
+          "An invoice or recorded response is available for this buyer.",
+        complete: today.hasInvoices,
         href: "/confirmations",
       },
       {
         id: "first_confirmation",
         label: "Complete the first confirmation",
         description: "Confirm or dispute an invoice with a recorded reason.",
-        complete: hasReviewed,
+        complete: today.hasReviewed,
         href: "/confirmations",
       },
     ];
@@ -583,21 +627,12 @@ router.get("/workspace/today", async (req, res): Promise<void> => {
     ];
   }
   const completeSteps = setup.filter((step) => step.complete).length;
-  const soonThreshold = Date.now() + 3 * DAY_MS;
   res.json(
     GetWorkspaceTodayResponse.parse({
       role,
-      generatedAt: new Date(),
+      generatedAt: now,
       summary: {
-        total: items.length,
-        urgent: items.filter((item) => item.priority === "urgent").length,
-        dueSoon: items.filter(
-          (item) =>
-            item.dueAt &&
-            item.dueAt.getTime() >= Date.now() &&
-            item.dueAt.getTime() <= soonThreshold,
-        ).length,
-        blocked: items.filter((item) => item.status === "blocked").length,
+        ...summary,
         completedSetupSteps: completeSteps,
         totalSetupSteps: setup.length,
       },
@@ -748,9 +783,7 @@ router.get("/workspace/search", async (req, res): Promise<void> => {
           .where(
             and(
               eq(workItemsTable.firmId, firmId),
-              clientId
-                ? eq(workItemsTable.clientPartyId, clientId)
-                : undefined,
+              clientId ? eq(workItemsTable.clientPartyId, clientId) : undefined,
               or(
                 ilike(workItemsTable.title, pattern),
                 ilike(workItemsTable.description, pattern),

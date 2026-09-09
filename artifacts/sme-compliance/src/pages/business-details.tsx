@@ -1,0 +1,128 @@
+import { useEffect, useState } from "react";
+import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getGetPartyQueryKey,
+  getGetWorkspaceTodayQueryKey,
+  getListPartiesQueryKey,
+  useGetMe,
+  useGetParty,
+  useUpdateParty,
+} from "@workspace/api-client-react";
+import {
+  BusinessDetailsForm,
+  RouteLoading,
+  WorkspaceHeader,
+  type BusinessDetailsPatch,
+} from "@workspace/web-ui";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { QueryError } from "@/components/query-error";
+import { usePageTitle } from "@/hooks/use-page-title";
+import { serverErrorMessage } from "@/lib/errors";
+
+export default function BusinessDetails() {
+  usePageTitle("Business details");
+  const me = useGetMe();
+  // Never take the client party from a route, query string or a form field.
+  const id =
+    me.data?.role === "client_user" ? (me.data.clientPartyId ?? "") : "";
+  const canEdit = Boolean(id && me.data?.capabilities.includes("party.read"));
+  const party = useGetParty(id, {
+    query: { queryKey: getGetPartyQueryKey(id), enabled: canEdit && !me.error },
+  });
+  const update = useUpdateParty();
+  const client = useQueryClient();
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [dirty]);
+
+  async function save(patch: BusinessDetailsPatch) {
+    if (!canEdit || me.error || !id)
+      throw new Error("No editable business is linked to this account.");
+    try {
+      await client.cancelQueries({ queryKey: getGetPartyQueryKey(id) });
+      const updated = await update.mutateAsync({ id, data: patch });
+      await client.cancelQueries({ queryKey: getGetPartyQueryKey(id) });
+      client.setQueryData(getGetPartyQueryKey(id), updated);
+      void client.invalidateQueries({
+        queryKey: getGetWorkspaceTodayQueryKey(),
+      });
+      void client.invalidateQueries({ queryKey: getListPartiesQueryKey() });
+      return updated;
+    } catch (error) {
+      throw new Error(serverErrorMessage(error));
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <WorkspaceHeader
+        title="Business details"
+        description={canEdit ? party.data?.legalName : undefined}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/">
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Back to Today
+            </Link>
+          </Button>
+        }
+      />
+      {me.error && me.data ? (
+        <QueryError
+          thing="your account permissions"
+          onRetry={() => void me.refetch()}
+        />
+      ) : null}
+      {me.error && !me.data ? (
+        <QueryError thing="your account" onRetry={() => void me.refetch()} />
+      ) : !me.data ? (
+        <RouteLoading />
+      ) : !canEdit ? (
+        <p role="alert">
+          No editable client business is linked to this account.
+        </p>
+      ) : !party.data ? (
+        party.isLoading ? (
+          <RouteLoading />
+        ) : (
+          <QueryError
+            thing="business details"
+            onRetry={() => void party.refetch()}
+          />
+        )
+      ) : party.data.id !== id || party.data.type !== "client_business" ? (
+        <p role="alert">These details do not belong to your business.</p>
+      ) : (
+        <>
+          {party.error ? (
+            <QueryError
+              thing="the latest business details"
+              onRetry={() => void party.refetch()}
+            />
+          ) : null}
+          <BusinessDetailsForm
+            party={party.data}
+            onSave={save}
+            onDirtyChange={setDirty}
+            disabledReason={
+              me.error
+                ? "Account permissions could not be refreshed. Retry before saving."
+                : party.data.mergedIntoId
+                  ? "This business record has been merged. Ask your firm to review your business access."
+                  : null
+            }
+          />
+        </>
+      )}
+    </div>
+  );
+}

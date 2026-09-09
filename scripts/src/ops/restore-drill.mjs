@@ -35,6 +35,7 @@ import {
   drillTarget,
   loadBackupManifest,
   recordRecoveryHeartbeat,
+  recordRecoveryFailure,
 } from "./recovery-evidence.mjs";
 
 const literal = (value) => `'${value.replaceAll("'", "''")}'`;
@@ -68,6 +69,7 @@ export async function restoreDrill(env = process.env, dependencies = {}) {
     path.join(os.tmpdir(), "meridian-verified-restore-"),
   );
   const verifiedCopy = path.join(temporary, "verified.dump");
+  let operationClaimed = false;
   try {
     // A private verified copy prevents a later path replacement changing the restored bytes.
     copyFileSync(archive, verifiedCopy);
@@ -120,6 +122,9 @@ export async function restoreDrill(env = process.env, dependencies = {}) {
       JSON.parse(query(targetUrl, DATABASE_SNAPSHOT_SQL)),
       database,
     );
+    // CREATE DATABASE is the exclusive target claim. Identity and creation
+    // checks must also pass before a refused/misrouted CLI can affect evidence.
+    operationClaimed = true;
     const restored = execute(
       "pg_restore",
       [
@@ -190,6 +195,12 @@ export async function restoreDrill(env = process.env, dependencies = {}) {
     );
     return metadata;
   } catch (error) {
+    if (operationClaimed)
+      recordRecoveryFailure(
+        env.DATABASE_URL,
+        "restore_drill",
+        dependencies.query,
+      );
     throw redactedPostgresError(
       error,
       sourceConnection,

@@ -27,6 +27,7 @@ const ClientDetail = lazyRoute(() =>
     default: module.ClientDetail,
   })),
 );
+const BusinessDetails = lazyRoute(() => import("@/pages/business-details"));
 const ClientImport = lazyRoute(() =>
   import("@/pages/client-import").then((module) => ({
     default: module.ClientImport,
@@ -160,11 +161,12 @@ const ActivityPage = lazyRoute(() =>
     default: module.ActivityPage,
   })),
 );
+const loadTodayWorkspace = () => import("@/pages/today");
 const Today = lazyRoute(() =>
-  import("@/pages/today").then((module) => ({ default: module.Today })),
+  loadTodayWorkspace().then((module) => ({ default: module.Today })),
 );
 const WorkPage = lazyRoute(() =>
-  import("@/pages/today").then((module) => ({ default: module.WorkPage })),
+  loadTodayWorkspace().then((module) => ({ default: module.WorkPage })),
 );
 import { ClerkShell } from "@/components/clerk-shell";
 const BankDataRoom = lazyRoute(() =>
@@ -298,6 +300,11 @@ function ConsoleRoutes() {
         <Route path="/clients/import">
           <CapabilityGate capability="clients.import">
             <ClientImport />
+          </CapabilityGate>
+        </Route>
+        <Route path="/clients/:id/business">
+          <CapabilityGate capability="party.write">
+            <BusinessDetails />
           </CapabilityGate>
         </Route>
         <Route path="/clients/:id">

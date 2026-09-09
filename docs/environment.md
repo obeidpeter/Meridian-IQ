@@ -7,17 +7,17 @@ fail closed unless a section below says otherwise.
 
 ## Core Runtime
 
-| Variable              | Purpose                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`            | `development`, `test`, or `production`; production enables strict startup and readiness behavior. |
-| `DATABASE_URL`        | PostgreSQL 16 connection string. Required by the API, migrations, and DB tests.                   |
-| `PORT`                | Process/dev-server port. Web apps have checked-in local defaults.                                 |
+| Variable              | Purpose                                                                                                                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`            | `development`, `test`, or `production`; production enables strict startup and readiness behavior.                                                                                                                             |
+| `DATABASE_URL`        | PostgreSQL 16 connection string. Required by the API, migrations, and DB tests.                                                                                                                                               |
+| `PORT`                | Process/dev-server port. Web apps have checked-in local defaults.                                                                                                                                                             |
 | `PUBLIC_APP_URL`      | Canonical public https origin for the links the platform sends (password recovery, Invoice Room). Required in production: boot holds readiness until it is set and safe, and no hostname in the code stands in for it (R112). |
-| `BASE_PATH`           | Web bundle mount path; must start and end with `/`.                                               |
-| `API_URL`             | E2E/mobile API origin override.                                                                   |
-| `LOG_LEVEL`           | Structured server log level.                                                                      |
-| `PGPOOL_MAX`          | Maximum application database pool size.                                                           |
-| `SHUTDOWN_TIMEOUT_MS` | Graceful shutdown budget.                                                                         |
+| `BASE_PATH`           | Web bundle mount path; must start and end with `/`.                                                                                                                                                                           |
+| `API_URL`             | E2E/mobile API origin override.                                                                                                                                                                                               |
+| `LOG_LEVEL`           | Structured server log level.                                                                                                                                                                                                  |
+| `PGPOOL_MAX`          | Maximum application database pool size.                                                                                                                                                                                       |
+| `SHUTDOWN_TIMEOUT_MS` | Graceful shutdown budget.                                                                                                                                                                                                     |
 
 ## Build and Hosting Identity
 
@@ -316,6 +316,23 @@ Do not manufacture CI variables to bless an untested local artifact.
 directory (default `tmp/state-catalogue-r198`). It is not a secret or a production
 setting. The harness rebuilds its `site` subdirectory; choose a dedicated scratch
 path, never a directory holding source or customer data.
+
+## Offline Preparation and External Verification
+
+`GITHUB_TOKEN` is a short-lived secret for read-only CI provenance and protected
+environment checks in [release preparation](release-preparation.md). Never place
+it in an artifact, command-line argument or report. `GITHUB_STEP_SUMMARY` is the
+GitHub-managed summary output file; only sanitized evidence belongs there.
+`RELEASE_CANDIDATE_PYTHON` selects the reviewed local Python executable for strict
+archive validation (default `python3`); it is not a production runtime setting.
+
+The opt-in [operational verifier](operational-verification.md) uses non-secret
+`OPS_CHECK_BASE_URL` (explicit HTTPS origin), `OPS_CHECK_TIMEOUT_MS` (1-30000 ms;
+default 10000), and `OPS_CHECK_METRICS_REQUIRED` (`true` by default). Its optional
+`OPS_CHECK_ALLOW_HTTP_LOOPBACK=1` is only for local fixtures. `METRICS_KEY_ID` and
+secret `METRICS_KEY_SECRET` select one authorized signing key; existing
+`METRICS_KEYS` or `METRICS_TOKEN` remain compatible alternatives. No schedule,
+production check, provider validation or backup is activated by these settings.
 
 ## Adding a Variable
 

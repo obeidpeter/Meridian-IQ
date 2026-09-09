@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.100.0
+ * OpenAPI spec version: 0.101.0
  */
 import {
   useMutation,
@@ -339,6 +339,8 @@ import type {
   ListStatementsParams,
   ListUnbilledIncomeParams,
   ListWhtCreditsParams,
+  ListWorkItemsPage200,
+  ListWorkItemsPageParams,
   ListWorkItemsParams,
   LoginInput,
   LookupOperationParams,
@@ -1609,6 +1611,91 @@ export const useCreateWorkItem = <TError = ErrorType<BadRequestResponse>,
       > => {
       return useMutation(getCreateWorkItemMutationOptions(options));
     }
+
+export const getListWorkItemsPageUrl = (params?: ListWorkItemsPageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/work-items/page?${stringifiedParams}` : `/api/work-items/page`
+}
+
+/**
+ * Cursors are bound to the caller and filters. Pages reflect live records; refresh from the first page after mutations or to see externally reordered tasks. The legacy work-items list remains available for existing clients.
+ * @summary Page through scoped team work in priority and due-date order
+ */
+export const listWorkItemsPage = async (params?: ListWorkItemsPageParams, options?: RequestInit): Promise<ListWorkItemsPage200> => {
+
+  return customFetch<ListWorkItemsPage200>(getListWorkItemsPageUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWorkItemsPageQueryKey = (params?: ListWorkItemsPageParams,) => {
+    return [
+    `/api/work-items/page`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWorkItemsPageQueryOptions = <TData = Awaited<ReturnType<typeof listWorkItemsPage>>, TError = ErrorType<BadRequestResponse | ForbiddenResponse>>(params?: ListWorkItemsPageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkItemsPage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWorkItemsPageQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWorkItemsPage>>> = ({ signal }) => listWorkItemsPage(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWorkItemsPage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWorkItemsPageQueryResult = NonNullable<Awaited<ReturnType<typeof listWorkItemsPage>>>
+export type ListWorkItemsPageQueryError = ErrorType<BadRequestResponse | ForbiddenResponse>
+
+
+/**
+ * @summary Page through scoped team work in priority and due-date order
+ */
+
+export function useListWorkItemsPage<TData = Awaited<ReturnType<typeof listWorkItemsPage>>, TError = ErrorType<BadRequestResponse | ForbiddenResponse>>(
+ params?: ListWorkItemsPageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkItemsPage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWorkItemsPageQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateWorkItemUrl = (id: string,) => {
 

@@ -13,6 +13,11 @@ import {
   X,
 } from "lucide-react";
 import { SegmentedControl, WorkspaceHeader } from "./workspace";
+import {
+  readCommentDraft,
+  saveCommentDraft,
+  type CommentDraft,
+} from "./work-comment-draft";
 
 export type CollaborativeWorkStatus =
   | "open"
@@ -92,9 +97,9 @@ const EMPTY_DRAFT: WorkDraft = {
 function readDraft(key: string | undefined): WorkDraft {
   if (!key || typeof window === "undefined") return EMPTY_DRAFT;
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null") as
-      | Partial<WorkDraft>
-      | null;
+    const parsed = JSON.parse(
+      window.localStorage.getItem(key) ?? "null",
+    ) as Partial<WorkDraft> | null;
     if (!parsed || typeof parsed !== "object") return EMPTY_DRAFT;
     const priority = ["low", "normal", "high", "urgent"].includes(
       String(parsed.priority),
@@ -146,11 +151,12 @@ function readAttempt(key: string | undefined): WorkAttempt | null {
   }
 }
 
-const statusItems: Array<{ value: "active" | "done" | "all"; label: string }> = [
-  { value: "active", label: "Active" },
-  { value: "done", label: "Completed" },
-  { value: "all", label: "All" },
-];
+const statusItems: Array<{ value: "active" | "done" | "all"; label: string }> =
+  [
+    { value: "active", label: "Active" },
+    { value: "done", label: "Completed" },
+    { value: "all", label: "All" },
+  ];
 
 function formatWhen(value: string | null): string {
   if (!value) return "No due date";
@@ -175,6 +181,15 @@ export function WorkManagement({
   assignees = [],
   isLoading = false,
   commentsLoading = false,
+  commentsError,
+  onRetryComments,
+  commentDraftStorageKey,
+  pageView,
+  onPageViewChange,
+  total,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
   busy = false,
   error,
   openNewInitially = false,
@@ -194,6 +209,15 @@ export function WorkManagement({
   assignees?: CollaborativeAssigneeOption[];
   isLoading?: boolean;
   commentsLoading?: boolean;
+  commentsError?: string | null;
+  onRetryComments?: () => void;
+  commentDraftStorageKey?: string;
+  pageView?: "active" | "done" | "all";
+  onPageViewChange?: (view: "active" | "done" | "all") => void;
+  total?: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   busy?: boolean;
   error?: string | null;
   openNewInitially?: boolean;
@@ -217,26 +241,49 @@ export function WorkManagement({
   onOpenLinkedRecord?: (href: string) => void;
 }) {
   const [initialDraft] = useState(() => readDraft(draftStorageKey));
-  const [filter, setFilter] = useState<"active" | "done" | "all">("active");
+  const [localFilter, setFilter] = useState<"active" | "done" | "all">(
+    "active",
+  );
+  const filter = pageView ?? localFilter;
   const [newOpen, setNewOpen] = useState(openNewInitially);
   const [title, setTitle] = useState(initialDraft.title);
   const [description, setDescription] = useState(initialDraft.description);
-  const [clientPartyId, setClientPartyId] = useState(initialDraft.clientPartyId);
-  const [priority, setPriority] =
-    useState<CollaborativeWorkPriority>(initialDraft.priority);
+  const [clientPartyId, setClientPartyId] = useState(
+    initialDraft.clientPartyId,
+  );
+  const [priority, setPriority] = useState<CollaborativeWorkPriority>(
+    initialDraft.priority,
+  );
   const [dueDate, setDueDate] = useState(initialDraft.dueDate);
   const [assignedTo, setAssignedTo] = useState(initialDraft.assignedTo);
-  const [comment, setComment] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const taskAttempt = useRef<WorkAttempt | null>(
-    readAttempt(draftStorageKey),
-  );
-  const loadedDraftKey = useRef(draftStorageKey);
-  const commentAttempt = useRef<{
-    workItemId: string;
-    body: string;
-    id: string;
+  const commentDrafts = useRef(new Map<string, CommentDraft>());
+  const [, refreshDraft] = useState(0);
+  const commentKey = `${commentDraftStorageKey ?? "memory"}:${selectedId ?? "none"}`;
+  const persistedCommentKey =
+    commentDraftStorageKey && selectedId ? commentKey : undefined;
+  const draft =
+    commentDrafts.current.get(commentKey) ??
+    readCommentDraft(persistedCommentKey);
+  const comment = draft.body;
+  const [commentError, setCommentError] = useState<{
+    key: string;
+    message: string;
   } | null>(null);
+  const [commentSending, setCommentSending] = useState(false);
+  const sendingComment = useRef(false);
+  const creatingTask = useRef(false);
+  const setCommentDraft = (
+    key: string,
+    storageKey: string | undefined,
+    next: CommentDraft,
+  ) => {
+    commentDrafts.current.set(key, next);
+    saveCommentDraft(storageKey, next);
+    refreshDraft((value) => value + 1);
+  };
+  const [localError, setLocalError] = useState<string | null>(null);
+  const taskAttempt = useRef<WorkAttempt | null>(readAttempt(draftStorageKey));
+  const loadedDraftKey = useRef(draftStorageKey);
 
   const filtered = useMemo(
     () =>
@@ -252,8 +299,7 @@ export function WorkManagement({
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const assigneesFor = (scope: string | null) =>
     assignees.filter(
-      (assignee) =>
-        !assignee.clientPartyId || assignee.clientPartyId === scope,
+      (assignee) => !assignee.clientPartyId || assignee.clientPartyId === scope,
     );
   const newTaskAssignees = assigneesFor(clientPartyId || null);
   const hasDraft = Boolean(
@@ -298,36 +344,46 @@ export function WorkManagement({
     } catch {
       // Storage may be unavailable in private or locked-down browser modes.
     }
-  }, [assignedTo, clientPartyId, description, draftStorageKey, dueDate, priority, title]);
+  }, [
+    assignedTo,
+    clientPartyId,
+    description,
+    draftStorageKey,
+    dueDate,
+    priority,
+    title,
+  ]);
 
   const submitNew = async (event: FormEvent) => {
     event.preventDefault();
+    if (creatingTask.current || busy || title.trim().length < 2) return;
+    creatingTask.current = true;
     setLocalError(null);
-    const input = {
-      ...(clientPartyId ? { clientPartyId } : {}),
-      title: title.trim(),
-      ...(description.trim() ? { description: description.trim() } : {}),
-      priority,
-      ...(dueDate
-        ? { dueAt: new Date(`${dueDate}T12:00:00`).toISOString() }
-        : {}),
-      ...(assignedTo ? { assignedTo } : {}),
-    };
-    const signature = JSON.stringify(input);
-    if (taskAttempt.current?.signature !== signature) {
-      taskAttempt.current = { signature, id: crypto.randomUUID() };
-    }
-    if (draftStorageKey) {
-      try {
-        window.localStorage.setItem(
-          `${draftStorageKey}:attempt`,
-          JSON.stringify(taskAttempt.current),
-        );
-      } catch {
-        // The in-memory key still protects retries until the page is closed.
-      }
-    }
     try {
+      const input = {
+        ...(clientPartyId ? { clientPartyId } : {}),
+        title: title.trim(),
+        ...(description.trim() ? { description: description.trim() } : {}),
+        priority,
+        ...(dueDate
+          ? { dueAt: new Date(`${dueDate}T12:00:00`).toISOString() }
+          : {}),
+        ...(assignedTo ? { assignedTo } : {}),
+      };
+      const signature = JSON.stringify(input);
+      if (taskAttempt.current?.signature !== signature) {
+        taskAttempt.current = { signature, id: crypto.randomUUID() };
+      }
+      if (draftStorageKey) {
+        try {
+          window.localStorage.setItem(
+            `${draftStorageKey}:attempt`,
+            JSON.stringify(taskAttempt.current),
+          );
+        } catch {
+          // The in-memory key still protects retries until the page is closed.
+        }
+      }
       await onCreate({
         clientRequestId: taskAttempt.current.id,
         ...input,
@@ -350,34 +406,47 @@ export function WorkManagement({
       setNewOpen(false);
     } catch (caught) {
       setLocalError(
-        caught instanceof Error ? caught.message : "The task could not be created.",
+        caught instanceof Error
+          ? caught.message
+          : "The task could not be created.",
       );
+    } finally {
+      creatingTask.current = false;
     }
   };
 
   const submitComment = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selected || !comment.trim()) return;
+    if (!selected || !comment.trim() || busy || sendingComment.current) return;
+    sendingComment.current = true;
+    setCommentSending(true);
     const body = comment.trim();
-    if (
-      commentAttempt.current?.workItemId !== selected.id ||
-      commentAttempt.current.body !== body
-    ) {
-      commentAttempt.current = {
-        workItemId: selected.id,
-        body,
-        id: crypto.randomUUID(),
-      };
-    }
-    setLocalError(null);
+    const attempt =
+      draft.attempt?.body === body
+        ? draft.attempt
+        : { body, id: crypto.randomUUID() };
+    setCommentDraft(commentKey, persistedCommentKey, {
+      body: comment,
+      attempt,
+    });
+    setCommentError(null);
     try {
-      await onComment(selected, body, commentAttempt.current.id);
-      commentAttempt.current = null;
-      setComment("");
+      await onComment(selected, body, attempt.id);
+      setCommentDraft(commentKey, persistedCommentKey, {
+        body: "",
+        attempt: null,
+      });
     } catch (caught) {
-      setLocalError(
-        caught instanceof Error ? caught.message : "The comment could not be added.",
-      );
+      setCommentError({
+        key: commentKey,
+        message:
+          caught instanceof Error
+            ? caught.message
+            : "The comment could not be added. Your draft is retained.",
+      });
+    } finally {
+      sendingComment.current = false;
+      setCommentSending(false);
     }
   };
 
@@ -388,7 +457,11 @@ export function WorkManagement({
         title="Team work"
         description="Assign owners, due dates and decisions alongside the client records they affect."
         actions={
-          <button type="button" className="mi-button-primary" onClick={() => setNewOpen(true)}>
+          <button
+            type="button"
+            className="mi-button-primary"
+            onClick={() => setNewOpen(true)}
+          >
             <Plus aria-hidden="true" />
             New task
           </button>
@@ -400,15 +473,27 @@ export function WorkManagement({
           label="Filter team work"
           items={statusItems}
           value={filter}
-          onChange={(value) => setFilter(value as typeof filter)}
+          onChange={(value) => {
+            const next = value as typeof filter;
+            if (onPageViewChange) onPageViewChange(next);
+            else setFilter(next);
+          }}
         />
-        <button type="button" className="mi-button-quiet" onClick={onRetry} disabled={isLoading}>
-          <RefreshCw className={isLoading ? "is-spinning" : undefined} aria-hidden="true" />
+        <button
+          type="button"
+          className="mi-button-quiet"
+          onClick={onRetry}
+          disabled={isLoading}
+        >
+          <RefreshCw
+            className={isLoading ? "is-spinning" : undefined}
+            aria-hidden="true"
+          />
           Refresh
         </button>
       </div>
 
-      {(error || localError) ? (
+      {error || localError ? (
         <div className="mi-collaboration__error" role="alert">
           <AlertCircle aria-hidden="true" />
           <span>{localError ?? error}</span>
@@ -417,15 +502,37 @@ export function WorkManagement({
 
       <div className="mi-collaboration__grid">
         <section className="mi-collaboration__list" aria-label="Work items">
-          {isLoading ? (
+          {isLoading && filtered.length === 0 ? (
             <div className="mi-collaboration__loading" role="status">
-              <Loader2 className="is-spinning" aria-hidden="true" /> Loading team work…
+              <Loader2 className="is-spinning" aria-hidden="true" /> Loading
+              team work…
+            </div>
+          ) : filtered.length === 0 && error ? (
+            <div className="mi-collaboration__empty">
+              <AlertCircle aria-hidden="true" />
+              <strong>Team work could not be loaded</strong>
+              <button
+                type="button"
+                className="mi-button-quiet"
+                onClick={onRetry}
+              >
+                <RefreshCw aria-hidden="true" />
+                Try again
+              </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="mi-collaboration__empty">
               <CheckCircle2 aria-hidden="true" />
-              <strong>{filter === "done" ? "Nothing completed yet" : "No active tasks"}</strong>
-              <span>Create a task when work needs an owner, deadline or discussion.</span>
+              <strong>
+                {filter === "done"
+                  ? "Nothing completed yet"
+                  : filter === "all"
+                    ? "No tasks yet"
+                    : "No active tasks"}
+              </strong>
+              <span>
+                Create a task when work needs an owner, deadline or discussion.
+              </span>
             </div>
           ) : (
             <ol>
@@ -443,7 +550,9 @@ export function WorkManagement({
                     </span>
                     <small>{item.clientName ?? "Firm-wide work"}</small>
                     <span className="mi-collaboration__item-meta">
-                      <span><Clock3 aria-hidden="true" /> {formatWhen(item.dueAt)}</span>
+                      <span>
+                        <Clock3 aria-hidden="true" /> {formatWhen(item.dueAt)}
+                      </span>
                       <span>{item.assignedToName ?? "Unassigned"}</span>
                     </span>
                   </button>
@@ -451,9 +560,32 @@ export function WorkManagement({
               ))}
             </ol>
           )}
+          {total !== undefined && filtered.length > 0 ? (
+            <p role="status">
+              Showing {filtered.length} of {total} tasks
+            </p>
+          ) : null}
+          {hasMore && onLoadMore ? (
+            <button
+              type="button"
+              className="mi-button-quiet"
+              onClick={onLoadMore}
+              disabled={loadingMore || isLoading}
+            >
+              {loadingMore ? (
+                <Loader2 className="is-spinning" aria-hidden="true" />
+              ) : (
+                <Plus aria-hidden="true" />
+              )}
+              {loadingMore ? "Loading more tasks" : "Load more tasks"}
+            </button>
+          ) : null}
         </section>
 
-        <section className="mi-collaboration__detail" aria-label="Selected work item">
+        <section
+          className="mi-collaboration__detail"
+          aria-label="Selected work item"
+        >
           {!selected ? (
             <div className="mi-collaboration__empty">
               <MessageSquare aria-hidden="true" />
@@ -466,10 +598,16 @@ export function WorkManagement({
                 <div>
                   <p>{selected.clientName ?? "Firm-wide work"}</p>
                   <h2>{selected.title}</h2>
-                  {selected.description ? <span>{selected.description}</span> : null}
+                  {selected.description ? (
+                    <span>{selected.description}</span>
+                  ) : null}
                 </div>
                 {selected.href && onOpenLinkedRecord ? (
-                  <button type="button" className="mi-button-quiet" onClick={() => onOpenLinkedRecord(selected.href!)}>
+                  <button
+                    type="button"
+                    className="mi-button-quiet"
+                    onClick={() => onOpenLinkedRecord(selected.href!)}
+                  >
                     Open record <ArrowRight aria-hidden="true" />
                   </button>
                 ) : null}
@@ -502,7 +640,9 @@ export function WorkManagement({
                 </label>
                 <div>
                   <span>Priority</span>
-                  <strong data-priority={selected.priority}>{selected.priority}</strong>
+                  <strong data-priority={selected.priority}>
+                    {selected.priority}
+                  </strong>
                 </div>
                 <div>
                   <span>Due</span>
@@ -544,16 +684,41 @@ export function WorkManagement({
 
               <div className="mi-collaboration__discussion">
                 <h3>Discussion</h3>
-                {commentsLoading ? (
+                {commentsError ? (
+                  <div className="mi-collaboration__error" role="alert">
+                    <AlertCircle aria-hidden="true" />
+                    <span>
+                      {comments.length
+                        ? "Discussion could not be refreshed. Showing the last loaded comments."
+                        : "Discussion could not be loaded."}
+                    </span>
+                    {onRetryComments ? (
+                      <button
+                        type="button"
+                        className="mi-button-quiet"
+                        onClick={onRetryComments}
+                        disabled={commentsLoading}
+                      >
+                        <RefreshCw aria-hidden="true" />
+                        Retry discussion
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {commentsLoading && comments.length === 0 ? (
                   <p role="status">Loading discussion…</p>
-                ) : comments.length === 0 ? (
-                  <p>No comments yet. Add the first decision or handoff note.</p>
-                ) : (
+                ) : comments.length === 0 && !commentsError ? (
+                  <p>
+                    No comments yet. Add the first decision or handoff note.
+                  </p>
+                ) : comments.length > 0 ? (
                   <ol>
                     {comments.map((entry) => (
                       <li key={entry.id}>
                         <span>
-                          <strong>{entry.authorName ?? "Workspace member"}</strong>
+                          <strong>
+                            {entry.authorName ?? "Workspace member"}
+                          </strong>
                           <time dateTime={entry.createdAt}>
                             {new Intl.DateTimeFormat("en-NG", {
                               day: "numeric",
@@ -567,21 +732,38 @@ export function WorkManagement({
                       </li>
                     ))}
                   </ol>
-                )}
+                ) : null}
+                {commentError?.key === commentKey ? (
+                  <p role="alert">{commentError.message}</p>
+                ) : null}
                 <form onSubmit={submitComment}>
                   <label htmlFor="work-comment">Add a comment</label>
                   <div>
                     <textarea
                       id="work-comment"
                       value={comment}
-                      onChange={(event) => setComment(event.target.value)}
+                      onChange={(event) =>
+                        setCommentDraft(commentKey, persistedCommentKey, {
+                          ...draft,
+                          body: event.target.value,
+                        })
+                      }
+                      disabled={commentSending}
                       maxLength={2000}
                       rows={3}
                       placeholder="Record a decision, question or handoff…"
                     />
-                    <button type="submit" className="mi-button-primary" disabled={busy || !comment.trim()}>
-                      <Send aria-hidden="true" />
-                      Comment
+                    <button
+                      type="submit"
+                      className="mi-button-primary"
+                      disabled={busy || commentSending || !comment.trim()}
+                    >
+                      {commentSending ? (
+                        <Loader2 className="is-spinning" aria-hidden="true" />
+                      ) : (
+                        <Send aria-hidden="true" />
+                      )}
+                      {commentSending ? "Sending comment" : "Comment"}
                     </button>
                   </div>
                 </form>
@@ -607,7 +789,10 @@ export function WorkManagement({
                   </p>
                 ) : null}
               </div>
-              <Dialog.Close className="mi-icon-button" aria-label="Close new task dialog">
+              <Dialog.Close
+                className="mi-icon-button"
+                aria-label="Close new task dialog"
+              >
                 <X aria-hidden="true" />
               </Dialog.Close>
             </div>
@@ -632,7 +817,9 @@ export function WorkManagement({
                   >
                     <option value="">Firm-wide task</option>
                     {clients.map((client) => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -678,7 +865,14 @@ export function WorkManagement({
               <div className="mi-work-dialog__row">
                 <label>
                   Priority
-                  <select value={priority} onChange={(event) => setPriority(event.target.value as CollaborativeWorkPriority)}>
+                  <select
+                    value={priority}
+                    onChange={(event) =>
+                      setPriority(
+                        event.target.value as CollaborativeWorkPriority,
+                      )
+                    }
+                  >
                     <option value="low">Low</option>
                     <option value="normal">Normal</option>
                     <option value="high">High</option>
@@ -687,13 +881,27 @@ export function WorkManagement({
                 </label>
                 <label>
                   Due date <span>Optional</span>
-                  <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
                 </label>
               </div>
               <div className="mi-work-dialog__actions">
-                <Dialog.Close className="mi-button-quiet" type="button">Cancel</Dialog.Close>
-                <button type="submit" className="mi-button-primary" disabled={busy || title.trim().length < 2}>
-                  {busy ? <Loader2 className="is-spinning" aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                <Dialog.Close className="mi-button-quiet" type="button">
+                  Cancel
+                </Dialog.Close>
+                <button
+                  type="submit"
+                  className="mi-button-primary"
+                  disabled={busy || title.trim().length < 2}
+                >
+                  {busy ? (
+                    <Loader2 className="is-spinning" aria-hidden="true" />
+                  ) : (
+                    <Plus aria-hidden="true" />
+                  )}
                   Create task
                 </button>
               </div>
