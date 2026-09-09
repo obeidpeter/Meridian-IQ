@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./csv": "./src/csv.ts",
+    "./team-work-page-suite": "./src/team-work-page.suite.tsx",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {

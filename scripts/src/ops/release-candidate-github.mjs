@@ -4,6 +4,14 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { sha256File } from "./common.mjs";
 
+// Where GitHub serves artifact bytes from: its own content host family and
+// the Azure blob accounts behind the Actions results service. Extend
+// deliberately, never to an operator-supplied value (R114).
+export const ARTIFACT_STORAGE_HOST_SUFFIXES = Object.freeze([
+  ".githubusercontent.com",
+  ".blob.core.windows.net",
+]);
+
 export const WORKFLOW = ".github/workflows/ci.yml";
 export const ENVIRONMENT = "release-production-handoff";
 export const mainWorkflowPath = (actual, expected) =>
@@ -279,6 +287,15 @@ export function githubClient(token, fetchImpl = fetch) {
             !url.password &&
             !url.hash,
           "unsafe artifact redirect",
+        );
+        // The digest check decides whether the bytes count; the host pin
+        // decides where this credential-free GET may go at all, so a spoofed
+        // API answer cannot point it at an arbitrary server (R114).
+        assert.ok(
+          ARTIFACT_STORAGE_HOST_SUFFIXES.some((suffix) =>
+            url.hostname.endsWith(suffix),
+          ),
+          "unexpected artifact redirect host",
         );
         // Do not forward the API token to signed blob storage or log the URL.
         response = await fetchImpl(url, {

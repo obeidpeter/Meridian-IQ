@@ -435,13 +435,13 @@ export const GetWorkspaceTodayResponse = zod.object({
   "role": zod.string(),
   "generatedAt": zod.coerce.date(),
   "summary": zod.object({
-  "total": zod.number().min(getWorkspaceTodayResponseSummaryTotalMin),
-  "urgent": zod.number().min(getWorkspaceTodayResponseSummaryUrgentMin),
-  "dueSoon": zod.number().min(getWorkspaceTodayResponseSummaryDueSoonMin),
-  "blocked": zod.number().min(getWorkspaceTodayResponseSummaryBlockedMin),
+  "total": zod.number().min(getWorkspaceTodayResponseSummaryTotalMin).describe('Every open item in scope across all sources, not the length of items.'),
+  "urgent": zod.number().min(getWorkspaceTodayResponseSummaryUrgentMin).describe('Items at the top rank: failed submissions and overdue deadlines, plus work marked urgent.'),
+  "dueSoon": zod.number().min(getWorkspaceTodayResponseSummaryDueSoonMin).describe('Items due within the next three days (Lagos calendar), including today.'),
+  "blocked": zod.number().min(getWorkspaceTodayResponseSummaryBlockedMin).describe('Items whose status is blocked or failed. A failed item is counted here and in urgent.'),
   "completedSetupSteps": zod.number().min(getWorkspaceTodayResponseSummaryCompletedSetupStepsMin),
   "totalSetupSteps": zod.number().min(getWorkspaceTodayResponseSummaryTotalSetupStepsMin)
-}),
+}).describe('Counts over the caller\'s whole scoped population, computed in SQL before the ranked list is limited, so they are independent of how many items the response carries and of the limit requested. The buckets overlap: an item can be both urgent and blocked.'),
   "items": zod.array(zod.object({
   "id": zod.string(),
   "source": zod.enum(['work_item', 'invoice', 'filing', 'obligation']),

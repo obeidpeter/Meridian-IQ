@@ -387,6 +387,27 @@ test("API pagination is complete and duplicate/changed counts fail closed", asyn
   );
 });
 
+test("an artifact redirect outside GitHub storage is refused before any download (R114)", async (t) => {
+  const directory = temporary(t);
+  const client = githubClient("token", async (url) => {
+    if (String(url).startsWith("https://api.github.com"))
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://fixture.invalid/archive?signed=secret" },
+      });
+    throw new Error("the redirect must not be fetched");
+  });
+  await assert.rejects(
+    client.download(
+      "fixture/repository",
+      { id: 41, size_in_bytes: 1, digest: `sha256:${"a".repeat(64)}` },
+      path.join(directory, "refused.zip"),
+    ),
+    /unexpected artifact redirect host/,
+  );
+  assert.equal(existsSync(path.join(directory, "refused.zip")), false);
+});
+
 test("signed archive redirect does not receive credentials and checksum/size failures refuse", async (t) => {
   const directory = temporary(t);
   const bytes = Buffer.from("synthetic zip bytes");
@@ -396,7 +417,10 @@ test("signed archive redirect does not receive credentials and checksum/size fai
       assert.equal(options.headers.Authorization, "Bearer must-not-forward");
       return new Response(null, {
         status: 302,
-        headers: { location: "https://fixture.invalid/archive?signed=secret" },
+        headers: {
+          location:
+            "https://productionresultssa0.blob.core.windows.net/archive?signed=secret",
+        },
       });
     }
     count++;

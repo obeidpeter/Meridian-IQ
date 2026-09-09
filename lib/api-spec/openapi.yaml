@@ -8664,21 +8664,34 @@ components:
 
     WorkspaceTodaySummary:
       type: object
+      description: >-
+        Counts over the caller's whole scoped population, computed in SQL before
+        the ranked list is limited, so they are independent of how many items the
+        response carries and of the limit requested. The buckets overlap: an item
+        can be both urgent and blocked.
       required:
         [total, urgent, dueSoon, blocked, completedSetupSteps, totalSetupSteps]
       properties:
         total:
           type: integer
           minimum: 0
+          description: Every open item in scope across all sources, not the length of items.
         urgent:
           type: integer
           minimum: 0
+          description: >-
+            Items at the top rank: failed submissions and overdue deadlines, plus
+            work marked urgent.
         dueSoon:
           type: integer
           minimum: 0
+          description: Items due within the next three days (Lagos calendar), including today.
         blocked:
           type: integer
           minimum: 0
+          description: >-
+            Items whose status is blocked or failed. A failed item is counted here
+            and in urgent.
         completedSetupSteps:
           type: integer
           minimum: 0

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -156,13 +156,23 @@ function ScopedWorkPage({ me }: { me: Me | undefined }) {
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(me),
   });
-  const items = Array.from(
-    new Map(
-      (list.data?.pages.flatMap((page) => page.items) ?? []).map((item) => [
-        item.id,
-        item,
-      ]),
-    ).values(),
+  // Memoised on the query data (R114): a fresh array every render made the
+  // selection effect below and the shared component's filter memo run on
+  // every render instead of on real change.
+  const items = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (list.data?.pages.flatMap((page) => page.items) ?? []).map(
+            (item) => [item.id, item],
+          ),
+        ).values(),
+      ),
+    [list.data],
+  );
+  const collaborativeItems = useMemo(
+    () => items.map(asCollaborative),
+    [items],
   );
   const comments = useListWorkItemComments(selectedId ?? "", {
     query: {
@@ -242,7 +252,7 @@ function ScopedWorkPage({ me }: { me: Me | undefined }) {
 
   return (
     <WorkManagement
-      items={items.map(asCollaborative)}
+      items={collaborativeItems}
       comments={comments.data ?? []}
       selectedId={selectedId}
       selectedItem={createdSelection?.item}
@@ -269,7 +279,8 @@ function ScopedWorkPage({ me }: { me: Me | undefined }) {
         select(null);
         setView(next);
       }}
-      total={list.data?.pages[0]?.total}
+      // The newest page's total, so rows that land while paging are counted (R114).
+      total={list.data?.pages.at(-1)?.total}
       hasMore={list.hasNextPage}
       loadingMore={list.isFetchingNextPage}
       onLoadMore={() => void list.fetchNextPage()}

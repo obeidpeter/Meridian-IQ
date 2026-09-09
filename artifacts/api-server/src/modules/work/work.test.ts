@@ -310,6 +310,10 @@ test("keyset pages reach all 125 tasks and reject client/filter cursor replay", 
   const seen = new Set<string>();
   let cursor: string | null = null;
   let firstCursor = "";
+  // A row that lands after the first page while the caller is paging: every
+  // later page reports the live scoped total, not the first page's (R114).
+  const lateId = randomUUID();
+  let expectedTotal = 125;
   do {
     const query = new URLSearchParams({ view: "done", limit: "17" });
     if (cursor) query.set("cursor", cursor);
@@ -320,7 +324,22 @@ test("keyset pages reach all 125 tasks and reject client/filter cursor replay", 
       items: Array<{ id: string; clientPartyId: string }>;
       nextCursor: string | null;
     };
-    assert.equal(page.total, 125);
+    assert.equal(page.total, expectedTotal);
+    if (!cursor) {
+      await getDb().insert(workItemsTable).values({
+        id: lateId,
+        firmId,
+        clientPartyId: clientAId,
+        createdBy: staffId,
+        clientRequestId: randomUUID(),
+        title: "Pagination task landed while paging",
+        status: "done",
+        priority: "normal",
+        dueAt: null,
+      });
+      ids.push(lateId);
+      expectedTotal = 126;
+    }
     assert.ok(page.items.length <= 17);
     for (const item of page.items) {
       assert.equal(item.clientPartyId, clientAId);

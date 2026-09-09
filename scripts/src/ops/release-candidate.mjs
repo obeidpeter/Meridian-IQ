@@ -208,6 +208,14 @@ export function stageSource(reservation, revision) {
   const template = path.join(reservation.output, "git-template");
   mkdirSync(template);
   const staging = path.join(reservation.output, "source");
+  // Git turned the file transport off by default after CVE-2022-39253, where
+  // a hostile repository's submodule could read arbitrary local paths during
+  // a recursive clone. It is re-enabled for this one command because the
+  // source IS a local checkout; the exposure stays closed because the clone
+  // never checks out here (--no-checkout), never recurses into submodules,
+  // starts from an empty template with core.hooksPath pointed at it (no hook
+  // runs), and the ls-tree mode filter below refuses gitlinks and symlinks
+  // before anything is written to disk.
   command(
     "git",
     [

@@ -41,8 +41,11 @@ read-only REST responses must establish:
    branch, SHA, non-expiration, producer-job timestamps, byte count, and
    GitHub-provided SHA-256 digest must agree. A missing digest refuses; the
    manifest's adjacent checksum is not an independent provenance root.
-4. The downloaded ZIP matches that authenticated digest and byte count. Its
-   manifest binds the same repository/run/attempt/SHA. Producer selection is
+4. The downloaded ZIP matches that authenticated digest and byte count. The
+   download follows GitHub's redirect only to its own artifact storage hosts
+   (`*.githubusercontent.com`, `*.blob.core.windows.net`) and never carries the
+   API token there; any other redirect host refuses before a byte is fetched.
+   Its manifest binds the same repository/run/attempt/SHA. Producer selection is
    repeated after gates and before approved handoff to detect reruns/deletion.
 
 Only the current successful attempt is accepted. Partial job reruns that reuse

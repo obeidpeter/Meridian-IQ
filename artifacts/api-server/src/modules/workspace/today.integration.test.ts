@@ -744,6 +744,61 @@ test("all-archived firm onboarding stays incomplete until that firm re-engages a
   assert.equal(step(body, "first_invoice").complete, true);
 });
 
+test("client onboarding requires this firm's live engagement, like the firm branch (R114)", async () => {
+  const scope = await makeScope(false);
+  const db = getDb();
+  await invoice(scope, { status: "validated" });
+  await db
+    .update(engagementsTable)
+    .set({ status: "archived" })
+    .where(
+      and(
+        eq(engagementsTable.firmId, scope.firmId),
+        eq(engagementsTable.clientPartyId, scope.clientId),
+      ),
+    );
+  const principal = clientPrincipal(scope.firmId, scope.clientId, {
+    userId: scope.userId,
+  });
+  let body = await today(principal);
+  assert.equal(
+    body.setup.some((item) => item.id === "first_client"),
+    false,
+    "a client user never sees the firm's add-client step",
+  );
+  for (const id of [
+    "business_identity",
+    "first_customer",
+    "first_invoice",
+    "invoice_validation",
+    "invoice_evidence",
+  ]) {
+    assert.equal(
+      step(body, id).complete,
+      false,
+      `${id} must not use an archived engagement's records as proof`,
+    );
+  }
+  assert.equal(step(body, "business_identity").href, "/business");
+  await db.insert(engagementsTable).values({
+    firmId: scope.firmId,
+    clientPartyId: scope.clientId,
+    type: "retainer",
+    status: "open",
+    title: "Re-engaged client",
+  });
+  body = await today(principal);
+  assert.equal(step(body, "business_identity").complete, true);
+  assert.equal(step(body, "first_customer").complete, true);
+  assert.equal(step(body, "first_invoice").complete, true);
+  assert.equal(step(body, "invoice_validation").complete, true);
+  assert.equal(
+    step(body, "invoice_evidence").complete,
+    false,
+    "re-engagement restores the anchor, not history that was never recorded",
+  );
+});
+
 test("firm onboarding does not use a non-business engagement as its client", async () => {
   const scope = await makeScope(false);
   const db = getDb();
