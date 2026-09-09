@@ -1,0 +1,37 @@
+{
+  "measuredAt": "2026-09-09T20:33:02.843Z",
+  "areas": {
+    "auth": {
+      "files": 10,
+      "lines": 98.03854094975912,
+      "branches": 86.28318584070797,
+      "functions": 95.07042253521126
+    },
+    "tenancy": {
+      "files": 3,
+      "lines": 93.77431906614785,
+      "branches": 80.95238095238095,
+      "functions": 78.57142857142857
+    },
+    "money": {
+      "files": 50,
+      "lines": 97.84956605593057,
+      "branches": 87.91208791208791,
+      "functions": 95.9830866807611
+    },
+    "clerk-gateway": {
+      "files": 5,
+      "lines": 94.64639788499669,
+      "branches": 86.1244019138756,
+      "functions": 89.83050847457628
+    },
+    "pipeline": {
+      "files": 5,
+      "lines": 93.81443298969072,
+      "branches": 78.53881278538812,
+      "functions": 92.85714285714286
+    }
+  },
+  "failures": [],
+  "raises": []
+}
