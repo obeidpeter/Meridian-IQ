@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { RotateCcw, Save } from "lucide-react";
+import { LiveStatus } from "./live-status";
 
 export interface BusinessDetailsRecord {
   id: string;
@@ -203,12 +204,15 @@ function BusinessDetailsEditor({
           {disabledReason}
         </p>
       ) : null}
-      {newerDetails ? (
-        <div className="space-y-2 text-sm">
-          <p role="status" className="text-muted-foreground">
-            Newer saved details are available. Your unsaved changes have not
-            been replaced.
-          </p>
+      <div className="space-y-2 text-sm">
+        {/* Present from the first render so the 409 notice is announced as a
+            change rather than a freshly mounted region (R115). */}
+        <LiveStatus className="text-muted-foreground">
+          {newerDetails
+            ? "Newer saved details are available. Your unsaved changes have not been replaced."
+            : null}
+        </LiveStatus>
+        {newerDetails ? (
           <details>
             <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Review newer saved details
@@ -229,8 +233,8 @@ function BusinessDetailsEditor({
                 ))}
             </dl>
           </details>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       {saveError ? (
         <p role="alert" className="text-sm text-destructive">
           {saveError}
@@ -300,21 +304,25 @@ function BusinessDetailsEditor({
         </div>
       </fieldset>
       <div className="flex flex-wrap items-center gap-3">
+        {/* Only the hard block disables the buttons. Saving and "nothing to
+            save" are aria-disabled so the control under the keyboard keeps
+            focus through the save and after it (R115); submit() refuses. */}
         <button
           type="submit"
-          disabled={
-            saving || Boolean(disabledReason) || !Object.keys(patch).length
-          }
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+          disabled={Boolean(disabledReason)}
+          aria-busy={saving || undefined}
+          aria-disabled={saving || !Object.keys(patch).length || undefined}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 aria-disabled:opacity-50"
         >
           <Save className="size-4 shrink-0" aria-hidden="true" />
           {saving ? "Saving business details..." : "Save business details"}
         </button>
         <button
           type="button"
-          disabled={!dirty || saving}
+          aria-disabled={!dirty || saving || undefined}
           className="mi-today__text-action"
           onClick={() => {
+            if (!dirty || saving) return;
             setBaseline(latestSaved);
             setValues(latestSaved);
             setBaselineStamp(party.updatedAt);

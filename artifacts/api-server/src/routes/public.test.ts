@@ -9,7 +9,10 @@ import {
   listen,
 } from "../test-helpers/route-harness.ts";
 import { crossTenantPrincipal } from "../test-helpers/principals.ts";
-import { createLoopbackClient } from "../test-helpers/loopback-client.ts";
+import {
+  LOOPBACK_SOURCES_ISOLATED,
+  createLoopbackClient,
+} from "../test-helpers/loopback-client.ts";
 
 const originalRelayUrl = process.env.MESSAGING_WEBHOOK_URL;
 const originalRelayToken = process.env.MESSAGING_WEBHOOK_TOKEN;
@@ -180,28 +183,40 @@ test("access-request honeypot absorbs automated submissions", async () => {
   assert.deepEqual(seen, []);
 });
 
-test("an isolated fixture source still hits the public cap on its sixth request", async () => {
-  const isolated = createLoopbackClient();
-  try {
-    const base = await listen(appFor(principal, publicRouter));
-    for (let attempt = 1; attempt <= 6; attempt++) {
-      const response = await isolated.request(`${base}/public/access-requests`, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({
-          name: "Bot",
-          email: "bot@example.test",
-          businessName: "Bot Co",
-          interest: "business",
-          teamSize: "one",
-          website: "https://spam.example",
-          consent: true,
-        }),
-      });
-      assert.equal(response.status, attempt <= 5 ? 202 : 429);
-      if (attempt === 6) assert.ok(Number(response.headers.get("retry-after")) > 0);
+test(
+  "an isolated fixture source still hits the public cap on its sixth request",
+  {
+    skip:
+      !LOOPBACK_SOURCES_ISOLATED &&
+      "a private per-IP counter needs Linux's 127/8 route",
+  },
+  async () => {
+    const isolated = createLoopbackClient();
+    try {
+      const base = await listen(appFor(principal, publicRouter));
+      for (let attempt = 1; attempt <= 6; attempt++) {
+        const response = await isolated.request(
+          `${base}/public/access-requests`,
+          {
+            method: "POST",
+            headers: JSON_HEADERS,
+            body: JSON.stringify({
+              name: "Bot",
+              email: "bot@example.test",
+              businessName: "Bot Co",
+              interest: "business",
+              teamSize: "one",
+              website: "https://spam.example",
+              consent: true,
+            }),
+          },
+        );
+        assert.equal(response.status, attempt <= 5 ? 202 : 429);
+        if (attempt === 6)
+          assert.ok(Number(response.headers.get("retry-after")) > 0);
+      }
+    } finally {
+      isolated.close();
     }
-  } finally {
-    isolated.close();
-  }
-});
+  },
+);

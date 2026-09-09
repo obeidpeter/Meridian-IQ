@@ -62,10 +62,17 @@ test("a failed refresh reports setup unavailable, hides the cached percentage an
   expect(h.refetch).toHaveBeenCalledOnce();
 });
 
-test("a retry in flight after a failure reports loading rather than a stale result", () => {
+test("a retry in flight after a failure keeps the retry control busy rather than showing a stale result", () => {
   h.error = new Error("offline");
   h.isFetching = true;
   render(<Today />);
-  expect(screen.getByText("Loading setup records...")).toBeTruthy();
+  // The unavailable notice and its retry stay mounted while the refetch
+  // runs (R115); the heading and the live region report the check.
+  expect(screen.getByText(/Setup progress is unavailable/)).toBeTruthy();
+  expect(screen.getByText("Checking setup records")).toBeTruthy();
+  const retry = screen.getByRole("button", { name: "Retry setup" });
+  expect(retry.getAttribute("aria-busy")).toBe("true");
+  fireEvent.click(retry);
+  expect(h.refetch).not.toHaveBeenCalled();
   expect(screen.queryAllByText("100%")).toHaveLength(0);
 });

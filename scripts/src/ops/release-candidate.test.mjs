@@ -39,6 +39,7 @@ import {
 } from "./release-candidate-handoff.mjs";
 import {
   ENVIRONMENT,
+  provenanceSnapshot,
   validateProducer,
   validateProtection,
   githubClient,
@@ -691,6 +692,14 @@ test("end-to-end preparation reuses all seven real pilot/RUN gates without bundl
   assert.equal(candidate.gates.databaseAccess, false);
   const log = readFileSync(path.join(result.evidence, "gates.log"), "utf8");
   assert.equal((log.match(/all seven CI artifacts/g) ?? []).length, 7);
+  // The retained provenance is the consumed-field snapshot, not the raw
+  // producer responses (R116).
+  assert.deepEqual(
+    JSON.parse(
+      readFileSync(path.join(result.evidence, "provenance.json"), "utf8"),
+    ),
+    provenanceSnapshot(f.evidence),
+  );
   assert.match(log, /pilot profile/);
   assert.equal(existsSync(path.join(f.options.output, "unpacked")), false);
   await assert.rejects(
@@ -725,7 +734,10 @@ test("long Expo transport paths prepare through all seven gates and cleanup", as
   const result = await prepareCandidate(f.options, { client: f.client });
   assert.equal(result.status, "PREPARED");
   assert.deepEqual(readFileSync(path.join(result.staging, name)), bytes);
-  const candidate = await verifyEvidence(result.evidence, result.candidateSha256);
+  const candidate = await verifyEvidence(
+    result.evidence,
+    result.candidateSha256,
+  );
   assert.equal(candidate.gates.applications.length, 7);
   assert.equal(candidate.gates.databaseAccess, false);
   assert.equal(existsSync(path.join(f.options.output, "unpacked")), false);
@@ -736,7 +748,10 @@ test("long Expo transport paths prepare through all seven gates and cleanup", as
 test("long tracked source paths remain complete through checkout and all seven gates", async (t) => {
   const name = `attached_assets/${"tracked-source-".repeat(9)}.txt`;
   const f = fixture(t, name);
-  f.options.output = path.join(f.directory, `candidate-${"nested-".repeat(12)}`);
+  f.options.output = path.join(
+    f.directory,
+    `candidate-${"nested-".repeat(12)}`,
+  );
   assert.ok(path.join(f.options.output, "source", name).length > 260);
   const result = await prepareCandidate(f.options, { client: f.client });
   assert.equal(result.status, "PREPARED");
@@ -745,14 +760,20 @@ test("long tracked source paths remain complete through checkout and all seven g
     "tracked long-path source\n",
   );
   assert.deepEqual(sourceIdentity(result.staging), f.manifest.source);
-  const candidate = await verifyEvidence(result.evidence, result.candidateSha256);
+  const candidate = await verifyEvidence(
+    result.evidence,
+    result.candidateSha256,
+  );
   assert.equal(candidate.gates.applications.length, 7);
   assert.equal(candidate.gates.databaseAccess, false);
 });
 
 test("long archive and extraction roots retain exclusive writes and reparse refusal", (t) => {
   const f = fixture(t);
-  const directory = path.join(f.directory, ...Array(4).fill("nested-".repeat(10)));
+  const directory = path.join(
+    f.directory,
+    ...Array(4).fill("nested-".repeat(10)),
+  );
   assert.ok(directory.length > 260);
   mkdirSync(directory, { recursive: true });
   const archive = path.join(directory, "original.zip");
@@ -1066,7 +1087,10 @@ test("the CI producer workflow grants its token read-only contents access (R113)
   const block = workflow.match(/^permissions:\n((?: {2}[a-z-]+: [a-z-]+\n)+)/m);
   assert.ok(block, "ci.yml must declare a top-level permissions block");
   assert.deepEqual(
-    block[1].trim().split("\n").map((line) => line.trim()),
+    block[1]
+      .trim()
+      .split("\n")
+      .map((line) => line.trim()),
     ["contents: read"],
   );
   assert.equal(
@@ -1078,4 +1102,53 @@ test("the CI producer workflow grants its token read-only contents access (R113)
     workflow,
     /pull_request_target|workflow_run:|secrets\.|github\.token|GITHUB_TOKEN/,
   );
+});
+
+test("the retained provenance keeps only the fields the checks consumed and still validates (R116)", () => {
+  const evidence = producer();
+  evidence.repository.owner = { login: "someone", id: 1 };
+  evidence.run.actor = { login: "someone", id: 1 };
+  evidence.run.head_commit = { message: "internal commit message" };
+  evidence.attempt.triggering_actor = { login: "someone", id: 1 };
+  evidence.jobs[1].steps.push({
+    name: "Set up job",
+    number: 0,
+    status: "completed",
+    conclusion: "success",
+  });
+  evidence.jobs[1].runner_name = "GitHub Actions 42";
+  evidence.artifacts[0].archive_download_url =
+    "https://api.github.com/repos/x/y/actions/artifacts/40/zip";
+  const snapshot = provenanceSnapshot(evidence);
+  assert.deepEqual(Object.keys(snapshot), [
+    "repository",
+    "workflow",
+    "run",
+    "attempt",
+    "jobsEndpoint",
+    "jobs",
+    "artifacts",
+  ]);
+  const text = JSON.stringify(snapshot);
+  for (const leaked of [
+    "owner",
+    "actor",
+    "head_commit",
+    "internal commit message",
+    "Set up job",
+    "runner_name",
+    "archive_download_url",
+  ])
+    assert.equal(text.includes(leaked), false, leaked);
+  // Re-validation from the snapshot alone selects the same artifact, now
+  // without the download URL the raw response carried.
+  assert.equal(
+    validateProducer(selectionBase, snapshot).id,
+    validateProducer(selectionBase, evidence).id,
+  );
+  assert.deepEqual(
+    validateProducer(selectionBase, snapshot),
+    snapshot.artifacts[0],
+  );
+  assert.equal(snapshot.jobs[1].steps.length, 2);
 });

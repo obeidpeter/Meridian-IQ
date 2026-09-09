@@ -49,7 +49,7 @@ export function StaleBuildBanner() {
         type="button"
         onClick={() => setDismissed(true)}
         aria-label="Dismiss server version warning"
-        className="shrink-0 rounded-md p-1 transition-colors hover:bg-amber-200 dark:hover:bg-amber-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-amber-200 dark:hover:bg-amber-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         data-testid="button-dismiss-stale-banner"
       >
         <X className="w-4 h-4" aria-hidden="true" />

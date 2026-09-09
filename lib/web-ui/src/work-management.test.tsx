@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -132,36 +133,80 @@ test("pagination is accessible and a load failure does not say no active tasks",
 
 test("duplicate comment submissions are suppressed and late success clears only its own draft", async () => {
   let finish!: () => void;
-  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
   const onComment = vi.fn(() => pending);
-  const props = { ...baseProps, items: [task(), task("task-b")], onCreate: async () => {}, onComment };
+  const props = {
+    ...baseProps,
+    items: [task(), task("task-b")],
+    onCreate: async () => {},
+    onComment,
+  };
   const view = render(<WorkManagement {...props} selectedId="task-b" />);
-  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "Keep task B draft" } });
+  fireEvent.change(screen.getByLabelText("Add a comment"), {
+    target: { value: "Keep task B draft" },
+  });
   view.rerender(<WorkManagement {...props} selectedId="task-a" />);
-  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "Send task A" } });
+  fireEvent.change(screen.getByLabelText("Add a comment"), {
+    target: { value: "Send task A" },
+  });
   const form = screen.getByLabelText("Add a comment").closest("form")!;
   fireEvent.submit(form);
   fireEvent.submit(form);
   expect(onComment).toHaveBeenCalledOnce();
   view.rerender(<WorkManagement {...props} selectedId="task-b" />);
   finish();
-  await waitFor(() => expect((screen.getByLabelText("Add a comment") as HTMLTextAreaElement).disabled).toBe(false));
+  await waitFor(() =>
+    expect(
+      (screen.getByLabelText("Add a comment") as HTMLTextAreaElement).readOnly,
+    ).toBe(false),
+  );
   expect(screen.getByDisplayValue("Keep task B draft")).toBeTruthy();
   view.rerender(<WorkManagement {...props} selectedId="task-a" />);
-  expect((screen.getByLabelText("Add a comment") as HTMLTextAreaElement).value).toBe("");
+  expect(
+    (screen.getByLabelText("Add a comment") as HTMLTextAreaElement).value,
+  ).toBe("");
 });
 
 test("comment storage is account and workspace scoped and safely tolerates denied storage", () => {
-  const props = { ...baseProps, items: [task()], selectedId: "task-a", onCreate: async () => {} };
-  const view = render(<WorkManagement {...props} commentDraftStorageKey="meridianiq:work-comment:user-a:firm-a" />);
-  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "Private draft for A" } });
-  view.rerender(<WorkManagement {...props} commentDraftStorageKey="meridianiq:work-comment:user-b:firm-b" />);
-  expect((screen.getByLabelText("Add a comment") as HTMLTextAreaElement).value).toBe("");
-  const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
+  const props = {
+    ...baseProps,
+    items: [task()],
+    selectedId: "task-a",
+    onCreate: async () => {},
+  };
+  const view = render(
+    <WorkManagement
+      {...props}
+      commentDraftStorageKey="meridianiq:work-comment:user-a:firm-a"
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("Add a comment"), {
+    target: { value: "Private draft for A" },
+  });
+  view.rerender(
+    <WorkManagement
+      {...props}
+      commentDraftStorageKey="meridianiq:work-comment:user-b:firm-b"
+    />,
+  );
+  expect(
+    (screen.getByLabelText("Add a comment") as HTMLTextAreaElement).value,
+  ).toBe("");
+  const storage = vi
+    .spyOn(Storage.prototype, "setItem")
+    .mockImplementation(() => {
+      throw new Error("Storage unavailable");
+    });
   try {
-    fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "Memory-only draft" } });
+    fireEvent.change(screen.getByLabelText("Add a comment"), {
+      target: { value: "Memory-only draft" },
+    });
     expect(screen.getByDisplayValue("Memory-only draft")).toBeTruthy();
-  } finally { storage.mockRestore(); }
+  } finally {
+    storage.mockRestore();
+  }
 });
 
 const baseProps = {
@@ -192,29 +237,61 @@ test("an off-page creation remains selected without changing page counts or disc
   expect(screen.getByRole("heading", { name: created.title })).toBeTruthy();
   expect(screen.getByText("Showing 50 of 126 tasks")).toBeTruthy();
   expect(onSelect).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "New task decision" } });
+  fireEvent.change(screen.getByLabelText("Add a comment"), {
+    target: { value: "New task decision" },
+  });
   view.rerender(<WorkManagement {...props} error="Refresh unavailable" />);
   expect(screen.getByDisplayValue("New task decision")).toBeTruthy();
   expect(onSelect).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Comment", exact: true }));
-  await waitFor(() => expect(onComment).toHaveBeenCalledWith(created, "New task decision", expect.any(String)));
+  await waitFor(() =>
+    expect(onComment).toHaveBeenCalledWith(
+      created,
+      "New task decision",
+      expect.any(String),
+    ),
+  );
 });
 
 test("loaded record updates take precedence over an off-page creation snapshot", async () => {
   const created = task("new-task");
   const loaded = { ...created, version: 2, title: "Updated task" };
   const onComment = vi.fn(async () => {});
-  render(<WorkManagement {...baseProps} items={[loaded]} selectedId={created.id} selectedItem={created} onCreate={async () => {}} onComment={onComment} />);
+  render(
+    <WorkManagement
+      {...baseProps}
+      items={[loaded]}
+      selectedId={created.id}
+      selectedItem={created}
+      onCreate={async () => {}}
+      onComment={onComment}
+    />,
+  );
   expect(screen.getByRole("heading", { name: "Updated task" })).toBeTruthy();
-  fireEvent.change(screen.getByLabelText("Add a comment"), { target: { value: "Latest version" } });
+  fireEvent.change(screen.getByLabelText("Add a comment"), {
+    target: { value: "Latest version" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Comment", exact: true }));
-  await waitFor(() => expect(onComment).toHaveBeenCalledWith(loaded, "Latest version", expect.any(String)));
+  await waitFor(() =>
+    expect(onComment).toHaveBeenCalledWith(
+      loaded,
+      "Latest version",
+      expect.any(String),
+    ),
+  );
 });
 
 test("off-page selections obey filters and cannot select a different id", () => {
   const onSelect = vi.fn();
   const created = task("new-task");
-  const props = { ...baseProps, items: [task()], selectedId: created.id, selectedItem: created, onSelect, onCreate: async () => {} };
+  const props = {
+    ...baseProps,
+    items: [task()],
+    selectedId: created.id,
+    selectedItem: created,
+    onSelect,
+    onCreate: async () => {},
+  };
   const view = render(<WorkManagement {...props} pageView="done" />);
   expect(onSelect).toHaveBeenLastCalledWith(null);
   view.rerender(<WorkManagement {...props} selectedId="unknown" />);
@@ -294,4 +371,142 @@ test("a failed create reuses its idempotency key after remount", async () => {
     expect(window.localStorage.getItem(key)).toBeNull();
     expect(window.localStorage.getItem(`${key}:attempt`)).toBeNull();
   });
+});
+
+test("load more stays focused and busy while the next page loads, and the count region persists (R115)", () => {
+  const load = vi.fn();
+  const props = {
+    ...baseProps,
+    onCreate: async () => {},
+    items: [task()],
+    total: 125,
+    hasMore: true,
+    onLoadMore: load,
+  };
+  const view = render(<WorkManagement {...props} />);
+  const count = screen.getByText("Showing 1 of 125 tasks");
+  const loadMore = screen.getByRole("button", { name: "Load more tasks" });
+  loadMore.focus();
+  fireEvent.click(loadMore);
+  expect(load).toHaveBeenCalledOnce();
+  view.rerender(<WorkManagement {...props} loadingMore />);
+  const loading = screen.getByRole("button", { name: "Loading more tasks" });
+  expect(loading).toBe(loadMore);
+  expect(document.activeElement).toBe(loadMore);
+  expect(loadMore.getAttribute("aria-busy")).toBe("true");
+  expect(loadMore.getAttribute("aria-disabled")).toBe("true");
+  expect(loadMore.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(loadMore);
+  expect(load).toHaveBeenCalledOnce();
+  view.rerender(
+    <WorkManagement {...props} items={[task(), task("task-b")]} total={126} />,
+  );
+  expect(document.activeElement).toBe(loadMore);
+  expect(loadMore.hasAttribute("aria-disabled")).toBe(false);
+  // The same region announces the new count: it was never unmounted.
+  expect(screen.getByText("Showing 2 of 126 tasks")).toBe(count);
+  expect(count.getAttribute("role")).toBe("status");
+});
+
+test("sending a comment and retrying the discussion keep keyboard focus (R115)", async () => {
+  let finish!: () => void;
+  const onComment = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const retry = vi.fn();
+  const props = {
+    ...baseProps,
+    items: [task()],
+    selectedId: "task-a",
+    onCreate: async () => {},
+    onComment,
+    commentsError: { status: 503 },
+    onRetryComments: retry,
+  };
+  const view = render(<WorkManagement {...props} />);
+  fireEvent.change(screen.getByLabelText("Add a comment"), {
+    target: { value: "Decision recorded" },
+  });
+  const send = screen.getByRole("button", { name: "Comment", exact: true });
+  send.focus();
+  fireEvent.click(send);
+  expect(onComment).toHaveBeenCalledOnce();
+  const sending = screen.getByRole("button", { name: "Sending comment" });
+  expect(sending).toBe(send);
+  expect(document.activeElement).toBe(send);
+  expect(send.getAttribute("aria-busy")).toBe("true");
+  expect(
+    (screen.getByLabelText("Add a comment") as HTMLTextAreaElement).readOnly,
+  ).toBe(true);
+  fireEvent.click(send);
+  expect(onComment).toHaveBeenCalledOnce();
+  await act(async () => finish());
+  expect(document.activeElement).toBe(send);
+  expect(send.getAttribute("aria-disabled")).toBe("true");
+  expect(send.hasAttribute("disabled")).toBe(false);
+
+  const retryButton = screen.getByRole("button", { name: "Retry discussion" });
+  retryButton.focus();
+  fireEvent.click(retryButton);
+  expect(retry).toHaveBeenCalledOnce();
+  view.rerender(<WorkManagement {...props} commentsLoading />);
+  expect(document.activeElement).toBe(retryButton);
+  expect(retryButton.getAttribute("aria-busy")).toBe("true");
+  fireEvent.click(retryButton);
+  expect(retry).toHaveBeenCalledOnce();
+});
+
+test("a draft under the user-only key is adopted by the scoped key once, and a scoped draft wins (R116)", async () => {
+  const legacy = "meridianiq:work-draft:user-a";
+  const scoped = "meridianiq:work-draft:user-a:firm-a:firm";
+  const draft = (title: string) =>
+    JSON.stringify({
+      title,
+      description: "",
+      clientPartyId: "",
+      priority: "normal",
+      dueDate: "",
+      assignedTo: "",
+    });
+  const attempt = JSON.stringify({
+    signature: "sig",
+    id: "6f1d4e5a-3b2c-4d8e-9f0a-1b2c3d4e5f60",
+  });
+  window.localStorage.setItem(legacy, draft("From the old key"));
+  window.localStorage.setItem(`${legacy}:attempt`, attempt);
+  const onCreate = vi.fn(async (_input: CreateCollaborativeWorkInput) => {});
+  const first = render(
+    <WorkManagement
+      {...baseProps}
+      onCreate={onCreate}
+      openNewInitially
+      draftStorageKey={scoped}
+      legacyDraftStorageKey={legacy}
+    />,
+  );
+  expect(await screen.findByDisplayValue("From the old key")).toBeTruthy();
+  expect(window.localStorage.getItem(legacy)).toBeNull();
+  expect(window.localStorage.getItem(`${legacy}:attempt`)).toBeNull();
+  expect(window.localStorage.getItem(`${scoped}:attempt`)).toBe(attempt);
+  expect(JSON.parse(window.localStorage.getItem(scoped) ?? "{}").title).toBe(
+    "From the old key",
+  );
+  first.unmount();
+
+  window.localStorage.setItem(legacy, draft("Stale legacy draft"));
+  window.localStorage.setItem(scoped, draft("Scoped draft"));
+  render(
+    <WorkManagement
+      {...baseProps}
+      onCreate={onCreate}
+      openNewInitially
+      draftStorageKey={scoped}
+      legacyDraftStorageKey={legacy}
+    />,
+  );
+  expect(await screen.findByDisplayValue("Scoped draft")).toBeTruthy();
+  expect(window.localStorage.getItem(legacy)).toBeNull();
 });

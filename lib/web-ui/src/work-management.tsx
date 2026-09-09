@@ -12,6 +12,7 @@ import {
   Send,
   X,
 } from "lucide-react";
+import { LiveStatus } from "./live-status";
 import { SegmentedControl, WorkspaceHeader } from "./workspace";
 import {
   readCommentDraft,
@@ -128,6 +129,29 @@ function readDraft(key: string | undefined): WorkDraft {
   }
 }
 
+// Drafts written before the key carried firm and client scope (R116) move
+// to the scoped key once, so a saved draft is not lost by the change; a
+// draft already under the scoped key wins and the legacy copy is dropped.
+function adoptLegacyDraft(
+  legacyKey: string | undefined,
+  key: string | undefined,
+): void {
+  if (!legacyKey || !key || legacyKey === key || typeof window === "undefined")
+    return;
+  try {
+    for (const suffix of ["", ":attempt"]) {
+      const legacy = window.localStorage.getItem(`${legacyKey}${suffix}`);
+      if (legacy === null) continue;
+      if (window.localStorage.getItem(`${key}${suffix}`) === null) {
+        window.localStorage.setItem(`${key}${suffix}`, legacy);
+      }
+      window.localStorage.removeItem(`${legacyKey}${suffix}`);
+    }
+  } catch {
+    // Storage unavailable: there is nothing to adopt.
+  }
+}
+
 function readAttempt(key: string | undefined): WorkAttempt | null {
   if (!key || typeof window === "undefined") return null;
   try {
@@ -195,6 +219,7 @@ export function WorkManagement({
   error,
   openNewInitially = false,
   draftStorageKey,
+  legacyDraftStorageKey,
   onSelect,
   onRetry,
   onCreate,
@@ -224,6 +249,8 @@ export function WorkManagement({
   error?: string | null;
   openNewInitially?: boolean;
   draftStorageKey?: string;
+  /** The user-only key drafts were saved under before R116; adopted once. */
+  legacyDraftStorageKey?: string;
   onSelect: (id: string | null) => void;
   onRetry: () => void;
   onCreate: (input: CreateCollaborativeWorkInput) => Promise<void>;
@@ -242,7 +269,10 @@ export function WorkManagement({
   ) => Promise<void>;
   onOpenLinkedRecord?: (href: string) => void;
 }) {
-  const [initialDraft] = useState(() => readDraft(draftStorageKey));
+  const [initialDraft] = useState(() => {
+    adoptLegacyDraft(legacyDraftStorageKey, draftStorageKey);
+    return readDraft(draftStorageKey);
+  });
   const [localFilter, setFilter] = useState<"active" | "done" | "all">(
     "active",
   );
@@ -325,6 +355,7 @@ export function WorkManagement({
   useEffect(() => {
     if (!draftStorageKey || loadedDraftKey.current === draftStorageKey) return;
     loadedDraftKey.current = draftStorageKey;
+    adoptLegacyDraft(legacyDraftStorageKey, draftStorageKey);
     taskAttempt.current = readAttempt(draftStorageKey);
     if (hasDraft) return;
     const draft = readDraft(draftStorageKey);
@@ -334,7 +365,7 @@ export function WorkManagement({
     setPriority(draft.priority);
     setDueDate(draft.dueDate);
     setAssignedTo(draft.assignedTo);
-  }, [draftStorageKey, hasDraft]);
+  }, [draftStorageKey, hasDraft, legacyDraftStorageKey]);
 
   useEffect(() => {
     if (!draftStorageKey || typeof window === "undefined") return;
@@ -513,12 +544,18 @@ export function WorkManagement({
 
       <div className="mi-collaboration__grid">
         <section className="mi-collaboration__list" aria-label="Work items">
-          {isLoading && filtered.length === 0 ? (
-            <div className="mi-collaboration__loading" role="status">
-              <Loader2 className="is-spinning" aria-hidden="true" /> Loading
-              team work…
-            </div>
-          ) : filtered.length === 0 && error ? (
+          {/* Present from the first render so loading and the row count are
+              announced as changes, not as freshly mounted regions (R115). */}
+          <LiveStatus className="mi-collaboration__loading">
+            {isLoading && filtered.length === 0 ? (
+              <>
+                <Loader2 className="is-spinning" aria-hidden="true" /> Loading
+                team work…
+              </>
+            ) : null}
+          </LiveStatus>
+          {isLoading && filtered.length === 0 ? null : filtered.length === 0 &&
+            error ? (
             <div className="mi-collaboration__empty">
               <AlertCircle aria-hidden="true" />
               <strong>Team work could not be loaded</strong>
@@ -571,17 +608,24 @@ export function WorkManagement({
               ))}
             </ol>
           )}
-          {total !== undefined && filtered.length > 0 ? (
-            <p role="status">
-              Showing {filtered.length} of {total} tasks
-            </p>
-          ) : null}
+          <LiveStatus className="mi-collaboration__count">
+            {total !== undefined && filtered.length > 0
+              ? `Showing ${filtered.length} of ${total} tasks`
+              : null}
+          </LiveStatus>
           {hasMore && onLoadMore ? (
+            // aria-disabled rather than disabled while a page loads (R115): a
+            // control that disables itself under the keyboard drops focus to
+            // the body. The click guard does the refusing.
             <button
               type="button"
               className="mi-button-quiet"
-              onClick={onLoadMore}
-              disabled={loadingMore || isLoading}
+              aria-busy={loadingMore || undefined}
+              aria-disabled={loadingMore || isLoading || undefined}
+              onClick={() => {
+                if (loadingMore || isLoading) return;
+                onLoadMore();
+              }}
             >
               {loadingMore ? (
                 <Loader2 className="is-spinning" aria-hidden="true" />
@@ -707,8 +751,12 @@ export function WorkManagement({
                       <button
                         type="button"
                         className="mi-button-quiet"
-                        onClick={onRetryComments}
-                        disabled={commentsLoading}
+                        aria-busy={commentsLoading || undefined}
+                        aria-disabled={commentsLoading || undefined}
+                        onClick={() => {
+                          if (commentsLoading) return;
+                          onRetryComments();
+                        }}
                       >
                         <RefreshCw aria-hidden="true" />
                         Retry discussion
@@ -716,9 +764,14 @@ export function WorkManagement({
                     ) : null}
                   </div>
                 ) : null}
-                {commentsLoading && comments.length === 0 ? (
-                  <p role="status">Loading discussion…</p>
-                ) : comments.length === 0 && !commentsError ? (
+                <LiveStatus className="mi-collaboration__discussion-status">
+                  {commentsLoading && comments.length === 0
+                    ? "Loading discussion…"
+                    : null}
+                </LiveStatus>
+                {commentsLoading &&
+                comments.length === 0 ? null : comments.length === 0 &&
+                  !commentsError ? (
                   <p>
                     No comments yet. Add the first decision or handoff note.
                   </p>
@@ -759,7 +812,8 @@ export function WorkManagement({
                           body: event.target.value,
                         })
                       }
-                      disabled={commentSending}
+                      readOnly={commentSending}
+                      aria-busy={commentSending || undefined}
                       maxLength={2000}
                       rows={3}
                       placeholder="Record a decision, question or handoff…"
@@ -767,7 +821,10 @@ export function WorkManagement({
                     <button
                       type="submit"
                       className="mi-button-primary"
-                      disabled={busy || commentSending || !comment.trim()}
+                      aria-busy={commentSending || undefined}
+                      aria-disabled={
+                        busy || commentSending || !comment.trim() || undefined
+                      }
                     >
                       {commentSending ? (
                         <Loader2 className="is-spinning" aria-hidden="true" />
@@ -794,11 +851,9 @@ export function WorkManagement({
                 <Dialog.Description>
                   Give the work a clear outcome, owner context and due date.
                 </Dialog.Description>
-                {hasDraft ? (
-                  <p className="mi-work-dialog__saved" role="status">
-                    Draft saved on this device.
-                  </p>
-                ) : null}
+                <LiveStatus className="mi-work-dialog__saved">
+                  {hasDraft ? "Draft saved on this device." : null}
+                </LiveStatus>
               </div>
               <Dialog.Close
                 className="mi-icon-button"
@@ -906,7 +961,8 @@ export function WorkManagement({
                 <button
                   type="submit"
                   className="mi-button-primary"
-                  disabled={busy || title.trim().length < 2}
+                  aria-busy={busy || undefined}
+                  aria-disabled={busy || title.trim().length < 2 || undefined}
                 >
                   {busy ? (
                     <Loader2 className="is-spinning" aria-hidden="true" />

@@ -163,17 +163,15 @@ function ScopedWorkPage({ me }: { me: Me | undefined }) {
     () =>
       Array.from(
         new Map(
-          (list.data?.pages.flatMap((page) => page.items) ?? []).map(
-            (item) => [item.id, item],
-          ),
+          (list.data?.pages.flatMap((page) => page.items) ?? []).map((item) => [
+            item.id,
+            item,
+          ]),
         ).values(),
       ),
     [list.data],
   );
-  const collaborativeItems = useMemo(
-    () => items.map(asCollaborative),
-    [items],
-  );
+  const collaborativeItems = useMemo(() => items.map(asCollaborative), [items]);
   const comments = useListWorkItemComments(selectedId ?? "", {
     query: {
       queryKey: [
@@ -289,7 +287,14 @@ function ScopedWorkPage({ me }: { me: Me | undefined }) {
       openNewInitially={
         new URLSearchParams(window.location.search).get("action") === "new"
       }
+      // Scoped like the comment key (R116): one user can belong to more than
+      // one workspace, and a draft belongs to the one it was written in.
       draftStorageKey={
+        me?.userId
+          ? `meridianiq:work-draft:${me.userId}:${me.firmId ?? "none"}:${me.clientPartyId ?? "firm"}`
+          : undefined
+      }
+      legacyDraftStorageKey={
         me?.userId ? `meridianiq:work-draft:${me.userId}` : undefined
       }
       onSelect={select}

@@ -78,7 +78,12 @@ pnpm --filter @workspace/db run test
 ```
 
 Use only a disposable database: the main-app HTTP integration and E2E failure
-fixtures require `E2E_DATABASE_DISPOSABLE=1`. The credit suite uses the same
+fixtures require `E2E_DATABASE_DISPOSABLE=1`. The route fixtures give each test
+file its own loopback source address on Linux, where the whole 127/8 block
+routes to `lo`, so the persistent per-IP throttles stay enabled; on macOS and
+Windows every fixture shares `127.0.0.1`, the two tests that need a private
+per-IP counter skip themselves, and `LOGIN_IP_ATTEMPT_MAX` can be raised if
+the login throttle trips across files. The credit suite uses the same
 flag to retire (layer-3 revoke) any assessment population an earlier run left
 behind — the bank Data Room aggregates the whole platform, so its k-anonymity
 assertions start from an empty population — and fails fast on a reused

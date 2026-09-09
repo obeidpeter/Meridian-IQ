@@ -43,8 +43,8 @@ test("only permitted editable fields are rendered, without verification claims",
   expect(
     screen
       .getByRole("button", { name: "Save business details" })
-      .hasAttribute("disabled"),
-  ).toBe(true);
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
   expect(screen.queryByText(/verified|atomic|stamped/i)).toBeNull();
   expect(
     screen.queryByRole("textbox", {
@@ -70,8 +70,8 @@ test("only changed fields are saved and the canonical response becomes the clean
   expect(
     screen
       .getByRole("button", { name: "Save business details" })
-      .hasAttribute("disabled"),
-  ).toBe(true);
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
   submit();
   expect(onSave).toHaveBeenCalledTimes(1);
 });
@@ -163,11 +163,12 @@ test("same-tick submissions and edits cannot overlap an in-flight save", async (
   expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
     "Abuja",
   );
-  expect(
-    screen
-      .getByRole("button", { name: "Saving business details..." })
-      .hasAttribute("disabled"),
-  ).toBe(true);
+  const savingButton = screen.getByRole("button", {
+    name: "Saving business details...",
+  });
+  expect(savingButton.getAttribute("aria-disabled")).toBe("true");
+  expect(savingButton.getAttribute("aria-busy")).toBe("true");
+  expect(savingButton.hasAttribute("disabled")).toBe(false);
   await act(async () => finish({ ...party, city: "Abuja" }));
   expect(screen.getByText("Business details saved.")).toBeTruthy();
 });
@@ -361,5 +362,47 @@ test("the save carries the stamp of the record the user edited, then adopts the 
       city: "Ibadan",
       expectedUpdatedAt: "2026-09-09T09:00:00.000Z",
     }),
+  );
+});
+
+test("save and discard keep keyboard focus through their own state changes (R115)", async () => {
+  let finish!: (record: BusinessDetailsRecord) => void;
+  const onSave = vi.fn(
+    () =>
+      new Promise<BusinessDetailsRecord>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<BusinessDetailsForm party={party} onSave={onSave} />);
+  change("City", "Abuja");
+  const save = screen.getByRole("button", { name: "Save business details" });
+  save.focus();
+  submit();
+  // Saving: the control under the keyboard is busy, not removed from the
+  // tab order, so focus stays where the user put it.
+  expect(document.activeElement).toBe(save);
+  expect(save.getAttribute("aria-busy")).toBe("true");
+  await act(async () => finish({ ...party, city: "Abuja" }));
+  expect(screen.getByText("Business details saved.")).toBeTruthy();
+  // Saved: nothing left to save, and focus is still on the button rather
+  // than dropped to the body by a disabled attribute.
+  expect(document.activeElement).toBe(save);
+  expect(save.getAttribute("aria-disabled")).toBe("true");
+  expect(save.hasAttribute("disabled")).toBe(false);
+  submit();
+  expect(onSave).toHaveBeenCalledOnce();
+
+  change("City", "Kano");
+  const discard = screen.getByRole("button", { name: "Discard changes" });
+  discard.focus();
+  fireEvent.click(discard);
+  expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
+    "Abuja",
+  );
+  expect(document.activeElement).toBe(discard);
+  expect(discard.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(discard);
+  expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
+    "Abuja",
   );
 });

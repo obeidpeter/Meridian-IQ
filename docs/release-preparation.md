@@ -112,7 +112,7 @@ new-candidate/
   source/                 matching Git checkout plus untouched CI package
   evidence/
     original.zip          exact GitHub archive, never repacked or modified
-    provenance.json       authenticated producer response snapshots
+    provenance.json       the producer fields the checks consumed, re-validatable
     inventory.json        every transported file's bytes and SHA-256
     gates.log             existing seven-app artifact gate output
     checklist.md          exact checksums and settings requiring review

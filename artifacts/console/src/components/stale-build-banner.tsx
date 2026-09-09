@@ -74,7 +74,7 @@ export function StaleBuildBanner() {
         type="button"
         onClick={dismiss}
         aria-label="Dismiss build warning"
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-amber-200 dark:hover:bg-amber-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-amber-200 dark:hover:bg-amber-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         data-testid="button-dismiss-stale-build"
       >
         <X className="h-4 w-4" aria-hidden="true" />
