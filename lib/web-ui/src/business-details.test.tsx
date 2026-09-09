@@ -324,3 +324,42 @@ test("discard after save uses the successful response while the caller prop is s
     "Abuja",
   );
 });
+
+test("the save carries the stamp of the record the user edited, then adopts the saved one (R113)", async () => {
+  const stamped = { ...party, updatedAt: "2026-09-09T08:00:00.000Z" };
+  const onSave = vi.fn().mockResolvedValue({
+    ...stamped,
+    city: "Abuja",
+    updatedAt: "2026-09-09T09:00:00.000Z",
+  });
+  const view = render(<BusinessDetailsForm party={stamped} onSave={onSave} />);
+  change("City", "Abuja");
+  // A newer record arrives while the user is typing: the baseline (and its
+  // stamp) must stay with what they edited, so the server can refuse it.
+  view.rerender(
+    <BusinessDetailsForm
+      party={{
+        ...stamped,
+        street: "9 Other Road",
+        updatedAt: "2026-09-09T08:30:00.000Z",
+      }}
+      onSave={onSave}
+    />,
+  );
+  submit();
+  await waitFor(() =>
+    expect(onSave).toHaveBeenCalledExactlyOnceWith({
+      city: "Abuja",
+      expectedUpdatedAt: "2026-09-09T08:00:00.000Z",
+    }),
+  );
+  await screen.findByText("Business details saved.");
+  change("City", "Ibadan");
+  submit();
+  await waitFor(() =>
+    expect(onSave).toHaveBeenLastCalledWith({
+      city: "Ibadan",
+      expectedUpdatedAt: "2026-09-09T09:00:00.000Z",
+    }),
+  );
+});

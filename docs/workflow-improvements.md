@@ -123,8 +123,11 @@ release prerequisite. The synthetic PostgreSQL instance was stopped afterward.
 
 - Pagination reflects live records, not a multi-request database snapshot.
   Refresh from the first page after external changes to ordering or membership.
-- Business-details PATCH has no server revision guard. Changed-only updates
-  reduce unrelated overwrites but cannot prevent same-field concurrent writes.
+- Business-details PATCH carries an optimistic-concurrency guard since R113:
+  the editors send the `updatedAt` they loaded as `expectedUpdatedAt`, a record
+  that changed since answers 409 with nothing written, and the page refetches so
+  the newer saved values appear beside the unsaved ones. Callers that omit the
+  stamp keep last-write-wins.
   Unsaved business details warn on browser unload; they are not persisted or
   protected from in-app navigation. Comment drafts have separate recovery.
 - Recovery heartbeats are producer records, not proof of private off-box

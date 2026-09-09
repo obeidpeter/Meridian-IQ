@@ -107,6 +107,24 @@ approval never grants maintenance-forward authorization.
 - Long-running work and external calls must not hold request transactions.
 - Consequential operations reserve idempotency before provider side effects.
 - Rollback tests and restore drills use disposable databases only.
+- A guardrail migration may assert an integrity constraint the Publish diff
+  missed (0056 re-asserts the two `clerk_reservations` UNIQUE constraints by
+  column, R113). Such a migration fails loudly on duplicate rows and boot then
+  holds readiness, so before publishing a build that carries one, run its
+  pre-check read-only against production and resolve any rows it reports:
+
+  ```sql
+  SELECT 'inference_call_id' AS col, inference_call_id AS value, count(*)
+    FROM clerk_reservations WHERE inference_call_id IS NOT NULL
+   GROUP BY 2 HAVING count(*) > 1
+  UNION ALL
+  SELECT 'provider_call_id', provider_call_id, count(*)
+    FROM clerk_reservations WHERE provider_call_id IS NOT NULL
+   GROUP BY 2 HAVING count(*) > 1;
+  ```
+
+  An empty result means the boot-time re-assertion adds the constraints and
+  the catalogue comparison passes without manual DDL.
 
 ## Backup and Restore
 

@@ -9,9 +9,18 @@ export interface BusinessDetailsRecord {
   street?: string | null;
   city?: string | null;
   countryCode: string;
+  /** The server's updatedAt; when present it rides every save as the
+   *  optimistic-concurrency stamp (R113). */
+  updatedAt?: string;
 }
 
-export type BusinessDetailsPatch = Partial<Omit<BusinessDetailsRecord, "id">>;
+export type BusinessDetailsPatch = Partial<
+  Omit<BusinessDetailsRecord, "id" | "updatedAt">
+> & {
+  /** The stamp of the record the user edited, so a newer save by someone
+   *  else answers 409 instead of being overwritten. */
+  expectedUpdatedAt?: string;
+};
 
 const fields = [
   {
@@ -109,6 +118,10 @@ function BusinessDetailsEditor({
   const [observedParty, setObservedParty] = useState(party);
   const [latestSaved, setLatestSaved] = useState(() => valuesFor(party));
   const [baseline, setBaseline] = useState(() => valuesFor(party));
+  // The stamp travels with the baseline, never with the latest refetch: a
+  // newer record that arrived while the user was typing is exactly the case
+  // the server must refuse.
+  const [baselineStamp, setBaselineStamp] = useState(party.updatedAt);
   const [values, setValues] = useState(() => valuesFor(party));
   const [errors, setErrors] = useState<Errors>({});
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -133,6 +146,7 @@ function BusinessDetailsEditor({
     if (!dirty && !savingRef.current) {
       setBaseline(valuesFor(party));
       setValues(valuesFor(party));
+      setBaselineStamp(party.updatedAt);
     }
   }
 
@@ -152,7 +166,9 @@ function BusinessDetailsEditor({
     setSaveError(null);
     setSaved(false);
     try {
-      const updated = await onSave(patch);
+      const updated = await onSave(
+        baselineStamp ? { ...patch, expectedUpdatedAt: baselineStamp } : patch,
+      );
       if (updated.id !== party.id)
         throw new Error(
           "The saved business record did not match this business.",
@@ -160,6 +176,7 @@ function BusinessDetailsEditor({
       setBaseline(valuesFor(updated));
       setValues(valuesFor(updated));
       setLatestSaved(valuesFor(updated));
+      setBaselineStamp(updated.updatedAt);
       setSaved(true);
     } catch (error) {
       setSaveError(
@@ -300,6 +317,7 @@ function BusinessDetailsEditor({
           onClick={() => {
             setBaseline(latestSaved);
             setValues(latestSaved);
+            setBaselineStamp(party.updatedAt);
             setErrors({});
             setSaveError(null);
             setSaved(false);

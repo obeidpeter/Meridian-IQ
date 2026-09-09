@@ -105,7 +105,7 @@ test("firm staff uses the selected party and changed-only PATCH, then refreshes 
   await screen.findByText("Business details saved.");
   expect(h.mutate).toHaveBeenCalledExactlyOnceWith({
     id: "client-a",
-    data: { city: "Abuja" },
+    data: { city: "Abuja", expectedUpdatedAt: "2026-09-09T08:00:00Z" },
   });
   expect(client.getQueryData(getGetPartyQueryKey("client-a"))).toMatchObject({
     city: "Abuja",
@@ -161,7 +161,7 @@ test("cached refetch failures and account-refresh failures retain unsaved input"
   await waitFor(() =>
     expect(h.mutate).toHaveBeenCalledWith({
       id: "client-a",
-      data: { city: "Abuja" },
+      data: { city: "Abuja", expectedUpdatedAt: "2026-09-09T08:00:00Z" },
     }),
   );
 });
@@ -206,4 +206,27 @@ test("browser unload warns only while dirty and listeners are cleaned up", () =>
   editCity();
   unmount();
   expect(warned()).toBe(false);
+});
+
+test("a 409 from a newer save refetches the record and keeps the unsaved edit (R113)", async () => {
+  h.mutate.mockRejectedValueOnce(
+    Object.assign(new Error("Conflict"), {
+      status: 409,
+      data: { error: "These business details changed since you loaded them. Review the latest saved values and try again." },
+    }),
+  );
+  render(page());
+  editCity();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Save business details" }),
+  );
+  await screen.findByText(/changed since you loaded them/);
+  expect(h.retry).toHaveBeenCalledOnce();
+  expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
+    "Abuja",
+  );
+  expect(h.mutate).toHaveBeenCalledExactlyOnceWith({
+    id: "client-a",
+    data: { city: "Abuja", expectedUpdatedAt: "2026-09-09T08:00:00Z" },
+  });
 });

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.101.0
+ * OpenAPI spec version: 0.102.0
  */
 
 export interface PartyUpdateInput {
@@ -18,4 +18,6 @@ export interface PartyUpdateInput {
   /** @nullable */
   city?: string | null;
   countryCode?: string;
+  /** Optimistic-concurrency guard (R113): the party's updatedAt the caller last loaded. When present, the update applies only if the record has not changed since; otherwise the response is 409 Conflict and nothing is written. Clients that omit it keep last-write-wins. */
+  expectedUpdatedAt?: Date;
 }
