@@ -101,7 +101,7 @@ export function validateMobileArtifact(root = ROOT) {
   return config;
 }
 
-export function buildMobileArtifact(root = ROOT, env = process.env) {
+function buildMobileArtifact(root = ROOT, env = process.env) {
   const app = path.join(root, "artifacts/mobile");
   const config = mobileBuildConfig(root);
   const buildEnv = {

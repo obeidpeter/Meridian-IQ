@@ -211,6 +211,5 @@ export const invoiceRoomPaymentRequestsTable = pgTable(
 
 export type InvoiceRoomShare = typeof invoiceRoomSharesTable.$inferSelect;
 export type InvoiceRoomSession = typeof invoiceRoomSessionsTable.$inferSelect;
-export type InvoiceRoomEvent = typeof invoiceRoomEventsTable.$inferSelect;
 export type InvoiceRoomPaymentRequest =
   typeof invoiceRoomPaymentRequestsTable.$inferSelect;

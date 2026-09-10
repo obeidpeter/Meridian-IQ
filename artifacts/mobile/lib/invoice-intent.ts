@@ -1,7 +1,7 @@
 import type { InvoiceInput } from "@workspace/api-client-react";
 import type { LineDraft } from "./invoice-form";
 
-export const INVOICE_INTENT_PREFIX = "miq_invoice_intent:";
+const INVOICE_INTENT_PREFIX = "miq_invoice_intent:";
 export interface InvoiceIntentScope {
   userId: string;
   firmId: string | null;
@@ -134,15 +134,6 @@ export function saveInvoiceIntent(
     if (!isCurrent())
       throw new Error("This invoice belongs to a previous session.");
     await storage.setItem(invoiceIntentStorageKey(intent.scope), serialized);
-  });
-}
-export function removeInvoiceIntent(
-  storage: IntentStorage,
-  scope: InvoiceIntentScope,
-  isCurrent: () => boolean,
-): Promise<void> {
-  return ordered(async () => {
-    if (isCurrent()) await storage.removeItem(invoiceIntentStorageKey(scope));
   });
 }
 export function clearInvoiceIntents(storage: IntentStorage): Promise<void> {

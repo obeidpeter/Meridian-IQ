@@ -242,7 +242,7 @@ async function relayRequest(
   );
 }
 
-export const liveErpRelayConnector: Connector = {
+const liveErpRelayConnector: Connector = {
   key: "meridian-relay",
   name: "Production ERP relay",
   description:

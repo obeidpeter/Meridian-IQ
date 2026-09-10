@@ -21,7 +21,7 @@ export type RailFaultOutcome =
   | "unauthorized"
   | "malformed";
 
-export const RAIL_FAULT_OUTCOMES: readonly RailFaultOutcome[] = [
+const RAIL_FAULT_OUTCOMES: readonly RailFaultOutcome[] = [
   "accept",
   "reject",
   "duplicate",
@@ -113,7 +113,6 @@ export const RAIL_FAULT_TABLE: Record<RailFaultOutcome, RailFaultShape> = {
 // rail can never inject an arbitrary lifecycle reason or Desk-case code.
 // Shared by the transport and the scripted fake so a scripted code the
 // wire would never deliver is never asserted in a pipeline test.
-export const MAX_REJECTION_CODE_LENGTH = 64;
 const REJECTION_CODE = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 export function sanitiseRejectionCode(code: unknown): string | null {

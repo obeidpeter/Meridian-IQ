@@ -76,7 +76,7 @@ export function formatNaira(amount: number): string {
   return formatCurrency(Math.round(toNonNegative(amount)));
 }
 
-export const BAND_THRESHOLDS: Record<TurnoverBand, string> = {
+const BAND_THRESHOLDS: Record<TurnoverBand, string> = {
   small: "Turnover up to \u20A625,000,000",
   medium: "Turnover \u20A625,000,001 \u2013 \u20A6100,000,000",
   large: "Turnover above \u20A6100,000,000",

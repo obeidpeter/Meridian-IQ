@@ -28,9 +28,9 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { displayPath, ROOT } from "./shared.mjs";
 
-export const BASELINE_FILE = path.join(ROOT, "complexity-baseline.json");
-export const REPORT_THRESHOLD = 10;
-export const DEFAULT_THRESHOLD = 20;
+const BASELINE_FILE = path.join(ROOT, "complexity-baseline.json");
+const REPORT_THRESHOLD = 10;
+const DEFAULT_THRESHOLD = 20;
 
 // "Function 'submit' has a complexity of 25. Maximum allowed is 10." keeps
 // its function label and its number.

@@ -4,7 +4,7 @@
 // a launch-profile owner never reads a checklist about desks the nav hides.
 // Keys not in the map are invoice-core and always shown.
 
-export const CLOSE_ITEM_FEATURE: Readonly<Record<string, string>> = {
+const CLOSE_ITEM_FEATURE: Readonly<Record<string, string>> = {
   open_filings: "statutory_desks",
   open_obligations: "statutory_desks",
   wht_credits: "statutory_desks",

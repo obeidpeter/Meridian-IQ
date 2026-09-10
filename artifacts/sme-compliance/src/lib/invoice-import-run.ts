@@ -5,7 +5,7 @@ import type {
 import { canonicalPayloadHash, stableCommandKey } from "./idempotent-command";
 import type { ImportRunApi, ImportRunManifest } from "./invoice-import-run-api";
 
-export const IMPORT_CHUNK_SIZE = 100;
+const IMPORT_CHUNK_SIZE = 100;
 export interface InvoiceImportRun {
   version: 1;
   id: string;
@@ -17,8 +17,7 @@ export interface InvoiceImportRun {
   started: boolean;
   manifest: ImportRunManifest;
 }
-export const importRunStorageKey = (scope: string) =>
-  `meridianiq:import-run:${scope}`;
+const importRunStorageKey = (scope: string) => `meridianiq:import-run:${scope}`;
 export function saveImportRun(run: InvoiceImportRun): boolean {
   try {
     localStorage.setItem(importRunStorageKey(run.scope), JSON.stringify(run));
@@ -101,7 +100,7 @@ export async function newImportRun(
     },
   };
 }
-export function importChunkKey(runId: string, index: number) {
+function importChunkKey(runId: string, index: number) {
   return `${runId}:${index}`;
 }
 

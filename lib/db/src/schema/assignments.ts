@@ -35,5 +35,3 @@ export const clientAssignmentsTable = pgTable(
     index("client_assignments_firm_user_idx").on(t.firmId, t.userId),
   ],
 );
-
-export type ClientAssignment = typeof clientAssignmentsTable.$inferSelect;

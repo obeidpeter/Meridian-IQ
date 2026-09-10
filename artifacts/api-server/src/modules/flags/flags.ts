@@ -22,7 +22,7 @@ const RELEASE_FLAG_BY_KEY = new Map(
   RELEASE_FLAGS.map((flag) => [flag.key, flag]),
 );
 
-export function featureRequirements(key: string): readonly string[] {
+function featureRequirements(key: string): readonly string[] {
   return RELEASE_FLAG_BY_KEY.get(key)?.requires ?? [];
 }
 
@@ -51,7 +51,7 @@ async function rawFeatureEnabled(
   return flag?.enabled ?? false;
 }
 
-export async function unmetFeatureRequirements(
+async function unmetFeatureRequirements(
   key: string,
   firmId?: string | null,
 ): Promise<string[]> {
@@ -144,7 +144,7 @@ export async function listFlags(): Promise<FlagWithCohort[]> {
   );
 }
 
-export async function getFlag(key: string): Promise<FeatureFlag> {
+async function getFlag(key: string): Promise<FeatureFlag> {
   const [flag] = await getDb()
     .select()
     .from(featureFlagsTable)

@@ -14,6 +14,3 @@ export const productionBootstrapClaimsTable = pgTable(
       .defaultNow(),
   },
 );
-
-export type ProductionBootstrapClaim =
-  typeof productionBootstrapClaimsTable.$inferSelect;

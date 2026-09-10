@@ -26,7 +26,7 @@ import {
   runtimeState,
 } from "./maintenance-server.mjs";
 
-export const HELD_EVIDENCE_MAX_AGE_MS = 3600_000;
+const HELD_EVIDENCE_MAX_AGE_MS = 3600_000;
 const HELD_EVIDENCE_MAX_BYTES = 16 * 1024;
 const HELD_CHECKS = [
   "maintenanceHealth",

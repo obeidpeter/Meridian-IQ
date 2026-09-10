@@ -241,7 +241,7 @@ async function bankRelayRequest(
   );
 }
 
-export const liveBankRelayConnector: StatementFeedConnector = {
+const liveBankRelayConnector: StatementFeedConnector = {
   key: "open-banking-relay",
   name: "Production open-banking relay",
   description:

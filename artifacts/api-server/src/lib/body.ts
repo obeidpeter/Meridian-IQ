@@ -8,7 +8,7 @@ import express, { type Request } from "express";
 // as JSON bodies well beyond the 100kb express default. Only JSON is parsed:
 // urlencoded parsing is deliberately NOT enabled so a cross-site HTML <form>
 // (a no-preflight "simple request") cannot deliver a parseable body (SEC-02).
-export const JSON_BODY_LIMIT = "8mb";
+const JSON_BODY_LIMIT = "8mb";
 
 export function rawBodyOf(req: Request): Buffer {
   return (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.alloc(0);

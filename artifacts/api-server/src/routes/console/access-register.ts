@@ -56,7 +56,7 @@ function registerHash(members: RegisterMember[]): string {
   return createHash("sha256").update(JSON.stringify(canon)).digest("hex");
 }
 
-export async function buildAccessRegister(firmId: string) {
+async function buildAccessRegister(firmId: string) {
   const db = getDb();
   const rows = await db
     .select({

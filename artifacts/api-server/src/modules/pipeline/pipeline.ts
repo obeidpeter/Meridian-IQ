@@ -90,14 +90,14 @@ const DEFAULT_MAX_BACKOFF_MS = 15 * 60 * 1000;
 const DEFAULT_RETRY_HORIZON_MS = 24 * 60 * 60 * 1000;
 const PARK_JITTER_MS = 2_000;
 
-export function outboxMaxBackoffMs(): number {
+function outboxMaxBackoffMs(): number {
   const configured = Number(process.env.OUTBOX_MAX_BACKOFF_MS);
   return Number.isFinite(configured) && configured > 0
     ? Math.floor(configured)
     : DEFAULT_MAX_BACKOFF_MS;
 }
 
-export function outboxRetryHorizonMs(): number {
+function outboxRetryHorizonMs(): number {
   const configured = Number(process.env.OUTBOX_RETRY_HORIZON_MS);
   return Number.isFinite(configured) && configured >= 0
     ? Math.floor(configured)
@@ -815,7 +815,7 @@ export function transactionHoldBudgetMs(): number {
   return 4 * railTimeoutMs() + 30_000;
 }
 
-export function outboxLeaseMs(): number {
+function outboxLeaseMs(): number {
   const configured = Number(process.env.OUTBOX_LEASE_MS);
   const minimum = transactionHoldBudgetMs();
   return Number.isFinite(configured) && configured >= minimum

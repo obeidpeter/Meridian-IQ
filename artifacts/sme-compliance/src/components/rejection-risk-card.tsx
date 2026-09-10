@@ -26,17 +26,17 @@ const SCOPE_TONES: Record<string, string> = {
 };
 
 /** "this supplier" / "this buyer" / "your firm"; humanizes nothing — an unknown scope shows as-is. */
-export function scopeChipLabel(scope: string): string {
+function scopeChipLabel(scope: string): string {
   return SCOPE_LABELS[scope] ?? scope;
 }
 
 /** Pill classes for a signal's scope chip (slate for unrecognised scopes). */
-export function scopeChipClasses(scope: string): string {
+function scopeChipClasses(scope: string): string {
   return SCOPE_TONES[scope] ?? pillClasses("slate");
 }
 
 /** "Seen 3 times · last on 12 Jul 2026" — the row's frequency line. */
-export function signalFrequency(count: number, lastSeen: string): string {
+function signalFrequency(count: number, lastSeen: string): string {
   return `Seen ${count} time${count === 1 ? "" : "s"} · last on ${formatDate(lastSeen)}`;
 }
 

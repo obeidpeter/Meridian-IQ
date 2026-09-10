@@ -9,9 +9,9 @@
 // (parseOrThrow), never a silent fall-through to an unbounded query.
 
 /** Rows a bare list request returns. */
-export const LIST_DEFAULT_LIMIT = 100;
+const LIST_DEFAULT_LIMIT = 100;
 /** The most rows one list request may ask for. */
-export const LIST_MAX_LIMIT = 200;
+const LIST_MAX_LIMIT = 200;
 /**
  * Reference lists (parties) feed pickers and name maps that want the whole
  * working set in one read; their rows are small, so their ceiling is higher.

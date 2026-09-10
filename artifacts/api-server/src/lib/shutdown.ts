@@ -28,7 +28,7 @@ export interface ShutdownDeps {
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 25_000;
 
-export function shutdownTimeoutMs(): number {
+function shutdownTimeoutMs(): number {
   const configured = Number(process.env.SHUTDOWN_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0
     ? Math.floor(configured)

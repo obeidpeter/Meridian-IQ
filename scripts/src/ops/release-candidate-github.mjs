@@ -7,15 +7,15 @@ import { sha256File } from "./common.mjs";
 // Where GitHub serves artifact bytes from: its own content host family and
 // the Azure blob accounts behind the Actions results service. Extend
 // deliberately, never to an operator-supplied value (R114).
-export const ARTIFACT_STORAGE_HOST_SUFFIXES = Object.freeze([
+const ARTIFACT_STORAGE_HOST_SUFFIXES = Object.freeze([
   ".githubusercontent.com",
   ".blob.core.windows.net",
 ]);
 
-export const WORKFLOW = ".github/workflows/ci.yml";
+const WORKFLOW = ".github/workflows/ci.yml";
 // The two producer-job steps whose order and timing bind the artifact to the
 // selected attempt.
-export const PRODUCER_STEPS = Object.freeze([
+const PRODUCER_STEPS = Object.freeze([
   "Stamp tested immutable build manifest",
   "Preserve tested release artifact",
 ]);
