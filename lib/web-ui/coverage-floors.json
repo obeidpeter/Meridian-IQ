@@ -51,6 +51,17 @@
         "lines": 92,
         "branches": 81
       }
+    },
+    "primitives": {
+      "paths": [
+        "src/ui/**",
+        "src/cn.ts",
+        "src/query-error.tsx"
+      ],
+      "floors": {
+        "lines": 94,
+        "branches": 66
+      }
     }
   }
 }

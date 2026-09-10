@@ -22,7 +22,7 @@
 | `@workspace/db`                            | Drizzle schema, migrations, RLS context, and database lifecycle.       |
 | `@workspace/api-errors`                    | Stable error-envelope interpretation shared by clients.                |
 | `@workspace/format`                        | Cross-surface display and copy primitives. Must stay runtime-light.    |
-| `@workspace/web-ui`                        | Headless shared UI and application-shell behavior.                     |
+| `@workspace/web-ui`                        | Headless shared UI, the shared shadcn primitives (`src/ui`) and application-shell behavior. |
 | `@workspace/web-config`                    | Vite/Vitest defaults and browser security headers.                     |
 | `@workspace/integrations-openai-ai-server` | Low-level provider client, imported only by Clerk provider wiring.     |
 | `@workspace/scripts`                       | E2E, load, backup/restore, release, and quality tooling.               |
