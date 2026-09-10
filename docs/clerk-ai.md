@@ -880,10 +880,16 @@ unchanged.
   the whole case refuses with the FIRST reason. `answer.plan` (the
   executed keys + app-resolved titles), `answer.pins` and
   `answer.sections` are the contract 0.56.0 ClerkAnswer extension —
-  `AskAnswer` in ask.ts MUST mirror openapi.yaml because the stored jsonb
-  answer IS the API answer (the db type still carries the lean pre-0.56
-  shape) — and the `clerk.ask` audit records the executed plan's keys
-  (pointer-only catalogue strings, never user or model text).
+  `AskAnswer` in ask-answer.ts MUST mirror openapi.yaml because the stored
+  jsonb answer IS the API answer (the db type still carries the lean
+  pre-0.56 shape) — and the `clerk.ask` audit records the executed plan's
+  keys (pointer-only catalogue strings, never user or model text). Since
+  R126 the flow is split behind the `askClerk` façade in ask.ts:
+  ask-offer.ts assembles the offered catalogues and option lists,
+  ask-followup.ts the multi-turn context, ask-steps.ts runs the plan steps
+  and ask-answer.ts holds the answer shape and the deterministic fold —
+  the single model call, the question case, the refusal prefix and the
+  audit stay in ask.ts.
 - **Multi-turn (pins BY ID since 0.56.0)**: the web clients thread the
   previous answered case's id (`AskClerkInput.previousCaseId`); the
   server loads that case inside `inClerkScope` with an explicit firm +

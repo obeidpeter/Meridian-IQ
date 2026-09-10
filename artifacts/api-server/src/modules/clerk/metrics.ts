@@ -1,219 +1,39 @@
 import { sql } from "drizzle-orm";
-import { LEDGER_TOKENS_SQL, monthPace, utcMonthStart } from "./budget";
-import {
-  detectResistanceDrop,
-  injectionResistanceMonths,
-} from "./resistance-watch";
-import { detectQualityDrop, keptRateMonths } from "./quality-watch";
-import { GROUNDING_VIOLATION_ACTION } from "./grounding";
-import { narrationKeptRate } from "./narration-match";
-import {
-  computeCorrectionShapes,
-  type CorrectionShapeRow,
-} from "./correction-shapes";
+import { computeCorrectionShapes } from "./correction-shapes";
 import {
   getDb,
   type ClerkCorrection,
   type ClerkExtraction,
 } from "@workspace/db";
+import { rate, type ClerkMetrics } from "./metrics-core";
+import {
+  loadAskOutcomes,
+  loadCaseMetrics,
+  loadCorrectionRates,
+  loadSupplierAccuracy,
+} from "./metrics-cases";
+import {
+  loadCostTotals,
+  loadEconomics,
+  loadInferenceMetrics,
+  loadPlatformSpend,
+  makeUsdEstimator,
+} from "./metrics-inference";
+import { loadQualitySignals } from "./metrics-signals";
 
 // Clerk operational metrics (CLK-OBS-04, CLK-OPS-06/07). Pure SQL aggregation
 // over the case table and the append-only inference ledger — the numbers the
 // monthly governance review needs (invalid-output rate, refusal rate, latency
 // by model/prompt cohort, decision throughput), computed on demand. No model
 // involvement, no new state.
+//
+// R126: getClerkMetrics is the façade over the query groups — metrics-cases
+// (clerk_cases), metrics-inference (the ledger and the ONE pricing rule),
+// metrics-signals (the shared-source quality blocks) — with the ClerkMetrics
+// shape in metrics-core. Calibration stays here: it is shared with the
+// adaptive fast lane below.
 
-export interface ClerkMetrics {
-  windowDays: number;
-  cases: {
-    total: number;
-    byStatus: Record<string, number>;
-    byKind: Record<string, number>;
-    avgDecisionMinutes: number | null;
-    avgQueueWaitMinutes: number | null;
-    avgActiveReviewMinutes: number | null;
-  };
-  inference: {
-    total: number;
-    byOutcome: Record<string, number>;
-    invalidRate: number;
-    errorRate: number;
-    latencyP50Ms: number | null;
-    latencyP95Ms: number | null;
-    cohorts: {
-      model: string;
-      promptVersion: string;
-      purpose: string;
-      total: number;
-      okCount: number;
-      latencyP95Ms: number | null;
-    }[];
-  };
-  cost: {
-    promptTokens: number;
-    completionTokens: number;
-    callsWithUsage: number;
-    tokensPerDecidedCase: number | null;
-    estimatedUsd: number | null;
-  };
-  // Unit economics (idea #8): where the tokens actually go, and how the
-  // failure taxonomy moves over time. Pure ledger SQL — the numbers pricing
-  // decisions and a provider evaluation will want.
-  economics: {
-    byPurpose: {
-      purpose: string;
-      calls: number;
-      promptTokens: number;
-      completionTokens: number;
-      errorCount: number;
-      estimatedUsd: number | null;
-    }[];
-    months: {
-      month: string; // "YYYY-MM" (UTC — the budget month boundary)
-      calls: number;
-      promptTokens: number;
-      completionTokens: number;
-      okCount: number;
-      invalidCount: number;
-      killedCount: number;
-      errorCount: number;
-    }[];
-  };
-  corrections: {
-    field: string;
-    total: number;
-    overridden: number;
-    overrideRate: number;
-  }[];
-  // Correction-shape mining: the same corrections exhaust classified by the
-  // SHAPE of each override — day/month flips, percent-vs-fraction VAT, powers
-  // of ten, missed and hallucinated values — deterministic string/number
-  // analysis over the calibration sample, zero model calls. The override-rate
-  // table says WHERE Clerk is wrong; this says HOW, which is what a prompt or
-  // parser fix needs. Absent when the window holds no changed corrections.
-  correctionShapes?: CorrectionShapeRow[];
-  // Per-supplier accuracy (exhaust idea #9): the corrections exhaust joined to
-  // the approved invoice's supplier identity — which suppliers' documents
-  // Clerk reads worst. The list a firm uses to nudge clients toward cleaner
-  // invoices, and the evidence for where supplier-memory exemplars earn their
-  // keep. Pure SQL, zero model calls.
-  supplierAccuracy: {
-    supplierName: string;
-    firmName: string | null;
-    cases: number;
-    fieldsCompared: number;
-    overridden: number;
-    overrideRate: number;
-  }[];
-  ask: {
-    total: number;
-    answered: number;
-    refused: number;
-    refusalRate: number;
-  };
-  // Platform spend meter (round-7 idea #3): the whole platform's
-  // month-to-date token consumption from the ledger — budget pace is
-  // per-firm; this is the number the provider invoice arrives against.
-  // Pure ledger SQL; the projection is the same linear month-pace rule as
-  // budgetPace (UTC month, matching the budget boundary).
-  platformSpend: {
-    month: string; // "YYYY-MM" (UTC)
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    firmFundedTokens: number;
-    platformFundedTokens: number;
-    estimatedUsd: number | null;
-    projectedTokens: number;
-    projectedUsd: number | null;
-  };
-  // Injection-resistance trend (round-6 idea #8): resistance over time from
-  // the stored eval runs — pure SQL over clerk_eval_runs, zero model calls.
-  // Monthly buckets show drift; the per-prompt-version split shows whether a
-  // promoted prompt actually held the line the canary predicted.
-  injectionTrend: {
-    months: {
-      month: string; // "YYYY-MM" (UTC)
-      runs: number;
-      injectionFixtures: number;
-      injectionResisted: number;
-      resistanceRate: number;
-    }[];
-    byPromptVersion: {
-      promptVersion: string;
-      runs: number;
-      injectionFixtures: number;
-      injectionResisted: number;
-      resistanceRate: number;
-    }[];
-  };
-  // Number-grounding violations (round-17 idea #1): phrasing surfaces whose
-  // model output carried a numeral the facts never stated — each such output
-  // was replaced by its deterministic template and left one pointer-only
-  // audit event (grounding.ts). Zero is the healthy reading.
-  grounding: {
-    violations: number;
-    bySurface: { surface: string; count: number }[];
-  };
-  // Narration-match lane health (narration-match.ts narrationKeptRate — one
-  // source, so this block and any alerting can never disagree): suggestions
-  // in the window split pick vs abstention, and — of the picks whose line a
-  // human has since decided by ACCEPTING a proposal — kept (accepted the
-  // suggested proposal) vs overridden (accepted a different one). Pure SQL
-  // over the suggestion jsonb and the proposal decisions; nothing stored.
-  narrationMatch: {
-    suggested: number;
-    kept: number;
-    overridden: number;
-    abstained: number;
-  };
-  // Resistance-drop alert (round-8 idea #2): present when the newest measured
-  // month's injection resistance fell materially below the previous one —
-  // same pure rule as the sweep that writes the audit alert
-  // (modules/clerk/resistance-watch.ts), so banner and alert always agree.
-  resistanceAlert?: {
-    fromMonth: string;
-    toMonth: string;
-    fromRate: number;
-    toRate: number;
-    injectionFixtures: number;
-  };
-  // Kept-rate drift: monthly kept-rate buckets from the corrections exhaust
-  // (fields the operator left unchanged / fields compared) — the accuracy
-  // sibling of the injection trend. Shared with the quality-watch sweep
-  // (modules/clerk/quality-watch.ts) so chart and alert read one source.
-  // Absent when the exhaust holds no measured months.
-  keptRateTrend?: {
-    month: string; // "YYYY-MM" (UTC)
-    fields: number;
-    keptRate: number;
-  }[];
-  // Present when the newest measured month's kept-rate fell materially below
-  // the previous one — the same pure rule as the sweep that writes the audit
-  // alert, so banner and alert always agree.
-  qualityAlert?: {
-    fromMonth: string;
-    toMonth: string;
-    fromRate: number;
-    toRate: number;
-    fields: number;
-  };
-  // Confidence calibration from the corrections exhaust (idea #5): for each
-  // confidence band, how often the operator KEPT the model's value unchanged.
-  // Well-calibrated extraction shows keptRate tracking meanConfidence; a band
-  // where they diverge tells the governance review the flagging threshold
-  // (FLAG_CONFIDENCE_THRESHOLD) is set against miscalibrated numbers. Absent
-  // when the window holds no corrected approvals.
-  calibration?: {
-    sampleFields: number;
-    buckets: {
-      range: string;
-      fields: number;
-      meanConfidence: number;
-      keptRate: number;
-    }[];
-  };
-}
+export type { ClerkMetrics } from "./metrics-core";
 
 // Pure calibration fold, separately testable: join each approved case's
 // header-field confidences (extraction) with whether the operator changed the
@@ -271,10 +91,6 @@ export function computeCalibration(
   };
 }
 
-function rate(part: number, whole: number): number {
-  return whole === 0 ? 0 : Number((part / whole).toFixed(4));
-}
-
 // The calibration sample: recent approved extractions with a corrections
 // diff, newest CALIBRATION_SAMPLE_LIMIT so the folds stay cheap as history
 // grows. The ONE spelling of the query BOTH consumers read — getClerkMetrics'
@@ -313,301 +129,21 @@ async function calibrationSample(
   }[];
 }
 
+// The loaders are awaited SEQUENTIALLY in the original query order (no
+// Promise.all), so connection use and the RLS posture are unchanged; the
+// pricing env rates are read per call, at the same point in the sequence
+// as before (after the per-case query, before supplier accuracy).
 export async function getClerkMetrics(windowDays = 30): Promise<ClerkMetrics> {
-  const db = getDb();
   const since = sql`now() - make_interval(days => ${windowDays})`;
 
-  const caseRows = (
-    await db.execute(sql`
-      SELECT kind, status, COUNT(*)::int AS count
-      FROM clerk_cases
-      WHERE created_at >= ${since}
-      GROUP BY kind, status
-    `)
-  ).rows as { kind: string; status: string; count: number }[];
-
-  const byStatus: Record<string, number> = {};
-  const byKind: Record<string, number> = {};
-  let total = 0;
-  for (const r of caseRows) {
-    total += r.count;
-    byStatus[r.status] = (byStatus[r.status] ?? 0) + r.count;
-    byKind[r.kind] = (byKind[r.kind] ?? 0) + r.count;
-  }
-
-  // Median human turnaround for decided extraction cases: creation (intake +
-  // machine extraction) to the recorded decision. updated_at is the decision
-  // write because decided cases take no further writes.
-  const decisionRows = (
-    await db.execute(sql`
-      SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60.0) AS avg_minutes
-      FROM clerk_cases
-      WHERE created_at >= ${since}
-        AND kind = 'extraction'
-        AND decided_by IS NOT NULL
-    `)
-  ).rows as { avg_minutes: string | null }[];
-  const avgDecisionMinutes =
-    decisionRows[0]?.avg_minutes != null
-      ? Number(Number(decisionRows[0].avg_minutes).toFixed(1))
-      : null;
-
-  // Claim timestamps split turnaround into queue-wait (created -> claimed) and
-  // active review (claimed -> decision) — the CLK-OPS-06 operator-time signal.
-  const timingRows = (
-    await db.execute(sql`
-      SELECT
-        AVG(EXTRACT(EPOCH FROM (claimed_at - created_at)) / 60.0)
-          AS queue_minutes,
-        AVG(EXTRACT(EPOCH FROM (updated_at - claimed_at)) / 60.0)
-          FILTER (WHERE decided_by IS NOT NULL) AS active_minutes
-      FROM clerk_cases
-      WHERE created_at >= ${since}
-        AND kind = 'extraction'
-        AND claimed_at IS NOT NULL
-    `)
-  ).rows as { queue_minutes: string | null; active_minutes: string | null }[];
-  const avgQueueWaitMinutes =
-    timingRows[0]?.queue_minutes != null
-      ? Number(Number(timingRows[0].queue_minutes).toFixed(1))
-      : null;
-  const avgActiveReviewMinutes =
-    timingRows[0]?.active_minutes != null
-      ? Number(Number(timingRows[0].active_minutes).toFixed(1))
-      : null;
-
-  // Per-field override rates from the correction exhaust: how often the
-  // operator changed each field the model proposed (approved cases only).
-  const correctionRows = (
-    await db.execute(sql`
-      SELECT
-        c ->> 'field' AS field,
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE (c ->> 'changed')::boolean)::int AS overridden
-      FROM clerk_cases, LATERAL jsonb_array_elements(corrections) AS c
-      WHERE created_at >= ${since} AND corrections IS NOT NULL
-      GROUP BY 1
-      ORDER BY 3 DESC, 1
-    `)
-  ).rows as { field: string; total: number; overridden: number }[];
-
-  const inferenceRows = (
-    await db.execute(sql`
-      SELECT outcome, COUNT(*)::int AS count
-      FROM clerk_inference_calls
-      WHERE created_at >= ${since}
-      GROUP BY outcome
-    `)
-  ).rows as { outcome: string; count: number }[];
-  const byOutcome: Record<string, number> = {};
-  let inferenceTotal = 0;
-  for (const r of inferenceRows) {
-    inferenceTotal += r.count;
-    byOutcome[r.outcome] = r.count;
-  }
-
-  const latencyRows = (
-    await db.execute(sql`
-      SELECT
-        percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50,
-        percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95
-      FROM clerk_inference_calls
-      WHERE created_at >= ${since} AND latency_ms IS NOT NULL
-    `)
-  ).rows as { p50: string | null; p95: string | null }[];
-
-  const cohortRows = (
-    await db.execute(sql`
-      SELECT
-        model,
-        prompt_version,
-        purpose,
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE outcome = 'ok')::int AS ok_count,
-        percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95
-      FROM clerk_inference_calls
-      WHERE created_at >= ${since}
-      GROUP BY model, prompt_version, purpose
-      ORDER BY total DESC
-      LIMIT 50
-    `)
-  ).rows as {
-    model: string;
-    prompt_version: string;
-    purpose: string;
-    total: number;
-    ok_count: number;
-    p95: string | null;
-  }[];
-
-  // Cost-to-serve (CLK-NFR-04): token totals from the ledger's usage columns.
-  // Older rows predate usage capture, so callsWithUsage says how much of the
-  // window the totals actually cover. Sums come back as bigint strings.
-  const costRows = (
-    await db.execute(sql`
-      SELECT
-        COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
-        COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
-        COUNT(*) FILTER (
-          WHERE prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL
-        )::int AS calls_with_usage
-      FROM clerk_inference_calls
-      WHERE created_at >= ${since}
-    `)
-  ).rows as {
-    prompt_tokens: string;
-    completion_tokens: string;
-    calls_with_usage: number;
-  }[];
-  const promptTokens = Number(costRows[0]?.prompt_tokens ?? 0);
-  const completionTokens = Number(costRows[0]?.completion_tokens ?? 0);
-  const callsWithUsage = costRows[0]?.calls_with_usage ?? 0;
-
-  // Tokens per decided extraction case: only cases whose ledger calls carry
-  // usage data enter the denominator, so partial capture doesn't skew the
-  // per-case number downward.
-  const perCaseRows = (
-    await db.execute(sql`
-      SELECT
-        COUNT(DISTINCT c.id)::int AS decided_cases,
-        (COALESCE(SUM(i.prompt_tokens), 0)
-          + COALESCE(SUM(i.completion_tokens), 0))::bigint AS tokens
-      FROM clerk_cases c
-      JOIN clerk_inference_calls i ON i.case_id = c.id
-      WHERE c.created_at >= ${since}
-        AND c.kind = 'extraction'
-        AND c.decided_by IS NOT NULL
-        AND (i.prompt_tokens IS NOT NULL OR i.completion_tokens IS NOT NULL)
-    `)
-  ).rows as { decided_cases: number; tokens: string }[];
-  const decidedWithUsage = perCaseRows[0]?.decided_cases ?? 0;
-  const tokensPerDecidedCase =
-    decidedWithUsage > 0
-      ? Number((Number(perCaseRows[0]!.tokens) / decidedWithUsage).toFixed(1))
-      : null;
-
-  // USD estimate only when the operator has configured both per-million-token
-  // rates; a half-configured or unconfigured environment reports null rather
-  // than a misleading partial figure. ONE spelling of the pricing rule — the
-  // headline cost, platform spend and per-purpose economics all price through
-  // this closure, so a rounding or rate-handling tweak lands everywhere.
-  // Known approximation (round 45): embed_memory (and round-47
-  // eval_retrieval) prompt tokens are priced at the COMPLETION input rate,
-  // which overstates embedding cost (~10x at current list prices).
-  // Acceptable while embedding spend is a sliver of the total; add a
-  // per-purpose rate if it ever becomes material.
-  const inputRate = Number(process.env.CLERK_COST_PER_1M_INPUT_USD);
-  const outputRate = Number(process.env.CLERK_COST_PER_1M_OUTPUT_USD);
-  const usdEstimate = (pt: number, ct: number): number | null =>
-    Number.isFinite(inputRate) && Number.isFinite(outputRate)
-      ? Number(
-          (
-            (pt / 1_000_000) * inputRate +
-            (ct / 1_000_000) * outputRate
-          ).toFixed(4),
-        )
-      : null;
-  const estimatedUsd = usdEstimate(promptTokens, completionTokens);
-
-  // Per-supplier accuracy: one row per supplier party whose approved cases
-  // carry a corrections diff in the window, worst offenders (most overridden
-  // fields) first. The supplier is the APPROVED invoice's register party —
-  // the same join eval-growth stamps onto fixtures — so the numbers name real
-  // register identities, never extracted strings.
-  const supplierRows = (
-    await db.execute(sql`
-      SELECT
-        p.legal_name AS supplier_name,
-        f.name AS firm_name,
-        COUNT(DISTINCT c.id)::int AS cases,
-        COUNT(*)::int AS fields_compared,
-        COUNT(*) FILTER (WHERE (cor ->> 'changed')::boolean)::int AS overridden
-      FROM clerk_cases c
-      JOIN invoices i ON i.id = c.created_invoice_id
-      JOIN parties p ON p.id = i.supplier_party_id
-      LEFT JOIN firms f ON f.id = c.firm_id
-      CROSS JOIN LATERAL jsonb_array_elements(c.corrections) AS cor
-      WHERE c.created_at >= ${since}
-        AND c.kind = 'extraction'
-        AND c.corrections IS NOT NULL
-      GROUP BY p.id, p.legal_name, f.name
-      ORDER BY 5 DESC, 4 DESC
-      LIMIT 20
-    `)
-  ).rows as {
-    supplier_name: string;
-    firm_name: string | null;
-    cases: number;
-    fields_compared: number;
-    overridden: number;
-  }[];
-
-  // Unit economics: token spend per purpose inside the window. USD estimates
-  // reuse the same env rates as the headline figure (null when unconfigured).
-  const purposeRows = (
-    await db.execute(sql`
-      SELECT
-        purpose,
-        COUNT(*)::int AS calls,
-        COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
-        COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
-        COUNT(*) FILTER (WHERE outcome = 'error')::int AS error_count
-      FROM clerk_inference_calls
-      WHERE created_at >= ${since}
-      GROUP BY purpose
-      ORDER BY (COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0)) DESC
-    `)
-  ).rows as {
-    purpose: string;
-    calls: number;
-    prompt_tokens: string;
-    completion_tokens: string;
-    error_count: number;
-  }[];
-
-  // Failure taxonomy over the trailing six UTC months (the budget month
-  // boundary), independent of windowDays so the trend stays visible when the
-  // operator narrows the window.
-  const monthRows = (
-    await db.execute(sql`
-      SELECT
-        to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
-        COUNT(*)::int AS calls,
-        COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
-        COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
-        COUNT(*) FILTER (WHERE outcome = 'ok')::int AS ok_count,
-        COUNT(*) FILTER (WHERE outcome = 'invalid_discarded')::int AS invalid_count,
-        COUNT(*) FILTER (WHERE outcome = 'killed')::int AS killed_count,
-        COUNT(*) FILTER (WHERE outcome = 'error')::int AS error_count
-      FROM clerk_inference_calls
-      WHERE created_at >= date_trunc('month', now()) - interval '5 months'
-      GROUP BY 1
-      ORDER BY 1 DESC
-    `)
-  ).rows as {
-    month: string;
-    calls: number;
-    prompt_tokens: string;
-    completion_tokens: string;
-    ok_count: number;
-    invalid_count: number;
-    killed_count: number;
-    error_count: number;
-  }[];
-
-  // Ask outcomes come from the answer payload: answered=true means a claim
-  // rendered; everything else was a refusal-and-escalate.
-  const askRows = (
-    await db.execute(sql`
-      SELECT
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE (answer ->> 'answered') = 'true')::int AS answered
-      FROM clerk_cases
-      WHERE created_at >= ${since} AND kind = 'question'
-    `)
-  ).rows as { total: number; answered: number }[];
-  const askTotal = askRows[0]?.total ?? 0;
-  const answered = askRows[0]?.answered ?? 0;
+  const cases = await loadCaseMetrics(since);
+  const corrections = await loadCorrectionRates(since);
+  const inference = await loadInferenceMetrics(since);
+  const costTotals = await loadCostTotals(since);
+  const usdEstimate = makeUsdEstimator();
+  const supplierAccuracy = await loadSupplierAccuracy(since);
+  const economics = await loadEconomics(since, usdEstimate);
+  const ask = await loadAskOutcomes(since);
 
   // Calibration input: the shared bounded sample (calibrationSample above),
   // platform-wide over the caller's window.
@@ -617,224 +153,35 @@ export async function getClerkMetrics(windowDays = 30): Promise<ClerkMetrics> {
   // two deterministic folds over the corrections exhaust.
   const correctionShapes = computeCorrectionShapes(calibrationRows);
 
-  // Platform month-to-date spend, split by who funds the call (firm_id set
-  // = firm-funded; null = platform-funded desk/eval tooling). The month
-  // boundary is the SAME UTC month-start Date the budget uses, passed as a
-  // parameter so the two can never diverge.
-  const spendNow = new Date();
-  const spendMonthStart = utcMonthStart(spendNow);
-  const [spendRow] = (
-    await db.execute<{
-      prompt_tokens: string;
-      completion_tokens: string;
-      firm_tokens: string;
-      platform_tokens: string;
-    }>(sql`
-      SELECT
-        COALESCE(SUM(prompt_tokens), 0)::text AS prompt_tokens,
-        COALESCE(SUM(completion_tokens), 0)::text AS completion_tokens,
-        COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)})
-          FILTER (WHERE firm_id IS NOT NULL), 0)::text AS firm_tokens,
-        COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)})
-          FILTER (WHERE firm_id IS NULL), 0)::text AS platform_tokens
-      FROM clerk_inference_calls
-      WHERE created_at >= ${spendMonthStart}
-    `)
-  ).rows;
-  const spendPrompt = Number(spendRow?.prompt_tokens ?? 0);
-  const spendCompletion = Number(spendRow?.completion_tokens ?? 0);
-  const spendTotal = spendPrompt + spendCompletion;
-  // budgetPace's own month-pace rule (monthPace — one body since round 54),
-  // on the same UTC boundary.
-  const { elapsed: monthElapsed, projected: projectedTokens } = monthPace(
-    spendMonthStart,
-    spendTotal,
-    spendNow,
-  );
-  const spendUsd = usdEstimate(spendPrompt, spendCompletion);
-  const projectedUsd =
-    spendUsd !== null && monthElapsed > 0
-      ? Number((spendUsd / monthElapsed).toFixed(4))
-      : null;
-
-  // Trailing six months of eval runs (shared with the resistance-drop sweep
-  // so the alert and the chart read the same buckets), plus the all-time
-  // per-prompt-version split — runs with no injection fixtures are excluded
-  // from the rate.
-  const trendMonths = await injectionResistanceMonths();
-  // Same rule as the sweep's alert — the banner and the audit event agree.
-  const resistanceAlert = detectResistanceDrop(trendMonths);
-  // Grounding violations in the window, by surface — counted straight from
-  // the pointer-only audit events grounding.ts writes (the action-prefixed
-  // audit index carries the probe).
-  const groundingRows = (
-    await db.execute(sql`
-      SELECT entity_id AS surface, COUNT(*)::int AS count
-      FROM audit_events
-      WHERE action = ${GROUNDING_VIOLATION_ACTION}
-        AND created_at >= ${since}
-      GROUP BY 1
-      ORDER BY 2 DESC, 1
-    `)
-  ).rows as { surface: string; count: number }[];
-  const grounding = {
-    violations: groundingRows.reduce((sum, r) => sum + Number(r.count), 0),
-    bySurface: groundingRows.map((r) => ({
-      surface: r.surface,
-      count: Number(r.count),
-    })),
-  };
-  // Narration-match kept-rate: the same window as the headline metrics, read
-  // from the lane's own SQL (narration-match.ts) so console and module agree.
-  const narrationRate = await narrationKeptRate(windowDays);
-  const narrationMatch = {
-    suggested: narrationRate.suggested,
-    kept: narrationRate.kept,
-    overridden: narrationRate.overridden,
-    abstained: narrationRate.abstained,
-  };
-  // Kept-rate drift buckets, shared with the quality-watch sweep exactly as
-  // the injection trend is shared with the resistance watch — one source, so
-  // the chart and the alert can never disagree.
-  const keptRateTrend = await keptRateMonths();
-  const qualityAlert = detectQualityDrop(keptRateTrend);
-  const trendPromptRows = (
-    await db.execute(sql`
-      SELECT prompt_version,
-        COUNT(*)::int AS runs,
-        SUM(injection_fixtures)::int AS injection_fixtures,
-        SUM(injection_resisted)::int AS injection_resisted
-      FROM clerk_eval_runs
-      GROUP BY 1
-      ORDER BY MAX(created_at) DESC
-      LIMIT 10
-    `)
-  ).rows as {
-    prompt_version: string;
-    runs: number;
-    injection_fixtures: number;
-    injection_resisted: number;
-  }[];
+  const platformSpend = await loadPlatformSpend(usdEstimate);
+  const signals = await loadQualitySignals(since, windowDays);
 
   return {
     windowDays,
-    cases: {
-      total,
-      byStatus,
-      byKind,
-      avgDecisionMinutes,
-      avgQueueWaitMinutes,
-      avgActiveReviewMinutes,
-    },
-    inference: {
-      total: inferenceTotal,
-      byOutcome,
-      invalidRate: rate(byOutcome["invalid_discarded"] ?? 0, inferenceTotal),
-      errorRate: rate(byOutcome["error"] ?? 0, inferenceTotal),
-      // != null, not truthiness: a 0 ms percentile is a real value.
-      latencyP50Ms:
-        latencyRows[0]?.p50 != null
-          ? Math.round(Number(latencyRows[0].p50))
-          : null,
-      latencyP95Ms:
-        latencyRows[0]?.p95 != null
-          ? Math.round(Number(latencyRows[0].p95))
-          : null,
-      cohorts: cohortRows.map((c) => ({
-        model: c.model,
-        promptVersion: c.prompt_version,
-        purpose: c.purpose,
-        total: c.total,
-        okCount: c.ok_count,
-        latencyP95Ms: c.p95 != null ? Math.round(Number(c.p95)) : null,
-      })),
-    },
+    cases,
+    inference,
     cost: {
-      promptTokens,
-      completionTokens,
-      callsWithUsage,
-      tokensPerDecidedCase,
-      estimatedUsd,
+      ...costTotals,
+      estimatedUsd: usdEstimate(
+        costTotals.promptTokens,
+        costTotals.completionTokens,
+      ),
     },
-    economics: {
-      byPurpose: purposeRows.map((p) => {
-        const pt = Number(p.prompt_tokens);
-        const ct = Number(p.completion_tokens);
-        return {
-          purpose: p.purpose,
-          calls: p.calls,
-          promptTokens: pt,
-          completionTokens: ct,
-          errorCount: p.error_count,
-          estimatedUsd: usdEstimate(pt, ct),
-        };
-      }),
-      months: monthRows.map((m) => ({
-        month: m.month,
-        calls: m.calls,
-        promptTokens: Number(m.prompt_tokens),
-        completionTokens: Number(m.completion_tokens),
-        okCount: m.ok_count,
-        invalidCount: m.invalid_count,
-        killedCount: m.killed_count,
-        errorCount: m.error_count,
-      })),
-    },
-    corrections: correctionRows.map((c) => ({
-      field: c.field,
-      total: c.total,
-      overridden: c.overridden,
-      overrideRate: rate(c.overridden, c.total),
-    })),
-    supplierAccuracy: supplierRows.map((s) => ({
-      supplierName: s.supplier_name,
-      firmName: s.firm_name,
-      cases: s.cases,
-      fieldsCompared: s.fields_compared,
-      overridden: s.overridden,
-      overrideRate: rate(s.overridden, s.fields_compared),
-    })),
-    ask: {
-      total: askTotal,
-      answered,
-      refused: askTotal - answered,
-      refusalRate: rate(askTotal - answered, askTotal),
-    },
-    platformSpend: {
-      month: spendNow.toISOString().slice(0, 7),
-      promptTokens: spendPrompt,
-      completionTokens: spendCompletion,
-      totalTokens: spendTotal,
-      firmFundedTokens: Number(spendRow?.firm_tokens ?? 0),
-      platformFundedTokens: Number(spendRow?.platform_tokens ?? 0),
-      estimatedUsd: spendUsd,
-      projectedTokens,
-      projectedUsd,
-    },
-    injectionTrend: {
-      months: trendMonths.map((m) => ({
-        month: m.month,
-        runs: m.runs,
-        injectionFixtures: m.injectionFixtures,
-        injectionResisted: m.injectionResisted,
-        resistanceRate: rate(m.injectionResisted, m.injectionFixtures),
-      })),
-      byPromptVersion: trendPromptRows.map((p) => ({
-        promptVersion: p.prompt_version,
-        runs: Number(p.runs),
-        injectionFixtures: Number(p.injection_fixtures),
-        injectionResisted: Number(p.injection_resisted),
-        resistanceRate: rate(
-          Number(p.injection_resisted),
-          Number(p.injection_fixtures),
-        ),
-      })),
-    },
-    grounding,
-    narrationMatch,
-    ...(resistanceAlert ? { resistanceAlert } : {}),
-    ...(keptRateTrend.length > 0 ? { keptRateTrend } : {}),
-    ...(qualityAlert ? { qualityAlert } : {}),
+    economics,
+    corrections,
+    supplierAccuracy,
+    ask,
+    platformSpend,
+    injectionTrend: signals.injectionTrend,
+    grounding: signals.grounding,
+    narrationMatch: signals.narrationMatch,
+    ...(signals.resistanceAlert
+      ? { resistanceAlert: signals.resistanceAlert }
+      : {}),
+    ...(signals.keptRateTrend.length > 0
+      ? { keptRateTrend: signals.keptRateTrend }
+      : {}),
+    ...(signals.qualityAlert ? { qualityAlert: signals.qualityAlert } : {}),
     ...(calibration ? { calibration } : {}),
     ...(correctionShapes.length > 0 ? { correctionShapes } : {}),
   };
