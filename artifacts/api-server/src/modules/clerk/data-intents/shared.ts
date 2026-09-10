@@ -90,7 +90,9 @@ export function extractInvoiceNumbers(question: string): string[] {
   const consider = (token: string, index: number) => {
     if (!/\d/.test(token)) return;
     if (DATE_SHAPES.some((re) => re.test(token))) return;
-    if (EXCLUDING_CONTEXT_RE.test(question.slice(Math.max(0, index - 12), index)))
+    if (
+      EXCLUDING_CONTEXT_RE.test(question.slice(Math.max(0, index - 12), index))
+    )
       return;
     const key = token.toLowerCase();
     if (!seen.has(key)) seen.set(key, token);
@@ -273,7 +275,9 @@ export async function billAggregate(
 // sample, so a link never names an invoice the asker could not already list.
 // Spread additively into a DataIntentResult; empty samples carry no links
 // key at all, and the sample facts themselves stay byte-identical.
-export function sampleLinks(agg: InvoiceAggregate): { links?: ClerkAnswerLink[] } {
+export function sampleLinks(agg: InvoiceAggregate): {
+  links?: ClerkAnswerLink[];
+} {
   if (agg.sampleRows.length === 0) return {};
   return {
     links: agg.sampleRows.slice(0, SAMPLE_LIMIT).map((r) => ({
@@ -287,7 +291,9 @@ export function sampleLinks(agg: InvoiceAggregate): { links?: ClerkAnswerLink[] 
 // The chase-list counterpart: per-row invoice ids from listChaseRows /
 // firmMoneySummary's topChase — already firm-scoped and (per-client) pinned
 // to the asker's own party, like every query in this catalogue.
-export function chaseLinks(rows: { invoiceId: string; invoiceNumber: string }[]): {
+export function chaseLinks(
+  rows: { invoiceId: string; invoiceNumber: string }[],
+): {
   links?: ClerkAnswerLink[];
 } {
   if (rows.length === 0) return {};
@@ -308,7 +314,11 @@ export function nameSample(agg: InvoiceAggregate): string {
     : agg.sample.join(", ");
 }
 
-export function countFact(key: string, label: string, n: number): ProtectedFact {
+export function countFact(
+  key: string,
+  label: string,
+  n: number,
+): ProtectedFact {
   return { key, label, kind: "count", value: String(n) };
 }
 

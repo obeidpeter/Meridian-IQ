@@ -314,7 +314,9 @@ export async function notifyPolicyGranted(
     ClerkActionPolicy,
     "id" | "firmId" | "clientPartyId" | "grantedByRole"
   >,
-  entityType: "clerk_action_policy" | "clerk_plan_policy" = "clerk_action_policy",
+  entityType:
+    | "clerk_action_policy"
+    | "clerk_plan_policy" = "clerk_action_policy",
 ): Promise<void> {
   if (!(await isFeatureEnabled("messaging_notifications", null))) return;
   const entityId = pointerEntityRef("pol", policy.id);
@@ -624,7 +626,9 @@ export async function notifyAutoPause(
     ClerkActionPolicy,
     "id" | "firmId" | "clientPartyId" | "grantedBy" | "grantedByRole"
   >,
-  entityType: "clerk_action_policy" | "clerk_plan_policy" = "clerk_action_policy",
+  entityType:
+    | "clerk_action_policy"
+    | "clerk_plan_policy" = "clerk_action_policy",
 ): Promise<void> {
   return notifyGrantorSignal(policy, entityType, "automation_paused", "pol");
 }
@@ -899,7 +903,10 @@ async function runOnePolicy(
       return prev ? decisionRailStanding(prev.id) : null;
     },
   );
-  if (previous && tooManyFailures(previous.submitted, previous.nowFailedAgain)) {
+  if (
+    previous &&
+    tooManyFailures(previous.submitted, previous.nowFailedAgain)
+  ) {
     return (await autoPauseAndNotify(policy, "rail_rejections"))
       ? "auto_paused"
       : "skipped_raced";
@@ -1021,10 +1028,7 @@ export async function runActionPolicySweep(): Promise<ActionPolicySweepResult> {
           ),
         ),
       )
-      .orderBy(
-        clerkActionPoliciesTable.createdAt,
-        clerkActionPoliciesTable.id,
-      )
+      .orderBy(clerkActionPoliciesTable.createdAt, clerkActionPoliciesTable.id)
       // One pass runs at most a batch (R105): each policy may fan out sends,
       // so an unbounded candidate set was an unbounded pass. The next pass
       // picks up the rest — lastRunDay keeps the once-per-day invariant.

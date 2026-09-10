@@ -337,11 +337,7 @@ export function ClientImport() {
             <Button
               variant="ghost"
               onClick={() =>
-                downloadBlob(
-                  "valo-clients-template.csv",
-                  TEMPLATE,
-                  "text/csv",
-                )
+                downloadBlob("valo-clients-template.csv", TEMPLATE, "text/csv")
               }
               data-testid="button-template"
             >

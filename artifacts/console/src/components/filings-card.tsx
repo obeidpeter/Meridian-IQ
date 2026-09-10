@@ -262,60 +262,66 @@ export function FilingsCard({ clientPartyId }: { clientPartyId: string }) {
                       </Button>
                     </div>
                   )}
-                  {canWrite && f.status !== "filed" && filedPanelId === f.id && (
-                    <div
-                      className="mt-2 rounded-md border p-3 space-y-3"
-                      data-testid={`panel-filing-filed-${f.id}`}
-                    >
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label htmlFor={`filing-filed-date-${f.id}`}>
-                            Filed date
-                          </Label>
-                          <Input
-                            id={`filing-filed-date-${f.id}`}
-                            type="date"
-                            value={filedDate}
-                            onChange={(e) => setFiledDate(e.target.value)}
-                            data-testid={`input-filing-filed-date-${f.id}`}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor={`filing-reference-${f.id}`}>
-                            Filing reference (optional)
-                          </Label>
-                          <Input
-                            id={`filing-reference-${f.id}`}
-                            value={filedReference}
-                            onChange={(e) => setFiledReference(e.target.value)}
-                            data-testid={`input-filing-reference-${f.id}`}
-                          />
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          // The contract requires filedDate for "filed"; the
-                          // optional reference is trimmed and OMITTED when
-                          // empty (absent-or-valued, never "").
-                          updateStatus.mutate({
-                            id: f.id,
-                            data: {
-                              status: "filed",
-                              filedDate,
-                              ...(filedReference.trim()
-                                ? { filedReference: filedReference.trim() }
-                                : {}),
-                            },
-                          })
-                        }
-                        disabled={!filedDate || updateStatus.isPending}
-                        data-testid={`button-filing-filed-confirm-${f.id}`}
+                  {canWrite &&
+                    f.status !== "filed" &&
+                    filedPanelId === f.id && (
+                      <div
+                        className="mt-2 rounded-md border p-3 space-y-3"
+                        data-testid={`panel-filing-filed-${f.id}`}
                       >
-                        {updateStatus.isPending ? "Recording…" : "Confirm filed"}
-                      </Button>
-                    </div>
-                  )}
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor={`filing-filed-date-${f.id}`}>
+                              Filed date
+                            </Label>
+                            <Input
+                              id={`filing-filed-date-${f.id}`}
+                              type="date"
+                              value={filedDate}
+                              onChange={(e) => setFiledDate(e.target.value)}
+                              data-testid={`input-filing-filed-date-${f.id}`}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`filing-reference-${f.id}`}>
+                              Filing reference (optional)
+                            </Label>
+                            <Input
+                              id={`filing-reference-${f.id}`}
+                              value={filedReference}
+                              onChange={(e) =>
+                                setFiledReference(e.target.value)
+                              }
+                              data-testid={`input-filing-reference-${f.id}`}
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            // The contract requires filedDate for "filed"; the
+                            // optional reference is trimmed and OMITTED when
+                            // empty (absent-or-valued, never "").
+                            updateStatus.mutate({
+                              id: f.id,
+                              data: {
+                                status: "filed",
+                                filedDate,
+                                ...(filedReference.trim()
+                                  ? { filedReference: filedReference.trim() }
+                                  : {}),
+                              },
+                            })
+                          }
+                          disabled={!filedDate || updateStatus.isPending}
+                          data-testid={`button-filing-filed-confirm-${f.id}`}
+                        >
+                          {updateStatus.isPending
+                            ? "Recording…"
+                            : "Confirm filed"}
+                        </Button>
+                      </div>
+                    )}
                 </div>
               );
             })}

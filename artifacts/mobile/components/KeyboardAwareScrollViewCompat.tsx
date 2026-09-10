@@ -14,7 +14,10 @@ export function KeyboardAwareScrollViewCompat({
 }: Props) {
   if (Platform.OS === "web") {
     return (
-      <ScrollView keyboardShouldPersistTaps={keyboardShouldPersistTaps} {...props}>
+      <ScrollView
+        keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+        {...props}
+      >
         {children}
       </ScrollView>
     );
@@ -38,8 +41,9 @@ export type Scrollable = {
 // wrapper spreads its props onto the underlying ScrollView — so a ref set here
 // reaches the real scroll view. The cast just teaches TS that this host accepts
 // the ref (the wrapper's own prop types don't declare it).
-export const ScrollHost = KeyboardAwareScrollViewCompat as unknown as React.ComponentType<
-  React.ComponentProps<typeof KeyboardAwareScrollViewCompat> & {
-    ref?: React.Ref<Scrollable>;
-  }
->;
+export const ScrollHost =
+  KeyboardAwareScrollViewCompat as unknown as React.ComponentType<
+    React.ComponentProps<typeof KeyboardAwareScrollViewCompat> & {
+      ref?: React.Ref<Scrollable>;
+    }
+  >;

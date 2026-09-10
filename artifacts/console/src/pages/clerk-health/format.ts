@@ -7,10 +7,7 @@ import type {
   EvalFixtureReport,
 } from "@workspace/api-client-react";
 import { errorStatus, serverErrorMessage } from "@/lib/errors";
-import {
-  formatPct,
-  type BadgeTone,
-} from "@/lib/format";
+import { formatPct, type BadgeTone } from "@/lib/format";
 
 // Pure helpers, tone maps and the tab list for the Clerk health page (R110:
 // split out of the 2,963-line page). No component renders here; the page's
@@ -198,7 +195,6 @@ export function canaryPrefillNote(promptLoadFailed: boolean): string | null {
     ? "Couldn't load the live prompt — paste a candidate manually."
     : null;
 }
-
 
 export const FIXTURE_SOURCE_TONE: Record<string, BadgeTone> = {
   static: "slate",

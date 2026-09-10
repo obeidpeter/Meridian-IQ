@@ -63,7 +63,6 @@ export interface ListObligationsFilter {
   offset?: number;
 }
 
-
 // Soonest deadline first (the list is a worklist — the next clock to beat
 // leads), id as the stable tiebreak.
 export async function listObligations(
@@ -206,7 +205,9 @@ export async function updateObligationStatus(
   const [existing] = await getDb()
     .select({ status: obligationsTable.status })
     .from(obligationsTable)
-    .where(and(eq(obligationsTable.id, id), eq(obligationsTable.firmId, firmId)))
+    .where(
+      and(eq(obligationsTable.id, id), eq(obligationsTable.firmId, firmId)),
+    )
     .limit(1);
   if (!existing) return null;
   const [row] = await getDb()
@@ -216,7 +217,9 @@ export async function updateObligationStatus(
       ...(notes !== undefined ? { notes } : {}),
       updatedAt: new Date(),
     })
-    .where(and(eq(obligationsTable.id, id), eq(obligationsTable.firmId, firmId)))
+    .where(
+      and(eq(obligationsTable.id, id), eq(obligationsTable.firmId, firmId)),
+    )
     .returning();
   if (!row) return null;
   await appendAudit({
@@ -291,7 +294,10 @@ export async function openObligationSamples(
   clientPartyId?: string,
   limit = 5,
 ): Promise<OpenObligationSample[]> {
-  const conditions: SQL[] = [eq(obligationsTable.firmId, firmId), OBLIGATION_OPEN];
+  const conditions: SQL[] = [
+    eq(obligationsTable.firmId, firmId),
+    OBLIGATION_OPEN,
+  ];
   if (clientPartyId) {
     conditions.push(eq(obligationsTable.clientPartyId, clientPartyId));
   }

@@ -1,6 +1,10 @@
 import { lagosDateString } from "../../lib/lagos-time";
 import { addDays } from "./date-math";
-import { WEEK_COUNT, bucketProjections, receivableProjections } from "./cashflow";
+import {
+  WEEK_COUNT,
+  bucketProjections,
+  receivableProjections,
+} from "./cashflow";
 import { payablesSummary, type PayablesSummary } from "./payables";
 import type { CashflowOutlook } from "./cashflow";
 

@@ -46,10 +46,25 @@ const buyerId = "dddd0005-0000-4000-8000-00000000dd05";
 
 const EXTRACTION_JSON = JSON.stringify({
   fields: [
-    { field: "invoiceNumber", value: "INV-500", confidence: 0.95, sourceSnippet: null },
-    { field: "issueDate", value: "2026-07-01", confidence: 0.9, sourceSnippet: null },
+    {
+      field: "invoiceNumber",
+      value: "INV-500",
+      confidence: 0.95,
+      sourceSnippet: null,
+    },
+    {
+      field: "issueDate",
+      value: "2026-07-01",
+      confidence: 0.9,
+      sourceSnippet: null,
+    },
     { field: "currency", value: "NGN", confidence: 0.9, sourceSnippet: null },
-    { field: "grandTotal", value: "161250", confidence: 0.85, sourceSnippet: null },
+    {
+      field: "grandTotal",
+      value: "161250",
+      confidence: 0.85,
+      sourceSnippet: null,
+    },
   ],
   lines: [],
 });
@@ -81,10 +96,38 @@ after(async () => {
 
 const SAMPLE_EXTRACTION: ClerkExtraction = {
   fields: [
-    { field: "invoiceNumber", value: "INV-500", confidence: 0.95, sourceSnippet: null, critical: true, flagged: true },
-    { field: "issueDate", value: "2026-07-01", confidence: 0.9, sourceSnippet: null, critical: true, flagged: true },
-    { field: "currency", value: "NGN", confidence: 0.9, sourceSnippet: null, critical: true, flagged: true },
-    { field: "grandTotal", value: "161250", confidence: 0.85, sourceSnippet: null, critical: true, flagged: true },
+    {
+      field: "invoiceNumber",
+      value: "INV-500",
+      confidence: 0.95,
+      sourceSnippet: null,
+      critical: true,
+      flagged: true,
+    },
+    {
+      field: "issueDate",
+      value: "2026-07-01",
+      confidence: 0.9,
+      sourceSnippet: null,
+      critical: true,
+      flagged: true,
+    },
+    {
+      field: "currency",
+      value: "NGN",
+      confidence: 0.9,
+      sourceSnippet: null,
+      critical: true,
+      flagged: true,
+    },
+    {
+      field: "grandTotal",
+      value: "161250",
+      confidence: 0.85,
+      sourceSnippet: null,
+      critical: true,
+      flagged: true,
+    },
   ],
   lines: [],
   promptVersion: "extract.v1",
@@ -134,7 +177,12 @@ test("approval stores the correction exhaust on the case", async () => {
       issueDate: "2026-07-01",
       currency: "NGN",
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "150000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "150000",
+          vatRate: "0.075",
+        },
       ],
     },
     opA,

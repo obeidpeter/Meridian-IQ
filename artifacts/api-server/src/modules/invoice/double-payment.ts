@@ -166,7 +166,9 @@ export async function computeDoublePaymentCheck(
       supplierName: r.supplier_name,
       currency: r.currency,
       grandTotal: r.grand_total,
-      pairKind: r.a_paid ? ("paid_original" as const) : ("both_unpaid" as const),
+      pairKind: r.a_paid
+        ? ("paid_original" as const)
+        : ("both_unpaid" as const),
       first: {
         invoiceId: r.a_id,
         invoiceNumber: r.a_number,

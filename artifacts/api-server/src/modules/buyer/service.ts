@@ -650,7 +650,12 @@ async function confirmInvoiceForBuyer(
   assertBuyerPartyAccess(principal, invoice.buyerPartyId);
   await recordConfirmation(
     invoice,
-    { buyerPartyId: invoice.buyerPartyId, state: "confirmed", method, noSetOff },
+    {
+      buyerPartyId: invoice.buyerPartyId,
+      state: "confirmed",
+      method,
+      noSetOff,
+    },
     principal,
   );
 }

@@ -62,11 +62,7 @@ export async function runModelCanary(
 ): Promise<ModelCanaryReport> {
   await assertClerkEnabled();
   const model = candidateModel.trim();
-  if (
-    model.length < 1 ||
-    model.length > MAX_MODEL_CHARS ||
-    /\s/.test(model)
-  ) {
+  if (model.length < 1 || model.length > MAX_MODEL_CHARS || /\s/.test(model)) {
     throw new DomainError(
       "BAD_CANDIDATE_MODEL",
       `The candidate model must be a single identifier of 1 to ${MAX_MODEL_CHARS} characters with no whitespace.`,
@@ -118,7 +114,11 @@ export async function runModelCanary(
     ...aggregate(candidateResults),
   };
   const { verdict, verdictReason } = canaryVerdict(incumbent, candidate);
-  const diffs = computeFixtureDiffs(fixtures, incumbentResults, candidateResults);
+  const diffs = computeFixtureDiffs(
+    fixtures,
+    incumbentResults,
+    candidateResults,
+  );
 
   await appendAudit({
     actorId,

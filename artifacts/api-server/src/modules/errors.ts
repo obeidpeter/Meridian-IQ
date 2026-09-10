@@ -61,7 +61,8 @@ export const ERROR_CATALOGUE: Record<string, CatalogueEntry> = {
   },
   RAIL_PROTOCOL: {
     code: "RAIL_PROTOCOL",
-    cause: "The access-point rail answered in a shape this build does not understand.",
+    cause:
+      "The access-point rail answered in a shape this build does not understand.",
     fix: "Retried; if the rail had already stamped the invoice, the duplicate path recovers the stamp it holds.",
     retriable: true,
   },

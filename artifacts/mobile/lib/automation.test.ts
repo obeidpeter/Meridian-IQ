@@ -79,7 +79,10 @@ test("actionConfirmButtonLabel mirrors the web dialogs", () => {
     actionConfirmButtonLabel("submit_overdue", 2),
     "Approve 2 invoices",
   );
-  assert.equal(actionConfirmButtonLabel("retry_failed", 1), "Approve 1 invoice");
+  assert.equal(
+    actionConfirmButtonLabel("retry_failed", 1),
+    "Approve 1 invoice",
+  );
   assert.equal(
     actionConfirmButtonLabel("draft_chasers", 2),
     "Draft 2 reminders",
@@ -108,8 +111,14 @@ test("actionOutcomeSummary: the three counts in the web's exact shape", () => {
 });
 
 test("policyKindLabel: labeled kinds plus a raw-token fallback", () => {
-  assert.equal(policyKindLabel("submit_overdue"), "Auto-submit overdue invoices");
-  assert.equal(policyKindLabel("retry_failed"), "Auto-retry failed submissions");
+  assert.equal(
+    policyKindLabel("submit_overdue"),
+    "Auto-submit overdue invoices",
+  );
+  assert.equal(
+    policyKindLabel("retry_failed"),
+    "Auto-retry failed submissions",
+  );
   assert.equal(policyKindLabel("mystery_kind"), "mystery_kind");
 });
 
@@ -195,7 +204,12 @@ test("policyGrantAlertMessage: the consent copy, then the client's own record as
   assert.equal(
     policyGrantAlertMessage("retry_failed", POLICY_CAP_DEFAULT, [
       // Only the granting kind's entry phrases the record.
-      { kind: "reconcile_matches", sample: 40, agreed: 38, medianLeadDays: null },
+      {
+        kind: "reconcile_matches",
+        sample: 40,
+        agreed: 38,
+        medianLeadDays: null,
+      },
       { kind: "retry_failed", sample: 5, agreed: 3, medianLeadDays: 2 },
     ]),
     `${policyGrantDescription("retry_failed", POLICY_CAP_DEFAULT)}\n\n` +

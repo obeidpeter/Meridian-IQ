@@ -17,10 +17,7 @@ import {
   periodMonthBounds,
   previousLagosPeriod,
 } from "../filings/statutory-calendar";
-import {
-  computeOpeningPosition,
-  invoiceHistorySpan,
-} from "./opening-position";
+import { computeOpeningPosition, invoiceHistorySpan } from "./opening-position";
 
 // Onboard with Clerk (Phase 1): the client onboarding run — an evidence-based
 // checklist a firm opens when it takes on a new SME client. The one rule that
@@ -488,8 +485,7 @@ export async function refreshOnboardingRun(
       entityType: "onboarding_run",
       entityId: runId,
       after: {
-        doneSteps: ONBOARDING_STEP_KEYS.filter((k) => detection[k].done)
-          .length,
+        doneSteps: ONBOARDING_STEP_KEYS.filter((k) => detection[k].done).length,
         skippedSteps: ONBOARDING_STEP_KEYS.filter(
           (k) => !detection[k].done && skips[k],
         ).length,

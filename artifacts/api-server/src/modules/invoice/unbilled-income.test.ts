@@ -71,29 +71,89 @@ before(async () => {
   ]);
   await db.insert(invoicesTable).values([
     // Monthly habit whose next invoice is ~10 days late: alert.
-    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-D1-${SALT}`, issueDate: daysAgo(100) }),
-    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-D2-${SALT}`, issueDate: daysAgo(70) }),
-    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-D3-${SALT}`, issueDate: daysAgo(40) }),
+    row({
+      buyerPartyId: buyerDue,
+      invoiceNumber: `UB-D1-${SALT}`,
+      issueDate: daysAgo(100),
+    }),
+    row({
+      buyerPartyId: buyerDue,
+      invoiceNumber: `UB-D2-${SALT}`,
+      issueDate: daysAgo(70),
+    }),
+    row({
+      buyerPartyId: buyerDue,
+      invoiceNumber: `UB-D3-${SALT}`,
+      issueDate: daysAgo(40),
+    }),
     // Two USD one-offs to the SAME buyer, interleaved with the NGN habit.
     // Merged into one history (the pre-round-20 bug) they would drag the
     // median gap under the monthly floor and KILL the alert — per-currency
     // grouping keeps the NGN cadence clean and the USD leg (2 invoices)
     // under the pattern minimum.
-    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-DU1-${SALT}`, issueDate: daysAgo(55), currency: "USD", grandTotal: "500.00" }),
-    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-DU2-${SALT}`, issueDate: daysAgo(50), currency: "USD", grandTotal: "500.00" }),
+    row({
+      buyerPartyId: buyerDue,
+      invoiceNumber: `UB-DU1-${SALT}`,
+      issueDate: daysAgo(55),
+      currency: "USD",
+      grandTotal: "500.00",
+    }),
+    row({
+      buyerPartyId: buyerDue,
+      invoiceNumber: `UB-DU2-${SALT}`,
+      issueDate: daysAgo(50),
+      currency: "USD",
+      grandTotal: "500.00",
+    }),
     // Same habit, freshly billed 15 days ago: nothing is late yet.
-    row({ buyerPartyId: buyerFresh, invoiceNumber: `UB-F1-${SALT}`, issueDate: daysAgo(75) }),
-    row({ buyerPartyId: buyerFresh, invoiceNumber: `UB-F2-${SALT}`, issueDate: daysAgo(45) }),
-    row({ buyerPartyId: buyerFresh, invoiceNumber: `UB-F3-${SALT}`, issueDate: daysAgo(15) }),
+    row({
+      buyerPartyId: buyerFresh,
+      invoiceNumber: `UB-F1-${SALT}`,
+      issueDate: daysAgo(75),
+    }),
+    row({
+      buyerPartyId: buyerFresh,
+      invoiceNumber: `UB-F2-${SALT}`,
+      issueDate: daysAgo(45),
+    }),
+    row({
+      buyerPartyId: buyerFresh,
+      invoiceNumber: `UB-F3-${SALT}`,
+      issueDate: daysAgo(15),
+    }),
     // A habit that went silent months ago: the arrangement ended, no nagging.
-    row({ buyerPartyId: buyerLapsed, invoiceNumber: `UB-L1-${SALT}`, issueDate: daysAgo(200) }),
-    row({ buyerPartyId: buyerLapsed, invoiceNumber: `UB-L2-${SALT}`, issueDate: daysAgo(170) }),
-    row({ buyerPartyId: buyerLapsed, invoiceNumber: `UB-L3-${SALT}`, issueDate: daysAgo(140) }),
+    row({
+      buyerPartyId: buyerLapsed,
+      invoiceNumber: `UB-L1-${SALT}`,
+      issueDate: daysAgo(200),
+    }),
+    row({
+      buyerPartyId: buyerLapsed,
+      invoiceNumber: `UB-L2-${SALT}`,
+      issueDate: daysAgo(170),
+    }),
+    row({
+      buyerPartyId: buyerLapsed,
+      invoiceNumber: `UB-L3-${SALT}`,
+      issueDate: daysAgo(140),
+    }),
     // Late like buyerDue — but a template covers it (the recurring engine's
     // problem, not this card's).
-    row({ buyerPartyId: buyerCovered, invoiceNumber: `UB-C1-${SALT}`, issueDate: daysAgo(100) }),
-    row({ buyerPartyId: buyerCovered, invoiceNumber: `UB-C2-${SALT}`, issueDate: daysAgo(70) }),
-    row({ buyerPartyId: buyerCovered, invoiceNumber: `UB-C3-${SALT}`, issueDate: daysAgo(40) }),
+    row({
+      buyerPartyId: buyerCovered,
+      invoiceNumber: `UB-C1-${SALT}`,
+      issueDate: daysAgo(100),
+    }),
+    row({
+      buyerPartyId: buyerCovered,
+      invoiceNumber: `UB-C2-${SALT}`,
+      issueDate: daysAgo(70),
+    }),
+    row({
+      buyerPartyId: buyerCovered,
+      invoiceNumber: `UB-C3-${SALT}`,
+      issueDate: daysAgo(40),
+    }),
   ]);
   await db.insert(recurringInvoiceTemplatesTable).values({
     firmId,
@@ -197,9 +257,15 @@ test("the top-N cut ranks by naira equivalent, not raw face value", async () => 
   const buyerNgn = randomUUID();
   const buyerUsd = randomUUID();
   const buyerEur = randomUUID();
-  await db.insert(firmsTable).values({ id: fxFirm, name: `UB FX Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: fxFirm, name: `UB FX Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: fxClient, type: "client_business", legalName: `UB FX Client ${SALT}` },
+    {
+      id: fxClient,
+      type: "client_business",
+      legalName: `UB FX Client ${SALT}`,
+    },
     { id: buyerNgn, type: "buyer", legalName: `UB FX NGN Buyer ${SALT}` },
     { id: buyerUsd, type: "buyer", legalName: `UB FX USD Buyer ${SALT}` },
     { id: buyerEur, type: "buyer", legalName: `UB FX EUR Buyer ${SALT}` },
@@ -226,18 +292,74 @@ test("the top-N cut ranks by naira equivalent, not raw face value", async () => 
   });
   await db.insert(invoicesTable).values([
     // NGN habit, ~10 days late: face value 100,000.
-    fxRow({ buyerPartyId: buyerNgn, invoiceNumber: `UBFX-N1-${SALT}`, issueDate: daysAgo(100), currency: "NGN", grandTotal: "100000.00" }),
-    fxRow({ buyerPartyId: buyerNgn, invoiceNumber: `UBFX-N2-${SALT}`, issueDate: daysAgo(70), currency: "NGN", grandTotal: "100000.00" }),
-    fxRow({ buyerPartyId: buyerNgn, invoiceNumber: `UBFX-N3-${SALT}`, issueDate: daysAgo(40), currency: "NGN", grandTotal: "100000.00" }),
+    fxRow({
+      buyerPartyId: buyerNgn,
+      invoiceNumber: `UBFX-N1-${SALT}`,
+      issueDate: daysAgo(100),
+      currency: "NGN",
+      grandTotal: "100000.00",
+    }),
+    fxRow({
+      buyerPartyId: buyerNgn,
+      invoiceNumber: `UBFX-N2-${SALT}`,
+      issueDate: daysAgo(70),
+      currency: "NGN",
+      grandTotal: "100000.00",
+    }),
+    fxRow({
+      buyerPartyId: buyerNgn,
+      invoiceNumber: `UBFX-N3-${SALT}`,
+      issueDate: daysAgo(40),
+      currency: "NGN",
+      grandTotal: "100000.00",
+    }),
     // USD habit, same lateness: the MOST RECENT non-null rate (1500, on the
     // middle invoice — the newest carries none) sets the rank.
-    fxRow({ buyerPartyId: buyerUsd, invoiceNumber: `UBFX-U1-${SALT}`, issueDate: daysAgo(100), currency: "USD", grandTotal: "2000.00", fxRateToNgn: "1300" }),
-    fxRow({ buyerPartyId: buyerUsd, invoiceNumber: `UBFX-U2-${SALT}`, issueDate: daysAgo(70), currency: "USD", grandTotal: "2000.00", fxRateToNgn: "1500" }),
-    fxRow({ buyerPartyId: buyerUsd, invoiceNumber: `UBFX-U3-${SALT}`, issueDate: daysAgo(40), currency: "USD", grandTotal: "2000.00" }),
+    fxRow({
+      buyerPartyId: buyerUsd,
+      invoiceNumber: `UBFX-U1-${SALT}`,
+      issueDate: daysAgo(100),
+      currency: "USD",
+      grandTotal: "2000.00",
+      fxRateToNgn: "1300",
+    }),
+    fxRow({
+      buyerPartyId: buyerUsd,
+      invoiceNumber: `UBFX-U2-${SALT}`,
+      issueDate: daysAgo(70),
+      currency: "USD",
+      grandTotal: "2000.00",
+      fxRateToNgn: "1500",
+    }),
+    fxRow({
+      buyerPartyId: buyerUsd,
+      invoiceNumber: `UBFX-U3-${SALT}`,
+      issueDate: daysAgo(40),
+      currency: "USD",
+      grandTotal: "2000.00",
+    }),
     // EUR habit with no rate ever captured: unconvertible, ranks at face.
-    fxRow({ buyerPartyId: buyerEur, invoiceNumber: `UBFX-E1-${SALT}`, issueDate: daysAgo(100), currency: "EUR", grandTotal: "900.00" }),
-    fxRow({ buyerPartyId: buyerEur, invoiceNumber: `UBFX-E2-${SALT}`, issueDate: daysAgo(70), currency: "EUR", grandTotal: "900.00" }),
-    fxRow({ buyerPartyId: buyerEur, invoiceNumber: `UBFX-E3-${SALT}`, issueDate: daysAgo(40), currency: "EUR", grandTotal: "900.00" }),
+    fxRow({
+      buyerPartyId: buyerEur,
+      invoiceNumber: `UBFX-E1-${SALT}`,
+      issueDate: daysAgo(100),
+      currency: "EUR",
+      grandTotal: "900.00",
+    }),
+    fxRow({
+      buyerPartyId: buyerEur,
+      invoiceNumber: `UBFX-E2-${SALT}`,
+      issueDate: daysAgo(70),
+      currency: "EUR",
+      grandTotal: "900.00",
+    }),
+    fxRow({
+      buyerPartyId: buyerEur,
+      invoiceNumber: `UBFX-E3-${SALT}`,
+      issueDate: daysAgo(40),
+      currency: "EUR",
+      grandTotal: "900.00",
+    }),
   ]);
 
   const alerts = await listUnbilledIncome(fxFirm, fxClient);

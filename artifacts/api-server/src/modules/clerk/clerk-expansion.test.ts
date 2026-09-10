@@ -29,7 +29,10 @@ import {
   restoreClerkFlag,
 } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal as makeClientPrincipal, firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal as makeClientPrincipal,
+  firmPrincipal as makeFirmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Clerk expansions B & C: the correction→eval learning loop and the grounded
 // failure explainer, plus voice-note duration persistence.
@@ -94,7 +97,12 @@ before(async () => {
       invoiceNumber: `EXP-${SALT}`,
       issueDate: "2026-07-01",
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -135,8 +143,18 @@ test("fixtureFromCase turns a corrected approval into ground truth", () => {
     sourceText: "INVOICE ...",
     status: "approved",
     corrections: [
-      { field: "invoiceNumber", extracted: "INV-1", final: "INV-1", changed: false },
-      { field: "buyerName", extracted: "Norstar", final: "Northstar Ltd", changed: true },
+      {
+        field: "invoiceNumber",
+        extracted: "INV-1",
+        final: "INV-1",
+        changed: false,
+      },
+      {
+        field: "buyerName",
+        extracted: "Norstar",
+        final: "Northstar Ltd",
+        changed: true,
+      },
     ],
   } as unknown as ClerkCase;
 
@@ -145,9 +163,18 @@ test("fixtureFromCase turns a corrected approval into ground truth", () => {
   assert.equal(fixture.expected.invoiceNumber, "INV-1");
   assert.equal(fixture.expected.buyerName, "Northstar Ltd");
 
-  assert.equal(fixtureFromCase({ ...base, status: "rejected" } as ClerkCase), null);
-  assert.equal(fixtureFromCase({ ...base, sourceText: null } as ClerkCase), null);
-  assert.equal(fixtureFromCase({ ...base, corrections: null } as ClerkCase), null);
+  assert.equal(
+    fixtureFromCase({ ...base, status: "rejected" } as ClerkCase),
+    null,
+  );
+  assert.equal(
+    fixtureFromCase({ ...base, sourceText: null } as ClerkCase),
+    null,
+  );
+  assert.equal(
+    fixtureFromCase({ ...base, corrections: null } as ClerkCase),
+    null,
+  );
 });
 
 test("growEvalFixtures ingests each corrected approval exactly once", async () => {
@@ -161,7 +188,12 @@ test("growEvalFixtures ingests each corrected approval exactly once", async () =
       sourceName: `grown-${SALT}.txt`,
       sourceText: `INVOICE GROWN-${SALT} total 500`,
       corrections: [
-        { field: "invoiceNumber", extracted: null, final: `GROWN-${SALT}`, changed: true },
+        {
+          field: "invoiceNumber",
+          extracted: null,
+          final: `GROWN-${SALT}`,
+          changed: true,
+        },
       ],
       createdBy: userId,
     })
@@ -211,23 +243,34 @@ test("explainInvoiceFailure: an exhausted budget falls back to catalogue text", 
       invoiceNumber: `EXP-BROKE-${SALT}`,
       issueDate: "2026-07-01",
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
   );
-  await getDb().insert(submissionAttemptsTable).values({
-    invoiceId: bundle.invoice.id,
-    rail: "rail_primary",
-    attemptNo: 1,
-    idempotencyKey: `exp-${SALT}-2`,
-    status: "error",
-    errorCode: CODE,
-  });
+  await getDb()
+    .insert(submissionAttemptsTable)
+    .values({
+      invoiceId: bundle.invoice.id,
+      rail: "rail_primary",
+      attemptNo: 1,
+      idempotencyKey: `exp-${SALT}-2`,
+      status: "error",
+      errorCode: CODE,
+    });
   const gateway = fakeGateway(() => {
     throw new Error("gateway must not be called when the budget is spent");
   });
-  const result = await explainInvoiceFailure(bundle.invoice.id, brokeAdmin, gateway);
+  const result = await explainInvoiceFailure(
+    bundle.invoice.id,
+    brokeAdmin,
+    gateway,
+  );
   assert.equal(result.source, "catalogue");
   assert.equal(result.explanation, `test cause ${SALT}`);
   assert.deepEqual(result.nextSteps, [`test fix ${SALT}`]);
@@ -254,8 +297,14 @@ test("explainInvoiceFailure: a client_user reaches only its own party's invoices
       nextSteps: ["Fix the field", "Resubmit"],
     }),
   );
-  const clientPrincipal: Principal = makeClientPrincipal(firmId, clientId, { userId: userId });
-  const result = await explainInvoiceFailure(invoiceId, clientPrincipal, gateway);
+  const clientPrincipal: Principal = makeClientPrincipal(firmId, clientId, {
+    userId: userId,
+  });
+  const result = await explainInvoiceFailure(
+    invoiceId,
+    clientPrincipal,
+    gateway,
+  );
   assert.equal(result.errorCode, CODE);
   assert.equal(result.source, "clerk");
 
@@ -278,13 +327,22 @@ test("explainInvoiceFailure: 404 when the invoice never failed", async () => {
       invoiceNumber: `EXP-CLEAN-${SALT}`,
       issueDate: "2026-07-01",
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
   );
   await assert.rejects(
-    explainInvoiceFailure(bundle.invoice.id, admin, fakeGateway(() => "{}")),
+    explainInvoiceFailure(
+      bundle.invoice.id,
+      admin,
+      fakeGateway(() => "{}"),
+    ),
     (err: Error & { status?: number }) => err.status === 404,
   );
 });

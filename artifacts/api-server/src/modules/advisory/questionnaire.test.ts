@@ -69,7 +69,8 @@ test("remediation is prioritised high-severity first and deterministic", () => {
   const b = computeAssessment(answers);
   assert.deepEqual(a.remediation, b.remediation);
   const severities = a.remediation.map(
-    (rem) => a.gaps.find((g) => g.questionId === rem.relatedQuestionId)!.severity,
+    (rem) =>
+      a.gaps.find((g) => g.questionId === rem.relatedQuestionId)!.severity,
   );
   const rank = { high: 0, medium: 1, low: 2 } as const;
   for (let i = 1; i < severities.length; i++) {

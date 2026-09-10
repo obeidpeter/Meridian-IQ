@@ -90,7 +90,9 @@ describe("isReadyToApprove", () => {
     expect(
       isReadyToApprove(
         makeCase({
-          preflight: [{ field: "issueDate", message: "Issue date is in the future" }],
+          preflight: [
+            { field: "issueDate", message: "Issue date is in the future" },
+          ],
         }),
       ),
     ).toBe(false);
@@ -406,7 +408,12 @@ describe("approveDecisionFromForm", () => {
     currency: "NGN",
     category: "b2b",
     lines: [
-      { description: "Consulting", quantity: "2", unitPrice: "5000", vatRate: "7.5" },
+      {
+        description: "Consulting",
+        quantity: "2",
+        unitPrice: "5000",
+        vatRate: "7.5",
+      },
     ],
   };
 
@@ -646,9 +653,9 @@ describe("reviewEffort", () => {
   test("lighter cases sort ahead of heavier ones", () => {
     const light = kase(1, 0);
     const heavy = kase(4, 3);
-    expect([heavy, light].sort((a, b) => reviewEffort(a) - reviewEffort(b))[0]).toBe(
-      light,
-    );
+    expect(
+      [heavy, light].sort((a, b) => reviewEffort(a) - reviewEffort(b))[0],
+    ).toBe(light);
   });
 });
 

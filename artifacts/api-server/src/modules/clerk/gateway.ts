@@ -3,7 +3,10 @@ import { db, clerkInferenceCallsTable } from "@workspace/db";
 import type { z } from "zod/v4";
 import { DomainError } from "../errors";
 import { CLERK_RUNTIME_FLAG_KEY, isFeatureEnabled } from "../flags/flags";
-import { acquireFirmClerkBudgetPermit, type FirmClerkBudgetPermit } from "./budget";
+import {
+  acquireFirmClerkBudgetPermit,
+  type FirmClerkBudgetPermit,
+} from "./budget";
 import type { Database } from "@workspace/db";
 
 // Inference gateway (Task #40). EVERY model call flows through here:
@@ -305,7 +308,10 @@ interface LedgerBase {
 // Append one ledger row: the call's identity (base) plus the outcome
 // fields, which stay explicit at each call site. Writes on the raw `db` by
 // design — spend accounting must survive any ambient rollback.
-function ledgerAppender(base: LedgerBase, permit?: FirmClerkBudgetPermit | null) {
+function ledgerAppender(
+  base: LedgerBase,
+  permit?: FirmClerkBudgetPermit | null,
+) {
   return async (
     row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof LedgerBase>,
   ): Promise<void> => {

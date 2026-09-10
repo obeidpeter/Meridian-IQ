@@ -212,12 +212,14 @@ test("expired tickets are dropped even when no receipt ever materialises", async
   await ensureFixtures();
 
   const staleTicketId = `sweep-ticket-stale-${randomUUID()}`;
-  await getDb().insert(pushTicketsTable).values({
-    ticketId: staleTicketId,
-    expoPushToken: lateLiveToken,
-    // Older than the 24h expiry: Expo no longer holds this receipt.
-    createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
-  });
+  await getDb()
+    .insert(pushTicketsTable)
+    .values({
+      ticketId: staleTicketId,
+      expoPushToken: lateLiveToken,
+      // Older than the 24h expiry: Expo no longer holds this receipt.
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+    });
 
   // Expo returns nothing for expired ids — and must not even be asked.
   setPushReceiptTransport(async (ids) => {

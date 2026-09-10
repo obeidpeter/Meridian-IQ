@@ -77,7 +77,9 @@ function extractionWith(
   };
 }
 
-const principal: Principal = crossTenantPrincipal("operator", { userId: operatorId });
+const principal: Principal = crossTenantPrincipal("operator", {
+  userId: operatorId,
+});
 
 before(async () => {
   const db = getDb();
@@ -87,8 +89,18 @@ before(async () => {
   ]);
   await db.insert(firmsTable).values({ id: firmId, name: `Mint Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientPartyId, type: "client_business", legalName: CLIENT_NAME, tin: CLIENT_TIN },
-    { id: invSupplierPartyId, type: "client_business", legalName: INV_SUPPLIER_NAME, tin: INV_SUPPLIER_TIN },
+    {
+      id: clientPartyId,
+      type: "client_business",
+      legalName: CLIENT_NAME,
+      tin: CLIENT_TIN,
+    },
+    {
+      id: invSupplierPartyId,
+      type: "client_business",
+      legalName: INV_SUPPLIER_NAME,
+      tin: INV_SUPPLIER_TIN,
+    },
     { id: invBuyerPartyId, type: "buyer", legalName: `Lekki Builders ${SALT}` },
   ]);
   await db.insert(membershipsTable).values({
@@ -261,7 +273,10 @@ test("mint + scrub round-trip: no raw name or TIN survives, in text OR expected"
     .from(clerkEvalFixturesTable)
     .where(eq(clerkEvalFixturesTable.caseId, rejectedCaseId));
   assert.ok(row);
-  const stored = JSON.stringify({ text: row.sourceText, expected: row.expected });
+  const stored = JSON.stringify({
+    text: row.sourceText,
+    expected: row.expected,
+  });
   assert.ok(!/ngozi/i.test(stored), "supplier name scrubbed everywhere");
   assert.ok(!/obi retail/i.test(stored), "buyer name scrubbed everywhere");
   assert.ok(!stored.includes("55512345"), "supplier TIN digits gone");
@@ -278,7 +293,9 @@ test("mint + scrub round-trip: no raw name or TIN survives, in text OR expected"
   assert.equal(expected.buyerName, "Company B");
   assert.equal(expected.supplierTin, "00000001-0001");
   assert.equal(expected.buyerTin, "00000002-0001");
-  assert.ok(row.sourceText.includes("Supplier: Company A (TIN: 00000001-0001)"));
+  assert.ok(
+    row.sourceText.includes("Supplier: Company A (TIN: 00000001-0001)"),
+  );
   // Non-identity values survive verbatim.
   assert.equal(expected.grandTotal, "45000.00");
   assert.ok(row.sourceText.includes("TOTAL: NGN 45,000.00"));
@@ -323,8 +340,7 @@ test("undecided, purged and scan cases are refused with their specific codes", a
   );
   await assert.rejects(
     () => mintFixtureFromCase({ caseId: randomUUID() }, operatorId),
-    (err: unknown) =>
-      err instanceof DomainError && err.status === 404,
+    (err: unknown) => err instanceof DomainError && err.status === 404,
   );
 });
 

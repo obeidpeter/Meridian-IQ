@@ -110,7 +110,9 @@ export const firmWebhookDeliveriesTable = pgTable(
     eventType: text("event_type").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     eventKey: text("event_key").notNull(),
-    status: firmWebhookDeliveryStatusEnum("status").notNull().default("pending"),
+    status: firmWebhookDeliveryStatusEnum("status")
+      .notNull()
+      .default("pending"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
@@ -120,7 +122,10 @@ export const firmWebhookDeliveriesTable = pgTable(
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("firm_webhook_deliveries_dedup_idx").on(t.webhookId, t.eventKey),
+    uniqueIndex("firm_webhook_deliveries_dedup_idx").on(
+      t.webhookId,
+      t.eventKey,
+    ),
     // The dispatcher's claim scan (status + due time) must not walk history.
     index("firm_webhook_deliveries_claim_idx").on(t.status, t.nextAttemptAt),
     // The per-webhook delivery list reads newest-first.

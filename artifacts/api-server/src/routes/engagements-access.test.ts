@@ -35,8 +35,13 @@ const clientA = randomUUID();
 const clientB = randomUUID();
 const buyer = randomUUID();
 
-const staff: Principal = firmPrincipal(firmId, { userId: userStaff, role: "firm_staff" });
-const clientUserA: Principal = clientPrincipal(firmId, clientA, { userId: userClientA });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userStaff,
+  role: "firm_staff",
+});
+const clientUserA: Principal = clientPrincipal(firmId, clientA, {
+  userId: userClientA,
+});
 
 const ASSESSMENT_FINDINGS = {
   score: 72,
@@ -135,7 +140,12 @@ before(async () => {
       invoiceNumber: `ENG-${SALT}`,
       issueDate: "2026-07-01",
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userStaff,

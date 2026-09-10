@@ -8,7 +8,9 @@ import { afterEach } from "vitest";
 // simply have no history to reset.
 afterEach(() => {
   const g = globalThis as {
-    history?: { replaceState(data: unknown, unused: string, url: string): void };
+    history?: {
+      replaceState(data: unknown, unused: string, url: string): void;
+    };
     location?: { pathname: string };
   };
   if (g.history && g.location) {

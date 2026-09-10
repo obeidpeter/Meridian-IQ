@@ -50,7 +50,10 @@ export function resolveClientAnalyticsScope(
 // This one answers 400 NO_TENANT — which is contract-observable on the clerk
 // read surfaces (digest, client statements, usage, advisory briefs), so do
 // NOT swap it to firmScope.
-export function resolveBoundFirm(principal: Principal, surface: string): string {
+export function resolveBoundFirm(
+  principal: Principal,
+  surface: string,
+): string {
   const tenant = tenantFirmId(principal) ?? principal.firmId;
   if (!tenant) {
     throw new DomainError(

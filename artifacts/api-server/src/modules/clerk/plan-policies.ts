@@ -122,7 +122,9 @@ export async function grantPlanPolicy(
       409,
     );
   }
-  if (!(await isPurposePermitted(input.clientPartyId, "compliance_submission"))) {
+  if (
+    !(await isPurposePermitted(input.clientPartyId, "compliance_submission"))
+  ) {
     throw new DomainError(
       "CONSENT_REQUIRED",
       "The client's consent for compliance submission is not in force",
@@ -182,7 +184,10 @@ export async function grantPlanPolicy(
   try {
     await notifyPolicyGranted(policy, "clerk_plan_policy");
   } catch (err) {
-    logger.warn({ err, policyId: policy.id }, "plan policy: grant signal failed");
+    logger.warn(
+      { err, policyId: policy.id },
+      "plan policy: grant signal failed",
+    );
   }
   return policy;
 }
@@ -366,7 +371,10 @@ async function autoPausePlanPolicy(
   try {
     await notifyAutoPause(policy, "clerk_plan_policy");
   } catch (err) {
-    logger.warn({ err, policyId: policy.id }, "plan policy: pause signal failed");
+    logger.warn(
+      { err, policyId: policy.id },
+      "plan policy: pause signal failed",
+    );
   }
   return true;
 }
@@ -374,11 +382,10 @@ async function autoPausePlanPolicy(
 // The grantor's CURRENT standing (the grantorRole discipline): membership
 // in this firm still carrying EVERY capability the template's steps demand,
 // and a client_user grantor still pinned to this very party.
-async function grantorStillValid(policy: ClerkPlanPolicy): Promise<Principal["role"] | null> {
-  const memberships = await membershipRolesFor(
-    policy.grantedBy,
-    policy.firmId,
-  );
+async function grantorStillValid(
+  policy: ClerkPlanPolicy,
+): Promise<Principal["role"] | null> {
+  const memberships = await membershipRolesFor(policy.grantedBy, policy.firmId);
   // Derived from the TEMPLATE, not hard-coded (round-34 review m4): the
   // month-end template now carries an invoice.write draft step beside the
   // submit kinds, and a template gaining a step class must tighten this
@@ -404,7 +411,9 @@ export type PlanPolicyRunOutcome =
 
 // The last Lagos day of the month — the closing window in which an empty
 // book finally consumes the month (see the NOTHING_TO_RUN branch below).
-export function isLagosMonthClosing(dateStr: string = lagosDateString()): boolean {
+export function isLagosMonthClosing(
+  dateStr: string = lagosDateString(),
+): boolean {
   const [y, m, d] = dateStr.split("-").map(Number);
   return d === new Date(Date.UTC(y, m, 0)).getUTCDate();
 }

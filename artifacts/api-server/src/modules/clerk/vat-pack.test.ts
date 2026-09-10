@@ -40,8 +40,16 @@ before(async () => {
     { id: firmB, name: `VAT Firm B ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientA1, type: "client_business", legalName: `VAT Client A1 ${SALT}` },
-    { id: clientA2, type: "client_business", legalName: `VAT Client A2 ${SALT}` },
+    {
+      id: clientA1,
+      type: "client_business",
+      legalName: `VAT Client A1 ${SALT}`,
+    },
+    {
+      id: clientA2,
+      type: "client_business",
+      legalName: `VAT Client A2 ${SALT}`,
+    },
     { id: clientB, type: "client_business", legalName: `VAT Client B ${SALT}` },
     { id: buyer, type: "buyer", legalName: `VAT Buyer ${SALT}` },
   ]);
@@ -68,7 +76,8 @@ before(async () => {
       invoiceNumber: over.n,
       issueDate: over.issueDate,
       kind: (over.kind ?? "invoice") as never,
-      status: (over.status ?? (over.accept === false ? "draft" : "submitted")) as never,
+      status: (over.status ??
+        (over.accept === false ? "draft" : "submitted")) as never,
       grandTotal: over.grand,
       vatTotal: over.vat,
     });
@@ -86,20 +95,73 @@ before(async () => {
 
   const inMonth = `${MONTH.slice(0, 7)}-05`;
   // Firm A, client A1: two accepted invoices issued in MONTH.
-  await mk({ supplier: clientA1, n: `VP-A1a-${SALT}`, issueDate: inMonth, grand: "1075.00", vat: "75.00" });
-  await mk({ supplier: clientA1, n: `VP-A1b-${SALT}`, issueDate: inMonth, grand: "2150.00", vat: "150.00" });
+  await mk({
+    supplier: clientA1,
+    n: `VP-A1a-${SALT}`,
+    issueDate: inMonth,
+    grand: "1075.00",
+    vat: "75.00",
+  });
+  await mk({
+    supplier: clientA1,
+    n: `VP-A1b-${SALT}`,
+    issueDate: inMonth,
+    grand: "2150.00",
+    vat: "150.00",
+  });
   // ...and an accepted CREDIT NOTE issued in MONTH — netted as an offset.
-  await mk({ supplier: clientA1, n: `VP-A1cn-${SALT}`, issueDate: inMonth, grand: "430.00", vat: "30.00", kind: "credit_note", status: "stamped" });
+  await mk({
+    supplier: clientA1,
+    n: `VP-A1cn-${SALT}`,
+    issueDate: inMonth,
+    grand: "430.00",
+    vat: "30.00",
+    kind: "credit_note",
+    status: "stamped",
+  });
   // ...and an accepted-then-CANCELLED invoice — void, excluded entirely.
-  await mk({ supplier: clientA1, n: `VP-A1x-${SALT}`, issueDate: inMonth, grand: "9999.00", vat: "700.00", status: "cancelled" });
+  await mk({
+    supplier: clientA1,
+    n: `VP-A1x-${SALT}`,
+    issueDate: inMonth,
+    grand: "9999.00",
+    vat: "700.00",
+    status: "cancelled",
+  });
   // Firm A, client A2: one accepted issued in MONTH, one issued in an OLDER
   // month (accepted whenever) — the old issue month keeps it out.
-  await mk({ supplier: clientA2, n: `VP-A2a-${SALT}`, issueDate: inMonth, grand: "500.00", vat: "34.88" });
-  await mk({ supplier: clientA2, n: `VP-A2old-${SALT}`, issueDate: `${OLD_MONTH.slice(0, 7)}-05`, grand: "999.00", vat: "69.93" });
+  await mk({
+    supplier: clientA2,
+    n: `VP-A2a-${SALT}`,
+    issueDate: inMonth,
+    grand: "500.00",
+    vat: "34.88",
+  });
+  await mk({
+    supplier: clientA2,
+    n: `VP-A2old-${SALT}`,
+    issueDate: `${OLD_MONTH.slice(0, 7)}-05`,
+    grand: "999.00",
+    vat: "69.93",
+  });
   // Firm A: a draft (never accepted) — unsubmitted paper is not evidence.
-  await mk({ supplier: clientA1, n: `VP-A1d-${SALT}`, issueDate: inMonth, grand: "7777.00", vat: "543.00", accept: false });
+  await mk({
+    supplier: clientA1,
+    n: `VP-A1d-${SALT}`,
+    issueDate: inMonth,
+    grand: "7777.00",
+    vat: "543.00",
+    accept: false,
+  });
   // Firm B: accepted in MONTH — must never appear in firm A's pack.
-  await mk({ firmId: firmB, supplier: clientB, n: `VP-B-${SALT}`, issueDate: inMonth, grand: "888.00", vat: "62.16" });
+  await mk({
+    firmId: firmB,
+    supplier: clientB,
+    n: `VP-B-${SALT}`,
+    issueDate: inMonth,
+    grand: "888.00",
+    vat: "62.16",
+  });
 });
 
 test("closedLagosMonths offers only closed months, newest first", () => {

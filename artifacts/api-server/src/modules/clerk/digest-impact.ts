@@ -84,8 +84,7 @@ export async function computeDigestImpact(
     if (pairs < MIN_PAIRS) return { ...EMPTY, pairs };
     return {
       pairs,
-      meanUrgentDelta:
-        r.mean_delta !== null ? Number(r.mean_delta) : null,
+      meanUrgentDelta: r.mean_delta !== null ? Number(r.mean_delta) : null,
       improvedShare: Number(r.improved) / pairs,
     };
   };

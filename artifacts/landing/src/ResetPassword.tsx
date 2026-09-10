@@ -136,8 +136,8 @@ export function ResetPassword() {
                 className="mt-2 text-sm text-muted-foreground"
                 data-testid="text-reset-guidance"
               >
-                Enter the email address on your Valo account. We will send
-                a one-time link if the account exists.
+                Enter the email address on your Valo account. We will send a
+                one-time link if the account exists.
               </p>
               <form onSubmit={onRequestReset} className="mt-4 space-y-3">
                 <div className="space-y-1.5">

@@ -11,7 +11,11 @@ import {
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
 import { closedLagosMonths } from "../modules/clerk/vat-pack.ts";
-import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // Route-level authz for the VAT filing pack (idea #2). The SEC-critical
 // guarantee — a client_user must never see sibling clients' VAT figures, and
@@ -58,7 +62,10 @@ test("firm principals get the pack; the month gate fails closed", async () => {
   assert.match(csv.headers.get("content-type") ?? "", /text\/csv/);
   const body = await csv.text();
   assert.ok(body.includes("netOutputVat"), "the CSV carries the net column");
-  assert.ok(body.includes("not a return"), "the disclosure travels in the file");
+  assert.ok(
+    body.includes("not a return"),
+    "the disclosure travels in the file",
+  );
 });
 
 test("a client_user is refused — sibling clients' VAT figures never leak", async () => {

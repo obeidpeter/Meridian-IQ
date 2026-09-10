@@ -414,8 +414,8 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
                 className="text-xs text-muted-foreground"
                 data-testid="text-verification-save-first"
               >
-                Save your preferences first — the verification code goes to
-                the saved address.
+                Save your preferences first — the verification code goes to the
+                saved address.
               </p>
             )}
             {verifyError && (

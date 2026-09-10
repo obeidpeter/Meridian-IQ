@@ -77,22 +77,44 @@ test("deletes are bounded to 1000 per pass, oldest first", async () => {
   );
   // Chunked inserts to stay well under the driver's parameter cap.
   for (let i = 0; i < backlog.length; i += 500) {
-    await getDb().insert(messagesTable).values(backlog.slice(i, i + 500));
+    await getDb()
+      .insert(messagesTable)
+      .values(backlog.slice(i, i + 500));
   }
   const recentParty = randomUUID();
-  await getDb().insert(messagesTable).values([row(recentParty, new Date())]);
+  await getDb()
+    .insert(messagesTable)
+    .values([row(recentParty, new Date())]);
 
   assert.equal(await sweepMessagesRetention(), 1000, "first pass caps at 1000");
-  assert.equal(await countFor(party), 5, "the remainder waits for the next pass");
-  assert.equal(await sweepMessagesRetention(), 5, "second pass finishes the backlog");
-  assert.equal(await sweepMessagesRetention(), 0, "then nothing left to delete");
+  assert.equal(
+    await countFor(party),
+    5,
+    "the remainder waits for the next pass",
+  );
+  assert.equal(
+    await sweepMessagesRetention(),
+    5,
+    "second pass finishes the backlog",
+  );
+  assert.equal(
+    await sweepMessagesRetention(),
+    0,
+    "then nothing left to delete",
+  );
   assert.equal(await countFor(party), 0);
-  assert.equal(await countFor(recentParty), 1, "recent rows ride out every pass");
+  assert.equal(
+    await countFor(recentParty),
+    1,
+    "recent rows ride out every pass",
+  );
 });
 
 test("a non-positive or malformed retention env disables the sweep", async () => {
   const party = randomUUID();
-  await getDb().insert(messagesTable).values([row(party, daysAgo(400))]);
+  await getDb()
+    .insert(messagesTable)
+    .values([row(party, daysAgo(400))]);
   const original = process.env.MESSAGES_RETENTION_DAYS;
   try {
     process.env.MESSAGES_RETENTION_DAYS = "0";

@@ -16,7 +16,11 @@ const firmId = randomUUID();
 const HEAVY = `up_heavy_${SALT}`.slice(0, 40);
 const LIGHT = `up_light_${SALT}`.slice(0, 40);
 
-const ledgerRow = (purpose: string, promptTokens: number, completionTokens: number) => ({
+const ledgerRow = (
+  purpose: string,
+  promptTokens: number,
+  completionTokens: number,
+) => ({
   firmId,
   purpose,
   model: "usage-model",

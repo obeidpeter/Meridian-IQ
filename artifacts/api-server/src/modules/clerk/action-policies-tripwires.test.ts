@@ -358,17 +358,30 @@ test("a grant refuses without a live engagement — completed/archived books of 
 test("the attempt cap excludes rail-hammered invoices from the AUTOMATED run but not from the human proposal", async () => {
   const client = await seedSupplier("Cap");
   // At the cap: excluded from automation for good (the ledger only grows).
-  const capped = await failedInvoice(client, daysAgo(12), AUTO_RETRY_ATTEMPT_CAP);
+  const capped = await failedInvoice(
+    client,
+    daysAgo(12),
+    AUTO_RETRY_ATTEMPT_CAP,
+  );
   // Under the cap: still automatable.
   const fresh = await failedInvoice(client, daysAgo(10), 1);
-  const policy = await grantActionPolicy(firmId, client, grantor, "retry_failed");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "retry_failed",
+  );
 
   // The HUMAN proposal keeps showing both — a person may still choose the
   // capped one deliberately (and the shape is the historical one).
   const { actions } = await listActionProposals(firmId, client);
   const retry = actions.find((a) => a.kind === "retry_failed");
   assert.ok(retry, "the human retry proposal exists");
-  assert.equal(retry.targetCount, 2, "the human count includes the capped invoice");
+  assert.equal(
+    retry.targetCount,
+    2,
+    "the human count includes the capped invoice",
+  );
   assert.deepEqual(
     retry.targets.map((t) => t.invoiceId).sort(),
     [capped, fresh].sort(),
@@ -377,16 +390,28 @@ test("the attempt cap excludes rail-hammered invoices from the AUTOMATED run but
   // The automated run takes ONLY the under-cap invoice.
   await runActionPolicySweep();
   const afterRow = await policyRow(policy.id);
-  assert.equal(afterRow?.lastRunDay, lagosDateString(new Date()), "the run happened");
+  assert.equal(
+    afterRow?.lastRunDay,
+    lagosDateString(new Date()),
+    "the run happened",
+  );
   assert.equal(afterRow?.pausedAt, null, "a capped candidate is no tripwire");
   const [decision] = await getDb()
     .select()
     .from(clerkActionDecisionsTable)
     .where(eq(clerkActionDecisionsTable.policyId, policy.id));
   assert.ok(decision, "one decision for the day");
-  assert.equal(decision.requestedCount, 1, "the capped invoice never entered the batch");
+  assert.equal(
+    decision.requestedCount,
+    1,
+    "the capped invoice never entered the batch",
+  );
   assert.equal(decision.targets[0].invoiceId, fresh);
-  assert.equal(await invoiceStatus(fresh), "submitted", "the healthy retry is real");
+  assert.equal(
+    await invoiceStatus(fresh),
+    "submitted",
+    "the healthy retry is real",
+  );
   assert.equal(
     await invoiceStatus(capped),
     "failed",
@@ -401,7 +426,12 @@ test("rail rejections on the PREVIOUS run pause the policy instead of running �
   // Yesterday's run: the decision recorded 'submitted' (enqueue-time truth),
   // but the rails since rejected it — the invoice is back in 'failed'.
   const bounced = await failedInvoice(client, daysAgo(15), 2);
-  const policy = await grantActionPolicy(firmId, client, grantor, "retry_failed");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "retry_failed",
+  );
   const target: ActionTargetOutcome = {
     invoiceId: bounced,
     invoiceNumber: `TRIP-${SALT}-bounced`,
@@ -437,7 +467,11 @@ test("rail rejections on the PREVIOUS run pause the policy instead of running �
   assert.ok(afterRow?.pausedAt, "the policy paused");
   assert.equal(afterRow?.pausedReason, "rail_rejections");
   assert.equal(afterRow?.pausedBy, null, "the system paused it, not a person");
-  assert.equal(afterRow?.lastRunDay, null, "the pause happened INSTEAD of the run");
+  assert.equal(
+    afterRow?.lastRunDay,
+    null,
+    "the pause happened INSTEAD of the run",
+  );
   assert.equal(
     await invoiceStatus(candidate),
     "failed",
@@ -458,14 +492,22 @@ test("rail rejections on the PREVIOUS run pause the policy instead of running �
         eq(auditEventsTable.entityId, policy.id),
       ),
     );
-  assert.equal((audit?.after as { reason?: string })?.reason, "rail_rejections");
+  assert.equal(
+    (audit?.after as { reason?: string })?.reason,
+    "rail_rejections",
+  );
   pausedPolicyIds.push(policy.id);
 });
 
 test("an engagement archived AFTER the grant pauses the policy — engagement_closed", async () => {
   const client = await seedSupplier("Wound");
   const overdue = (await draftFor(client, daysAgo(20))).invoice.id;
-  const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "submit_overdue",
+  );
   // The firm winds the client down: the only engagement goes archived.
   await getDb()
     .update(engagementsTable)
@@ -488,7 +530,12 @@ test("an engagement archived AFTER the grant pauses the policy — engagement_cl
 test("a thrown run pauses the policy — run_error — instead of silently retrying tomorrow", async () => {
   const client = await seedSupplier("Throw");
   await failedInvoice(client, daysAgo(8), 1);
-  const policy = await grantActionPolicy(firmId, client, grantor, "retry_failed");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "retry_failed",
+  );
   // A decision row whose targets jsonb is NOT an array: only a hand-written
   // ledger row can look like this (every real writer stores an array), and
   // it makes the run THROW (jsonb_array_elements refuses an object) — the
@@ -554,7 +601,10 @@ test("auto-pauses raise the durable operator alert — counts only, once per Lag
   // Pointer-only (SEC-12): counts ride the alert, never which policies —
   // per-policy detail lives on each policy_auto_paused audit row.
   const serialized = JSON.stringify(alert.after);
-  assert.ok(pausedPolicyIds.length >= 3, "the earlier tests recorded their pauses");
+  assert.ok(
+    pausedPolicyIds.length >= 3,
+    "the earlier tests recorded their pauses",
+  );
   for (const id of pausedPolicyIds) {
     assert.ok(!serialized.includes(id), "no policy id rides the fleet alert");
   }
@@ -567,7 +617,12 @@ test("a staff grant notifies the client party — consent-gated, and a dark rail
   // Staff grants; the client (whose paper the autopilot will file) is told
   // through the ordinary alert rails: default channels with no prefs row are
   // whatsapp + email (push skips — no registered devices).
-  const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+  const policy = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "submit_overdue",
+  );
   const signals = await grantedMessagesForParty(client);
   assert.equal(signals.length, 2, "whatsapp + email default channels");
   assert.deepEqual(signals.map((s) => s.channel).sort(), ["email", "whatsapp"]);
@@ -586,7 +641,12 @@ test("a staff grant notifies the client party — consent-gated, and a dark rail
     .update(featureFlagsTable)
     .set({ enabled: false })
     .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
-  const darkGrant = await grantActionPolicy(firmId, client, grantor, "retry_failed");
+  const darkGrant = await grantActionPolicy(
+    firmId,
+    client,
+    grantor,
+    "retry_failed",
+  );
   assert.ok(darkGrant.id, "a dark rail never fails the grant");
   assert.equal(
     (await grantedMessagesForParty(client)).length,
@@ -640,11 +700,13 @@ test("a client grant notifies firm staff under their opt-ins — verified email 
   assert.equal((await grantedMessagesForUser(staffUnverifiedId)).length, 0);
   assert.equal((await grantedMessagesForUser(staffNoPrefsId)).length, 0);
   assert.equal(
-    (await grantedMessagesForUser(clientGrantorId)).length, 0,
+    (await grantedMessagesForUser(clientGrantorId)).length,
+    0,
     "the grantor is not notified — they clicked",
   );
   assert.equal(
-    (await grantedMessagesForParty(client)).length, 0,
+    (await grantedMessagesForParty(client)).length,
+    0,
     "a client grant notifies the FIRM side only",
   );
 });

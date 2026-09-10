@@ -141,7 +141,6 @@ export const EXTRACT_NOTICE_JSON_SCHEMA: Record<string, unknown> = {
 // no gateway — trivially unit-testable, can never touch tenant data).
 // ---------------------------------------------------------------------------
 
-
 const FIELD_LABELS: Record<NoticeField, string> = {
   referenceNumber: "reference number",
   authority: "issuing authority",

@@ -17,7 +17,10 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // The withholding remittance schedule (WHT Desk): the client's BILLS
@@ -41,16 +44,36 @@ const launchFlagGuard = makeFlagGuard("statutory_desks");
 before(async () => {
   await launchFlagGuard.saveAndSet(true);
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `WHT Remit Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `WHT Remit Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `WHT Remit Client ${SALT}` },
-    { id: siblingParty, type: "client_business", legalName: `WHT Remit Sibling ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `WHT Remit Client ${SALT}`,
+    },
+    {
+      id: siblingParty,
+      type: "client_business",
+      legalName: `WHT Remit Sibling ${SALT}`,
+    },
     { id: vendorA, type: "buyer", legalName: `Remit Vendor Alpha ${SALT}` },
     { id: vendorB, type: "buyer", legalName: `Remit Vendor Beta ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `wht rm A ${SALT}` },
-    { firmId, clientPartyId: siblingParty, type: "retainer", title: `wht rm B ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `wht rm A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `wht rm B ${SALT}`,
+    },
   ]);
   const bill = (
     supplier: string,
@@ -110,7 +133,11 @@ test("the schedule: in-period categorised bills, computed deductions, the 21st",
   const schedule = await computeWhtRemittance(firmId, clientParty, PERIOD);
   assert.equal(schedule.period, PERIOD);
   assert.equal(schedule.periodLabel, "July 2097");
-  assert.equal(schedule.dueDate, "2097-08-21", "the wht 21st from the shared calendar");
+  assert.equal(
+    schedule.dueDate,
+    "2097-08-21",
+    "the wht 21st from the shared calendar",
+  );
   assert.deepEqual(schedule.rows, [
     {
       invoiceId: schedule.rows[0].invoiceId,

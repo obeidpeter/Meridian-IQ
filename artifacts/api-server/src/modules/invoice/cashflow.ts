@@ -360,7 +360,10 @@ export async function computeCashflowOutlook(
   const today = lagosDateString(now);
   return {
     asOf: today,
-    groups: bucketProjections(await receivableProjections(firmId, clientPartyId, now), today),
+    groups: bucketProjections(
+      await receivableProjections(firmId, clientPartyId, now),
+      today,
+    ),
   };
 }
 

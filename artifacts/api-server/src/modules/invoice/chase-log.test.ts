@@ -1,12 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import {
-  getDb,
-  firmsTable,
-  partiesTable,
-  invoicesTable,
-} from "@workspace/db";
+import { getDb, firmsTable, partiesTable, invoicesTable } from "@workspace/db";
 import type { Principal } from "../auth/rbac.ts";
 import {
   chaseHistory,

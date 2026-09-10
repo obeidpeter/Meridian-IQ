@@ -316,7 +316,7 @@ export async function renderInvoicePdf(
       .fontSize(9)
       .fillColor("#b3261e")
       .text(
-        `${(invoice.status === "draft" || invoice.status === "validated" ? "DRAFT" : invoice.status.toUpperCase())} — UNSTAMPED: this document has not been stamped on the e-invoicing rails and is not fiscal evidence.`,
+        `${invoice.status === "draft" || invoice.status === "validated" ? "DRAFT" : invoice.status.toUpperCase()} — UNSTAMPED: this document has not been stamped on the e-invoicing rails and is not fiscal evidence.`,
         MARGIN,
         y,
         { width: CONTENT_WIDTH },
@@ -478,7 +478,11 @@ export async function renderInvoicePdf(
     // to an IRN/CSID verify reference if a legacy row has none.
     const qrContent =
       stamp.qrPayload ||
-      JSON.stringify({ verify: "/verify-stamp", irn: stamp.irn, csid: stamp.csid });
+      JSON.stringify({
+        verify: "/verify-stamp",
+        irn: stamp.irn,
+        csid: stamp.csid,
+      });
     drawQr(
       doc,
       qrContent,

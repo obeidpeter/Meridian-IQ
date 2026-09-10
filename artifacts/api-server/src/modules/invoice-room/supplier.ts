@@ -1,10 +1,4 @@
-import {
-  and,
-  desc,
-  eq,
-  isNull,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   confirmationsTable,
   getDb,
@@ -18,7 +12,11 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import type { Principal } from "../auth/rbac";
-import { requireFirmScope, assertClientPartyScope, clientPartyScope } from "../auth/rbac";
+import {
+  requireFirmScope,
+  assertClientPartyScope,
+  clientPartyScope,
+} from "../auth/rbac";
 import { normalizeEmail } from "../auth/session";
 import { DomainError } from "../errors";
 import { recordConfirmation } from "../invoice/confirmations";

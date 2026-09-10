@@ -77,11 +77,13 @@ before(async () => {
   // Aliases are firm-keyed RLS (migration 0017) — seed in bypass, the same
   // context the preview's operator caller runs in.
   await runInBypassContext(() =>
-    getDb().insert(partyNameAliasesTable).values({
-      firmId,
-      partyId: heavyId,
-      alias: `MI-ALIAS-${SALT.toUpperCase()}`,
-    }),
+    getDb()
+      .insert(partyNameAliasesTable)
+      .values({
+        firmId,
+        partyId: heavyId,
+        alias: `MI-ALIAS-${SALT.toUpperCase()}`,
+      }),
   );
   // The consent spine and desk cases resolve through the party id too —
   // the review of round 12 flagged them as the operationally material counts.

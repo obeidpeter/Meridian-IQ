@@ -65,14 +65,16 @@ async function seedFixture(
     firmId,
     createdBy,
   });
-  await getDb().insert(clerkEvalFixturesTable).values({
-    caseId,
-    label: `fixture-${caseId.slice(0, 8)}`,
-    sourceText,
-    expected: { invoiceNumber: "INV-1" },
-    supplierName: identity.supplierName,
-    supplierTin: identity.supplierTin,
-  });
+  await getDb()
+    .insert(clerkEvalFixturesTable)
+    .values({
+      caseId,
+      label: `fixture-${caseId.slice(0, 8)}`,
+      sourceText,
+      expected: { invoiceNumber: "INV-1" },
+      supplierName: identity.supplierName,
+      supplierTin: identity.supplierTin,
+    });
   return caseId;
 }
 
@@ -157,25 +159,27 @@ test("the PRODUCTION growth loop produces a matchable fixture", async () => {
       issueDate: "2026-07-01",
     })
     .returning({ id: invoicesTable.id });
-  await getDb().insert(clerkCasesTable).values({
-    id: caseId,
-    kind: "extraction",
-    status: "approved",
-    sourceType: "text",
-    sourceText: `INVOICE EXG-${SALT} from ${SUPPLIER}\nTotal 100`,
-    // Production corrections NEVER include party identity — only these.
-    corrections: [
-      {
-        field: "invoiceNumber",
-        extracted: `EXG-${SALT}`,
-        final: `EXG-${SALT}`,
-        changed: false,
-      },
-    ],
-    createdInvoiceId: invoice.id,
-    firmId: firmA,
-    createdBy: userId,
-  });
+  await getDb()
+    .insert(clerkCasesTable)
+    .values({
+      id: caseId,
+      kind: "extraction",
+      status: "approved",
+      sourceType: "text",
+      sourceText: `INVOICE EXG-${SALT} from ${SUPPLIER}\nTotal 100`,
+      // Production corrections NEVER include party identity — only these.
+      corrections: [
+        {
+          field: "invoiceNumber",
+          extracted: `EXG-${SALT}`,
+          final: `EXG-${SALT}`,
+          changed: false,
+        },
+      ],
+      createdInvoiceId: invoice.id,
+      firmId: firmA,
+      createdBy: userId,
+    });
 
   const grown = await growEvalFixtures();
   assert.ok(grown >= 1);
@@ -352,22 +356,24 @@ test("hygiene: a proven-misleading exemplar is skipped for the next candidate", 
     { field: "currency", extracted: "NGN", final: "NGN", changed: false },
   ];
   for (let i = 0; i < 3; i++) {
-    await getDb().insert(clerkCasesTable).values({
-      id: randomUUID(),
-      kind: "extraction",
-      status: "approved",
-      sourceType: "text",
-      firmId: firmA,
-      createdBy: userId,
-      extraction: {
-        fields: [],
-        lines: [],
-        promptVersion: "extract.v1+ex1",
-        model: "fake",
-        exemplarCaseId: newer,
-      } as never,
-      corrections: corrections as never,
-    });
+    await getDb()
+      .insert(clerkCasesTable)
+      .values({
+        id: randomUUID(),
+        kind: "extraction",
+        status: "approved",
+        sourceType: "text",
+        firmId: firmA,
+        createdBy: userId,
+        extraction: {
+          fields: [],
+          lines: [],
+          promptVersion: "extract.v1+ex1",
+          model: "fake",
+          exemplarCaseId: newer,
+        } as never,
+        corrections: corrections as never,
+      });
   }
 
   const afterHygiene = await findExtractionExemplar(doc, firmA);

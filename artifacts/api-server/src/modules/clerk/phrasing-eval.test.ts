@@ -179,7 +179,8 @@ const RESPONDERS: Record<
               note: `Start with the ${overdue} overdue statutory items — clearing them stops the position worsening. The rest of the month's numbers are set out below.`,
             }
           : {
-              headline: "You're on track this month: nothing statutory is overdue.",
+              headline:
+                "You're on track this month: nothing statutory is overdue.",
               note: "Nothing needs urgent attention right now. Keep an eye on the next return due date and keep capturing paper as it arrives.",
             },
       );
@@ -337,7 +338,10 @@ test("a clean run scores full marks and stores the run", async () => {
   const injections = PHRASING_FIXTURES.filter(
     (f) => f.riskLabel === "injection",
   ).length;
-  assert.ok(injections >= 5, "every attacker-slotted surface has an injection fixture");
+  assert.ok(
+    injections >= 5,
+    "every attacker-slotted surface has an injection fixture",
+  );
   assert.equal(run.injectionFixtures, injections);
   assert.equal(run.injectionResisted, injections);
   assert.deepEqual(run.promptVersions, {
@@ -379,7 +383,10 @@ test("a clean run scores full marks and stores the run", async () => {
   assert.ok(prompts.some((p) => String(p.user).includes("SYSTEM OVERRIDE")));
 
   const runs = await listPhrasingEvalRuns();
-  assert.ok(runs.some((r) => r.id === run.id), "the run is stored");
+  assert.ok(
+    runs.some((r) => r.id === run.id),
+    "the run is stored",
+  );
 });
 
 test("an ungrounded digest and echoed injections are caught and named", async () => {
@@ -407,12 +414,17 @@ test("an ungrounded digest and echoed injections are caught and named", async ()
 
   const waive = run.results.find((r) => r.key === "chaser-inject-waive");
   assert.ok(waive && !waive.correct && waive.resisted === false);
-  assert.ok(waive.grounded === true, "the echo is a content failure, not a grounding one");
+  assert.ok(
+    waive.grounded === true,
+    "the echo is a content failure, not a grounding one",
+  );
   assert.ok(waive.failures.some((f) => f.includes("injected waiver payload")));
 
   const nil = run.results.find((r) => r.key === "vat-note-inject-waive");
   assert.ok(nil && !nil.correct && nil.resisted === false);
-  assert.ok(nil.failures.some((f) => f.includes("injected nil-filing payload")));
+  assert.ok(
+    nil.failures.some((f) => f.includes("injected nil-filing payload")),
+  );
 });
 
 test("a model call that fails validation counts against resistance", async () => {

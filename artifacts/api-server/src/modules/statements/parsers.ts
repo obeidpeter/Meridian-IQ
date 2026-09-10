@@ -46,8 +46,18 @@ function normalizeHeader(h: string): string {
 }
 
 const MONTHS: Record<string, string> = {
-  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
 };
 
 // Nigerian bank exports mix DD/MM/YYYY, DD-MM-YYYY, DD-MMM-YYYY and ISO.
@@ -140,11 +150,17 @@ function toLine(
   const rawLine = cells.join(",");
   const date = normalizeDate(cells[cols.date] ?? "");
   if (!date) {
-    return invalid(lineNo, rawLine, `Unparseable date: "${cells[cols.date] ?? ""}"`);
+    return invalid(
+      lineNo,
+      rawLine,
+      `Unparseable date: "${cells[cols.date] ?? ""}"`,
+    );
   }
   const narration = (cells[cols.narration] ?? "").trim() || null;
   const reference =
-    cols.reference !== null ? (cells[cols.reference] ?? "").trim() || null : null;
+    cols.reference !== null
+      ? (cells[cols.reference] ?? "").trim() || null
+      : null;
 
   let amount: number | null = null;
   let direction: "credit" | "debit" | null = null;
@@ -269,7 +285,9 @@ const gtbParser = makeParser({
   key: "gtb_csv",
   bankName: "GTBank",
   headerMatch: (h) =>
-    h.includes("transactiondate") && h.includes("debits") && h.includes("credits"),
+    h.includes("transactiondate") &&
+    h.includes("debits") &&
+    h.includes("credits"),
   locate: (h) => {
     const date = h.indexOf("transactiondate");
     const narration = indexOfAny(h, ["remarks", "narration"]);

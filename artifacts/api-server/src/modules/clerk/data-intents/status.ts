@@ -139,7 +139,12 @@ export const STATUS_INTENTS: readonly DataIntent[] = [
       return {
         text: `Invoice ${r.invoice_number}${forClient(params)} is ${side}, issued ${r.issue_date}, status ${r.status}. ${next}`,
         facts: [
-          { key: "number", label: "Invoice number", kind: "text", value: r.invoice_number },
+          {
+            key: "number",
+            label: "Invoice number",
+            kind: "text",
+            value: r.invoice_number,
+          },
           { key: "status", label: "Status", kind: "text", value: r.status },
           ...(r.grand_total !== null
             ? [
@@ -199,7 +204,13 @@ export const STATUS_INTENTS: readonly DataIntent[] = [
         facts: [
           countFact("pending_approvals", "Awaiting approval", pending.count),
           ...(pending.oldestDays !== null
-            ? [countFact("oldest_wait_days", "Oldest wait (days)", pending.oldestDays)]
+            ? [
+                countFact(
+                  "oldest_wait_days",
+                  "Oldest wait (days)",
+                  pending.oldestDays,
+                ),
+              ]
             : []),
         ],
         links: pending.invoices.map((r) => ({
@@ -339,7 +350,11 @@ export const STATUS_INTENTS: readonly DataIntent[] = [
           `${plural(policies.length, "standing approval")} ${isAre(policies.length)} in force${forClient(params)}: ${lines.join("; ")}. ` +
           `Every run re-checks consent, the granter's access and each invoice, and is recorded like a hand-approved batch — pause or revoke any of them from the dashboard's Automation strip.`,
         facts: [
-          countFact("automation_policies", "Standing approvals", policies.length),
+          countFact(
+            "automation_policies",
+            "Standing approvals",
+            policies.length,
+          ),
           countFact("automation_active", "Active", policies.length - paused),
           countFact("automation_paused", "Paused", paused),
         ],

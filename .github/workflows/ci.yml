@@ -91,6 +91,12 @@ jobs:
       - name: Complexity ratchet
         run: pnpm run complexity:check
 
+      # Formatting (R124): every code file Prettier covers (.prettierignore
+      # keeps the generated clients, build output and the non-code formats
+      # out) must already be formatted; `pnpm run format` fixes a failure.
+      - name: Formatting
+        run: pnpm run format:check
+
       # Supply-chain gate: fail the build on a HIGH/CRITICAL advisory in a
       # production dependency so a new CVE cannot land silently. Scoped to
       # --prod (build/dev tooling is not shipped) and --audit-level=high so

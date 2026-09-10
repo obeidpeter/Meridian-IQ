@@ -58,8 +58,10 @@ export interface ResponseLetterFacts {
   packLines: string[];
 }
 
-const line = (label: string, value: string | null | undefined): string | null =>
-  value ? `${label}: ${value}` : null;
+const line = (
+  label: string,
+  value: string | null | undefined,
+): string | null => (value ? `${label}: ${value}` : null);
 
 export interface ObligationNoticeRow {
   label: string;

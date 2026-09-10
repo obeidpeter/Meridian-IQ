@@ -65,7 +65,10 @@ function isRlsViolation(err: unknown): boolean {
 
 function rejectsWithRls(label: string): (err: unknown) => boolean {
   return (err) => {
-    assert.ok(isRlsViolation(err), `${label}: expected an RLS violation, got: ${String(err)}`);
+    assert.ok(
+      isRlsViolation(err),
+      `${label}: expected an RLS violation, got: ${String(err)}`,
+    );
     return true;
   };
 }
@@ -231,13 +234,15 @@ test("WITH CHECK: a firm context cannot write rows for another firm", async () =
   // transaction, so probes cannot share one.
   await assert.rejects(
     asFirm(firmA, () =>
-      getDb().insert(invoicesTable).values({
-        firmId: firmB,
-        supplierPartyId: partyB,
-        buyerPartyId: partyB,
-        invoiceNumber: `RLS-XFIRM-${SALT}`,
-        issueDate: "2026-07-01",
-      }),
+      getDb()
+        .insert(invoicesTable)
+        .values({
+          firmId: firmB,
+          supplierPartyId: partyB,
+          buyerPartyId: partyB,
+          invoiceNumber: `RLS-XFIRM-${SALT}`,
+          issueDate: "2026-07-01",
+        }),
     ),
     rejectsWithRls("cross-firm invoice insert"),
   );
@@ -284,12 +289,14 @@ test("bypass-only tables: invisible and unwritable from any firm context", async
   });
   await assert.rejects(
     asFirm(firmA, () =>
-      getDb().insert(passwordResetsTable).values({
-        userId: userA,
-        tokenHash: `rls-xfirm-${SALT}`,
-        expiresAt: new Date(Date.now() + 60_000),
-        issuedByUserId: userA,
-      }),
+      getDb()
+        .insert(passwordResetsTable)
+        .values({
+          userId: userA,
+          tokenHash: `rls-xfirm-${SALT}`,
+          expiresAt: new Date(Date.now() + 60_000),
+          issuedByUserId: userA,
+        }),
     ),
     rejectsWithRls("password_resets insert from a firm context"),
   );

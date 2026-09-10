@@ -19,7 +19,10 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
-import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // The activation control plane (R99): a flag's pilot cohort is set and
 // cleared with a reason, read back by firm name, and every move lands on
@@ -65,7 +68,10 @@ async function auditRows(action: string, entityId: string) {
     .select()
     .from(auditEventsTable)
     .where(
-      and(eq(auditEventsTable.action, action), eq(auditEventsTable.entityId, entityId)),
+      and(
+        eq(auditEventsTable.action, action),
+        eq(auditEventsTable.entityId, entityId),
+      ),
     )
     .orderBy(auditEventsTable.seq);
 }
@@ -75,7 +81,11 @@ test("an override is set with a reason, read back by firm name, counted, and aud
   const res = await fetch(`${base}/feature-flags/${KEY}/override`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ firmId: firmA, enabled: true, reason: "Cohort 1 pilot" }),
+    body: JSON.stringify({
+      firmId: firmA,
+      enabled: true,
+      reason: "Cohort 1 pilot",
+    }),
   });
   assert.equal(res.status, 200);
   const row = (await res.json()) as Record<string, unknown>;
@@ -89,7 +99,10 @@ test("an override is set with a reason, read back by firm name, counted, and aud
   const cohort = (await (
     await fetch(`${base}/feature-flags/${KEY}/overrides`)
   ).json()) as { firmId: string; firmName: string }[];
-  assert.deepEqual(cohort.map((c) => c.firmId), [firmA]);
+  assert.deepEqual(
+    cohort.map((c) => c.firmId),
+    [firmA],
+  );
 
   const flags = (await (await fetch(`${base}/feature-flags`)).json()) as {
     key: string;
@@ -103,7 +116,10 @@ test("an override is set with a reason, read back by firm name, counted, and aud
   assert.equal(audit[0]!.actorRole, "operator");
   assert.equal(audit[0]!.firmId, firmA, "the audit row names the TARGET firm");
   assert.equal(audit[0]!.before, null);
-  assert.deepEqual(audit[0]!.after, { enabled: true, reason: "Cohort 1 pilot" });
+  assert.deepEqual(audit[0]!.after, {
+    enabled: true,
+    reason: "Cohort 1 pilot",
+  });
 });
 
 test("re-setting keeps before/after; clearing restores the default and audits; a second clear is a 404", async () => {
@@ -111,22 +127,38 @@ test("re-setting keeps before/after; clearing restores the default and audits; a
   const again = await fetch(`${base}/feature-flags/${KEY}/override`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ firmId: firmA, enabled: false, reason: "Paused: data issue" }),
+    body: JSON.stringify({
+      firmId: firmA,
+      enabled: false,
+      reason: "Paused: data issue",
+    }),
   });
   assert.equal(again.status, 200);
   const audit = await auditRows("flag.override.set", `${KEY}:${firmA}`);
   assert.equal(audit.length, 2);
-  assert.deepEqual(audit[1]!.before, { enabled: true, reason: "Cohort 1 pilot" });
-  assert.deepEqual(audit[1]!.after, { enabled: false, reason: "Paused: data issue" });
-
-  const cleared = await fetch(`${base}/feature-flags/${KEY}/override/${firmA}`, {
-    method: "DELETE",
+  assert.deepEqual(audit[1]!.before, {
+    enabled: true,
+    reason: "Cohort 1 pilot",
   });
+  assert.deepEqual(audit[1]!.after, {
+    enabled: false,
+    reason: "Paused: data issue",
+  });
+
+  const cleared = await fetch(
+    `${base}/feature-flags/${KEY}/override/${firmA}`,
+    {
+      method: "DELETE",
+    },
+  );
   assert.equal(cleared.status, 204);
   const clearAudit = await auditRows("flag.override.clear", `${KEY}:${firmA}`);
   assert.equal(clearAudit.length, 1);
   assert.equal(clearAudit[0]!.firmId, firmA);
-  assert.deepEqual(clearAudit[0]!.before, { enabled: false, reason: "Paused: data issue" });
+  assert.deepEqual(clearAudit[0]!.before, {
+    enabled: false,
+    reason: "Paused: data issue",
+  });
   assert.equal(clearAudit[0]!.after, null);
 
   const cohort = (await (
@@ -142,26 +174,66 @@ test("re-setting keeps before/after; clearing restores the default and audits; a
 test("validation: a reason is required; unknown flag or firm is a 404; the runtime switch is not overridable", async () => {
   const base = await listen(appFor(operator, platformRouter as express.Router));
   const post = (path: string, body: unknown) =>
-    fetch(`${base}${path}`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
+    fetch(`${base}${path}`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
 
-  assert.equal((await post(`/feature-flags/${KEY}/override`, { firmId: firmB, enabled: true })).status, 400);
   assert.equal(
-    (await post(`/feature-flags/${KEY}/override`, { firmId: firmB, enabled: true, reason: "   " })).status,
+    (
+      await post(`/feature-flags/${KEY}/override`, {
+        firmId: firmB,
+        enabled: true,
+      })
+    ).status,
     400,
   );
   assert.equal(
-    (await post(`/feature-flags/no_such_flag_${SALT}/override`, { firmId: firmB, enabled: true, reason: "why" })).status,
-    404,
-  );
-  assert.equal(
-    (await post(`/feature-flags/${KEY}/override`, { firmId: randomUUID(), enabled: true, reason: "why" })).status,
-    404,
-  );
-  assert.equal(
-    (await post(`/feature-flags/clerk_ai_runtime/override`, { firmId: firmB, enabled: true, reason: "why" })).status,
+    (
+      await post(`/feature-flags/${KEY}/override`, {
+        firmId: firmB,
+        enabled: true,
+        reason: "   ",
+      })
+    ).status,
     400,
   );
-  assert.equal((await fetch(`${base}/feature-flags/no_such_flag_${SALT}/overrides`)).status, 404);
+  assert.equal(
+    (
+      await post(`/feature-flags/no_such_flag_${SALT}/override`, {
+        firmId: firmB,
+        enabled: true,
+        reason: "why",
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await post(`/feature-flags/${KEY}/override`, {
+        firmId: randomUUID(),
+        enabled: true,
+        reason: "why",
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await post(`/feature-flags/clerk_ai_runtime/override`, {
+        firmId: firmB,
+        enabled: true,
+        reason: "why",
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await fetch(`${base}/feature-flags/no_such_flag_${SALT}/overrides`))
+      .status,
+    404,
+  );
 });
 
 test("PATCH flips the platform switch with an audit row; an unseeded key is a 404, never a silent no-op", async () => {
@@ -194,15 +266,26 @@ test("PATCH flips the platform switch with an audit row; an unseeded key is a 40
 test("a firm admin reads the cohort but cannot change it", async () => {
   const admin = firmPrincipal(firmA, { role: "firm_admin" });
   const base = await listen(appFor(admin, platformRouter as express.Router));
-  assert.equal((await fetch(`${base}/feature-flags/${KEY}/overrides`)).status, 200);
+  assert.equal(
+    (await fetch(`${base}/feature-flags/${KEY}/overrides`)).status,
+    200,
+  );
   const denied = await fetch(`${base}/feature-flags/${KEY}/override`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ firmId: firmA, enabled: true, reason: "self-serve" }),
+    body: JSON.stringify({
+      firmId: firmA,
+      enabled: true,
+      reason: "self-serve",
+    }),
   });
   assert.equal(denied.status, 403);
   assert.equal(
-    (await fetch(`${base}/feature-flags/${KEY}/override/${firmA}`, { method: "DELETE" })).status,
+    (
+      await fetch(`${base}/feature-flags/${KEY}/override/${firmA}`, {
+        method: "DELETE",
+      })
+    ).status,
     403,
   );
 });

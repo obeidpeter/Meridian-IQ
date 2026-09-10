@@ -54,8 +54,13 @@ let freshA: string;
 
 // Extract the plan schema's closed key enum from a captured request.
 function keyEnum(req: CompletionRequest): string[] {
-  const steps = (req.jsonSchema as { properties: { steps: { items: { properties: { key: { enum: string[] } } } } } })
-    .properties.steps.items.properties.key;
+  const steps = (
+    req.jsonSchema as {
+      properties: {
+        steps: { items: { properties: { key: { enum: string[] } } } };
+      };
+    }
+  ).properties.steps.items.properties.key;
   return steps.enum;
 }
 
@@ -92,7 +97,9 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `ask-act-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `AskAct Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `AskAct Firm ${SALT}` });
   // Per-firm opt-in only — the platform default stays dark.
   await setFirmOverride(ACTIONS_FLAG_KEY, firmId, true);
   await db.insert(partiesTable).values([
@@ -122,8 +129,18 @@ before(async () => {
     },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientA, type: "readiness_assessment", title: "aa" },
-    { firmId, clientPartyId: clientB, type: "readiness_assessment", title: "ab" },
+    {
+      firmId,
+      clientPartyId: clientA,
+      type: "readiness_assessment",
+      title: "aa",
+    },
+    {
+      firmId,
+      clientPartyId: clientB,
+      type: "readiness_assessment",
+      title: "ab",
+    },
   ]);
   const LINE = {
     description: "Goods",
@@ -160,10 +177,15 @@ after(async () => {
 test("act keys ride the closed enum only when offered; dark flag or no capability removes them", async () => {
   // Offered: firm asker with every kind.
   const offered: CompletionRequest[] = [];
-  await askClerk("Submit the overdue paper.", userId, planGateway([], offered), {
-    firmId,
-    actionKinds: ALL_KINDS,
-  });
+  await askClerk(
+    "Submit the overdue paper.",
+    userId,
+    planGateway([], offered),
+    {
+      firmId,
+      actionKinds: ALL_KINDS,
+    },
+  );
   assert.ok(keyEnum(offered[0]).includes("act.submit_overdue"));
   assert.ok(keyEnum(offered[0]).includes("act.retry_failed"));
   assert.ok(keyEnum(offered[0]).includes("act.draft_chasers"));
@@ -298,11 +320,16 @@ test("a mixed data+act plan answers both parts; an empty assembly answers honest
   // an act key would instruct the model to re-propose work the follow-up
   // never asked for (the planted-step class the v7 rules forbid).
   const followPrompts: CompletionRequest[] = [];
-  await askClerk("And for last month?", userId, planGateway([], followPrompts), {
-    firmId,
-    previousCaseId: row.id,
-    actionKinds: ALL_KINDS,
-  });
+  await askClerk(
+    "And for last month?",
+    userId,
+    planGateway([], followPrompts),
+    {
+      firmId,
+      previousCaseId: row.id,
+      actionKinds: ALL_KINDS,
+    },
+  );
   const followUser = String(followPrompts[0].user);
   assert.match(followUser, /used data key data\.overdue_submissions/);
   assert.ok(

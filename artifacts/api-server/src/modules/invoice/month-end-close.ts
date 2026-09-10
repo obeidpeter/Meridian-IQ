@@ -13,10 +13,7 @@ import {
   OBLIGATION_DUE_SOON_DAYS,
   countOpenObligations,
 } from "../obligations/obligations";
-import {
-  FILING_DUE_SOON_DAYS,
-  countOpenFilings,
-} from "../filings/filings";
+import { FILING_DUE_SOON_DAYS, countOpenFilings } from "../filings/filings";
 import { countWhtChase } from "../wht/credits";
 
 // Month-end close assistant (round-19 idea #2). The platform now runs seven
@@ -81,7 +78,9 @@ export async function computeMonthEndClose(
   // sits AT the cap the detail says so — a saturated "(5)" must never read
   // as exactly five.
   const capped = (n: number, cap: number, detail: string): string =>
-    n >= cap ? `${detail} Showing the detector's top ${cap} — more may exist.` : detail;
+    n >= cap
+      ? `${detail} Showing the detector's top ${cap} — more may exist.`
+      : detail;
 
   // The checklist's ONE predicate (count > 0) picks both the status and
   // which detail sentence shows, spelled once here so the two can never

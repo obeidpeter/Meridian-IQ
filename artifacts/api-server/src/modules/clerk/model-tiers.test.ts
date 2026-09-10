@@ -44,7 +44,10 @@ test("parseModelTiers + modelForPurpose: opt-in routing with eval coupling", () 
   // Eval purposes follow their production extraction tier...
   assert.equal(modelForPurpose("eval_extract", tiers, "base"), "big");
   assert.equal(modelForPurpose("eval_canary", tiers, "base"), "big");
-  assert.equal(modelForPurpose("eval_extract_notice", tiers, "base"), "careful");
+  assert.equal(
+    modelForPurpose("eval_extract_notice", tiers, "base"),
+    "careful",
+  );
   // ...unless explicitly overridden.
   const explicit = parseModelTiers("eval_extract=elsewhere");
   assert.equal(modelForPurpose("eval_extract", explicit, "base"), "elsewhere");

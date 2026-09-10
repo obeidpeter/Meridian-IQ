@@ -18,7 +18,9 @@ const UNIQUES = `
    ORDER BY 1`;
 
 async function uniques(client: pg.PoolClient) {
-  return (await client.query<{ column_name: string; index_name: string }>(UNIQUES)).rows;
+  return (
+    await client.query<{ column_name: string; index_name: string }>(UNIQUES)
+  ).rows;
 }
 
 // Reproduce the production catalogue: the table exists without its two
@@ -79,10 +81,14 @@ test("migration 56 names the duplicated column instead of asserting over duplica
       firm,
       "migration-56 fixture",
     ]);
-    const { rows: [{ udt_name: outcomeType }] } = await client.query<{ udt_name: string }>(
+    const {
+      rows: [{ udt_name: outcomeType }],
+    } = await client.query<{ udt_name: string }>(
       "SELECT udt_name FROM information_schema.columns WHERE table_name = 'clerk_inference_calls' AND column_name = 'outcome'",
     );
-    const { rows: [{ outcome }] } = await client.query<{ outcome: string }>(
+    const {
+      rows: [{ outcome }],
+    } = await client.query<{ outcome: string }>(
       `SELECT (enum_range(NULL::${client.escapeIdentifier(outcomeType)}))[1]::text AS outcome`,
     );
     await client.query(

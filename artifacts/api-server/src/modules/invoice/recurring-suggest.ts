@@ -123,7 +123,10 @@ export function detectMonthlyPattern(invoices: HistoryRow[]): {
   const sorted = [...invoices].sort((a, b) =>
     a.issueDate.localeCompare(b.issueDate),
   );
-  const span = daysBetween(sorted[0].issueDate, sorted[sorted.length - 1].issueDate);
+  const span = daysBetween(
+    sorted[0].issueDate,
+    sorted[sorted.length - 1].issueDate,
+  );
   if (span < MIN_SPAN_DAYS) return null;
 
   // Non-zero gaps only: several invoices on the SAME day are one billing
@@ -181,13 +184,20 @@ export async function buyerBillingHistories(
 ): Promise<
   Map<
     string,
-    { buyerPartyId: string; name: string; currency: string; invoices: HistoryRow[] }
+    {
+      buyerPartyId: string;
+      name: string;
+      currency: string;
+      invoices: HistoryRow[];
+    }
   >
 > {
   const db = getDb();
   const covered = (
     await db
-      .selectDistinct({ buyerPartyId: recurringInvoiceTemplatesTable.buyerPartyId })
+      .selectDistinct({
+        buyerPartyId: recurringInvoiceTemplatesTable.buyerPartyId,
+      })
       .from(recurringInvoiceTemplatesTable)
       .where(
         and(
@@ -230,7 +240,12 @@ export async function buyerBillingHistories(
 
   const byBuyer = new Map<
     string,
-    { buyerPartyId: string; name: string; currency: string; invoices: HistoryRow[] }
+    {
+      buyerPartyId: string;
+      name: string;
+      currency: string;
+      invoices: HistoryRow[];
+    }
   >();
   for (const row of rows) {
     if (covered.includes(row.buyerPartyId)) continue;
@@ -243,7 +258,11 @@ export async function buyerBillingHistories(
     };
     const total = Number(row.grandTotal);
     if (Number.isFinite(total)) {
-      entry.invoices.push({ id: row.id, issueDate: row.issueDate, grandTotal: total });
+      entry.invoices.push({
+        id: row.id,
+        issueDate: row.issueDate,
+        grandTotal: total,
+      });
     }
     byBuyer.set(key, entry);
   }

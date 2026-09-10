@@ -140,10 +140,7 @@ test("scrub maps known names onto the synthetic directory in appearance order", 
     "Invoice AKINTOLA HAULAGE WEST for the Dangote job",
     ids(["Akintola Haulage West", "Dangote", "Akintola"]),
   );
-  assert.equal(
-    out,
-    "Invoice Alpha Ventures Ltd for the Beta Trading Co job",
-  );
+  assert.equal(out, "Invoice Alpha Ventures Ltd for the Beta Trading Co job");
 });
 
 test("scrub is word-bounded: unrelated words survive known short names", () => {
@@ -170,10 +167,7 @@ test("scrub catches surface variants: NBSP, homoglyphs, informal short forms", (
   // NBSP inside the name (routine in pasted text) — NFKC + whitespace
   // collapse still matches.
   assert.equal(
-    scrubIntentQuestion(
-      "When is VAT due for Acme Ltd?",
-      ids(["Acme Ltd"]),
-    ),
+    scrubIntentQuestion("When is VAT due for Acme Ltd?", ids(["Acme Ltd"])),
     "When is VAT due for Alpha Ventures Ltd?",
   );
   // Kelvin-sign K homoglyph folds to K under NFKC and scrubs.
@@ -242,8 +236,7 @@ test("only question cases mint", async () => {
           { caseId, expected: { claimKey: "vat.filing-deadline" } },
           operatorId,
         ),
-      (err: unknown) =>
-        err instanceof DomainError && err.code === "NOT_FOUND",
+      (err: unknown) => err instanceof DomainError && err.code === "NOT_FOUND",
     );
   }
 });
@@ -252,7 +245,10 @@ test("a crowded question is refused, never stored partially scrubbed", async () 
   await assert.rejects(
     () =>
       mintIntentFixture(
-        { caseId: crowdedCaseId, expected: { claimKey: "vat.filing-deadline" } },
+        {
+          caseId: crowdedCaseId,
+          expected: { claimKey: "vat.filing-deadline" },
+        },
         operatorId,
       ),
     (err: unknown) =>
@@ -314,8 +310,7 @@ test("retire/restore drive the loader without deleting the row", async () => {
   await retireIntentFixture(second.id, operatorId);
   await assert.rejects(
     () => retireIntentFixture(randomUUID(), operatorId),
-    (err: unknown) =>
-      err instanceof DomainError && err.code === "NOT_FOUND",
+    (err: unknown) => err instanceof DomainError && err.code === "NOT_FOUND",
   );
 });
 

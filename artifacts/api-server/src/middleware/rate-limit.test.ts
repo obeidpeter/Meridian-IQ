@@ -82,7 +82,10 @@ test("general class: N requests pass, the N+1th is 429 with Retry-After; counts 
   const limited = await fetch(`${base}/api/anything`);
   assert.equal(limited.status, 429);
   const retryAfter = Number(limited.headers.get("retry-after"));
-  assert.ok(retryAfter >= 1 && retryAfter <= 60, "Retry-After points at the window end");
+  assert.ok(
+    retryAfter >= 1 && retryAfter <= 60,
+    "Retry-After points at the window end",
+  );
   const body = (await limited.json()) as { error: string };
   assert.match(body.error, /Too many requests/);
 
@@ -134,8 +137,16 @@ test("model class is independent: model routes hit their own tighter cap while g
 
   // A GET on a path that only rate-limits POST is not a model route.
   const getAsk = await fetch(`${base}/api/clerk/ask`);
-  assert.equal(getAsk.status, 200, "method-scoped: GET /clerk/ask is general only");
-  assert.equal(await counterFor(`rl:m:${userId}`), 3, "model counter untouched by GET");
+  assert.equal(
+    getAsk.status,
+    200,
+    "method-scoped: GET /clerk/ask is general only",
+  );
+  assert.equal(
+    await counterFor(`rl:m:${userId}`),
+    3,
+    "model counter untouched by GET",
+  );
 });
 
 test("parameterized model routes match by pattern (case retry, narrative, reply-draft)", async () => {

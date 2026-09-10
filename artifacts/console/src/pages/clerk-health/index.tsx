@@ -3,9 +3,7 @@ import {
   useGetClerkMetrics,
   getGetClerkMetricsQueryKey,
 } from "@workspace/api-client-react";
-import type {
-  ClerkMetrics,
-} from "@workspace/api-client-react";
+import type { ClerkMetrics } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -18,20 +16,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QueryError } from "@/components/query-error";
 import { ClerkPageHeader } from "@/components/clerk-shell";
 import { usePageTitle } from "@/hooks/use-page-title";
-import {
-  formatPct,
-} from "@/lib/format";
-import {
-  HEALTH_TABS,
-  HEALTH_WINDOWS,
-  qualityAlertText,
-} from "./format";
+import { formatPct } from "@/lib/format";
+import { HEALTH_TABS, HEALTH_WINDOWS, qualityAlertText } from "./format";
 import { OverviewTab } from "./overview-tab";
 import { QualityTab } from "./quality-tab";
 import { EconomicsTab } from "./economics-tab";
 import { EvalsTab } from "./evals-tab";
 import { ModelCanaryCard, PromptCanaryCard } from "./canary-cards";
-
 
 // ---- Health tab -----------------------------------------------------------
 // Read-only operational metrics for the Clerk: case flow, ask refusals and
@@ -87,7 +78,6 @@ export function ClerkHealthPage() {
     </div>
   );
 }
-
 
 export function HealthPanel() {
   const [windowDays, setWindowDays] = useState(30);

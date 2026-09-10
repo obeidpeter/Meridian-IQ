@@ -130,9 +130,7 @@ function pct(confidence: string): string {
 export function buildTemplateAssist(ranked: RankedCandidate[]): string {
   const top = ranked[0];
   const lead = `${top.invoiceNumber} is the strongest candidate at ${pct(top.confidence)}: ${
-    top.highlights.length > 0
-      ? top.highlights.join("; ")
-      : "the amounts agree"
+    top.highlights.length > 0 ? top.highlights.join("; ") : "the amounts agree"
   }.`;
   const runnerUp = ranked[1];
   const contrast = runnerUp
@@ -183,7 +181,10 @@ export async function assistMatch(
       buyerName: partiesTable.legalName,
     })
     .from(matchProposalsTable)
-    .innerJoin(invoicesTable, eq(invoicesTable.id, matchProposalsTable.invoiceId))
+    .innerJoin(
+      invoicesTable,
+      eq(invoicesTable.id, matchProposalsTable.invoiceId),
+    )
     .innerJoin(partiesTable, eq(partiesTable.id, invoicesTable.buyerPartyId))
     .where(
       and(

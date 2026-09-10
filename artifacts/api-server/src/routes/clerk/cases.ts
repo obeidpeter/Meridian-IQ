@@ -91,26 +91,23 @@ router.get("/clerk/cases/:id", async (req, res): Promise<void> => {
 // carve-out from the response schemas' blanket sourceScanPagesB64 strip.
 // Operator review surface (clerk.use), with the SAME 404 non-disclosure
 // scope pattern as the case-detail route should the capability ever widen.
-router.get(
-  "/clerk/cases/:id/source-pages",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "clerk.use");
-    const params = parseOrThrow(GetClerkCaseSourcePagesParams, req.params);
-    const row = await getCase(params.id);
-    // Firm principals only see their firm's cases; a client_user only its own
-    // submissions. Same 404 as not-found so existence is not disclosed.
-    const tenant = tenantFirmId(req.principal);
-    if (
-      (tenant && row.firmId !== tenant) ||
-      (req.principal.role === "client_user" &&
-        row.createdBy !== req.principal.userId)
-    ) {
-      res.status(404).json({ error: "Case not found" });
-      return;
-    }
-    res.json(GetClerkCaseSourcePagesResponse.parse(caseSourcePages(row)));
-  },
-);
+router.get("/clerk/cases/:id/source-pages", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const params = parseOrThrow(GetClerkCaseSourcePagesParams, req.params);
+  const row = await getCase(params.id);
+  // Firm principals only see their firm's cases; a client_user only its own
+  // submissions. Same 404 as not-found so existence is not disclosed.
+  const tenant = tenantFirmId(req.principal);
+  if (
+    (tenant && row.firmId !== tenant) ||
+    (req.principal.role === "client_user" &&
+      row.createdBy !== req.principal.userId)
+  ) {
+    res.status(404).json({ error: "Case not found" });
+    return;
+  }
+  res.json(GetClerkCaseSourcePagesResponse.parse(caseSourcePages(row)));
+});
 
 // The asker's helpfulness signal on a question case. clerk.ask — the same
 // capability that asked the question; the module confines the rating to the
@@ -238,11 +235,7 @@ router.post("/clerk/cases/:id/retry", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const params = parseOrThrow(RetryClerkCaseParams, req.params);
   const gateway = await getClerkGateway();
-  const row = await retryExtraction(
-    params.id,
-    req.principal.userId,
-    gateway,
-  );
+  const row = await retryExtraction(params.id, req.principal.userId, gateway);
   res.json(RetryClerkCaseResponse.parse(row));
 });
 

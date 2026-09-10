@@ -36,22 +36,25 @@ const DEFAULT_PREFS = {
   penaltyAlerts: true,
 };
 
-router.get("/clients/:id/alert-preferences", async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
-  const params = parseOrThrow(GetAlertPreferencesParams, req.params);
-  await assertPartyAccess(req.principal, params.id);
-  const [row] = await getDb()
-    .select()
-    .from(alertPreferencesTable)
-    .where(eq(alertPreferencesTable.clientPartyId, params.id))
-    .limit(1);
-  const prefs = row ?? {
-    clientPartyId: params.id,
-    ...DEFAULT_PREFS,
-    updatedAt: new Date(),
-  };
-  res.json(GetAlertPreferencesResponse.parse(prefs));
-});
+router.get(
+  "/clients/:id/alert-preferences",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const params = parseOrThrow(GetAlertPreferencesParams, req.params);
+    await assertPartyAccess(req.principal, params.id);
+    const [row] = await getDb()
+      .select()
+      .from(alertPreferencesTable)
+      .where(eq(alertPreferencesTable.clientPartyId, params.id))
+      .limit(1);
+    const prefs = row ?? {
+      clientPartyId: params.id,
+      ...DEFAULT_PREFS,
+      updatedAt: new Date(),
+    };
+    res.json(GetAlertPreferencesResponse.parse(prefs));
+  },
+);
 
 // Alert preferences are managed by firm staff (messaging.send) AND by the SME
 // client itself: a client_user may update the preferences of its own client
@@ -62,46 +65,48 @@ function assertCanManageAlerts(principal: Principal): void {
   assertCan(principal, "messaging.send");
 }
 
-router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => {
-  assertCanManageAlerts(req.principal);
-  const params = parseOrThrow(UpdateAlertPreferencesParams, req.params);
-  const parsed = parseOrThrow(UpdateAlertPreferencesBody, req.body);
-  await assertPartyAccess(req.principal, params.id);
-  // Contact-number provenance (see modules/inbound/whatsapp.ts): whenever the
-  // payload names a routing-key field (whatsappTo/phone), record WHICH role
-  // wrote it — the inbound WhatsApp rail only routes on numbers the client
-  // set themselves. A PUT that never names those fields (e.g. staff toggling
-  // a channel) leaves the existing provenance untouched.
-  const touchesContact =
-    parsed.whatsappTo !== undefined || parsed.phone !== undefined;
-  const provenance = touchesContact
-    ? { contactSetByRole: req.principal.role }
-    : {};
-  const values = {
-    clientPartyId: params.id,
-    ...DEFAULT_PREFS,
-    ...parsed,
-    ...provenance,
-  };
-  const [row] = await getDb()
-    .insert(alertPreferencesTable)
-    .values(values)
-    .onConflictDoUpdate({
-      target: alertPreferencesTable.clientPartyId,
-      set: { ...parsed, ...provenance, updatedAt: new Date() },
-    })
-    .returning();
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId: req.principal.firmId,
-    action: "alert.preferences.update",
-    entityType: "alert_preferences",
-    entityId: params.id,
-    after: parsed,
-  });
-  res.json(UpdateAlertPreferencesResponse.parse(row));
-});
-
+router.put(
+  "/clients/:id/alert-preferences",
+  async (req, res): Promise<void> => {
+    assertCanManageAlerts(req.principal);
+    const params = parseOrThrow(UpdateAlertPreferencesParams, req.params);
+    const parsed = parseOrThrow(UpdateAlertPreferencesBody, req.body);
+    await assertPartyAccess(req.principal, params.id);
+    // Contact-number provenance (see modules/inbound/whatsapp.ts): whenever the
+    // payload names a routing-key field (whatsappTo/phone), record WHICH role
+    // wrote it — the inbound WhatsApp rail only routes on numbers the client
+    // set themselves. A PUT that never names those fields (e.g. staff toggling
+    // a channel) leaves the existing provenance untouched.
+    const touchesContact =
+      parsed.whatsappTo !== undefined || parsed.phone !== undefined;
+    const provenance = touchesContact
+      ? { contactSetByRole: req.principal.role }
+      : {};
+    const values = {
+      clientPartyId: params.id,
+      ...DEFAULT_PREFS,
+      ...parsed,
+      ...provenance,
+    };
+    const [row] = await getDb()
+      .insert(alertPreferencesTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: alertPreferencesTable.clientPartyId,
+        set: { ...parsed, ...provenance, updatedAt: new Date() },
+      })
+      .returning();
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId: req.principal.firmId,
+      action: "alert.preferences.update",
+      entityType: "alert_preferences",
+      entityId: params.id,
+      after: parsed,
+    });
+    res.json(UpdateAlertPreferencesResponse.parse(row));
+  },
+);
 
 router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
   assertCanManageAlerts(req.principal);

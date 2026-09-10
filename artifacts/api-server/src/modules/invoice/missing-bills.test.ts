@@ -57,7 +57,11 @@ before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `MB Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `MB Client ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `MB Client ${SALT}`,
+    },
     { id: vendorDue, type: "buyer", legalName: `MB Due Vendor ${SALT}` },
     { id: vendorFresh, type: "buyer", legalName: `MB Fresh Vendor ${SALT}` },
     { id: vendorLapsed, type: "buyer", legalName: `MB Lapsed Vendor ${SALT}` },
@@ -71,30 +75,82 @@ before(async () => {
   });
   await db.insert(invoicesTable).values([
     // Monthly capture habit whose next bill is ~10 days late: alert.
-    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-D1-${SALT}`, issueDate: daysAgo(100) }),
-    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-D2-${SALT}`, issueDate: daysAgo(70) }),
-    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-D3-${SALT}`, issueDate: daysAgo(40) }),
+    bill({
+      supplierPartyId: vendorDue,
+      invoiceNumber: `MB-D1-${SALT}`,
+      issueDate: daysAgo(100),
+    }),
+    bill({
+      supplierPartyId: vendorDue,
+      invoiceNumber: `MB-D2-${SALT}`,
+      issueDate: daysAgo(70),
+    }),
+    bill({
+      supplierPartyId: vendorDue,
+      invoiceNumber: `MB-D3-${SALT}`,
+      issueDate: daysAgo(40),
+    }),
     // A voided mis-capture 10 days ago must NOT advance the cadence —
     // cancelled paper is not evidence, and counting it would suppress the
     // genuine alert (lastIssueDate would look current).
     {
-      ...bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DX-${SALT}`, issueDate: daysAgo(10) }),
+      ...bill({
+        supplierPartyId: vendorDue,
+        invoiceNumber: `MB-DX-${SALT}`,
+        issueDate: daysAgo(10),
+      }),
       status: "cancelled" as const,
     },
     // Two USD one-offs from the SAME vendor, interleaved with the NGN habit
     // — merged (the pre-round-20 bug) they would drag the median gap under
     // the monthly floor and kill the alert; per-currency grouping keeps the
     // NGN cadence clean and the USD leg under the pattern minimum.
-    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DU1-${SALT}`, issueDate: daysAgo(55), currency: "USD", grandTotal: "300.00" }),
-    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DU2-${SALT}`, issueDate: daysAgo(50), currency: "USD", grandTotal: "300.00" }),
+    bill({
+      supplierPartyId: vendorDue,
+      invoiceNumber: `MB-DU1-${SALT}`,
+      issueDate: daysAgo(55),
+      currency: "USD",
+      grandTotal: "300.00",
+    }),
+    bill({
+      supplierPartyId: vendorDue,
+      invoiceNumber: `MB-DU2-${SALT}`,
+      issueDate: daysAgo(50),
+      currency: "USD",
+      grandTotal: "300.00",
+    }),
     // Same habit, captured 15 days ago: nothing is late yet.
-    bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F1-${SALT}`, issueDate: daysAgo(75) }),
-    bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F2-${SALT}`, issueDate: daysAgo(45) }),
-    bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F3-${SALT}`, issueDate: daysAgo(15) }),
+    bill({
+      supplierPartyId: vendorFresh,
+      invoiceNumber: `MB-F1-${SALT}`,
+      issueDate: daysAgo(75),
+    }),
+    bill({
+      supplierPartyId: vendorFresh,
+      invoiceNumber: `MB-F2-${SALT}`,
+      issueDate: daysAgo(45),
+    }),
+    bill({
+      supplierPartyId: vendorFresh,
+      invoiceNumber: `MB-F3-${SALT}`,
+      issueDate: daysAgo(15),
+    }),
     // Silent for months: the subscription ended — not a missing bill.
-    bill({ supplierPartyId: vendorLapsed, invoiceNumber: `MB-L1-${SALT}`, issueDate: daysAgo(200) }),
-    bill({ supplierPartyId: vendorLapsed, invoiceNumber: `MB-L2-${SALT}`, issueDate: daysAgo(170) }),
-    bill({ supplierPartyId: vendorLapsed, invoiceNumber: `MB-L3-${SALT}`, issueDate: daysAgo(140) }),
+    bill({
+      supplierPartyId: vendorLapsed,
+      invoiceNumber: `MB-L1-${SALT}`,
+      issueDate: daysAgo(200),
+    }),
+    bill({
+      supplierPartyId: vendorLapsed,
+      invoiceNumber: `MB-L2-${SALT}`,
+      issueDate: daysAgo(170),
+    }),
+    bill({
+      supplierPartyId: vendorLapsed,
+      invoiceNumber: `MB-L3-${SALT}`,
+      issueDate: daysAgo(140),
+    }),
   ]);
 });
 
@@ -149,8 +205,14 @@ test("listMissingRecurringBills flags exactly the late vendor habit", async () =
 });
 
 test("another firm or another client sees nothing", async () => {
-  assert.equal((await listMissingRecurringBills(randomUUID(), clientParty)).length, 0);
-  assert.equal((await listMissingRecurringBills(firmId, randomUUID())).length, 0);
+  assert.equal(
+    (await listMissingRecurringBills(randomUUID(), clientParty)).length,
+    0,
+  );
+  assert.equal(
+    (await listMissingRecurringBills(firmId, randomUUID())).length,
+    0,
+  );
 });
 
 test("the firm-wide digest count sees the same alerts", async () => {
@@ -182,9 +244,15 @@ test("the top-N cut ranks by naira equivalent, not raw face value", async () => 
   const vendorNgn = randomUUID();
   const vendorUsd = randomUUID();
   const vendorEur = randomUUID();
-  await db.insert(firmsTable).values({ id: fxFirm, name: `MB FX Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: fxFirm, name: `MB FX Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: fxClient, type: "client_business", legalName: `MB FX Client ${SALT}` },
+    {
+      id: fxClient,
+      type: "client_business",
+      legalName: `MB FX Client ${SALT}`,
+    },
     { id: vendorNgn, type: "buyer", legalName: `MB FX NGN Vendor ${SALT}` },
     { id: vendorUsd, type: "buyer", legalName: `MB FX USD Vendor ${SALT}` },
     { id: vendorEur, type: "buyer", legalName: `MB FX EUR Vendor ${SALT}` },
@@ -218,18 +286,74 @@ test("the top-N cut ranks by naira equivalent, not raw face value", async () => 
   });
   await db.insert(invoicesTable).values([
     // NGN habit, ~10 days late: face value 100,000.
-    fxBill({ supplierPartyId: vendorNgn, invoiceNumber: `MBFX-N1-${SALT}`, issueDate: daysAgo(100), currency: "NGN", grandTotal: "100000.00" }),
-    fxBill({ supplierPartyId: vendorNgn, invoiceNumber: `MBFX-N2-${SALT}`, issueDate: daysAgo(70), currency: "NGN", grandTotal: "100000.00" }),
-    fxBill({ supplierPartyId: vendorNgn, invoiceNumber: `MBFX-N3-${SALT}`, issueDate: daysAgo(40), currency: "NGN", grandTotal: "100000.00" }),
+    fxBill({
+      supplierPartyId: vendorNgn,
+      invoiceNumber: `MBFX-N1-${SALT}`,
+      issueDate: daysAgo(100),
+      currency: "NGN",
+      grandTotal: "100000.00",
+    }),
+    fxBill({
+      supplierPartyId: vendorNgn,
+      invoiceNumber: `MBFX-N2-${SALT}`,
+      issueDate: daysAgo(70),
+      currency: "NGN",
+      grandTotal: "100000.00",
+    }),
+    fxBill({
+      supplierPartyId: vendorNgn,
+      invoiceNumber: `MBFX-N3-${SALT}`,
+      issueDate: daysAgo(40),
+      currency: "NGN",
+      grandTotal: "100000.00",
+    }),
     // USD habit, same lateness: the MOST RECENT non-null rate (1500, on the
     // middle bill — the newest carries none) sets the rank, not the oldest.
-    fxBill({ supplierPartyId: vendorUsd, invoiceNumber: `MBFX-U1-${SALT}`, issueDate: daysAgo(100), currency: "USD", grandTotal: "2000.00", fxRateToNgn: "1300" }),
-    fxBill({ supplierPartyId: vendorUsd, invoiceNumber: `MBFX-U2-${SALT}`, issueDate: daysAgo(70), currency: "USD", grandTotal: "2000.00", fxRateToNgn: "1500" }),
-    fxBill({ supplierPartyId: vendorUsd, invoiceNumber: `MBFX-U3-${SALT}`, issueDate: daysAgo(40), currency: "USD", grandTotal: "2000.00" }),
+    fxBill({
+      supplierPartyId: vendorUsd,
+      invoiceNumber: `MBFX-U1-${SALT}`,
+      issueDate: daysAgo(100),
+      currency: "USD",
+      grandTotal: "2000.00",
+      fxRateToNgn: "1300",
+    }),
+    fxBill({
+      supplierPartyId: vendorUsd,
+      invoiceNumber: `MBFX-U2-${SALT}`,
+      issueDate: daysAgo(70),
+      currency: "USD",
+      grandTotal: "2000.00",
+      fxRateToNgn: "1500",
+    }),
+    fxBill({
+      supplierPartyId: vendorUsd,
+      invoiceNumber: `MBFX-U3-${SALT}`,
+      issueDate: daysAgo(40),
+      currency: "USD",
+      grandTotal: "2000.00",
+    }),
     // EUR habit with no rate ever captured: unconvertible, ranks at face.
-    fxBill({ supplierPartyId: vendorEur, invoiceNumber: `MBFX-E1-${SALT}`, issueDate: daysAgo(100), currency: "EUR", grandTotal: "900.00" }),
-    fxBill({ supplierPartyId: vendorEur, invoiceNumber: `MBFX-E2-${SALT}`, issueDate: daysAgo(70), currency: "EUR", grandTotal: "900.00" }),
-    fxBill({ supplierPartyId: vendorEur, invoiceNumber: `MBFX-E3-${SALT}`, issueDate: daysAgo(40), currency: "EUR", grandTotal: "900.00" }),
+    fxBill({
+      supplierPartyId: vendorEur,
+      invoiceNumber: `MBFX-E1-${SALT}`,
+      issueDate: daysAgo(100),
+      currency: "EUR",
+      grandTotal: "900.00",
+    }),
+    fxBill({
+      supplierPartyId: vendorEur,
+      invoiceNumber: `MBFX-E2-${SALT}`,
+      issueDate: daysAgo(70),
+      currency: "EUR",
+      grandTotal: "900.00",
+    }),
+    fxBill({
+      supplierPartyId: vendorEur,
+      invoiceNumber: `MBFX-E3-${SALT}`,
+      issueDate: daysAgo(40),
+      currency: "EUR",
+      grandTotal: "900.00",
+    }),
   ]);
 
   const alerts = await listMissingRecurringBills(fxFirm, fxClient);
@@ -254,7 +378,10 @@ test("an archived engagement drops the client from the digest count", async () =
     assert.equal(counts.alerts, 0, "no live engagement, no digest nagging");
     // The client's OWN card is unaffected — it mirrors the bills ledger,
     // whose orientation only needs the engagement to EXIST.
-    assert.equal((await listMissingRecurringBills(firmId, clientParty)).length, 1);
+    assert.equal(
+      (await listMissingRecurringBills(firmId, clientParty)).length,
+      1,
+    );
   } finally {
     await getDb()
       .update(engagementsTable)

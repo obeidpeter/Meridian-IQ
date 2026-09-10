@@ -35,9 +35,16 @@ const staff = firmPrincipal(firmId, { role: "firm_staff", userId: staffId });
 
 before(async () => {
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `Review Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Review Firm ${SALT}` });
   await db.insert(usersTable).values([
-    { id: adminId, email: `admin-${SALT}@test.local`, fullName: "Ada Admin", totpEnabledAt: new Date() },
+    {
+      id: adminId,
+      email: `admin-${SALT}@test.local`,
+      fullName: "Ada Admin",
+      totpEnabledAt: new Date(),
+    },
     { id: staffId, email: `staff-${SALT}@test.local`, fullName: "Sam Staff" },
   ]);
   await db.insert(membershipsTable).values([
@@ -45,17 +52,32 @@ before(async () => {
     { userId: staffId, firmId, role: "firm_staff", clientPartyId: null },
   ]);
   await db.insert(partiesTable).values({
-    id: clientId, type: "client_business", legalName: `Reviewed Client ${SALT}`, countryCode: "NG",
+    id: clientId,
+    type: "client_business",
+    legalName: `Reviewed Client ${SALT}`,
+    countryCode: "NG",
   });
   await db.insert(engagementsTable).values({
-    firmId, clientPartyId: clientId, type: "retainer", status: "in_progress", title: "R",
+    firmId,
+    clientPartyId: clientId,
+    type: "retainer",
+    status: "in_progress",
+    title: "R",
   });
   await db.insert(clientAssignmentsTable).values({
-    firmId, clientPartyId: clientId, userId: staffId, assignedBy: adminId,
+    firmId,
+    clientPartyId: clientId,
+    userId: staffId,
+    assignedBy: adminId,
   });
   await appendAudit({
-    actorId: adminId, actorRole: "firm_admin", firmId,
-    action: "auth.login", entityType: "user", entityId: adminId, after: { role: "firm_admin" },
+    actorId: adminId,
+    actorRole: "firm_admin",
+    firmId,
+    action: "auth.login",
+    entityType: "user",
+    entityId: adminId,
+    after: { role: "firm_admin" },
   });
 });
 
@@ -69,8 +91,18 @@ test("the register reports role, MFA, last sign-in and assignments; attesting la
   assert.equal(first.status, 200);
   const register = (await first.json()) as {
     hash: string;
-    members: { userId: string; role: string; mfaEnabled: boolean; lastSignInAt: string | null; assignedClients: string[] }[];
-    lastAttestation: null | { hash: string; byUserId: string; memberCount: number };
+    members: {
+      userId: string;
+      role: string;
+      mfaEnabled: boolean;
+      lastSignInAt: string | null;
+      assignedClients: string[];
+    }[];
+    lastAttestation: null | {
+      hash: string;
+      byUserId: string;
+      memberCount: number;
+    };
   };
   assert.equal(register.lastAttestation, null);
   const adminRow = register.members.find((m) => m.userId === adminId);
@@ -83,35 +115,56 @@ test("the register reports role, MFA, last sign-in and assignments; attesting la
   assert.deepEqual(staffRow.assignedClients, [`Reviewed Client ${SALT}`]);
 
   // The hash is stable across reads when nothing moved.
-  const again = (await (await fetch(`${base}/console/access-register`)).json()) as { hash: string };
+  const again = (await (
+    await fetch(`${base}/console/access-register`)
+  ).json()) as { hash: string };
   assert.equal(again.hash, register.hash);
 
   const stale = await fetch(`${base}/console/access-register/attest`, {
-    method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ hash: "deadbeef" }),
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ hash: "deadbeef" }),
   });
   assert.equal(stale.status, 409);
 
   const ok = await fetch(`${base}/console/access-register/attest`, {
-    method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ hash: register.hash }),
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ hash: register.hash }),
   });
   assert.equal(ok.status, 201);
-  const attestation = (await ok.json()) as { hash: string; byUserId: string; memberCount: number; byName: string | null };
+  const attestation = (await ok.json()) as {
+    hash: string;
+    byUserId: string;
+    memberCount: number;
+    byName: string | null;
+  };
   assert.equal(attestation.hash, register.hash);
   assert.equal(attestation.byUserId, adminId);
   assert.equal(attestation.memberCount, 2);
   assert.equal(attestation.byName, "Ada Admin");
 
-  const after = (await (await fetch(`${base}/console/access-register`)).json()) as {
-    lastAttestation: { hash: string; byUserId: string; memberCount: number } | null;
+  const after = (await (
+    await fetch(`${base}/console/access-register`)
+  ).json()) as {
+    lastAttestation: {
+      hash: string;
+      byUserId: string;
+      memberCount: number;
+    } | null;
   };
   assert.equal(after.lastAttestation?.hash, register.hash);
   assert.equal(after.lastAttestation?.byUserId, adminId);
 
   // Moving the register (an assignment change) invalidates the attested hash.
-  await getDb().delete(clientAssignmentsTable).where(
-    (await import("drizzle-orm")).eq(clientAssignmentsTable.userId, staffId),
-  );
-  const moved = (await (await fetch(`${base}/console/access-register`)).json()) as { hash: string };
+  await getDb()
+    .delete(clientAssignmentsTable)
+    .where(
+      (await import("drizzle-orm")).eq(clientAssignmentsTable.userId, staffId),
+    );
+  const moved = (await (
+    await fetch(`${base}/console/access-register`)
+  ).json()) as { hash: string };
   assert.notEqual(moved.hash, register.hash);
 
   const csv = await fetch(`${base}/console/access-register/csv`);
@@ -126,7 +179,9 @@ test("firm staff cannot read or attest the register", async () => {
   const base = await listen(appFor(staff, accessRegisterRouter));
   assert.equal((await fetch(`${base}/console/access-register`)).status, 403);
   const attempt = await fetch(`${base}/console/access-register/attest`, {
-    method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ hash: "x" }),
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ hash: "x" }),
   });
   assert.equal(attempt.status, 403);
 });

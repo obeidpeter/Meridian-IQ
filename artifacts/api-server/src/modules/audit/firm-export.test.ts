@@ -29,7 +29,10 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Full-firm portability export: every section scoped to THE firm (party
 // sphere, firm-keyed rows, the audit ledger's firm_id column), row caps with
@@ -49,7 +52,11 @@ const invoiceId = randomUUID();
 const PASSWORD_HASH = `sekret-scrypt-${SALT}`;
 
 const operator: Principal = crossTenantPrincipal("operator");
-const auditor: Principal = { ...operator, userId: randomUUID(), role: "auditor" };
+const auditor: Principal = {
+  ...operator,
+  userId: randomUUID(),
+  role: "auditor",
+};
 const firmAdmin: Principal = firmPrincipal(firmA, { userId: adminUser });
 
 const router = auditRouter as express.Router;
@@ -75,13 +82,31 @@ before(async () => {
     role: "firm_admin",
   });
   await db.insert(partiesTable).values([
-    { id: clientPartyA, type: "client_business", legalName: `Export Client ${SALT}` },
+    {
+      id: clientPartyA,
+      type: "client_business",
+      legalName: `Export Client ${SALT}`,
+    },
     { id: buyerPartyA, type: "buyer", legalName: `Export Buyer ${SALT}` },
-    { id: foreignParty, type: "client_business", legalName: `Export Foreign ${SALT}` },
+    {
+      id: foreignParty,
+      type: "client_business",
+      legalName: `Export Foreign ${SALT}`,
+    },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId: firmA, clientPartyId: clientPartyA, type: "retainer", title: `exp A ${SALT}` },
-    { firmId: firmB, clientPartyId: foreignParty, type: "retainer", title: `exp B ${SALT}` },
+    {
+      firmId: firmA,
+      clientPartyId: clientPartyA,
+      type: "retainer",
+      title: `exp A ${SALT}`,
+    },
+    {
+      firmId: firmB,
+      clientPartyId: foreignParty,
+      type: "retainer",
+      title: `exp B ${SALT}`,
+    },
   ]);
   await db.insert(invoicesTable).values({
     id: invoiceId,
@@ -194,7 +219,10 @@ test("every section is populated and scoped to the firm; secrets never leave", a
   const partyIds = bundle.sections.parties.map((p) => p.id);
   assert.ok(partyIds.includes(clientPartyA), "engaged party in the sphere");
   assert.ok(partyIds.includes(buyerPartyA), "invoice buyer in the sphere");
-  assert.ok(!partyIds.includes(foreignParty), "another firm's client stays out");
+  assert.ok(
+    !partyIds.includes(foreignParty),
+    "another firm's client stays out",
+  );
 
   assert.equal(bundle.sections.engagements.length, 1);
   assert.equal(bundle.sections.invoices.length, 1);
@@ -215,10 +243,16 @@ test("every section is populated and scoped to the firm; secrets never leave", a
   const member = bundle.sections.members[0];
   assert.equal(member.email, `export-admin-${SALT}@test.local`);
   assert.equal(member.role, "firm_admin");
-  assert.ok(!("passwordHash" in member), "no hash column in the members section");
+  assert.ok(
+    !("passwordHash" in member),
+    "no hash column in the members section",
+  );
 
   const auditActions = bundle.sections.audit_events.map((e) => e.action);
-  assert.ok(auditActions.includes(`test.export-a-${SALT}`), "firm A's ledger rows ride");
+  assert.ok(
+    auditActions.includes(`test.export-a-${SALT}`),
+    "firm A's ledger rows ride",
+  );
   assert.ok(
     !auditActions.includes(`test.export-b-${SALT}`),
     "another firm's ledger rows are excluded",

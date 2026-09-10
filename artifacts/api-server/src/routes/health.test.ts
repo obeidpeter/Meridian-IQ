@@ -57,7 +57,10 @@ test("/readyz answers 503 while shutting down, in every environment (R101)", asy
   try {
     const res = await fetch(`${base}/readyz`);
     assert.equal(res.status, 503);
-    assert.deepEqual(await res.json(), { status: "unavailable", reason: "shutting_down" });
+    assert.deepEqual(await res.json(), {
+      status: "unavailable",
+      reason: "shutting_down",
+    });
   } finally {
     markReady();
   }

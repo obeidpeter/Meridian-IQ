@@ -235,7 +235,11 @@ async function relayRequest(
     );
     throw new Error("Live ERP relay rejected the request");
   }
-  return readBoundedJsonObject(response, MAX_RELAY_BODY_BYTES, "Live ERP relay");
+  return readBoundedJsonObject(
+    response,
+    MAX_RELAY_BODY_BYTES,
+    "Live ERP relay",
+  );
 }
 
 export const liveErpRelayConnector: Connector = {

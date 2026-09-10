@@ -42,7 +42,11 @@ export const MONEY_INTENTS: readonly DataIntent[] = [
           agg.count === 0
             ? `No receivables${forClient(params)} are more than ${RECEIVABLE_AGE_DAYS} days old.`
             : `${plural(agg.count, "receivable")}${forClient(params)} ${isAre(agg.count)} more than ${RECEIVABLE_AGE_DAYS} days old, NGN ${agg.totalNgn} in total: ${nameSample(agg)}. Consider chasing payment.`,
-        facts: invoiceFacts(agg, `Receivables over ${RECEIVABLE_AGE_DAYS} days`, true),
+        facts: invoiceFacts(
+          agg,
+          `Receivables over ${RECEIVABLE_AGE_DAYS} days`,
+          true,
+        ),
         ...sampleLinks(agg),
       };
     },
@@ -177,7 +181,11 @@ export const MONEY_INTENTS: readonly DataIntent[] = [
     accepts: { client: true },
     async run(firmId, params) {
       const nameRows = (
-        rows: { buyerName: string; invoiceNumber: string; daysBeyondExpected: number }[],
+        rows: {
+          buyerName: string;
+          invoiceNumber: string;
+          daysBeyondExpected: number;
+        }[],
       ) =>
         rows
           .slice(0, 3)
@@ -227,5 +235,5 @@ export const MONEY_INTENTS: readonly DataIntent[] = [
         ...chaseLinks(summary.topChase),
       };
     },
-  }
+  },
 ];

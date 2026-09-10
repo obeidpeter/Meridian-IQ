@@ -22,10 +22,7 @@ import {
   sweepRetrievalWatch,
   type RetrievalWatchRun,
 } from "./retrieval-eval.ts";
-import {
-  restoreClerkFlag,
-  saveAndEnableClerkFlag,
-} from "./test-support.ts";
+import { restoreClerkFlag, saveAndEnableClerkFlag } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Retrieval eval lane (round 47): the scorer is DETERMINISTIC app code over
@@ -179,11 +176,7 @@ test("detectRetrievalQualityDrop: trailing baseline, recall wins, quiet below mi
     null,
   );
 
-  const baseline = [
-    mk("b1", 9, 0.9),
-    mk("b2", 10, 0.95),
-    mk("b3", 9, 0.92),
-  ];
+  const baseline = [mk("b1", 9, 0.9), mk("b2", 10, 0.95), mk("b3", 9, 0.92)];
   // No material drop: quiet.
   assert.equal(
     detectRetrievalQualityDrop([mk("ok", 9, 0.9), ...baseline]),

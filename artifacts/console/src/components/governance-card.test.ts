@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  governanceCardState,
-  isFirmAdminRole,
-} from "./governance-card";
+import { governanceCardState, isFirmAdminRole } from "./governance-card";
 
 // The governance card's self-gate: the PUT is firm-admin only, so the card
 // renders only for firm admins — and the load-failure split mirrors the

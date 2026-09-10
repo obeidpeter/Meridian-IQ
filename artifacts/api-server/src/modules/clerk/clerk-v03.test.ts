@@ -48,10 +48,25 @@ const RUN_SALT = makeRunSalt();
 
 const EXTRACTION_WITH_LINES = JSON.stringify({
   fields: [
-    { field: "invoiceNumber", value: "INV-900", confidence: 0.95, sourceSnippet: null },
-    { field: "issueDate", value: "2026-07-01", confidence: 0.9, sourceSnippet: null },
+    {
+      field: "invoiceNumber",
+      value: "INV-900",
+      confidence: 0.95,
+      sourceSnippet: null,
+    },
+    {
+      field: "issueDate",
+      value: "2026-07-01",
+      confidence: 0.9,
+      sourceSnippet: null,
+    },
     { field: "currency", value: "NGN", confidence: 0.9, sourceSnippet: null },
-    { field: "grandTotal", value: "215000", confidence: 0.85, sourceSnippet: null },
+    {
+      field: "grandTotal",
+      value: "215000",
+      confidence: 0.85,
+      sourceSnippet: null,
+    },
   ],
   lines: [
     {
@@ -91,11 +106,28 @@ after(async () => {
 
 test("computeLineCorrections diffs positionally and records count drift", () => {
   const extracted = [
-    { description: "Widget A", quantity: "2", unitPrice: "100.00", vatRate: "7.5", confidence: 0.9 },
-    { description: "Delivery", quantity: "1", unitPrice: "50", vatRate: null, confidence: 0.8 },
+    {
+      description: "Widget A",
+      quantity: "2",
+      unitPrice: "100.00",
+      vatRate: "7.5",
+      confidence: 0.9,
+    },
+    {
+      description: "Delivery",
+      quantity: "1",
+      unitPrice: "50",
+      vatRate: null,
+      confidence: 0.8,
+    },
   ];
   const approved = [
-    { description: "Widget A", quantity: "3", unitPrice: "100", vatRate: "0.075" },
+    {
+      description: "Widget A",
+      quantity: "3",
+      unitPrice: "100",
+      vatRate: "0.075",
+    },
   ];
   const byField = new Map(
     computeLineCorrections(extracted, approved).map((c) => [c.field, c]),
@@ -120,8 +152,20 @@ test("computeLineCorrections diffs positionally and records count drift", () => 
 
 test("computeLineCorrections treats a real VAT change and null-vs-value as overrides", () => {
   const extracted = [
-    { description: "X", quantity: "1", unitPrice: "10", vatRate: "7.5", confidence: 0.9 },
-    { description: "Y", quantity: "1", unitPrice: "10", vatRate: null, confidence: 0.9 },
+    {
+      description: "X",
+      quantity: "1",
+      unitPrice: "10",
+      vatRate: "7.5",
+      confidence: 0.9,
+    },
+    {
+      description: "Y",
+      quantity: "1",
+      unitPrice: "10",
+      vatRate: null,
+      confidence: 0.9,
+    },
   ];
   const approved = [
     { description: "X", quantity: "1", unitPrice: "10", vatRate: "0.05" },
@@ -131,8 +175,16 @@ test("computeLineCorrections treats a real VAT change and null-vs-value as overr
     computeLineCorrections(extracted, approved).map((c) => [c.field, c]),
   );
   assert.equal(byField.get("lines.count")?.changed, false);
-  assert.equal(byField.get("lines.0.vatRate")?.changed, true, "7.5% -> 5% is a real change");
-  assert.equal(byField.get("lines.1.vatRate")?.changed, true, "null -> 7.5% is a real change");
+  assert.equal(
+    byField.get("lines.0.vatRate")?.changed,
+    true,
+    "7.5% -> 5% is a real change",
+  );
+  assert.equal(
+    byField.get("lines.1.vatRate")?.changed,
+    true,
+    "null -> 7.5% is a real change",
+  );
 });
 
 test("approval stores line-level corrections alongside header corrections", async () => {
@@ -155,7 +207,12 @@ test("approval stores line-level corrections alongside header corrections", asyn
       currency: "NGN",
       lines: [
         // Operator corrected the quantity; VAT arrives in fraction dialect.
-        { description: "Widget A", quantity: "3", unitPrice: "100000", vatRate: "0.075" },
+        {
+          description: "Widget A",
+          quantity: "3",
+          unitPrice: "100000",
+          vatRate: "0.075",
+        },
       ],
     },
     opA,
@@ -241,7 +298,11 @@ test("retry re-runs extraction on the stored source of a failed case", async () 
 
   const retried = await retryExtraction(kase.id, opA, flaky);
   assert.equal(retried.status, "extracted");
-  assert.equal(retried.failReason, null, "a successful retry clears the fail reason");
+  assert.equal(
+    retried.failReason,
+    null,
+    "a successful retry clears the fail reason",
+  );
   assert.ok(retried.extraction?.fields.length);
 
   // Only failed cases can be retried — an extracted case cannot be re-rolled.
@@ -306,7 +367,9 @@ test("the gateway records token usage in the ledger and metrics report cost", as
     process.env.CLERK_COST_PER_1M_INPUT_USD = "2";
     process.env.CLERK_COST_PER_1M_OUTPUT_USD = "8";
     const priced = await getClerkMetrics(30);
-    assert.ok(priced.cost.estimatedUsd !== null && priced.cost.estimatedUsd > 0);
+    assert.ok(
+      priced.cost.estimatedUsd !== null && priced.cost.estimatedUsd > 0,
+    );
   } finally {
     if (prevIn === undefined) delete process.env.CLERK_COST_PER_1M_INPUT_USD;
     else process.env.CLERK_COST_PER_1M_INPUT_USD = prevIn;
@@ -357,11 +420,23 @@ test("a claim overdue for review is register-visible but not answerable", async 
     claimKey: `v03.freshness.undated.${RUN_SALT}`,
   });
 
-  assert.equal(overdue.state, "active", "overdue-review claims stay active in the register");
+  assert.equal(
+    overdue.state,
+    "active",
+    "overdue-review claims stay active in the register",
+  );
   const answerableIds = new Set((await getActiveClaims()).map((c) => c.id));
-  assert.equal(answerableIds.has(overdue.id), false, "overdue claims cannot answer");
+  assert.equal(
+    answerableIds.has(overdue.id),
+    false,
+    "overdue claims cannot answer",
+  );
   assert.equal(answerableIds.has(fresh.id), true);
-  assert.equal(answerableIds.has(undated.id), true, "no review date means no freshness gate");
+  assert.equal(
+    answerableIds.has(undated.id),
+    true,
+    "no review date means no freshness gate",
+  );
 });
 
 test("the sweep expires active claims whose effective window has closed", async () => {

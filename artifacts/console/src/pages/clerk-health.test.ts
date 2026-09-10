@@ -80,9 +80,9 @@ describe("mintFixtureErrorCopy", () => {
   });
 
   test("anything else falls back to the server's words, then the generic line", () => {
-    expect(
-      mintFixtureErrorCopy({ status: 500, data: { error: "boom" } }),
-    ).toBe("boom");
+    expect(mintFixtureErrorCopy({ status: 500, data: { error: "boom" } })).toBe(
+      "boom",
+    );
     expect(mintFixtureErrorCopy(new Error("network"))).toBe(
       "Could not mint the fixture. Try again in a moment.",
     );
@@ -94,9 +94,9 @@ describe("askFeedbackTotalsLine", () => {
     expect(
       askFeedbackTotalsLine({ helpful: 12, notHelpful: 3, unrated: 40 }),
     ).toBe("12 helpful · 3 not helpful · 40 unrated");
-    expect(askFeedbackTotalsLine({ helpful: 0, notHelpful: 0, unrated: 0 })).toBe(
-      "0 helpful · 0 not helpful · 0 unrated",
-    );
+    expect(
+      askFeedbackTotalsLine({ helpful: 0, notHelpful: 0, unrated: 0 }),
+    ).toBe("0 helpful · 0 not helpful · 0 unrated");
   });
 });
 
@@ -318,7 +318,10 @@ describe("retireDisabledReason", () => {
 });
 
 describe("corpusSummary", () => {
-  const report = (fixtures: EvalFixtureSummary[], runsScanned = 7): EvalFixtureReport => ({
+  const report = (
+    fixtures: EvalFixtureSummary[],
+    runsScanned = 7,
+  ): EvalFixtureReport => ({
     fixtures,
     runsScanned,
   });
@@ -386,8 +389,8 @@ describe("retrieval eval card lines", () => {
     const run = (hits: number) => ({ hits, fixtureCount: 10 });
     expect(retrievalTrendLine([run(9)])).toBeNull();
     expect(retrievalTrendLine([run(9), run(10)])).toBe("9/10 ← 10/10");
-    expect(
-      retrievalTrendLine([9, 10, 10, 8, 10, 9, 7].map(run)),
-    ).toBe("9/10 ← 10/10 ← 10/10 ← 8/10 ← 10/10 ← 9/10");
+    expect(retrievalTrendLine([9, 10, 10, 8, 10, 9, 7].map(run))).toBe(
+      "9/10 ← 10/10 ← 10/10 ← 8/10 ← 10/10 ← 9/10",
+    );
   });
 });

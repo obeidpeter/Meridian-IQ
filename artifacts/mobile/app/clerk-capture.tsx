@@ -148,7 +148,8 @@ export default function ClerkCaptureScreen() {
       void queryClient.invalidateQueries({ queryKey: listKey });
       setBanner({
         tone: "success",
-        message: "Sent to Clerk. It appears below while it's read and reviewed.",
+        message:
+          "Sent to Clerk. It appears below while it's read and reviewed.",
       });
     } catch (error) {
       if (hasStatus(error, 409)) {
@@ -169,7 +170,8 @@ export default function ClerkCaptureScreen() {
         // CLERK_BUDGET_EXHAUSTED.
         setBanner({
           tone: "error",
-          message: "Clerk has reached its usage limit for now. Please try again later.",
+          message:
+            "Clerk has reached its usage limit for now. Please try again later.",
         });
         return;
       }
@@ -476,7 +478,9 @@ export default function ClerkCaptureScreen() {
                   style={{ minHeight: 110, textAlignVertical: "top" }}
                 />
                 <AppButton
-                  label={createMut.isPending ? "Sending…" : "Send text to Clerk"}
+                  label={
+                    createMut.isPending ? "Sending…" : "Send text to Clerk"
+                  }
                   icon="send"
                   onPress={submitText}
                   disabled={!text.trim() || busy}
@@ -511,7 +515,9 @@ export default function ClerkCaptureScreen() {
                     kase={kase}
                     expanded={expandedId === kase.id}
                     onToggle={() =>
-                      setExpandedId((prev) => (prev === kase.id ? null : kase.id))
+                      setExpandedId((prev) =>
+                        prev === kase.id ? null : kase.id,
+                      )
                     }
                   />
                 ))
@@ -541,7 +547,8 @@ function CaseRow({
   const colors = useColors();
   const meta = clerkStatusMeta(kase.status);
   const icon = SOURCE_ICON[kase.sourceType ?? ""] ?? "file-text";
-  const title = kase.sourceName || SOURCE_LABEL[kase.sourceType ?? ""] || "Document";
+  const title =
+    kase.sourceName || SOURCE_LABEL[kase.sourceType ?? ""] || "Document";
   const fields = kase.extraction?.fields ?? [];
   const failed = kase.status === "failed";
 
@@ -559,7 +566,11 @@ function CaseRow({
           <View
             style={[
               styles.iconTile,
-              { backgroundColor: failed ? colors.destructiveSoft : colors.accent },
+              {
+                backgroundColor: failed
+                  ? colors.destructiveSoft
+                  : colors.accent,
+              },
             ]}
           >
             <Feather

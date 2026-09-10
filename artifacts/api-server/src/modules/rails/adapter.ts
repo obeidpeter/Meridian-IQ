@@ -116,7 +116,9 @@ export function setRailTransport(next: RailTransport | null): RailTransport {
 
 /** The rails a transport serves (every rail unless it says otherwise). */
 function servedRails(transport: RailTransport): readonly Rail[] {
-  return transport.rails && transport.rails.length > 0 ? transport.rails : RAILS;
+  return transport.rails && transport.rails.length > 0
+    ? transport.rails
+    : RAILS;
 }
 
 export interface RailTransportSummary {
@@ -530,16 +532,18 @@ export async function verifyStamp(
   // stamp_records probe above, which is as cheap as the cache lookup itself.
   // Stale rows are pruned by the pipeline retention sweep.
   if (valid) {
-    await getDb().insert(stampVerificationsTable).values({
-      id: randomUUID(),
-      irn,
-      csid,
-      valid,
-      rail: matchedRail,
-      checkedAt: now,
-      freshUntil: new Date(now.getTime() + CACHE_TTL_MS),
-      raw: {},
-    });
+    await getDb()
+      .insert(stampVerificationsTable)
+      .values({
+        id: randomUUID(),
+        irn,
+        csid,
+        valid,
+        rail: matchedRail,
+        checkedAt: now,
+        freshUntil: new Date(now.getTime() + CACHE_TTL_MS),
+        raw: {},
+      });
   }
   const lifecycle = valid
     ? await lookupLifecycle(irn, csid)

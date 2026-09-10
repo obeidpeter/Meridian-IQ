@@ -1,6 +1,11 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { getDb, firmsTable, partiesTable, engagementsTable } from "@workspace/db";
+import {
+  getDb,
+  firmsTable,
+  partiesTable,
+  engagementsTable,
+} from "@workspace/db";
 import {
   GetPublicThemeQueryParams,
   GetPublicThemeResponse,
@@ -34,198 +39,238 @@ const router: IRouter = Router();
 // Public branding resolution: the app shell needs the theme before any login,
 // so this endpoint is on the PUBLIC_PATHS allowlist (no principal — the flag
 // is evaluated globally) and returns branding only — never tenant data.
-router.get("/public/theme", requireFlag("white_label", { global: true }), async (req, res): Promise<void> => {
-  const query = parseOrThrow(GetPublicThemeQueryParams, req.query);
-  const [firm] = await getDb()
-    .select({
-      firmId: firmsTable.id,
-      name: firmsTable.name,
-      subdomain: firmsTable.subdomain,
-      theme: firmsTable.theme,
-    })
-    .from(firmsTable)
-    .where(eq(firmsTable.subdomain, query.subdomain))
-    .limit(1);
-  if (!firm) {
-    throw new DomainError("NOT_FOUND", "No firm on this subdomain", 404);
-  }
-  res.json(GetPublicThemeResponse.parse(firm));
-});
-
-router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "theme.write");
-  const params = parseOrThrow(UpdateFirmThemeParams, req.params);
-  const body = parseOrThrow(UpdateFirmThemeBody, req.body);
-  assertSameTenant(req.principal, params.id);
-  const [existing] = await getDb()
-    .select({ id: firmsTable.id, theme: firmsTable.theme, subdomain: firmsTable.subdomain })
-    .from(firmsTable)
-    .where(eq(firmsTable.id, params.id))
-    .limit(1);
-  if (!existing) {
-    throw new DomainError("NOT_FOUND", "Firm not found", 404);
-  }
-  // Subdomains are unique across firms; answer a taken name with a 409 rather
-  // than letting the DB constraint surface as a 500.
-  if (body.subdomain && body.subdomain !== existing.subdomain) {
-    const [taken] = await getDb()
-      .select({ id: firmsTable.id })
+router.get(
+  "/public/theme",
+  requireFlag("white_label", { global: true }),
+  async (req, res): Promise<void> => {
+    const query = parseOrThrow(GetPublicThemeQueryParams, req.query);
+    const [firm] = await getDb()
+      .select({
+        firmId: firmsTable.id,
+        name: firmsTable.name,
+        subdomain: firmsTable.subdomain,
+        theme: firmsTable.theme,
+      })
       .from(firmsTable)
-      .where(eq(firmsTable.subdomain, body.subdomain))
+      .where(eq(firmsTable.subdomain, query.subdomain))
       .limit(1);
-    if (taken) {
-      throw new DomainError(
-        "SUBDOMAIN_TAKEN",
-        "That subdomain is already in use",
-        409,
-      );
+    if (!firm) {
+      throw new DomainError("NOT_FOUND", "No firm on this subdomain", 404);
     }
-  }
-  const [row] = await getDb()
-    .update(firmsTable)
-    .set({
-      theme: body.theme as Record<string, unknown>,
-      ...(body.subdomain ? { subdomain: body.subdomain } : {}),
-    })
-    .where(eq(firmsTable.id, params.id))
-    .returning();
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId: params.id,
-    action: "firm.theme_update",
-    entityType: "firm",
-    entityId: params.id,
-    before: { theme: existing.theme, subdomain: existing.subdomain },
-    after: { theme: row.theme, subdomain: row.subdomain },
-  });
-  res.json(UpdateFirmThemeResponse.parse(row));
-});
+    res.json(GetPublicThemeResponse.parse(firm));
+  },
+);
+
+router.put(
+  "/firms/:id/theme",
+  requireFlag("white_label"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "theme.write");
+    const params = parseOrThrow(UpdateFirmThemeParams, req.params);
+    const body = parseOrThrow(UpdateFirmThemeBody, req.body);
+    assertSameTenant(req.principal, params.id);
+    const [existing] = await getDb()
+      .select({
+        id: firmsTable.id,
+        theme: firmsTable.theme,
+        subdomain: firmsTable.subdomain,
+      })
+      .from(firmsTable)
+      .where(eq(firmsTable.id, params.id))
+      .limit(1);
+    if (!existing) {
+      throw new DomainError("NOT_FOUND", "Firm not found", 404);
+    }
+    // Subdomains are unique across firms; answer a taken name with a 409 rather
+    // than letting the DB constraint surface as a 500.
+    if (body.subdomain && body.subdomain !== existing.subdomain) {
+      const [taken] = await getDb()
+        .select({ id: firmsTable.id })
+        .from(firmsTable)
+        .where(eq(firmsTable.subdomain, body.subdomain))
+        .limit(1);
+      if (taken) {
+        throw new DomainError(
+          "SUBDOMAIN_TAKEN",
+          "That subdomain is already in use",
+          409,
+        );
+      }
+    }
+    const [row] = await getDb()
+      .update(firmsTable)
+      .set({
+        theme: body.theme as Record<string, unknown>,
+        ...(body.subdomain ? { subdomain: body.subdomain } : {}),
+      })
+      .where(eq(firmsTable.id, params.id))
+      .returning();
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId: params.id,
+      action: "firm.theme_update",
+      entityType: "firm",
+      entityId: params.id,
+      before: { theme: existing.theme, subdomain: existing.subdomain },
+      after: { theme: row.theme, subdomain: row.subdomain },
+    });
+    res.json(UpdateFirmThemeResponse.parse(row));
+  },
+);
 
 // Bulk client import (CON-05): rows from a practice-management export become
 // client parties plus engagements (the engagement is what places the client in
 // the firm's tenant boundary — see assertPartyAccess). Validate-then-commit
 // with per-row results, mirroring the invoice-import contract.
-router.post("/clients/import", requireFlag("white_label"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "clients.import");
-  const firmId = requireFirmScope(req.principal);
-  const parsed = parseOrThrow(ImportClientsBody, req.body);
+router.post(
+  "/clients/import",
+  requireFlag("white_label"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clients.import");
+    const firmId = requireFirmScope(req.principal);
+    const parsed = parseOrThrow(ImportClientsBody, req.body);
 
-  type RowResult = {
-    rowNumber: number;
-    status: "created" | "exists" | "invalid";
-    partyId: string | null;
-    engagementId: string | null;
-    errors: { field: string; message: string }[];
-  };
-  const results: RowResult[] = [];
+    type RowResult = {
+      rowNumber: number;
+      status: "created" | "exists" | "invalid";
+      partyId: string | null;
+      engagementId: string | null;
+      errors: { field: string; message: string }[];
+    };
+    const results: RowResult[] = [];
 
-  for (let i = 0; i < parsed.rows.length; i++) {
-    const row = parsed.rows[i];
-    const rowNumber = i + 1;
-    const errors: { field: string; message: string }[] = [];
-    let tin: string | null = null;
-    let tinValidated = false;
-    if (row.tin) {
-      const check = validateTin(row.tin);
-      if (!check.valid) {
-        errors.push({ field: "tin", message: "TIN failed format validation" });
-      } else {
-        tin = check.normalized;
-        tinValidated = true;
+    for (let i = 0; i < parsed.rows.length; i++) {
+      const row = parsed.rows[i];
+      const rowNumber = i + 1;
+      const errors: { field: string; message: string }[] = [];
+      let tin: string | null = null;
+      let tinValidated = false;
+      if (row.tin) {
+        const check = validateTin(row.tin);
+        if (!check.valid) {
+          errors.push({
+            field: "tin",
+            message: "TIN failed format validation",
+          });
+        } else {
+          tin = check.normalized;
+          tinValidated = true;
+        }
       }
-    }
-    let cac: string | null = null;
-    if (row.cacNumber) {
-      const check = validateCac(row.cacNumber);
-      if (!check.valid) {
-        errors.push({ field: "cacNumber", message: "CAC number failed format validation" });
-      } else {
-        cac = check.normalized;
+      let cac: string | null = null;
+      if (row.cacNumber) {
+        const check = validateCac(row.cacNumber);
+        if (!check.valid) {
+          errors.push({
+            field: "cacNumber",
+            message: "CAC number failed format validation",
+          });
+        } else {
+          cac = check.normalized;
+        }
       }
-    }
-    if (errors.length > 0) {
-      results.push({ rowNumber, status: "invalid", partyId: null, engagementId: null, errors });
-      continue;
-    }
+      if (errors.length > 0) {
+        results.push({
+          rowNumber,
+          status: "invalid",
+          partyId: null,
+          engagementId: null,
+          errors,
+        });
+        continue;
+      }
 
-    // Existing-client detection is scoped to THIS firm's engaged clients —
-    // the shared probe (modules/party/party.ts findEngagedClientId) owns the
-    // cross-tenant-oracle rationale.
-    const existingPartyId = await findEngagedClientId(
-      firmId,
-      tin,
-      row.legalName,
-    );
-    if (existingPartyId) {
+      // Existing-client detection is scoped to THIS firm's engaged clients —
+      // the shared probe (modules/party/party.ts findEngagedClientId) owns the
+      // cross-tenant-oracle rationale.
+      const existingPartyId = await findEngagedClientId(
+        firmId,
+        tin,
+        row.legalName,
+      );
+      if (existingPartyId) {
+        results.push({
+          rowNumber,
+          status: "exists",
+          partyId: existingPartyId,
+          engagementId: null,
+          errors: [],
+        });
+        continue;
+      }
+      if (!parsed.commit) {
+        results.push({
+          rowNumber,
+          status: "created",
+          partyId: null,
+          engagementId: null,
+          errors: [],
+        });
+        continue;
+      }
+
+      const [party] = await getDb()
+        .insert(partiesTable)
+        .values({
+          type: "client_business",
+          legalName: row.legalName,
+          tin,
+          tinValidated,
+          cacNumber: cac,
+          street: row.street ?? null,
+          city: row.city ?? null,
+          countryCode: "NG",
+        })
+        .returning({ id: partiesTable.id });
+      const [engagement] = await getDb()
+        .insert(engagementsTable)
+        .values({
+          firmId,
+          clientPartyId: party.id,
+          type: "retainer",
+          status: "in_progress",
+          title:
+            row.engagementTitle ?? `${row.legalName} — compliance retainer`,
+        })
+        .returning({ id: engagementsTable.id });
       results.push({
         rowNumber,
-        status: "exists",
-        partyId: existingPartyId,
-        engagementId: null,
+        status: "created",
+        partyId: party.id,
+        engagementId: engagement.id,
         errors: [],
       });
-      continue;
-    }
-    if (!parsed.commit) {
-      results.push({ rowNumber, status: "created", partyId: null, engagementId: null, errors: [] });
-      continue;
     }
 
-    const [party] = await getDb()
-      .insert(partiesTable)
-      .values({
-        type: "client_business",
-        legalName: row.legalName,
-        tin,
-        tinValidated,
-        cacNumber: cac,
-        street: row.street ?? null,
-        city: row.city ?? null,
-        countryCode: "NG",
-      })
-      .returning({ id: partiesTable.id });
-    const [engagement] = await getDb()
-      .insert(engagementsTable)
-      .values({
-        firmId,
-        clientPartyId: party.id,
-        type: "retainer",
-        status: "in_progress",
-        title: row.engagementTitle ?? `${row.legalName} — compliance retainer`,
-      })
-      .returning({ id: engagementsTable.id });
-    results.push({
-      rowNumber,
-      status: "created",
-      partyId: party.id,
-      engagementId: engagement.id,
-      errors: [],
+    const createdCount = results.filter((r) => r.status === "created").length;
+    const existsCount = results.filter((r) => r.status === "exists").length;
+    const invalidCount = results.filter((r) => r.status === "invalid").length;
+    // Validate-only probes are audited too: bulk lookups against party data must
+    // never be silent (CORE-05).
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId,
+      action: parsed.commit ? "clients.import" : "clients.import_validate",
+      entityType: "firm",
+      entityId: firmId,
+      after: {
+        rows: results.length,
+        created: createdCount,
+        exists: existsCount,
+        invalid: invalidCount,
+      },
     });
-  }
-
-  const createdCount = results.filter((r) => r.status === "created").length;
-  const existsCount = results.filter((r) => r.status === "exists").length;
-  const invalidCount = results.filter((r) => r.status === "invalid").length;
-  // Validate-only probes are audited too: bulk lookups against party data must
-  // never be silent (CORE-05).
-  await appendAudit({
-    actorId: req.principal.userId,
-    firmId,
-    action: parsed.commit ? "clients.import" : "clients.import_validate",
-    entityType: "firm",
-    entityId: firmId,
-    after: { rows: results.length, created: createdCount, exists: existsCount, invalid: invalidCount },
-  });
-  res.json(
-    ImportClientsResponse.parse({
-      rowCount: results.length,
-      createdCount,
-      existsCount,
-      invalidCount,
-      committed: parsed.commit,
-      rows: results,
-    }),
-  );
-});
+    res.json(
+      ImportClientsResponse.parse({
+        rowCount: results.length,
+        createdCount,
+        existsCount,
+        invalidCount,
+        committed: parsed.commit,
+        rows: results,
+      }),
+    );
+  },
+);
 
 export default router;

@@ -46,7 +46,8 @@ export const SUBMISSION_INTENTS: readonly DataIntent[] = [
   },
   {
     key: "data.due_soon_submissions",
-    title: "invoices whose statutory submission deadline falls in the next 7 days",
+    title:
+      "invoices whose statutory submission deadline falls in the next 7 days",
     accepts: { client: true },
     async run(firmId, params) {
       const agg = await invoiceAggregate(
@@ -136,13 +137,9 @@ export const SUBMISSION_INTENTS: readonly DataIntent[] = [
           agg.count === 0
             ? `No invoices${forClient(params)} were accepted by the rails ${period}.`
             : `${plural(agg.count, "invoice")}${forClient(params)} ${agg.count === 1 ? "was" : "were"} accepted by the rails ${period}, NGN ${agg.totalNgn} in total: ${nameSample(agg)}.`,
-        facts: invoiceFacts(
-          agg,
-          `Accepted by the rails ${period}`,
-          true,
-        ),
+        facts: invoiceFacts(agg, `Accepted by the rails ${period}`, true),
         ...sampleLinks(agg),
       };
     },
-  }
+  },
 ];

@@ -166,7 +166,9 @@ export async function listPaymentBehaviour(
   clientPartyId: string,
   now: Date = new Date(),
 ): Promise<BuyerPaymentBehaviour[]> {
-  return summarizeBehaviour(await acceptedSettlementRows(firmId, [clientPartyId], now));
+  return summarizeBehaviour(
+    await acceptedSettlementRows(firmId, [clientPartyId], now),
+  );
 }
 
 // One buyer's behaviour, for surfaces anchored to a single invoice (the

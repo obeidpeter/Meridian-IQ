@@ -88,7 +88,12 @@ async function draftFor(supplierPartyId: string, issueDate: string) {
       issueDate,
       dueDate: null,
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -131,18 +136,18 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `rem-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Reminder Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Reminder Firm ${SALT}` });
   await db.insert(partiesTable).values(
-    [...ALL_SUPPLIERS, supplierDormant].map(
-      (id, i) => ({
-        id,
-        type: "client_business" as const,
-        legalName: `Reminder Client ${i} ${SALT}`,
-        tin: `10000${i}00-0009`,
-        street: `${i} Marina Rd`,
-        city: "Lagos",
-      }),
-    ),
+    [...ALL_SUPPLIERS, supplierDormant].map((id, i) => ({
+      id,
+      type: "client_business" as const,
+      legalName: `Reminder Client ${i} ${SALT}`,
+      tin: `10000${i}00-0009`,
+      street: `${i} Marina Rd`,
+      city: "Lagos",
+    })),
   );
   // Alert fan-out is gated on layer-1 consent (CORE-03): grant it for every
   // fixture party; the revocation test layers a revoke on top for its party.
@@ -328,13 +333,15 @@ test("a dormant relationship stops the sends — the live-engagement wall", asyn
 
   // Re-opening the relationship resumes the ladder: no slot was consumed
   // while walled.
-  await getDb().insert(engagementsTable).values({
-    firmId,
-    clientPartyId: supplierDormant,
-    type: "readiness_assessment",
-    status: "open",
-    title: `Reminder Engagement dormant ${SALT}`,
-  });
+  await getDb()
+    .insert(engagementsTable)
+    .values({
+      firmId,
+      clientPartyId: supplierDormant,
+      type: "readiness_assessment",
+      status: "open",
+      title: `Reminder Engagement dormant ${SALT}`,
+    });
   await drainReminders();
   const ledger = await remindersFor(invoice.id);
   assert.equal(ledger.length, 1);

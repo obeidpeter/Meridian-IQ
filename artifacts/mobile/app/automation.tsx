@@ -224,7 +224,11 @@ export default function AutomationScreen() {
     message: string;
   } | null>(null);
 
-  const queryOpts = { enabled: !!clientPartyId, staleTime: 60_000, retry: false };
+  const queryOpts = {
+    enabled: !!clientPartyId,
+    staleTime: 60_000,
+    retry: false,
+  };
   const proposalsQuery = useGetActionProposals(
     { clientPartyId: clientPartyId ?? "" },
     {
@@ -531,8 +535,8 @@ export default function AutomationScreen() {
           <View style={{ gap: 12 }}>
             <AppText variant="body" color={colors.mutedForeground}>
               Clerk suggests, you decide. Nothing runs until it is approved —
-              here for one batch, or as a standing daily approval you can
-              pause or revoke at any time.
+              here for one batch, or as a standing daily approval you can pause
+              or revoke at any time.
             </AppText>
 
             {banner ? (

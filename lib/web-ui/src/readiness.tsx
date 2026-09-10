@@ -68,7 +68,11 @@ export function ReadinessList({
               data-testid={`readiness-${step.id}`}
             >
               <span className="mi-readiness__mark" aria-hidden="true">
-                {step.state === "done" ? "✓" : step.state === "attention" ? "!" : index + 1}
+                {step.state === "done"
+                  ? "✓"
+                  : step.state === "attention"
+                    ? "!"
+                    : index + 1}
               </span>
               <div className="mi-readiness__copy">
                 {step.href ? (

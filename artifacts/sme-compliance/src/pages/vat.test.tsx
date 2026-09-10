@@ -305,10 +305,7 @@ describe("pure helpers", () => {
     expect(line).toContain("higher");
     // An empty previous month yields no sentence at all.
     expect(
-      vatComparisonLine(
-        cur,
-        position({ outputInvoiceCount: 0, billCount: 0 }),
-      ),
+      vatComparisonLine(cur, position({ outputInvoiceCount: 0, billCount: 0 })),
     ).toBeNull();
   });
 

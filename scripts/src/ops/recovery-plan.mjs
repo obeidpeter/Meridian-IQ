@@ -148,10 +148,7 @@ export function validateRollbackApproval(
   );
   assert.equal(record.approved, true, "rollback record is not approved");
   text(record.approvedBy, "rollback approval approvedBy", 200);
-  text(
-    record.qualificationEvidence,
-    "rollback approval qualificationEvidence",
-  );
+  text(record.qualificationEvidence, "rollback approval qualificationEvidence");
   const approvedAt = timestamp(
     record.approvedAt,
     "rollback approval approvedAt",
@@ -161,7 +158,10 @@ export function validateRollbackApproval(
     approvedAt <= now && now < expiresAt,
     "rollback approval is expired or future-dated",
   );
-  assert.ok(expiresAt > approvedAt, "rollback approval expiry must follow approval");
+  assert.ok(
+    expiresAt > approvedAt,
+    "rollback approval expiry must follow approval",
+  );
   return record;
 }
 
@@ -339,10 +339,7 @@ function readRecordBytes(file, maxBytes, label) {
       if (read === 0) break;
       size += read;
     }
-    assert.ok(
-      size > 0 && size <= maxBytes,
-      `${label} exceeds bounded size`,
-    );
+    assert.ok(size > 0 && size <= maxBytes, `${label} exceeds bounded size`);
     return bytes.subarray(0, size);
   } finally {
     closeSync(fd);
@@ -361,7 +358,11 @@ function parseRecord(bytes, label) {
 
 export function loadRollbackApproval(
   env,
-  { revision, rollbackRevision = env.RELEASE_ROLLBACK_REVISION, now = Date.now() },
+  {
+    revision,
+    rollbackRevision = env.RELEASE_ROLLBACK_REVISION,
+    now = Date.now(),
+  },
 ) {
   assert.equal(
     recoveryMode(env),

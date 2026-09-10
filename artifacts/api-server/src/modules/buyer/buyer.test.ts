@@ -97,28 +97,102 @@ before(async () => {
     },
   ]);
 
-  await seedInvoice({ id: i1, supplierPartyId: supplierOne, status: "stamped", vatTotal: "100.00", stamped: true });
-  await seedInvoice({ id: i2, supplierPartyId: supplierOne, status: "confirmed", vatTotal: "100.00", stamped: true });
-  await seedInvoice({ id: i3, supplierPartyId: supplierOne, status: "stamped", vatTotal: "100.00", stamped: true });
-  await seedInvoice({ id: i4, supplierPartyId: supplierOne, status: "submitted", vatTotal: "100.00" });
-  await seedInvoice({ id: i5, supplierPartyId: supplierTwo, status: "submitted", vatTotal: "50.00" });
-  await seedInvoice({ id: i6, supplierPartyId: supplierTwo, status: "cancelled", vatTotal: "70.00", stamped: true });
+  await seedInvoice({
+    id: i1,
+    supplierPartyId: supplierOne,
+    status: "stamped",
+    vatTotal: "100.00",
+    stamped: true,
+  });
+  await seedInvoice({
+    id: i2,
+    supplierPartyId: supplierOne,
+    status: "confirmed",
+    vatTotal: "100.00",
+    stamped: true,
+  });
+  await seedInvoice({
+    id: i3,
+    supplierPartyId: supplierOne,
+    status: "stamped",
+    vatTotal: "100.00",
+    stamped: true,
+  });
+  await seedInvoice({
+    id: i4,
+    supplierPartyId: supplierOne,
+    status: "submitted",
+    vatTotal: "100.00",
+  });
+  await seedInvoice({
+    id: i5,
+    supplierPartyId: supplierTwo,
+    status: "submitted",
+    vatTotal: "50.00",
+  });
+  await seedInvoice({
+    id: i6,
+    supplierPartyId: supplierTwo,
+    status: "cancelled",
+    vatTotal: "70.00",
+    stamped: true,
+  });
   // A draft addressed to the buyer must never surface outside its firm.
-  await seedInvoice({ id: randomUUID(), supplierPartyId: supplierOne, status: "draft", vatTotal: "100.00" });
+  await seedInvoice({
+    id: randomUUID(),
+    supplierPartyId: supplierOne,
+    status: "draft",
+    vatTotal: "100.00",
+  });
 
   // Append-only confirmation lineage; the newest row per invoice decides.
   const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
   await db.insert(confirmationsTable).values([
     // I1: requested, then confirmed — counts as confirmed.
-    { invoiceId: i1, buyerPartyId: buyerId, state: "requested", createdAt: at(60) },
-    { invoiceId: i1, buyerPartyId: buyerId, state: "confirmed", method: "portal", createdAt: at(30) },
+    {
+      invoiceId: i1,
+      buyerPartyId: buyerId,
+      state: "requested",
+      createdAt: at(60),
+    },
+    {
+      invoiceId: i1,
+      buyerPartyId: buyerId,
+      state: "confirmed",
+      method: "portal",
+      createdAt: at(30),
+    },
     // I2: confirmed outright.
-    { invoiceId: i2, buyerPartyId: buyerId, state: "confirmed", method: "portal", createdAt: at(45) },
+    {
+      invoiceId: i2,
+      buyerPartyId: buyerId,
+      state: "confirmed",
+      method: "portal",
+      createdAt: at(45),
+    },
     // I3: confirmed EARLIER, then queried — the newer query wins.
-    { invoiceId: i3, buyerPartyId: buyerId, state: "confirmed", method: "portal", createdAt: at(50) },
-    { invoiceId: i3, buyerPartyId: buyerId, state: "queried", method: "portal", note: "price?", createdAt: at(20) },
+    {
+      invoiceId: i3,
+      buyerPartyId: buyerId,
+      state: "confirmed",
+      method: "portal",
+      createdAt: at(50),
+    },
+    {
+      invoiceId: i3,
+      buyerPartyId: buyerId,
+      state: "queried",
+      method: "portal",
+      note: "price?",
+      createdAt: at(20),
+    },
     // I4: open request — outstanding.
-    { invoiceId: i4, buyerPartyId: buyerId, state: "requested", createdAt: at(10) },
+    {
+      invoiceId: i4,
+      buyerPartyId: buyerId,
+      state: "requested",
+      createdAt: at(10),
+    },
   ]);
 });
 
@@ -185,23 +259,33 @@ test("supplierDetail: the drill-down runs the exposure breakdown's aggregation a
   assert.ok(detail.invoices.every((i) => i.supplierPartyId === supplierOne));
   const byId = new Map(detail.invoices.map((i) => [i.id, i]));
   assert.equal(byId.get(i1)?.confirmationState, "confirmed");
-  assert.equal(byId.get(i3)?.confirmationState, "queried", "newest lineage row wins");
+  assert.equal(
+    byId.get(i3)?.confirmationState,
+    "queried",
+    "newest lineage row wins",
+  );
   assert.equal(byId.get(i4)?.confirmationState, "requested");
   assert.equal(byId.get(i4)?.stampValid, false);
   assert.equal(byId.get(i1)?.eligible, true);
 
   // No invoices to the caller = 404: an unknown supplier, and equally a
   // real supplier viewed by a buyer it never invoiced.
-  await assert.rejects(supplierDetail(buyerId, randomUUID()), (err: unknown) => {
-    assert.ok(err instanceof DomainError);
-    assert.equal(err.status, 404);
-    return true;
-  });
-  await assert.rejects(supplierDetail(randomUUID(), supplierOne), (err: unknown) => {
-    assert.ok(err instanceof DomainError);
-    assert.equal(err.status, 404);
-    return true;
-  });
+  await assert.rejects(
+    supplierDetail(buyerId, randomUUID()),
+    (err: unknown) => {
+      assert.ok(err instanceof DomainError);
+      assert.equal(err.status, 404);
+      return true;
+    },
+  );
+  await assert.rejects(
+    supplierDetail(randomUUID(), supplierOne),
+    (err: unknown) => {
+      assert.ok(err instanceof DomainError);
+      assert.equal(err.status, 404);
+      return true;
+    },
+  );
 });
 
 test("respondBulk refuses an over-cap batch outright", async () => {

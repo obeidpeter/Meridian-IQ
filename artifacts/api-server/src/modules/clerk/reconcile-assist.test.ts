@@ -23,7 +23,10 @@ import {
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal as makeClientPrincipal, firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal as makeClientPrincipal,
+  firmPrincipal as makeFirmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Reconciliation match assist (idea #2). Pinned invariants:
 //  - the ranking and every highlight are computed from the matcher's RECORDED
@@ -160,13 +163,24 @@ after(async () => {
 
 test("proposalHighlights reads the recorded features into plain language", () => {
   const strong = proposalHighlights({
-    features: { amountScore: 1, referenceScore: 1, dateScore: 0.95, nameScore: 1 },
+    features: {
+      amountScore: 1,
+      referenceScore: 1,
+      dateScore: 0.95,
+      nameScore: 1,
+    },
     valueDate: "2026-07-04",
     issueDate: "2026-07-01",
   });
-  assert.ok(strong.includes("the paid amount matches the invoice total exactly"));
-  assert.ok(strong.includes("the invoice number appears in the bank narration"));
-  assert.ok(strong.includes("payment landed 3 days after the invoice was issued"));
+  assert.ok(
+    strong.includes("the paid amount matches the invoice total exactly"),
+  );
+  assert.ok(
+    strong.includes("the invoice number appears in the bank narration"),
+  );
+  assert.ok(
+    strong.includes("payment landed 3 days after the invoice was issued"),
+  );
   assert.ok(strong.includes("the customer's name appears in the narration"));
 
   const near = proposalHighlights({
@@ -176,7 +190,10 @@ test("proposalHighlights reads the recorded features into plain language", () =>
   });
   assert.ok(near.some((h) => h.includes("within 2% of the invoice total")));
   assert.ok(near.some((h) => h.includes("most of the customer's name")));
-  assert.equal(near.some((h) => h.includes("invoice number")), false);
+  assert.equal(
+    near.some((h) => h.includes("invoice number")),
+    false,
+  );
 
   // The matcher recorded ZERO date support (implausibly early / outside the
   // window): no date highlight may appear, even though raw dates exist —

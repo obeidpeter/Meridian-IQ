@@ -1,4 +1,11 @@
-import { test, describe, before, beforeEach, after, afterEach } from "node:test";
+import {
+  test,
+  describe,
+  before,
+  beforeEach,
+  after,
+  afterEach,
+} from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingHttpHeaders } from "node:http";
@@ -97,7 +104,10 @@ test("the served rails are the ones with a URL; an unserved rail answers RAIL_UN
 test("422 with a code is a terminal rejection carrying that code; an unsafe code falls back to MBS_SCHEMA_INVALID", async () => {
   const transport = createHttpRailTransport(cfg());
   const a = submission();
-  fake.script(a.inv.invoiceNumber, { outcome: "reject", code: "MBS_INVALID_TIN" });
+  fake.script(a.inv.invoiceNumber, {
+    outcome: "reject",
+    code: "MBS_INVALID_TIN",
+  });
   const rejected = await transport.submit("rail_primary", a.inv, a.key);
   assert.equal(rejected.status, "rejected");
   assert.equal(rejected.errorCode, "MBS_INVALID_TIN");
@@ -122,10 +132,16 @@ test("409 is MBS_DUPLICATE; lookup recovers a stamp only when the rail holds one
   assert.equal(dup.status, "rejected");
   assert.equal(dup.errorCode, "MBS_DUPLICATE");
   assert.equal((dup.raw as { httpStatus: number }).httpStatus, 409);
-  assert.equal(await transport.lookup("rail_primary", orphan.inv, orphan.key), null);
+  assert.equal(
+    await transport.lookup("rail_primary", orphan.inv, orphan.key),
+    null,
+  );
 
   const held = submission();
-  fake.script(held.inv.invoiceNumber, { outcome: "duplicate", holdsStamp: true });
+  fake.script(held.inv.invoiceNumber, {
+    outcome: "duplicate",
+    holdsStamp: true,
+  });
   const dup2 = await transport.submit("rail_primary", held.inv, held.key);
   assert.equal(dup2.errorCode, "MBS_DUPLICATE");
   assert.equal((dup2.raw as { httpStatus: number }).httpStatus, 409);
@@ -151,7 +167,13 @@ test("a key the rail already accepted is a duplicate on re-send and the same sta
 
 test("429, 503, a scripted 401 and a non-conforming 2xx map to their retriable codes", async () => {
   const transport = createHttpRailTransport(cfg());
-  const cells: Array<["rate_limit" | "unavailable" | "unauthorized" | "malformed", string, number]> = [
+  const cells: Array<
+    [
+      "rate_limit" | "unavailable" | "unauthorized" | "malformed",
+      string,
+      number,
+    ]
+  > = [
     ["rate_limit", "RAIL_RATE_LIMITED", 429],
     ["unavailable", "RAIL_UNAVAILABLE", 503],
     ["unauthorized", "RAIL_UNAUTHORIZED", 401],
@@ -163,12 +185,18 @@ test("429, 503, a scripted 401 and a non-conforming 2xx map to their retriable c
     const result = await transport.submit("rail_primary", inv, key);
     assert.equal(result.status, "error", outcome);
     assert.equal(result.errorCode, code, outcome);
-    assert.equal((result.raw as { httpStatus: number }).httpStatus, httpStatus, outcome);
+    assert.equal(
+      (result.raw as { httpStatus: number }).httpStatus,
+      httpStatus,
+      outcome,
+    );
   }
 });
 
 test("a wrong bearer token is RAIL_UNAUTHORIZED on submit and a RailLookupError on lookup — never a miss", async () => {
-  const transport = createHttpRailTransport(cfg({ tokens: { rail_primary: "wrong" } }));
+  const transport = createHttpRailTransport(
+    cfg({ tokens: { rail_primary: "wrong" } }),
+  );
   const { inv, key } = submission();
   const result = await transport.submit("rail_primary", inv, key);
   assert.equal(result.status, "error");
@@ -176,7 +204,8 @@ test("a wrong bearer token is RAIL_UNAUTHORIZED on submit and a RailLookupError 
   assert.equal(fake.calls.at(-1)?.authorized, false);
   await assert.rejects(
     transport.lookup("rail_primary", inv, key),
-    (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_UNAUTHORIZED",
+    (err: unknown) =>
+      err instanceof RailLookupError && err.code === "RAIL_UNAUTHORIZED",
   );
 });
 
@@ -210,7 +239,8 @@ test("an unreachable access point is RAIL_UNAVAILABLE on submit and a RailLookup
   });
   await assert.rejects(
     transport.lookup("rail_primary", inv, key),
-    (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_UNAVAILABLE",
+    (err: unknown) =>
+      err instanceof RailLookupError && err.code === "RAIL_UNAVAILABLE",
   );
 });
 
@@ -228,7 +258,11 @@ test("lookup: a miss is null, a hit is the stamp the rail holds", async () => {
 
 test("httpRailConfigFromEnv: only lit rails, trailing slashes trimmed, sandbox and 5 s by default", () => {
   assert.equal(httpRailConfigFromEnv({}), null);
-  assert.equal(httpRailConfigFromEnv({ RAIL_PRIMARY_TOKEN: "t" }), null, "a token alone lights nothing");
+  assert.equal(
+    httpRailConfigFromEnv({ RAIL_PRIMARY_TOKEN: "t" }),
+    null,
+    "a token alone lights nothing",
+  );
   const primary = httpRailConfigFromEnv({
     RAIL_PRIMARY_URL: "https://rail.example/base/",
     RAIL_PRIMARY_TOKEN: " secret ",
@@ -245,7 +279,10 @@ test("httpRailConfigFromEnv: only lit rails, trailing slashes trimmed, sandbox a
     RAIL_ENVIRONMENT: "live",
     RAIL_TIMEOUT_MS: "2500",
   });
-  assert.deepEqual(both?.urls, { rail_primary: "https://a.example", rail_secondary: "https://b.example" });
+  assert.deepEqual(both?.urls, {
+    rail_primary: "https://a.example",
+    rail_secondary: "https://b.example",
+  });
   assert.deepEqual(both?.tokens, {});
   assert.equal(both?.environment, "live");
   assert.equal(both?.timeoutMs, 2_500);
@@ -275,7 +312,11 @@ interface StubAnswer {
 interface StubRail {
   readonly url: string;
   readonly hits: number;
-  readonly requests: Array<{ method: string; path: string; headers: IncomingHttpHeaders }>;
+  readonly requests: Array<{
+    method: string;
+    path: string;
+    headers: IncomingHttpHeaders;
+  }>;
   answer(next: StubAnswer): void;
   close(): Promise<void>;
 }
@@ -287,7 +328,11 @@ async function startStub(): Promise<StubRail> {
   const server = createServer((req, res) => {
     req.resume();
     req.on("end", () => {
-      requests.push({ method: req.method ?? "", path: req.url ?? "", headers: req.headers });
+      requests.push({
+        method: req.method ?? "",
+        path: req.url ?? "",
+        headers: req.headers,
+      });
       const answer = next;
       const body =
         answer.body === undefined
@@ -344,13 +389,18 @@ const json = (value: unknown): string => JSON.stringify(value);
 const NUL = String.fromCharCode(0);
 const BEL = String.fromCharCode(7);
 
-type StampBody = Record<"irn" | "csid" | "qrPayload" | "signedArtifactRef", string>;
+type StampBody = Record<
+  "irn" | "csid" | "qrPayload" | "signedArtifactRef",
+  string
+>;
 
 function conformingBody(overrides: Partial<StampBody> = {}): StampBody {
   return {
     irn: "IRN-0123456789ABCDEF",
     csid: "c".repeat(24),
-    qrPayload: Buffer.from(json({ irn: "IRN-0123456789ABCDEF" })).toString("base64"),
+    qrPayload: Buffer.from(json({ irn: "IRN-0123456789ABCDEF" })).toString(
+      "base64",
+    ),
     signedArtifactRef: "c2lnbmVk",
     ...overrides,
   };
@@ -382,7 +432,9 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
   });
 
   function transport(overrides: Partial<HttpRailConfig> = {}) {
-    return createHttpRailTransport(cfg({ urls: { rail_primary: stub.url }, ...overrides }));
+    return createHttpRailTransport(
+      cfg({ urls: { rail_primary: stub.url }, ...overrides }),
+    );
   }
 
   interface SubmitCell {
@@ -397,7 +449,10 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
   const SUBMIT_CELLS: SubmitCell[] = [
     {
       name: "400 with a code is a rejection carrying it (E-1001)",
-      answer: { status: 400, body: json({ code: "E-1001", message: "bad request" }) },
+      answer: {
+        status: 400,
+        body: json({ code: "E-1001", message: "bad request" }),
+      },
       status: "rejected",
       code: "E-1001",
     },
@@ -432,7 +487,12 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
       status: "error",
       code: "RAIL_UNAUTHORIZED",
     },
-    { name: "404 is RAIL_PROTOCOL", answer: { status: 404 }, status: "error", code: "RAIL_PROTOCOL" },
+    {
+      name: "404 is RAIL_PROTOCOL",
+      answer: { status: 404 },
+      status: "error",
+      code: "RAIL_PROTOCOL",
+    },
     {
       name: "418 is RAIL_PROTOCOL",
       answer: { status: 418, body: "short and stout" },
@@ -440,7 +500,12 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
       code: "RAIL_PROTOCOL",
       body: "short and stout",
     },
-    { name: "500 is RAIL_UNAVAILABLE", answer: { status: 500 }, status: "error", code: "RAIL_UNAVAILABLE" },
+    {
+      name: "500 is RAIL_UNAVAILABLE",
+      answer: { status: 500 },
+      status: "error",
+      code: "RAIL_UNAVAILABLE",
+    },
     {
       name: "502 is RAIL_UNAVAILABLE",
       answer: { status: 502, body: "<html>bad gateway</html>" },
@@ -494,7 +559,10 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     test(`submit: ${status} with a Location is RAIL_PROTOCOL and the redirect is never followed`, async () => {
       other = await startStub();
       other.answer({ status: 201, body: json(conformingBody()) });
-      stub.answer({ status, headers: { location: `${other.url}/v0/submissions` } });
+      stub.answer({
+        status,
+        headers: { location: `${other.url}/v0/submissions` },
+      });
       const { inv, key } = submission();
       const result = await transport().submit("rail_primary", inv, key);
       assert.equal(result.status, "error");
@@ -506,7 +574,11 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
   }
 
   test("submit: 429 with Retry-After 30 carries raw.retryAfterMs 30000", async () => {
-    stub.answer({ status: 429, headers: { "retry-after": "30" }, body: json({ code: "SLOW_DOWN" }) });
+    stub.answer({
+      status: 429,
+      headers: { "retry-after": "30" },
+      body: json({ code: "SLOW_DOWN" }),
+    });
     const { inv, key } = submission();
     const result = await transport().submit("rail_primary", inv, key);
     assert.equal(result.errorCode, "RAIL_RATE_LIMITED");
@@ -522,7 +594,10 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const result = await transport().submit("rail_primary", inv, key);
     assert.equal(result.errorCode, "RAIL_RATE_LIMITED");
     const retryAfterMs = (result.raw as { retryAfterMs: number }).retryAfterMs;
-    assert.ok(retryAfterMs >= 40_000 && retryAfterMs <= 50_000, `retryAfterMs ${retryAfterMs}`);
+    assert.ok(
+      retryAfterMs >= 40_000 && retryAfterMs <= 50_000,
+      `retryAfterMs ${retryAfterMs}`,
+    );
   });
 
   test("submit: 429 with Retry-After 999999 is capped at one hour", async () => {
@@ -530,7 +605,10 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const { inv, key } = submission();
     const result = await transport().submit("rail_primary", inv, key);
     assert.equal(result.errorCode, "RAIL_RATE_LIMITED");
-    assert.equal((result.raw as { retryAfterMs: number }).retryAfterMs, 3_600_000);
+    assert.equal(
+      (result.raw as { retryAfterMs: number }).retryAfterMs,
+      3_600_000,
+    );
   });
 
   test("submit: 429 without Retry-After carries no retryAfterMs at all", async () => {
@@ -539,7 +617,10 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const result = await transport().submit("rail_primary", inv, key);
     assert.equal(result.errorCode, "RAIL_RATE_LIMITED");
     assert.equal("retryAfterMs" in (result.raw as object), false);
-    assert.deepEqual(result.raw, { httpStatus: 429, body: { code: "SLOW_DOWN" } });
+    assert.deepEqual(result.raw, {
+      httpStatus: 429,
+      body: { code: "SLOW_DOWN" },
+    });
   });
 
   // ---- Body hardening: what the attempts table may receive ----
@@ -550,11 +631,18 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const result = await transport().submit("rail_primary", inv, key);
     assert.equal(result.status, "error");
     assert.equal(result.errorCode, "RAIL_PROTOCOL");
-    const raw = result.raw as { httpStatus: number; body: unknown; truncated?: boolean };
+    const raw = result.raw as {
+      httpStatus: number;
+      body: unknown;
+      truncated?: boolean;
+    };
     assert.equal(raw.httpStatus, 200);
     assert.equal(raw.truncated, true);
     assert.equal(typeof raw.body, "string");
-    assert.ok((raw.body as string).length <= 4_096, `retained ${(raw.body as string).length} chars`);
+    assert.ok(
+      (raw.body as string).length <= 4_096,
+      `retained ${(raw.body as string).length} chars`,
+    );
   });
 
   test("body: a 503 whose JSON body carries a raw NUL byte leaves no NUL in raw.body", async () => {
@@ -569,7 +657,11 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const raw = result.raw as { httpStatus: number; body: unknown };
     assert.equal(raw.httpStatus, 503);
     assert.equal(hasNul(raw.body), false, json(raw.body));
-    assert.equal(json(raw).includes("\\u0000"), false, "nothing jsonb would refuse");
+    assert.equal(
+      json(raw).includes("\\u0000"),
+      false,
+      "nothing jsonb would refuse",
+    );
     assert.deepEqual(raw.body, { code: "RAIL_DOWN", detail: "xy" });
   });
 
@@ -587,7 +679,11 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const raw = result.raw as { httpStatus: number; body: unknown };
     assert.equal(raw.httpStatus, 503);
     assert.equal(hasNul(raw.body), false, json(raw.body));
-    assert.equal(json(raw).includes("\\u0000"), false, "nothing jsonb would refuse");
+    assert.equal(
+      json(raw).includes("\\u0000"),
+      false,
+      "nothing jsonb would refuse",
+    );
   });
 
   test("body: a 503 of 20 000 nested brackets is retained as bounded text and stringifies", async () => {
@@ -603,14 +699,25 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
   });
 
   test("body: a 401 that echoes the bearer token keeps [redacted], never the token", async () => {
-    stub.answer({ status: 401, body: json({ error: `token ${TOKEN} is not known here` }) });
+    stub.answer({
+      status: 401,
+      body: json({ error: `token ${TOKEN} is not known here` }),
+    });
     const { inv, key } = submission();
     const result = await transport().submit("rail_primary", inv, key);
     assert.equal(result.errorCode, "RAIL_UNAUTHORIZED");
     const persisted = json((result.raw as { body: unknown }).body);
     assert.ok(persisted.includes("[redacted]"), persisted);
-    assert.equal(persisted.includes(TOKEN), false, "the bearer never reaches the attempts table");
-    assert.equal(stub.requests[0]?.headers.authorization, `Bearer ${TOKEN}`, "it did travel on the wire");
+    assert.equal(
+      persisted.includes(TOKEN),
+      false,
+      "the bearer never reaches the attempts table",
+    );
+    assert.equal(
+      stub.requests[0]?.headers.authorization,
+      `Bearer ${TOKEN}`,
+      "it did travel on the wire",
+    );
   });
 
   test("body: a 200 that never ends its body is RAIL_TIMEOUT in phase body within the budget", async () => {
@@ -622,7 +729,11 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     });
     const { inv, key } = submission();
     const started = Date.now();
-    const result = await transport({ timeoutMs: 300 }).submit("rail_primary", inv, key);
+    const result = await transport({ timeoutMs: 300 }).submit(
+      "rail_primary",
+      inv,
+      key,
+    );
     const elapsed = Date.now() - started;
     assert.equal(result.status, "error");
     assert.equal(result.errorCode, "RAIL_TIMEOUT");
@@ -658,7 +769,10 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
   }
 
   test("stamp: a 201 with a qrPayload of exactly 2900 base64 chars and an irn of 128 chars is accepted", async () => {
-    const body = conformingBody({ qrPayload: "A".repeat(2_900), irn: "I".repeat(128) });
+    const body = conformingBody({
+      qrPayload: "A".repeat(2_900),
+      irn: "I".repeat(128),
+    });
     stub.answer({ status: 201, body: json(body) });
     const { inv, key } = submission();
     const result = await transport().submit("rail_primary", inv, key);
@@ -671,18 +785,37 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
 
   // ---- Lookup: a definite miss is null, everything else that is not the stamp throws ----
 
-  const LOOKUP_CELLS: Array<{ name: string; answer: StubAnswer; code: string }> = [
-    { name: "503 is RAIL_UNAVAILABLE", answer: { status: 503 }, code: "RAIL_UNAVAILABLE" },
-    { name: "401 is RAIL_UNAUTHORIZED", answer: { status: 401 }, code: "RAIL_UNAUTHORIZED" },
+  const LOOKUP_CELLS: Array<{
+    name: string;
+    answer: StubAnswer;
+    code: string;
+  }> = [
+    {
+      name: "503 is RAIL_UNAVAILABLE",
+      answer: { status: 503 },
+      code: "RAIL_UNAVAILABLE",
+    },
+    {
+      name: "401 is RAIL_UNAUTHORIZED",
+      answer: { status: 401 },
+      code: "RAIL_UNAUTHORIZED",
+    },
     {
       name: "429 is RAIL_RATE_LIMITED",
       answer: { status: 429, headers: { "retry-after": "5" } },
       code: "RAIL_RATE_LIMITED",
     },
-    { name: "418 is RAIL_PROTOCOL", answer: { status: 418 }, code: "RAIL_PROTOCOL" },
+    {
+      name: "418 is RAIL_PROTOCOL",
+      answer: { status: 418 },
+      code: "RAIL_PROTOCOL",
+    },
     {
       name: "a 200 that is not a stamp is RAIL_PROTOCOL",
-      answer: { status: 200, body: json({ stamp: "not the shape the profile defines" }) },
+      answer: {
+        status: 200,
+        body: json({ stamp: "not the shape the profile defines" }),
+      },
       code: "RAIL_PROTOCOL",
     },
   ];
@@ -694,11 +827,16 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
       await assert.rejects(
         transport().lookup("rail_primary", inv, key),
         (err: unknown) =>
-          err instanceof RailLookupError && err.code === cell.code && err.rail === "rail_primary",
+          err instanceof RailLookupError &&
+          err.code === cell.code &&
+          err.rail === "rail_primary",
       );
       assert.equal(stub.hits, 1);
       assert.equal(stub.requests[0]?.method, "GET");
-      assert.equal(stub.requests[0]?.path, `/v0/submissions/${encodeURIComponent(key)}`);
+      assert.equal(
+        stub.requests[0]?.path,
+        `/v0/submissions/${encodeURIComponent(key)}`,
+      );
     });
   }
 
@@ -712,11 +850,15 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
   test("lookup: 302 is RailLookupError RAIL_PROTOCOL and the redirect is never followed", async () => {
     other = await startStub();
     other.answer({ status: 200, body: json(conformingBody()) });
-    stub.answer({ status: 302, headers: { location: `${other.url}/v0/submissions/x` } });
+    stub.answer({
+      status: 302,
+      headers: { location: `${other.url}/v0/submissions/x` },
+    });
     const { inv, key } = submission();
     await assert.rejects(
       transport().lookup("rail_primary", inv, key),
-      (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_PROTOCOL",
+      (err: unknown) =>
+        err instanceof RailLookupError && err.code === "RAIL_PROTOCOL",
     );
     assert.equal(stub.hits, 1);
     assert.equal(other.hits, 0, "the redirect target was never called");
@@ -733,7 +875,8 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
     const started = Date.now();
     await assert.rejects(
       transport({ timeoutMs: 300 }).lookup("rail_primary", inv, key),
-      (err: unknown) => err instanceof RailLookupError && err.code === "RAIL_TIMEOUT",
+      (err: unknown) =>
+        err instanceof RailLookupError && err.code === "RAIL_TIMEOUT",
     );
     const elapsed = Date.now() - started;
     assert.ok(elapsed < 2_000, `gave up after ${elapsed}ms`);
@@ -743,28 +886,50 @@ describe("the wire matrix, cell by cell, against an ad-hoc stub", () => {
 // ---- Configuration: what a rail URL must look like before a credential goes to it ----
 
 test("httpRailConfigFromEnv: a URL with credentials, a non-URL or a non-http(s) scheme leaves the rail unconfigured", () => {
-  assert.equal(httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "http://user:pw@rail.example" }), null);
+  assert.equal(
+    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "http://user:pw@rail.example" }),
+    null,
+  );
   assert.equal(httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "not a url" }), null);
   assert.equal(httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "ftp://x" }), null);
   const mixed = httpRailConfigFromEnv({
     RAIL_PRIMARY_URL: "ftp://x",
     RAIL_SECONDARY_URL: "https://b.example/",
   });
-  assert.deepEqual(mixed?.urls, { rail_secondary: "https://b.example" }, "one bad URL does not darken the other rail");
+  assert.deepEqual(
+    mixed?.urls,
+    { rail_secondary: "https://b.example" },
+    "one bad URL does not darken the other rail",
+  );
 });
 
 test("httpRailConfigFromEnv: plain http is refused in production except to loopback; https is fine", () => {
-  assert.equal(httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "http://rail.example", NODE_ENV: "production" }), null);
+  assert.equal(
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "http://rail.example",
+      NODE_ENV: "production",
+    }),
+    null,
+  );
   assert.deepEqual(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "http://127.0.0.1:9", NODE_ENV: "production" })?.urls,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "http://127.0.0.1:9",
+      NODE_ENV: "production",
+    })?.urls,
     { rail_primary: "http://127.0.0.1:9" },
   );
   assert.deepEqual(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "https://rail.example", NODE_ENV: "production" })?.urls,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "https://rail.example",
+      NODE_ENV: "production",
+    })?.urls,
     { rail_primary: "https://rail.example" },
   );
   assert.deepEqual(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "http://rail.example", NODE_ENV: "test" })?.urls,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "http://rail.example",
+      NODE_ENV: "test",
+    })?.urls,
     { rail_primary: "http://rail.example" },
     "outside production a plain-http staging rail is tolerated",
   );
@@ -774,18 +939,31 @@ test("RAIL_ENVIRONMENT is exactly sandbox|live; anything else keeps provenance o
   assert.equal(railEnvironmentFromEnv({ RAIL_ENVIRONMENT: "Live" }), "sandbox");
   assert.equal(railEnvironmentFromEnv({ RAIL_ENVIRONMENT: "prod" }), "sandbox");
   assert.equal(railEnvironmentFromEnv({ RAIL_ENVIRONMENT: "live" }), "live");
-  assert.equal(railEnvironmentFromEnv({ RAIL_ENVIRONMENT: " live " }), "live", "trimmed");
+  assert.equal(
+    railEnvironmentFromEnv({ RAIL_ENVIRONMENT: " live " }),
+    "live",
+    "trimmed",
+  );
   assert.equal(railEnvironmentFromEnv({}), "sandbox");
   assert.equal(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "https://a.example", RAIL_ENVIRONMENT: "Live" })?.environment,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "https://a.example",
+      RAIL_ENVIRONMENT: "Live",
+    })?.environment,
     "sandbox",
   );
   assert.equal(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "https://a.example", RAIL_ENVIRONMENT: "prod" })?.environment,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "https://a.example",
+      RAIL_ENVIRONMENT: "prod",
+    })?.environment,
     "sandbox",
   );
   assert.equal(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "https://a.example", RAIL_ENVIRONMENT: "live" })?.environment,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "https://a.example",
+      RAIL_ENVIRONMENT: "live",
+    })?.environment,
     "live",
   );
 });
@@ -796,7 +974,10 @@ test("RAIL_TIMEOUT_MS is clamped to 60 s", () => {
   assert.equal(railTimeoutMs({ RAIL_TIMEOUT_MS: "60000" }), 60_000);
   assert.equal(railTimeoutMs({ RAIL_TIMEOUT_MS: "59999" }), 59_999);
   assert.equal(
-    httpRailConfigFromEnv({ RAIL_PRIMARY_URL: "https://a.example", RAIL_TIMEOUT_MS: "999999" })?.timeoutMs,
+    httpRailConfigFromEnv({
+      RAIL_PRIMARY_URL: "https://a.example",
+      RAIL_TIMEOUT_MS: "999999",
+    })?.timeoutMs,
     60_000,
   );
 });

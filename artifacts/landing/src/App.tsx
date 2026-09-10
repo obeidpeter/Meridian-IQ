@@ -306,7 +306,10 @@ function RedirectingPanel({
   }, []);
 
   return (
-    <Card className="auth-redirecting p-6 shadow-sm" data-testid="panel-redirecting">
+    <Card
+      className="auth-redirecting p-6 shadow-sm"
+      data-testid="panel-redirecting"
+    >
       <div className="flex items-center gap-2">
         <Loader2
           className="h-5 w-5 animate-spin text-primary"
@@ -504,21 +507,16 @@ function SignInPanel() {
           Two-step verification
         </div>
 
-        <h1 className="auth-title">
-          Enter your code
-        </h1>
+        <h1 className="auth-title">Enter your code</h1>
         <p className="auth-intro">
-          <span className="auth-account-email">{email}</span> has an
-          extra security step. Type the 6-digit code from your authenticator
-          app, or use one of your saved recovery codes.
+          <span className="auth-account-email">{email}</span> has an extra
+          security step. Type the 6-digit code from your authenticator app, or
+          use one of your saved recovery codes.
         </p>
 
         <form onSubmit={onVerifyCode} className="auth-form">
           <div className="space-y-2">
-            <Label
-              htmlFor="totp-code"
-              className="auth-label"
-            >
+            <Label htmlFor="totp-code" className="auth-label">
               Authentication code
             </Label>
             <Input
@@ -600,9 +598,7 @@ function SignInPanel() {
         Secure sign-in
       </div>
 
-      <h1 className="auth-title">
-        Welcome back
-      </h1>
+      <h1 className="auth-title">Welcome back</h1>
       <p className="auth-intro">
         Sign in and we&apos;ll take you straight to your workspace.
       </p>
@@ -642,10 +638,7 @@ function SignInPanel() {
         </div>
         <div className="space-y-2">
           <div className="auth-label-row">
-            <Label
-              htmlFor="password"
-              className="auth-label"
-            >
+            <Label htmlFor="password" className="auth-label">
               Password
             </Label>
             <a
@@ -718,7 +711,9 @@ function SignInPanel() {
 
       <div className="auth-account-note">
         <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
-        <span>Your connection is secure. You only see what your account allows.</span>
+        <span>
+          Your connection is secure. You only see what your account allows.
+        </span>
       </div>
       <div className="auth-support-links">
         <a
@@ -728,10 +723,7 @@ function SignInPanel() {
         >
           Need an invitation?
         </a>
-        <a
-          href="/#trust"
-          className="auth-text-link auth-muted-link"
-        >
+        <a href="/#trust" className="auth-text-link auth-muted-link">
           Security and service status
         </a>
       </div>
@@ -1930,8 +1922,8 @@ function Portal() {
 
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-xs text-muted-foreground">
           <p>
-            Valo — Lagos, Nigeria. The Penalty Calculator is free for
-            everyone; the other workspaces need a sign-in.
+            Valo — Lagos, Nigeria. The Penalty Calculator is free for everyone;
+            the other workspaces need a sign-in.
           </p>
           <nav className="flex items-center gap-4" aria-label="Footer">
             <a

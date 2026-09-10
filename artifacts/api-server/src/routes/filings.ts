@@ -42,54 +42,66 @@ const router: IRouter = Router();
 // would intercept every request that merely flows past this router
 // (including the principal-less machine rails).
 
-router.get("/filings", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "filing.read");
-  const query = parseOrThrow(ListFilingsQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  // SEC-03: a client_user is pinned to its own party whatever the filter
-  // says; firm staff keep the filter they asked for (or none — firm-wide).
-  const clientPartyId = narrowToClientPartyScope(
-    req.principal,
-    query.clientPartyId,
-  );
-  const filings = await listFilings(firmId, {
-    clientPartyId,
-    status: query.status,
-    taxType: query.taxType,
-    limit: query.limit,
-    offset: query.offset,
-  });
-  res.json(ListFilingsResponse.parse({ filings }));
-});
+router.get(
+  "/filings",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "filing.read");
+    const query = parseOrThrow(ListFilingsQueryParams, req.query);
+    const firmId = requireFirmScope(req.principal);
+    // SEC-03: a client_user is pinned to its own party whatever the filter
+    // says; firm staff keep the filter they asked for (or none — firm-wide).
+    const clientPartyId = narrowToClientPartyScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const filings = await listFilings(firmId, {
+      clientPartyId,
+      status: query.status,
+      taxType: query.taxType,
+      limit: query.limit,
+      offset: query.offset,
+    });
+    res.json(ListFilingsResponse.parse({ filings }));
+  },
+);
 
 // Sync-now: the same mint the hourly sweep performs, on demand for THIS firm
 // (a firm that just onboarded a client need not wait for the loop). The
 // natural unique key makes the overlap free — an already-current register
 // mints zero.
-router.post("/filings/sync", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "filing.write");
-  const firmId = requireFirmScope(req.principal);
-  const minted = await mintFilingsForFirm(firmId);
-  res.json(SyncFilingsResponse.parse({ minted }));
-});
+router.post(
+  "/filings/sync",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "filing.write");
+    const firmId = requireFirmScope(req.principal);
+    const minted = await mintFilingsForFirm(firmId);
+    res.json(SyncFilingsResponse.parse({ minted }));
+  },
+);
 
-router.post("/filings/:id/status", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "filing.write");
-  const params = parseOrThrow(UpdateFilingStatusParams, req.params);
-  const body = parseOrThrow(UpdateFilingStatusBody, req.body);
-  const firmId = requireFirmScope(req.principal);
-  // The module's UPDATE carries the firm predicate (compare-and-set): a
-  // foreign tenant's id updates zero rows and 404s without disclosure.
-  const row = await updateFilingStatus(
-    params.id,
-    firmId,
-    body,
-    req.principal.userId,
-  );
-  if (!row) {
-    throw new DomainError("NOT_FOUND", "Filing not found", 404);
-  }
-  res.json(UpdateFilingStatusResponse.parse(row));
-});
+router.post(
+  "/filings/:id/status",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "filing.write");
+    const params = parseOrThrow(UpdateFilingStatusParams, req.params);
+    const body = parseOrThrow(UpdateFilingStatusBody, req.body);
+    const firmId = requireFirmScope(req.principal);
+    // The module's UPDATE carries the firm predicate (compare-and-set): a
+    // foreign tenant's id updates zero rows and 404s without disclosure.
+    const row = await updateFilingStatus(
+      params.id,
+      firmId,
+      body,
+      req.principal.userId,
+    );
+    if (!row) {
+      throw new DomainError("NOT_FOUND", "Filing not found", 404);
+    }
+    res.json(UpdateFilingStatusResponse.parse(row));
+  },
+);
 
 export default router;

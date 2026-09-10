@@ -13,7 +13,11 @@ import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
-import { CLERK_FLAG_KEY, embedWithLedger, type MemoryEmbedder } from "./gateway";
+import {
+  CLERK_FLAG_KEY,
+  embedWithLedger,
+  type MemoryEmbedder,
+} from "./gateway";
 import { embedderOrNull } from "./provider";
 import {
   alertOnceViaAuditLedger,
@@ -60,31 +64,107 @@ interface RetrievalQuery {
 // re-phrased). Growing it is append-only — the drop watch compares RATES,
 // so adding fixtures never reads as a regression.
 export const RETRIEVAL_DOCS: RetrievalDoc[] = [
-  { key: "vat_due", text: "When is our VAT return for May due and what happens if we file it late?" },
-  { key: "paye_remit", text: "How do I remit PAYE for our staff for last month?" },
-  { key: "wht_credit", text: "Can we use withholding tax credit notes against our VAT bill?" },
-  { key: "invoice_reject_tin", text: "Why was our invoice rejected with a TIN mismatch error?" },
-  { key: "buyer_unpaid", text: "Which buyers still have not paid us for June?" },
-  { key: "stamp_verify", text: "How can a customer verify the FIRS stamp on an invoice we sent them?" },
-  { key: "recon_missing", text: "Our bank statement shows money in that has no matching invoice — what should we do?" },
-  { key: "penalty_est", text: "Roughly what penalties do we owe on the two overdue filings?" },
-  { key: "cash_outlook", text: "How much cash should we expect to come in over the next month?" },
-  { key: "onboard_status", text: "How far along is the onboarding for our new client?" },
-  { key: "chase_ladder", text: "What reminder steps does the platform take before an unpaid invoice is escalated?" },
-  { key: "close_month", text: "What is left to do before we can close the books for July?" },
+  {
+    key: "vat_due",
+    text: "When is our VAT return for May due and what happens if we file it late?",
+  },
+  {
+    key: "paye_remit",
+    text: "How do I remit PAYE for our staff for last month?",
+  },
+  {
+    key: "wht_credit",
+    text: "Can we use withholding tax credit notes against our VAT bill?",
+  },
+  {
+    key: "invoice_reject_tin",
+    text: "Why was our invoice rejected with a TIN mismatch error?",
+  },
+  {
+    key: "buyer_unpaid",
+    text: "Which buyers still have not paid us for June?",
+  },
+  {
+    key: "stamp_verify",
+    text: "How can a customer verify the FIRS stamp on an invoice we sent them?",
+  },
+  {
+    key: "recon_missing",
+    text: "Our bank statement shows money in that has no matching invoice — what should we do?",
+  },
+  {
+    key: "penalty_est",
+    text: "Roughly what penalties do we owe on the two overdue filings?",
+  },
+  {
+    key: "cash_outlook",
+    text: "How much cash should we expect to come in over the next month?",
+  },
+  {
+    key: "onboard_status",
+    text: "How far along is the onboarding for our new client?",
+  },
+  {
+    key: "chase_ladder",
+    text: "What reminder steps does the platform take before an unpaid invoice is escalated?",
+  },
+  {
+    key: "close_month",
+    text: "What is left to do before we can close the books for July?",
+  },
 ];
 
 export const RETRIEVAL_QUERIES: RetrievalQuery[] = [
-  { key: "q_vat_deadline", text: "what's the deadline for the May VAT filing?", expectedDoc: "vat_due" },
-  { key: "q_paye", text: "paying employee PAYE for June — how does it work?", expectedDoc: "paye_remit" },
-  { key: "q_wht", text: "offsetting WHT credit notes against VAT owed", expectedDoc: "wht_credit" },
-  { key: "q_tin", text: "invoice bounced with a TIN mismatch", expectedDoc: "invoice_reject_tin" },
-  { key: "q_owed", text: "who still owes us money from last month?", expectedDoc: "buyer_unpaid" },
-  { key: "q_verify", text: "a customer wants to check our invoice stamp is genuine", expectedDoc: "stamp_verify" },
-  { key: "q_credit", text: "there's an unexplained credit on the bank statement", expectedDoc: "recon_missing" },
-  { key: "q_penalty", text: "how big is the fine for the late returns?", expectedDoc: "penalty_est" },
-  { key: "q_inflow", text: "expected receipts over the coming weeks", expectedDoc: "cash_outlook" },
-  { key: "q_close", text: "what month-end close steps remain?", expectedDoc: "close_month" },
+  {
+    key: "q_vat_deadline",
+    text: "what's the deadline for the May VAT filing?",
+    expectedDoc: "vat_due",
+  },
+  {
+    key: "q_paye",
+    text: "paying employee PAYE for June — how does it work?",
+    expectedDoc: "paye_remit",
+  },
+  {
+    key: "q_wht",
+    text: "offsetting WHT credit notes against VAT owed",
+    expectedDoc: "wht_credit",
+  },
+  {
+    key: "q_tin",
+    text: "invoice bounced with a TIN mismatch",
+    expectedDoc: "invoice_reject_tin",
+  },
+  {
+    key: "q_owed",
+    text: "who still owes us money from last month?",
+    expectedDoc: "buyer_unpaid",
+  },
+  {
+    key: "q_verify",
+    text: "a customer wants to check our invoice stamp is genuine",
+    expectedDoc: "stamp_verify",
+  },
+  {
+    key: "q_credit",
+    text: "there's an unexplained credit on the bank statement",
+    expectedDoc: "recon_missing",
+  },
+  {
+    key: "q_penalty",
+    text: "how big is the fine for the late returns?",
+    expectedDoc: "penalty_est",
+  },
+  {
+    key: "q_inflow",
+    text: "expected receipts over the coming weeks",
+    expectedDoc: "cash_outlook",
+  },
+  {
+    key: "q_close",
+    text: "what month-end close steps remain?",
+    expectedDoc: "close_month",
+  },
 ];
 
 function cosine(a: number[], b: number[]): number {
@@ -238,33 +318,37 @@ const AUTO_RETRIEVAL_FLAG_KEY = "clerk_auto_retrieval_eval";
 // in memory.ts).
 const RETRIEVAL_SWEEP_LOCK_ID = 731_851;
 
-registerSweep("clerk.retrieval_auto_eval", async function sweepRetrievalAutoEval(): Promise<void> {
-  const due = await runInBypassContext(async () => {
-    const locked = await tryAdvisoryXactLock(RETRIEVAL_SWEEP_LOCK_ID);
-    if (!locked) return false;
-    // Each run spends platform tokens: opt-in flag, at most once per UTC
-    // day, and the kill switch checked here too (the phrasing-watch M2
-    // rationale — a dark clerk_ai must not redden sweep health all day).
-    if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
-    if (!(await isFeatureEnabled(AUTO_RETRIEVAL_FLAG_KEY))) return false;
-    return unattendedRunDueToday(clerkRetrievalEvalRunsTable);
-  });
-  if (!due) return;
-  try {
-    const embedder = await embedderOrNull();
-    if (!embedder) return;
-    const run = await runRetrievalEval(null, embedder);
-    logger.info(
-      { fixtureCount: run.fixtureCount, hits: run.hits, mrr: run.mrr },
-      "retrieval lane: nightly eval run complete",
-    );
-  } catch (err) {
-    logger.warn(
-      { err },
-      "retrieval lane: nightly eval skipped (clerk disabled or provider unavailable)",
-    );
-  }
-}, { critical: false });
+registerSweep(
+  "clerk.retrieval_auto_eval",
+  async function sweepRetrievalAutoEval(): Promise<void> {
+    const due = await runInBypassContext(async () => {
+      const locked = await tryAdvisoryXactLock(RETRIEVAL_SWEEP_LOCK_ID);
+      if (!locked) return false;
+      // Each run spends platform tokens: opt-in flag, at most once per UTC
+      // day, and the kill switch checked here too (the phrasing-watch M2
+      // rationale — a dark clerk_ai must not redden sweep health all day).
+      if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
+      if (!(await isFeatureEnabled(AUTO_RETRIEVAL_FLAG_KEY))) return false;
+      return unattendedRunDueToday(clerkRetrievalEvalRunsTable);
+    });
+    if (!due) return;
+    try {
+      const embedder = await embedderOrNull();
+      if (!embedder) return;
+      const run = await runRetrievalEval(null, embedder);
+      logger.info(
+        { fixtureCount: run.fixtureCount, hits: run.hits, mrr: run.mrr },
+        "retrieval lane: nightly eval run complete",
+      );
+    } catch (err) {
+      logger.warn(
+        { err },
+        "retrieval lane: nightly eval skipped (clerk disabled or provider unavailable)",
+      );
+    }
+  },
+  { critical: false },
+);
 
 // ---- Drop watch -------------------------------------------------------------
 
@@ -310,8 +394,7 @@ export function detectRetrievalQualityDrop(
   const drops: RetrievalQualityDrop[] = [];
   const baseFixtures = baseline.reduce((a, r) => a + r.fixtureCount, 0);
   if (baseFixtures > 0) {
-    const baseRecall =
-      baseline.reduce((a, r) => a + r.hits, 0) / baseFixtures;
+    const baseRecall = baseline.reduce((a, r) => a + r.hits, 0) / baseFixtures;
     const newRecall = newest.hits / newest.fixtureCount;
     if (baseRecall - newRecall >= DROP_POINTS) {
       drops.push({
@@ -387,4 +470,6 @@ export async function sweepRetrievalWatch(
   });
 }
 
-registerSweep("clerk.retrieval_watch", atMostHourly(sweepRetrievalWatch), { critical: false });
+registerSweep("clerk.retrieval_watch", atMostHourly(sweepRetrievalWatch), {
+  critical: false,
+});

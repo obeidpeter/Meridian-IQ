@@ -20,7 +20,11 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { Download, Percent } from "lucide-react";
-import { formatLagosDate, formatNaira, severityBadgeClasses } from "@/lib/format";
+import {
+  formatLagosDate,
+  formatNaira,
+  severityBadgeClasses,
+} from "@/lib/format";
 
 // Monthly VAT position (contract 0.45.0): output VAT from the client's own
 // issued documents against input VAT from their captured supplier bills, one
@@ -260,7 +264,10 @@ export function Vat() {
             <CardHeader>
               <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
                 <span className="flex items-center gap-2">
-                  <Percent className="w-4 h-4 text-primary" aria-hidden="true" />
+                  <Percent
+                    className="w-4 h-4 text-primary"
+                    aria-hidden="true"
+                  />
                   {position.monthLabel}
                 </span>
                 <span className="flex items-center gap-2">

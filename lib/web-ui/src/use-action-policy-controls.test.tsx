@@ -88,18 +88,14 @@ describe("useActionPolicyControls", () => {
 
   test("confirmGrant refuses a non-automatable kind even with a valid cap", () => {
     const { rendered, grantCalls } = harness({});
-    act(() =>
-      rendered.result.current.beginAutomate({ kind: "draft_chasers" }),
-    );
+    act(() => rendered.result.current.beginAutomate({ kind: "draft_chasers" }));
     act(() => rendered.result.current.confirmGrant());
     expect(grantCalls).toEqual([]);
   });
 
   test("confirmGrant sends kind + client + the chosen cap, and success closes the dialog", () => {
     const { rendered, grantCalls } = harness({});
-    act(() =>
-      rendered.result.current.beginAutomate({ kind: "retry_failed" }),
-    );
+    act(() => rendered.result.current.beginAutomate({ kind: "retry_failed" }));
     act(() => rendered.result.current.setCapInput("25"));
     act(() => rendered.result.current.confirmGrant());
     expect(grantCalls).toEqual([
@@ -139,9 +135,9 @@ describe("useActionPolicyControls", () => {
       policies: { enabled: true, policies: [paused, active] },
     });
     expect(rendered.result.current.livePolicies).toEqual([paused, active]);
-    expect(
-      rendered.result.current.policyByKind.get("submit_overdue"),
-    ).toEqual(paused);
+    expect(rendered.result.current.policyByKind.get("submit_overdue")).toEqual(
+      paused,
+    );
     expect(rendered.result.current.policyByKind.has("draft_chasers")).toBe(
       false,
     );

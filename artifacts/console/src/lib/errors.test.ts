@@ -93,7 +93,11 @@ describe("serverErrorToast", () => {
 
   test("relays the server's own words as the description", () => {
     const { calls, toast } = capture();
-    serverErrorToast(toast, { data: { error: "TIN is not valid" } }, "Try again.");
+    serverErrorToast(
+      toast,
+      { data: { error: "TIN is not valid" } },
+      "Try again.",
+    );
     expect(calls).toEqual([
       {
         title: "Something went wrong",

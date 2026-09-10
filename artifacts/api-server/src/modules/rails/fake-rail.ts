@@ -1,4 +1,9 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import type { Socket } from "node:net";
 import type { CanonicalInvoice } from "../invoice/canonical";
 import {
@@ -112,7 +117,12 @@ function send(
 }
 
 /** Answer and drop the connection: a half-read request must not poison the keep-alive pool. */
-function sendAndClose(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): void {
+function sendAndClose(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+): void {
   // An early iterator exit or immediate destroy resets Windows TCP before the
   // response arrives. Discard the rest without buffering, but never let a
   // stalled upload/reader extend the rejected socket's lifetime indefinitely.
@@ -130,7 +140,9 @@ function invoiceNumberOf(body: unknown): string | null {
   return typeof number === "string" && number.length > 0 ? number : null;
 }
 
-export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRail> {
+export async function startFakeRail(
+  opts: FakeRailOptions = {},
+): Promise<FakeRail> {
   const host = opts.host ?? "127.0.0.1";
   const secret = opts.secret ?? DEFAULT_SECRET;
   const faults = new FaultScript();
@@ -146,7 +158,10 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
 
   function record(
     req: IncomingMessage,
-    partial: Omit<FakeRailCall, "method" | "path" | "authorized" | "idempotencyHeader">,
+    partial: Omit<
+      FakeRailCall,
+      "method" | "path" | "authorized" | "idempotencyHeader"
+    >,
   ): void {
     const header = req.headers["idempotency-key"];
     calls.push({
@@ -171,7 +186,10 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
     });
   }
 
-  async function handleSubmit(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function handleSubmit(
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> {
     let body: unknown;
     try {
       body = await readJson(req);
@@ -186,27 +204,41 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       });
       sendAndClose(req, res, tooLarge ? 413 : 500, {
         code: tooLarge ? "PAYLOAD_TOO_LARGE" : "UNREADABLE_BODY",
-        message: tooLarge ? "body over the fake rail's limit" : "unreadable body",
+        message: tooLarge
+          ? "body over the fake rail's limit"
+          : "unreadable body",
       });
       return;
     }
-    const idempotencyKey = (body as { idempotencyKey?: unknown } | null)?.idempotencyKey;
+    const idempotencyKey = (body as { idempotencyKey?: unknown } | null)
+      ?.idempotencyKey;
     const rail = (body as { rail?: unknown } | null)?.rail;
     const invoiceNumber = invoiceNumberOf(body);
-    const invoice = (body as { invoice?: unknown } | null)?.invoice as CanonicalInvoice | undefined;
+    const invoice = (body as { invoice?: unknown } | null)?.invoice as
+      | CanonicalInvoice
+      | undefined;
     const meta = {
       rail: typeof rail === "string" ? rail : null,
       invoiceNumber,
-      idempotencyKey: typeof idempotencyKey === "string" ? idempotencyKey : null,
+      idempotencyKey:
+        typeof idempotencyKey === "string" ? idempotencyKey : null,
     };
     if (!authorized(req)) {
       record(req, { ...meta, outcome: "unauthorized", httpStatus: 401 });
       send(res, 401, { code: "RAIL_UNAUTHORIZED", message: "bad credentials" });
       return;
     }
-    if (typeof idempotencyKey !== "string" || !idempotencyKey || !invoice || !invoiceNumber) {
+    if (
+      typeof idempotencyKey !== "string" ||
+      !idempotencyKey ||
+      !invoice ||
+      !invoiceNumber
+    ) {
       record(req, { ...meta, outcome: "bad_request", httpStatus: 400 });
-      send(res, 400, { code: "BAD_REQUEST", message: "idempotencyKey and invoice are required" });
+      send(res, 400, {
+        code: "BAD_REQUEST",
+        message: "idempotencyKey and invoice are required",
+      });
       return;
     }
     // A key this rail already accepted is a duplicate whatever the script
@@ -216,27 +248,50 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
       send(res, 409, { code: "MBS_DUPLICATE", message: "already stamped" });
       return;
     }
-    const fault = faults.next(invoiceNumber, "submit") ?? { outcome: "accept" as const };
+    const fault = faults.next(invoiceNumber, "submit") ?? {
+      outcome: "accept" as const,
+    };
     const shape = RAIL_FAULT_TABLE[fault.outcome];
     switch (fault.outcome) {
       case "accept": {
         const stamp = deterministicStamp(invoice, idempotencyKey, secret);
         held.set(idempotencyKey, stamp);
-        record(req, { ...meta, outcome: "accept", httpStatus: shape.httpStatus });
+        record(req, {
+          ...meta,
+          outcome: "accept",
+          httpStatus: shape.httpStatus,
+        });
         send(res, shape.httpStatus, stamp);
         return;
       }
       case "duplicate": {
         if (fault.holdsStamp) {
-          held.set(idempotencyKey, deterministicStamp(invoice, idempotencyKey, secret));
+          held.set(
+            idempotencyKey,
+            deterministicStamp(invoice, idempotencyKey, secret),
+          );
         }
-        record(req, { ...meta, outcome: "duplicate", httpStatus: shape.httpStatus });
-        send(res, shape.httpStatus, { code: "MBS_DUPLICATE", message: "already stamped" });
+        record(req, {
+          ...meta,
+          outcome: "duplicate",
+          httpStatus: shape.httpStatus,
+        });
+        send(res, shape.httpStatus, {
+          code: "MBS_DUPLICATE",
+          message: "already stamped",
+        });
         return;
       }
       case "reject": {
-        const code = sanitiseRejectionCode(fault.code) ?? shape.errorCode ?? "MBS_SCHEMA_INVALID";
-        record(req, { ...meta, outcome: "reject", httpStatus: shape.httpStatus });
+        const code =
+          sanitiseRejectionCode(fault.code) ??
+          shape.errorCode ??
+          "MBS_SCHEMA_INVALID";
+        record(req, {
+          ...meta,
+          outcome: "reject",
+          httpStatus: shape.httpStatus,
+        });
         send(res, shape.httpStatus, { code, message: `rejected: ${code}` });
         return;
       }
@@ -249,32 +304,64 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
         // The rail DID stamp when holdsStamp: the answer just never made
         // sense to the client — the case the retry-then-409 path recovers.
         if (fault.holdsStamp) {
-          held.set(idempotencyKey, deterministicStamp(invoice, idempotencyKey, secret));
+          held.set(
+            idempotencyKey,
+            deterministicStamp(invoice, idempotencyKey, secret),
+          );
         }
-        record(req, { ...meta, outcome: "malformed", httpStatus: shape.httpStatus });
-        send(res, shape.httpStatus, { stamp: "not the shape the profile defines" });
+        record(req, {
+          ...meta,
+          outcome: "malformed",
+          httpStatus: shape.httpStatus,
+        });
+        send(res, shape.httpStatus, {
+          stamp: "not the shape the profile defines",
+        });
         return;
       }
       case "rate_limit":
       case "unavailable":
       case "unauthorized": {
-        record(req, { ...meta, outcome: fault.outcome, httpStatus: shape.httpStatus });
+        record(req, {
+          ...meta,
+          outcome: fault.outcome,
+          httpStatus: shape.httpStatus,
+        });
         const headers: Record<string, string> =
           fault.outcome === "rate_limit"
-            ? { "retry-after": String(Math.max(0, Math.floor(fault.retryAfterSeconds ?? 1))) }
+            ? {
+                "retry-after": String(
+                  Math.max(0, Math.floor(fault.retryAfterSeconds ?? 1)),
+                ),
+              }
             : {};
-        send(res, shape.httpStatus, { code: shape.errorCode, message: fault.outcome }, headers);
+        send(
+          res,
+          shape.httpStatus,
+          { code: shape.errorCode, message: fault.outcome },
+          headers,
+        );
         return;
       }
     }
   }
 
-  function handleLookup(req: IncomingMessage, res: ServerResponse, encodedKey: string): void {
+  function handleLookup(
+    req: IncomingMessage,
+    res: ServerResponse,
+    encodedKey: string,
+  ): void {
     let idempotencyKey: string;
     try {
       idempotencyKey = decodeURIComponent(encodedKey);
     } catch {
-      record(req, { rail: null, invoiceNumber: null, idempotencyKey: encodedKey, outcome: "bad_request", httpStatus: 400 });
+      record(req, {
+        rail: null,
+        invoiceNumber: null,
+        idempotencyKey: encodedKey,
+        outcome: "bad_request",
+        httpStatus: 400,
+      });
       send(res, 400, { code: "BAD_REQUEST" });
       return;
     }
@@ -290,7 +377,11 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
     const fault = invoiceNumber ? faults.next(invoiceNumber, "lookup") : null;
     if (fault && fault.outcome !== "accept") {
       const shape = RAIL_FAULT_TABLE[fault.outcome];
-      record(req, { ...meta, outcome: `lookup_${fault.outcome}`, httpStatus: shape.httpStatus });
+      record(req, {
+        ...meta,
+        outcome: `lookup_${fault.outcome}`,
+        httpStatus: shape.httpStatus,
+      });
       if (fault.outcome === "timeout") {
         holdOpen(res);
         return;
@@ -303,7 +394,10 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
         send(res, 404, { code: "NOT_FOUND" });
         return;
       }
-      send(res, shape.httpStatus, { code: shape.errorCode, message: fault.outcome });
+      send(res, shape.httpStatus, {
+        code: shape.errorCode,
+        message: fault.outcome,
+      });
       return;
     }
     const stamp = held.get(idempotencyKey);
@@ -316,7 +410,11 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
     send(res, 200, stamp);
   }
 
-  async function handleControl(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+  async function handleControl(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+  ): Promise<void> {
     if (req.method === "GET" && path === "/__fake/healthz") {
       send(res, 200, { ok: true, held: held.size, calls: calls.length });
       return;
@@ -354,15 +452,23 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
         !isRailFaultOutcome(script.outcome) ||
         (script.op !== undefined && !isRailFaultOp(script.op))
       ) {
-        send(res, 400, { code: "BAD_REQUEST", message: "invoiceNumber and a known outcome are required" });
+        send(res, 400, {
+          code: "BAD_REQUEST",
+          message: "invoiceNumber and a known outcome are required",
+        });
         return;
       }
       const fault: RailFault = { outcome: script.outcome };
-      if (typeof script.code === "string" && script.code) fault.code = script.code;
-      if (typeof script.times === "number" && script.times > 0) fault.times = Math.floor(script.times);
+      if (typeof script.code === "string" && script.code)
+        fault.code = script.code;
+      if (typeof script.times === "number" && script.times > 0)
+        fault.times = Math.floor(script.times);
       if (script.holdsStamp === true) fault.holdsStamp = true;
       if (isRailFaultOp(script.op)) fault.op = script.op;
-      if (typeof script.retryAfterSeconds === "number" && script.retryAfterSeconds >= 0) {
+      if (
+        typeof script.retryAfterSeconds === "number" &&
+        script.retryAfterSeconds >= 0
+      ) {
         fault.retryAfterSeconds = script.retryAfterSeconds;
       }
       faults.script(script.invoiceNumber, fault);
@@ -386,7 +492,10 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
           await handleControl(req, res, path);
         } else if (req.method === "POST" && path === "/v0/submissions") {
           await handleSubmit(req, res);
-        } else if (req.method === "GET" && path.startsWith("/v0/submissions/")) {
+        } else if (
+          req.method === "GET" &&
+          path.startsWith("/v0/submissions/")
+        ) {
           handleLookup(req, res, path.slice("/v0/submissions/".length));
         } else {
           send(res, 404, { code: "NOT_FOUND" });
@@ -410,7 +519,8 @@ export async function startFakeRail(opts: FakeRailOptions = {}): Promise<FakeRai
     });
   });
   const address = server.address();
-  const port = typeof address === "object" && address ? address.port : (opts.port ?? 0);
+  const port =
+    typeof address === "object" && address ? address.port : (opts.port ?? 0);
 
   return {
     url: `http://${host}:${port}`,

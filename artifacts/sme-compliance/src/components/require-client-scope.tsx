@@ -42,8 +42,8 @@ export function RequireClientScope({
                 </>
               ) : (
                 <>
-                  Your account isn't scoped to a client business, so there's
-                  no {thing} to show here. Sign in with a client account.
+                  Your account isn't scoped to a client business, so there's no{" "}
+                  {thing} to show here. Sign in with a client account.
                 </>
               )}
             </span>

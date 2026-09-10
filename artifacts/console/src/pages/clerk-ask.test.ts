@@ -31,7 +31,10 @@ const answer = (over: Partial<ClerkAnswer>): ClerkAnswer => ({
 describe("heldAnswer", () => {
   test("a successful ask replaces the held answer", () => {
     const first = answer({});
-    const second = answer({ proposition: "₦1.2m is overdue.", dataIntent: "overdue" });
+    const second = answer({
+      proposition: "₦1.2m is overdue.",
+      dataIntent: "overdue",
+    });
     expect(heldAnswer(null, { type: "success", answer: first })).toBe(first);
     expect(heldAnswer(first, { type: "success", answer: second })).toBe(second);
   });
@@ -42,7 +45,9 @@ describe("heldAnswer", () => {
       answered: false,
       refusalReason: "No active claim covers this.",
     });
-    expect(heldAnswer(prev, { type: "success", answer: refusal })).toBe(refusal);
+    expect(heldAnswer(prev, { type: "success", answer: refusal })).toBe(
+      refusal,
+    );
   });
 
   test("a failed follow-up keeps the previous answer on screen", () => {
@@ -113,7 +118,10 @@ describe("planLine", () => {
     expect(
       planLine({
         plan: [
-          { key: "data.submitted_this_month", title: "This month's submissions" },
+          {
+            key: "data.submitted_this_month",
+            title: "This month's submissions",
+          },
           { key: "data.month_delta", title: "Month-on-month change" },
         ],
       }),
@@ -170,14 +178,18 @@ describe("AnswerCard sections rendering", () => {
         text: "3 invoices were submitted.",
         dataIntent: "data.submitted_this_month",
         dataParams: { month: "June 2026" },
-        facts: [{ key: "count", label: "Submitted", kind: "count", value: "3" }],
+        facts: [
+          { key: "count", label: "Submitted", kind: "count", value: "3" },
+        ],
       },
       {
         title: "May 2026",
         text: "2 invoices were submitted.",
         dataIntent: "data.submitted_this_month",
         dataParams: { month: "May 2026" },
-        facts: [{ key: "count", label: "Submitted", kind: "count", value: "2" }],
+        facts: [
+          { key: "count", label: "Submitted", kind: "count", value: "2" },
+        ],
       },
     ],
   });
@@ -212,7 +224,9 @@ describe("AnswerCard sections rendering", () => {
         answer: answer({
           dataIntent: "data.overdue_invoices",
           dataParams: { month: "June 2026" },
-          facts: [{ key: "count", label: "Overdue", kind: "count", value: "2" }],
+          facts: [
+            { key: "count", label: "Overdue", kind: "count", value: "2" },
+          ],
         }),
       }),
     );

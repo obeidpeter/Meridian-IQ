@@ -68,7 +68,9 @@ describe("onboardingStepLabel", () => {
       "Filings register backfilled",
     );
     expect(
-      onboardingStepLabel("future_step" as Parameters<typeof onboardingStepLabel>[0]),
+      onboardingStepLabel(
+        "future_step" as Parameters<typeof onboardingStepLabel>[0],
+      ),
     ).toBe("future_step");
   });
 });
@@ -134,7 +136,11 @@ function position(over: Partial<OpeningPosition> = {}): OpeningPosition {
       ],
       topDebtors: [],
     } as unknown as OpeningPosition["receivables"],
-    payables: { clientPartyId: "cp-1", groups: [], topSuppliers: [] } as unknown as OpeningPosition["payables"],
+    payables: {
+      clientPartyId: "cp-1",
+      groups: [],
+      topSuppliers: [],
+    } as unknown as OpeningPosition["payables"],
     vat: { netVat: "12000.00" } as unknown as OpeningPosition["vat"],
     filings: { unfiled: 3, dueSoon: 1, overdue: 2, nextDueDate: "2026-08-21" },
     wht: { awaiting: 0, awaitingAmount: "0" },
@@ -213,10 +219,19 @@ describe("openingSummaryLines", () => {
           earliestIssueDate: null,
           latestIssueDate: null,
         },
-        receivables: { asOf: "2026-08-07", groups: [], topDebtors: [] } as unknown as OpeningPosition["receivables"],
+        receivables: {
+          asOf: "2026-08-07",
+          groups: [],
+          topDebtors: [],
+        } as unknown as OpeningPosition["receivables"],
         filings: { unfiled: 0, dueSoon: 0, overdue: 0, nextDueDate: null },
         wht: { awaiting: 2, awaitingAmount: "10000.00" },
-        obligations: { open: 1, dueSoon: 0, overdue: 1, nearestDue: "2026-08-15" },
+        obligations: {
+          open: 1,
+          dueSoon: 0,
+          overdue: 1,
+          nearestDue: "2026-08-15",
+        },
         automation: {
           windowMonths: 6,
           asOf: "2026-08-07",

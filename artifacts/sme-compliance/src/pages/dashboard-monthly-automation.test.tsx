@@ -8,7 +8,13 @@
 //    renders NOTHING — no placeholder — and never blocks granting.
 //  - Granting sends the month_end_close template for this client either way.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   AutomationEvidence,
@@ -123,8 +129,18 @@ describe("MonthlyAutomationStrip (consent dialog evidence)", () => {
       // reconcile_matches is not a plan step — it must not phrase a segment.
       evidenceKind({ kind: "reconcile_matches", sample: 40, agreed: 38 }),
       evidenceKind(),
-      evidenceKind({ kind: "retry_failed", sample: 5, agreed: 3, medianLeadDays: 2 }),
-      evidenceKind({ kind: "draft_recurring", sample: 3, agreed: 2, medianLeadDays: 6 }),
+      evidenceKind({
+        kind: "retry_failed",
+        sample: 5,
+        agreed: 3,
+        medianLeadDays: 2,
+      }),
+      evidenceKind({
+        kind: "draft_recurring",
+        sample: 3,
+        agreed: 2,
+        medianLeadDays: 6,
+      }),
     ]);
     renderStrip();
     await click(screen.getByTestId("button-plan-policy-grant"));
@@ -166,7 +182,12 @@ describe("MonthlyAutomationStrip (consent dialog evidence)", () => {
 
     // Every plan kind with an empty sample: no rate from nothing.
     harness.evidence.data = evidence([
-      evidenceKind({ sample: 0, agreed: 0, agreementRate: null, medianLeadDays: null }),
+      evidenceKind({
+        sample: 0,
+        agreed: 0,
+        agreementRate: null,
+        medianLeadDays: null,
+      }),
       evidenceKind({
         kind: "retry_failed",
         sample: 0,

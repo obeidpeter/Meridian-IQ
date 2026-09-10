@@ -138,16 +138,13 @@ router.get("/onboarding/runs/:id", async (req, res): Promise<void> => {
   res.json(GetOnboardingRunResponse.parse(await detailFor(req, run)));
 });
 
-router.post(
-  "/onboarding/runs/:id/refresh",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "engagement.write");
-    const params = parseOrThrow(RefreshOnboardingRunParams, req.params);
-    const firmId = requireFirmScope(req.principal);
-    const run = await refreshOnboardingRun(params.id, firmId);
-    res.json(RefreshOnboardingRunResponse.parse(await detailFor(req, run)));
-  },
-);
+router.post("/onboarding/runs/:id/refresh", async (req, res): Promise<void> => {
+  assertCan(req.principal, "engagement.write");
+  const params = parseOrThrow(RefreshOnboardingRunParams, req.params);
+  const firmId = requireFirmScope(req.principal);
+  const run = await refreshOnboardingRun(params.id, firmId);
+  res.json(RefreshOnboardingRunResponse.parse(await detailFor(req, run)));
+});
 
 router.post(
   "/onboarding/runs/:id/steps/:stepKey/skip",
@@ -207,70 +204,64 @@ router.get(
 // certify); zero model calls, so the route stays in the ambient request
 // transaction. Same read posture as the run detail — a client may download
 // its own report.
-router.get(
-  "/onboarding/runs/:id/report",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "engagement.read");
-    const params = parseOrThrow(GetOnboardingReportParams, req.params);
-    const firmId = requireFirmScope(req.principal);
-    const run = await getOnboardingRun(params.id, firmId);
-    assertClientPartyScope(req.principal, run.clientPartyId);
-    if (run.status !== "completed") {
-      throw new DomainError(
-        "REPORT_NOT_READY",
-        "The readiness report exists once the onboarding run completes",
-        409,
-      );
-    }
-    // The frozen baseline, defensively parsed (the opening-position route's
-    // drift rule); an unreadable or pre-Phase-2 blob renders as the honest
-    // "no baseline" section rather than failing the report.
-    const frozen = run.openingPosition
-      ? GetOnboardingOpeningPositionResponse.safeParse(run.openingPosition)
-      : null;
-    const brand = await loadFirmBrand(firmId);
-    const pdf = await renderOnboardingReportPdf({
-      run: await onboardingRunView(run),
-      position: frozen?.success
-        ? (frozen.data as unknown as OpeningPosition)
-        : null,
-      firmName: brand.name ?? "",
-      // A firm without an explicit brandName gets its own name in the brand
-      // header — loadFirmBrand (pdf-brand.ts), the one home every paper
-      // route uses.
-      theme: brand.theme,
-    });
-    // Pointer-only download audit (SEC-12): who pulled which run's report —
-    // never the content (the pack-download precedent).
-    await appendAudit({
-      actorId: req.principal.userId,
-      firmId,
-      action: "onboarding.report_downloaded",
-      entityType: "onboarding_run",
-      entityId: run.id,
-      after: { clientPartyId: run.clientPartyId },
-    });
-    sendPdfAttachment(
-      res,
-      `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`,
-      pdf,
+router.get("/onboarding/runs/:id/report", async (req, res): Promise<void> => {
+  assertCan(req.principal, "engagement.read");
+  const params = parseOrThrow(GetOnboardingReportParams, req.params);
+  const firmId = requireFirmScope(req.principal);
+  const run = await getOnboardingRun(params.id, firmId);
+  assertClientPartyScope(req.principal, run.clientPartyId);
+  if (run.status !== "completed") {
+    throw new DomainError(
+      "REPORT_NOT_READY",
+      "The readiness report exists once the onboarding run completes",
+      409,
     );
-  },
-);
+  }
+  // The frozen baseline, defensively parsed (the opening-position route's
+  // drift rule); an unreadable or pre-Phase-2 blob renders as the honest
+  // "no baseline" section rather than failing the report.
+  const frozen = run.openingPosition
+    ? GetOnboardingOpeningPositionResponse.safeParse(run.openingPosition)
+    : null;
+  const brand = await loadFirmBrand(firmId);
+  const pdf = await renderOnboardingReportPdf({
+    run: await onboardingRunView(run),
+    position: frozen?.success
+      ? (frozen.data as unknown as OpeningPosition)
+      : null,
+    firmName: brand.name ?? "",
+    // A firm without an explicit brandName gets its own name in the brand
+    // header — loadFirmBrand (pdf-brand.ts), the one home every paper
+    // route uses.
+    theme: brand.theme,
+  });
+  // Pointer-only download audit (SEC-12): who pulled which run's report —
+  // never the content (the pack-download precedent).
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId,
+    action: "onboarding.report_downloaded",
+    entityType: "onboarding_run",
+    entityId: run.id,
+    after: { clientPartyId: run.clientPartyId },
+  });
+  sendPdfAttachment(
+    res,
+    `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`,
+    pdf,
+  );
+});
 
-router.post(
-  "/onboarding/runs/:id/abandon",
-  async (req, res): Promise<void> => {
-    assertCan(req.principal, "engagement.write");
-    const params = parseOrThrow(AbandonOnboardingRunParams, req.params);
-    const firmId = requireFirmScope(req.principal);
-    const run = await abandonOnboardingRun(
-      params.id,
-      firmId,
-      req.principal.userId,
-    );
-    res.json(AbandonOnboardingRunResponse.parse(await detailFor(req, run)));
-  },
-);
+router.post("/onboarding/runs/:id/abandon", async (req, res): Promise<void> => {
+  assertCan(req.principal, "engagement.write");
+  const params = parseOrThrow(AbandonOnboardingRunParams, req.params);
+  const firmId = requireFirmScope(req.principal);
+  const run = await abandonOnboardingRun(
+    params.id,
+    firmId,
+    req.principal.userId,
+  );
+  res.json(AbandonOnboardingRunResponse.parse(await detailFor(req, run)));
+});
 
 export default router;

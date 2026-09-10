@@ -62,9 +62,9 @@ describe("actNowLine", () => {
   });
 
   test("pending and the s.104 floor compose, naira grouped", () => {
-    expect(
-      actNowLine(kind({ pending: 3, exposureFloorNgn: "50000" })),
-    ).toBe("Would act on 3 now · ₦50,000 s.104 floor risked in the window");
+    expect(actNowLine(kind({ pending: 3, exposureFloorNgn: "50000" }))).toBe(
+      "Would act on 3 now · ₦50,000 s.104 floor risked in the window",
+    );
   });
 
   test("exposure alone still renders with the risked framing", () => {

@@ -77,7 +77,9 @@ export async function runClaimFirstReminderSweep<Row>(
     string,
     typeof alertPreferencesTable.$inferSelect
   >();
-  const partyIds = [...new Set(candidates.map((row) => cfg.clientPartyIdOf(row)))];
+  const partyIds = [
+    ...new Set(candidates.map((row) => cfg.clientPartyIdOf(row))),
+  ];
   if (messagingOn && partyIds.length > 0) {
     const rows = await runInBypassContext(() =>
       getDb()

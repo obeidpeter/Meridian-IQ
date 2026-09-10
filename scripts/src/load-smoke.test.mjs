@@ -7,7 +7,10 @@ import { commandHeaders } from "./test-client.mjs";
 
 test("command fixtures issue unique keys and preserve an explicit replay key", () => {
   const first = commandHeaders();
-  assert.notEqual(commandHeaders()["x-idempotency-key"], first["x-idempotency-key"]);
+  assert.notEqual(
+    commandHeaders()["x-idempotency-key"],
+    first["x-idempotency-key"],
+  );
   assert.deepEqual(commandHeaders(first["x-idempotency-key"]), first);
   assert.equal(first["x-valo-csrf"], "1");
 });

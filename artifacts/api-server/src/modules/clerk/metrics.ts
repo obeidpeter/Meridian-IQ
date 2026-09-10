@@ -289,7 +289,10 @@ async function calibrationSample(
   windowDays: number,
   firmId?: string,
 ): Promise<
-  { extraction: ClerkExtraction | null; corrections: ClerkCorrection[] | null }[]
+  {
+    extraction: ClerkExtraction | null;
+    corrections: ClerkCorrection[] | null;
+  }[]
 > {
   return (
     await getDb().execute(sql`
@@ -310,9 +313,7 @@ async function calibrationSample(
   }[];
 }
 
-export async function getClerkMetrics(
-  windowDays = 30,
-): Promise<ClerkMetrics> {
+export async function getClerkMetrics(windowDays = 30): Promise<ClerkMetrics> {
   const db = getDb();
   const since = sql`now() - make_interval(days => ${windowDays})`;
 
@@ -482,9 +483,7 @@ export async function getClerkMetrics(
   const decidedWithUsage = perCaseRows[0]?.decided_cases ?? 0;
   const tokensPerDecidedCase =
     decidedWithUsage > 0
-      ? Number(
-          (Number(perCaseRows[0]!.tokens) / decidedWithUsage).toFixed(1),
-        )
+      ? Number((Number(perCaseRows[0]!.tokens) / decidedWithUsage).toFixed(1))
       : null;
 
   // USD estimate only when the operator has configured both per-million-token
@@ -502,9 +501,10 @@ export async function getClerkMetrics(
   const usdEstimate = (pt: number, ct: number): number | null =>
     Number.isFinite(inputRate) && Number.isFinite(outputRate)
       ? Number(
-          ((pt / 1_000_000) * inputRate + (ct / 1_000_000) * outputRate).toFixed(
-            4,
-          ),
+          (
+            (pt / 1_000_000) * inputRate +
+            (ct / 1_000_000) * outputRate
+          ).toFixed(4),
         )
       : null;
   const estimatedUsd = usdEstimate(promptTokens, completionTokens);

@@ -1,4 +1,15 @@
-import { and, asc, eq, gt, inArray, isNull, lt, lte, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -179,7 +190,10 @@ async function markBreaches(now: Date): Promise<number> {
         lt(b2cReportBatchesTable.deadlineAt, now),
       ),
     )
-    .returning({ id: b2cReportBatchesTable.id, firmId: b2cReportBatchesTable.firmId });
+    .returning({
+      id: b2cReportBatchesTable.id,
+      firmId: b2cReportBatchesTable.firmId,
+    });
   for (const b of breached) {
     await appendAudit({
       firmId: b.firmId,

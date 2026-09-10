@@ -244,7 +244,11 @@ async function inputAggregates(
 
 // The disclosure every position surface carries — one paragraph, the whole
 // basis, no soft-pedalling.
-function positionNote(label: string, scopeLine: string, now: Date = new Date()): string {
+function positionNote(
+  label: string,
+  scopeLine: string,
+  now: Date = new Date(),
+): string {
   return (
     `VAT position for ${label} by issue date (Lagos calendar), month to date${scopeLine}. ` +
     `Output VAT: invoices and credit notes issued in the month that cleared the e-invoicing rails (an accepted submission attempt, whenever it happened), net of credits, cancelled documents excluded — the VAT pack's basis. ` +

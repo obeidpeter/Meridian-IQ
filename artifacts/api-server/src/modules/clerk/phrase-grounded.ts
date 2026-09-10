@@ -100,7 +100,9 @@ export async function phraseGroundedDraft<T>(
     const text = opts.text(data);
     // Number grounding: a numeral the facts never stated → template answers
     // (grounding.ts). The allowed source is the exact composed user prompt.
-    if (!(await ensureGrounded(opts.groundingSurface, tenant, text, opts.user))) {
+    if (
+      !(await ensureGrounded(opts.groundingSurface, tenant, text, opts.user))
+    ) {
       return null;
     }
     return data;

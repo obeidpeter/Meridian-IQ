@@ -436,8 +436,8 @@ export function BillingStatementCard() {
                     className="text-xs text-muted-foreground"
                     data-testid="text-no-payments"
                   >
-                    No payments recorded yet — recording an intent computes
-                    the month&apos;s fee server-side and opens a checkout.
+                    No payments recorded yet — recording an intent computes the
+                    month&apos;s fee server-side and opens a checkout.
                   </p>
                 ) : (
                   <ul className="divide-y" data-testid="list-payment-intents">

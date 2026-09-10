@@ -40,7 +40,10 @@ const MAX_SUGGESTIONS = 3;
 // Exact match after stripping separators ("1234-5678" vs "12345678").
 // Anything else is 0: TINs are identifiers, not prose — near-misses are
 // different taxpayers, and a wrong pre-selected identity is worse than none.
-export function tinScore(extracted: string | null, party: string | null): number {
+export function tinScore(
+  extracted: string | null,
+  party: string | null,
+): number {
   const a = normalizeTin(extracted);
   const b = normalizeTin(party);
   if (a.length < 6 || b.length < 6) return 0;

@@ -168,4 +168,6 @@ export async function sweepStuckPendingCases(): Promise<number> {
 registerSweep("clerk.watchdog", runClerkWatchdog);
 registerSweep("clerk.stuck_pending_cases", sweepStuckPendingCases);
 registerSweep("clerk.expired_claims", sweepExpiredClaims);
-registerSweep("clerk.expired_case_content", sweepExpiredCaseContent, { critical: false });
+registerSweep("clerk.expired_case_content", sweepExpiredCaseContent, {
+  critical: false,
+});

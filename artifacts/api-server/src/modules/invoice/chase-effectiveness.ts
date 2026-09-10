@@ -58,8 +58,7 @@ export function summarizeChaseEffectiveness(
   const reminded = rows.filter((r) => r.reminders > 0 && r.firstReminderAt);
   // A settlement observed BEFORE the first reminder never credits it.
   const remindedSettled = reminded.filter(
-    (r) =>
-      r.settledAt !== null && r.settledAt > (r.firstReminderAt as string),
+    (r) => r.settledAt !== null && r.settledAt > (r.firstReminderAt as string),
   );
   // End of the Lagos day (asOf is a Lagos date string).
   const nowMs = new Date(`${asOf}T23:59:59+01:00`).getTime();
@@ -86,7 +85,9 @@ export function summarizeChaseEffectiveness(
   const issueToSettle = (list: ChaseOutcomeRow[]) =>
     list
       .filter((r) => r.settledAt !== null)
-      .map((r) => daysBetweenTs(`${r.issueDate}T00:00:00Z`, r.settledAt as string));
+      .map((r) =>
+        daysBetweenTs(`${r.issueDate}T00:00:00Z`, r.settledAt as string),
+      );
   const remindedDays = issueToSettle(reminded);
   const unremindedDays = issueToSettle(rows.filter((r) => r.reminders === 0));
 

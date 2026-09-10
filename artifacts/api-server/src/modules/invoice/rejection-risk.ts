@@ -129,7 +129,9 @@ export async function computeRejectionRisk(invoice: {
     .filter((r) => Number(r.supplier_n) > 0)
     .sort(byCount((r) => Number(r.supplier_n)))
     .slice(0, TOP_PER_SCOPE)
-    .map((r) => signal(r, "supplier", Number(r.supplier_n), r.supplier_last_seen));
+    .map((r) =>
+      signal(r, "supplier", Number(r.supplier_n), r.supplier_last_seen),
+    );
   const buyer = rows
     .filter((r) => Number(r.buyer_n) > 0)
     .sort(byCount((r) => Number(r.buyer_n)))

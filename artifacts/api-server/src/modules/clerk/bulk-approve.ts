@@ -166,7 +166,9 @@ export async function bulkApproveCases(
       // going — mirroring bulk-submit's per-row posture.
       if (err instanceof DomainError) {
         skip(
-          err.code === "CASE_DECIDED_CONFLICT" ? "already decided" : err.message,
+          err.code === "CASE_DECIDED_CONFLICT"
+            ? "already decided"
+            : err.message,
         );
       } else {
         skip("Approval failed unexpectedly");

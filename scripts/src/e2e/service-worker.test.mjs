@@ -126,10 +126,18 @@ test("account switch, revoked session and offline API requests never enter worke
 
 test("Valo upgrade removes previous-brand static caches but retains current and unrelated caches", async () => {
   const sw = worker();
-  for (const name of ["meridianiq-sme-static-v4", "valo-sme-static-v4", "valo-sme-static-v5", "sibling-static-v1"])
+  for (const name of [
+    "meridianiq-sme-static-v4",
+    "valo-sme-static-v4",
+    "valo-sme-static-v5",
+    "sibling-static-v1",
+  ])
     await sw.caches.open(name);
   await sw.dispatch("activate");
-  assert.deepEqual(await sw.caches.keys(), ["valo-sme-static-v5", "sibling-static-v1"]);
+  assert.deepEqual(await sw.caches.keys(), [
+    "valo-sme-static-v5",
+    "sibling-static-v1",
+  ]);
 });
 
 test("public fingerprinted assets work offline; private, no-store, HTML and bearer responses do not persist", async () => {

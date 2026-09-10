@@ -54,5 +54,5 @@ export const PAYABLES_INTENTS: readonly DataIntent[] = [
         // No links (see billAggregate).
       };
     },
-  }
+  },
 ];

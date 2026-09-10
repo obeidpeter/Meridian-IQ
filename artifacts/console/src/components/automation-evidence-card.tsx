@@ -68,8 +68,8 @@ export function AutomationEvidenceCard() {
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           Backtest over the last {evidence.windowMonths} months of this
-          firm&apos;s own ledgers — agreement between each dark automation
-          kind and the decisions your team made by hand.
+          firm&apos;s own ledgers — agreement between each dark automation kind
+          and the decisions your team made by hand.
         </p>
       </CardHeader>
       <CardContent>
@@ -99,8 +99,8 @@ export function AutomationEvidenceCard() {
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
           Deterministic replay of recorded ledgers — machine-made writes never
-          count as agreement. Evidence for deciding the automation flags, as
-          of {evidence.asOf}.
+          count as agreement. Evidence for deciding the automation flags, as of{" "}
+          {evidence.asOf}.
         </p>
       </CardContent>
     </Card>

@@ -663,7 +663,12 @@ async function draftRecurringEvidence(
 
   // Act-now: patterns alerting TODAY under the same replay (a superset of
   // the still-open historical cycles when a cycle first alerts this month).
-  const pendingNow = await pendingDraftRecurring(firmId, asOf, clientPartyId, data);
+  const pendingNow = await pendingDraftRecurring(
+    firmId,
+    asOf,
+    clientPartyId,
+    data,
+  );
 
   return {
     kind: "draft_recurring",

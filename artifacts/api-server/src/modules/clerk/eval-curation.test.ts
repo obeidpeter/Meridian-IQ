@@ -205,9 +205,7 @@ test("listEvalFixtures reconstructs history from stored runs and flags retiremen
         key: grownKey,
         fieldsCompared: 5,
         fieldsCorrect: 4,
-        mismatches: [
-          { field: "grandTotal", expected: "100", actual: "1" },
-        ],
+        mismatches: [{ field: "grandTotal", expected: "100", actual: "1" }],
       }),
       runResult({
         key: redKey,

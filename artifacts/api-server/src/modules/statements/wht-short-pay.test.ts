@@ -57,11 +57,13 @@ async function drainUntil(eventId: string): Promise<void> {
   assert.fail("outbox event did not settle within the drain budget");
 }
 
-async function seedStatement(lines: {
-  amount: string;
-  direction: "credit" | "debit";
-  narration: string;
-}[]): Promise<{ statementId: string; lineIds: string[] }> {
+async function seedStatement(
+  lines: {
+    amount: string;
+    direction: "credit" | "debit";
+    narration: string;
+  }[],
+): Promise<{ statementId: string; lineIds: string[] }> {
   const [statement] = await getDb()
     .insert(bankStatementsTable)
     .values({
@@ -129,9 +131,15 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `wht-shortpay-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `WHT SP Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `WHT SP Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `WHT SP Client ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `WHT SP Client ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `Corporate Buyer Plc ${SALT}` },
   ]);
   await db.insert(engagementsTable).values({
@@ -163,11 +171,34 @@ before(async () => {
     grandTotal,
     whtCategory,
   });
-  await db.insert(invoicesTable).values([
-    receivable(whtInvId, `SP-WHT-${SALT}`, "100000.00", "7500.00", "107500.00", "services_5"),
-    receivable(plainInvId, `SP-PLAIN-${SALT}`, "46511.63", "3488.37", "50000.00", null),
-    receivable(manualInvId, `SP-MAN-${SALT}`, "40000.00", "3000.00", "43000.00", "rent_10"),
-  ]);
+  await db
+    .insert(invoicesTable)
+    .values([
+      receivable(
+        whtInvId,
+        `SP-WHT-${SALT}`,
+        "100000.00",
+        "7500.00",
+        "107500.00",
+        "services_5",
+      ),
+      receivable(
+        plainInvId,
+        `SP-PLAIN-${SALT}`,
+        "46511.63",
+        "3488.37",
+        "50000.00",
+        null,
+      ),
+      receivable(
+        manualInvId,
+        `SP-MAN-${SALT}`,
+        "40000.00",
+        "3000.00",
+        "43000.00",
+        "rent_10",
+      ),
+    ]);
 });
 
 test("accepting a short-pay proposal settles the invoice AND mints the credit", async () => {

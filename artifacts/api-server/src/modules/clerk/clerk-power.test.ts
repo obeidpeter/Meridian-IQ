@@ -57,39 +57,47 @@ before(async () => {
     buyerName: `Power Buyer ${SALT}`,
     engagementTitle: `Power engagement ${SALT}`,
   });
-  await getDb().insert(firmsTable).values([
-    { id: digestFirmId, name: `Digest Firm ${SALT}` },
-    { id: clerkDigestFirmId, name: `Clerk Digest Firm ${SALT}` },
-  ]);
+  await getDb()
+    .insert(firmsTable)
+    .values([
+      { id: digestFirmId, name: `Digest Firm ${SALT}` },
+      { id: clerkDigestFirmId, name: `Clerk Digest Firm ${SALT}` },
+    ]);
   // The digest facts are RECEIVABLE-oriented (payables round): the counted
   // supplier must be an engaged client of the digest firm, or every count
   // below reads zero.
-  await getDb().insert(engagementsTable).values({
-    firmId: digestFirmId,
-    clientPartyId: supplierId,
-    type: "readiness_assessment",
-    title: `Digest engagement ${SALT}`,
-  });
+  await getDb()
+    .insert(engagementsTable)
+    .values({
+      firmId: digestFirmId,
+      clientPartyId: supplierId,
+      type: "readiness_assessment",
+      title: `Digest engagement ${SALT}`,
+    });
   // A captured supplier BILL in the digest firm (the engaged client is the
   // BUYER): draft forever, so it must NOT pollute the unsubmitted counters —
   // it surfaces only through the payables fact (due within 7 days).
-  await getDb().insert(partiesTable).values({
-    id: digestVendorId,
-    type: "buyer",
-    legalName: `Digest Vendor ${SALT}`,
-  });
+  await getDb()
+    .insert(partiesTable)
+    .values({
+      id: digestVendorId,
+      type: "buyer",
+      legalName: `Digest Vendor ${SALT}`,
+    });
   const billDue = new Date();
   billDue.setUTCDate(billDue.getUTCDate() + 3);
-  await getDb().insert(invoicesTable).values({
-    firmId: digestFirmId,
-    supplierPartyId: digestVendorId,
-    buyerPartyId: supplierId,
-    invoiceNumber: `DIG-BILL-${SALT}`,
-    status: "draft",
-    issueDate: new Date().toISOString().slice(0, 10),
-    dueDate: billDue.toISOString().slice(0, 10),
-    grandTotal: "500.00",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      firmId: digestFirmId,
+      supplierPartyId: digestVendorId,
+      buyerPartyId: supplierId,
+      invoiceNumber: `DIG-BILL-${SALT}`,
+      status: "draft",
+      issueDate: new Date().toISOString().slice(0, 10),
+      dueDate: billDue.toISOString().slice(0, 10),
+      grandTotal: "500.00",
+    });
 });
 
 after(async () => {
@@ -262,9 +270,7 @@ test("a successful extraction stores its pre-flight verdict on the case", async 
       text: `INVOICE PF-DIRTY-${SALT}`,
     },
     userId,
-    fakeGateway(() =>
-      extractionJson({ ...CLEAN_VALUES, invoiceNumber: null }),
-    ),
+    fakeGateway(() => extractionJson({ ...CLEAN_VALUES, invoiceNumber: null })),
     undefined,
     { firmId },
   );
@@ -283,7 +289,10 @@ function batchGateway() {
     if (req.schemaName === "invoice_segmentation") {
       return JSON.stringify({
         invoices: [
-          { text: `INVOICE BATCH-A-${SALT} total 100`, label: `BATCH-A-${SALT}` },
+          {
+            text: `INVOICE BATCH-A-${SALT} total 100`,
+            label: `BATCH-A-${SALT}`,
+          },
           { text: `INVOICE BATCH-B-${SALT} total 200`, label: null },
         ],
       });
@@ -401,8 +410,14 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
   });
   assert.equal(busy.headline, "3 invoices need attention this week.");
   assert.equal(busy.bullets.length, 16);
-  assert.match(busy.bullets[0], /2 invoices are past the 7-day submission window/);
-  assert.match(busy.bullets[5], /2 regular invoices look unraised across 1 client/);
+  assert.match(
+    busy.bullets[0],
+    /2 invoices are past the 7-day submission window/,
+  );
+  assert.match(
+    busy.bullets[5],
+    /2 regular invoices look unraised across 1 client/,
+  );
   assert.match(
     busy.bullets[6],
     /2 invoices \(NGN 150000\.00\) are expected to be paid in the coming week/,
@@ -511,7 +526,12 @@ test("computeDigestFacts counts from the firm's invoices via SQL", async () => {
       invoiceNumber: `DIG-OVERDUE-${SALT}`,
       issueDate: past.toISOString().slice(0, 10),
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "1000", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,
@@ -528,7 +548,12 @@ test("computeDigestFacts counts from the firm's invoices via SQL", async () => {
       invoiceNumber: `DIG-DUESOON-${SALT}`,
       issueDate: recent.toISOString().slice(0, 10),
       lines: [
-        { description: "Goods", quantity: "1", unitPrice: "500", vatRate: "0.075" },
+        {
+          description: "Goods",
+          quantity: "1",
+          unitPrice: "500",
+          vatRate: "0.075",
+        },
       ],
     },
     userId,

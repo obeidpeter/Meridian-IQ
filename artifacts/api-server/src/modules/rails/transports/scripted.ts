@@ -72,7 +72,9 @@ export function scriptedRail(opts: ScriptedRailOptions = {}): ScriptedRail {
       calls.length = 0;
     },
     async submit(rail: Rail, inv: CanonicalInvoice, idempotencyKey: string) {
-      const fault = faults.next(inv.invoiceNumber, "submit") ?? { outcome: "accept" };
+      const fault = faults.next(inv.invoiceNumber, "submit") ?? {
+        outcome: "accept",
+      };
       if (
         (fault.outcome === "duplicate" || fault.outcome === "malformed") &&
         fault.holdsStamp &&
@@ -106,13 +108,16 @@ export function scriptedRail(opts: ScriptedRailOptions = {}): ScriptedRail {
           outcome: fault.outcome,
         });
         // reject / duplicate make no sense on a GET: read them as a miss.
-        if (fault.outcome === "reject" || fault.outcome === "duplicate") return null;
+        if (fault.outcome === "reject" || fault.outcome === "duplicate")
+          return null;
         throw new RailLookupError(
           rail,
           RAIL_FAULT_TABLE[fault.outcome].errorCode ?? "RAIL_PROTOCOL",
         );
       }
-      const stamp = fault ? (held.get(inv.invoiceNumber) ?? {}) : held.get(inv.invoiceNumber);
+      const stamp = fault
+        ? (held.get(inv.invoiceNumber) ?? {})
+        : held.get(inv.invoiceNumber);
       calls.push({
         op: "lookup",
         rail,

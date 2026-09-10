@@ -27,9 +27,10 @@ const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 // so a day-31 "now" can never skip a short month.
 function previousMonth(): string {
   const now = new Date();
-  return localDayIso(
-    new Date(now.getFullYear(), now.getMonth() - 1, 1),
-  ).slice(0, 7);
+  return localDayIso(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(
+    0,
+    7,
+  );
 }
 
 /**
@@ -101,7 +102,10 @@ export function Statements() {
           });
         },
         onError: () =>
-          toast({ title: "Could not generate statement", variant: "destructive" }),
+          toast({
+            title: "Could not generate statement",
+            variant: "destructive",
+          }),
       },
     );
   };
@@ -116,7 +120,10 @@ export function Statements() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+          <h1
+            className="text-2xl md:text-3xl font-bold"
+            data-testid="text-page-title"
+          >
             Revenue-share statements
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -209,7 +216,10 @@ export function Statements() {
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                   <div>
                     <p className="font-semibold flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-primary" aria-hidden="true" />
+                      <FileText
+                        className="w-4 h-4 text-primary"
+                        aria-hidden="true"
+                      />
                       {s.firmName ?? "Firm"} · {s.period}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -220,10 +230,13 @@ export function Statements() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => exportCsv([s], `${s.firmName ?? s.firmId}-${s.period}`)}
+                    onClick={() =>
+                      exportCsv([s], `${s.firmName ?? s.firmId}-${s.period}`)
+                    }
                     data-testid={`button-export-${s.id}`}
                   >
-                    <Download className="w-4 h-4 mr-1" aria-hidden="true" /> Export
+                    <Download className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
+                    Export
                   </Button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -244,11 +257,15 @@ export function Statements() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Overage</p>
-                    <p className="font-medium tabular-nums">{formatNaira(s.overageAmount)}</p>
+                    <p className="font-medium tabular-nums">
+                      {formatNaira(s.overageAmount)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Billing total</p>
-                    <p className="font-medium tabular-nums">{formatNaira(s.billingAmount)}</p>
+                    <p className="font-medium tabular-nums">
+                      {formatNaira(s.billingAmount)}
+                    </p>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t flex items-center justify-between">

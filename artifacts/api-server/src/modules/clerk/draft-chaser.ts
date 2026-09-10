@@ -97,7 +97,6 @@ export interface ChaserFactsInput {
   lastReminderAt: string | null;
 }
 
-
 // The facts the model may phrase — nothing else reaches the prompt. Pure and
 // exported for tests.
 export function chaserFacts(input: ChaserFactsInput): string {
@@ -238,10 +237,7 @@ export async function stagePaymentChaser(
   assertSameTenant(principal, invoice.firmId);
   assertClientPartyScope(principal, invoice.supplierPartyId);
 
-  if (
-    invoice.kind !== "invoice" ||
-    !CHASEABLE.has(invoice.status)
-  ) {
+  if (invoice.kind !== "invoice" || !CHASEABLE.has(invoice.status)) {
     throw new DomainError(
       "NOT_CHASEABLE",
       "Only an outstanding receivable (issued and not yet settled) can be chased",

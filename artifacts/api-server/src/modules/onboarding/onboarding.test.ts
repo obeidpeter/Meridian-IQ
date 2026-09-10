@@ -167,7 +167,9 @@ test("the journey: facts settle steps one by one; completion claims once", async
 
   // At creation: filings backfill has already executed (machine step), the
   // duplicate scan flags clientDupe (same TIN), everything else is pending.
-  let view = await onboardingRunView(await refreshOnboardingRun(run.id, firmId));
+  let view = await onboardingRunView(
+    await refreshOnboardingRun(run.id, firmId),
+  );
   const byKey = () => new Map(view.steps.map((s) => [s.key, s]));
   let steps = byKey();
   assert.equal(steps.get("filings_synced")?.status, "done");
@@ -327,9 +329,8 @@ test("the journey: facts settle steps one by one; completion claims once", async
   // generated response schema — the module shape and the spec's $ref
   // composition (ClientVatPosition, ReceivablesSummary, …) drift apart
   // silently otherwise, and the route would 500 on the first real read.
-  const { GetOnboardingOpeningPositionResponse } = await import(
-    "@workspace/api-zod"
-  );
+  const { GetOnboardingOpeningPositionResponse } =
+    await import("@workspace/api-zod");
   GetOnboardingOpeningPositionResponse.parse(frozen);
   GetOnboardingOpeningPositionResponse.parse(live);
 
@@ -363,7 +364,10 @@ test("the journey: facts settle steps one by one; completion claims once", async
   assert.ok(firmWide);
   assert.ok(firmWide.facts.some((f) => f.key === "onboarding_active"));
   view = await onboardingRunView(settled);
-  assert.equal(view.steps.find((s) => s.key === "duplicates_reviewed")?.status, "skipped");
+  assert.equal(
+    view.steps.find((s) => s.key === "duplicates_reviewed")?.status,
+    "skipped",
+  );
 
   // Exactly ONE completion audit despite refresh converging again.
   await refreshOnboardingRun(run.id, firmId);
@@ -480,7 +484,13 @@ test("firm scoping: lists stay inside the firm; foreign ids 404 without disclosu
     isDomainError("NOT_FOUND", 404),
   );
   await assert.rejects(
-    skipOnboardingStep(anyRun.id, otherFirmId, "consent_captured", "nope", userId),
+    skipOnboardingStep(
+      anyRun.id,
+      otherFirmId,
+      "consent_captured",
+      "nope",
+      userId,
+    ),
     isDomainError("NOT_FOUND", 404),
   );
   await assert.rejects(

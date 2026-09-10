@@ -95,9 +95,9 @@ describe("PayablesCard", () => {
     expect(card.textContent).toContain("Due later");
     // The folded later bucket: weeks 2-4 plus later = 130,000 across 4.
     expect(card.textContent).toContain("130,000");
-    expect(
-      screen.getByTestId("payables-supplier-sp-1").textContent,
-    ).toContain("Dangote Cement");
+    expect(screen.getByTestId("payables-supplier-sp-1").textContent).toContain(
+      "Dangote Cement",
+    );
     expect(
       screen.getByTestId("link-view-bills").getAttribute("href"),
     ).toContain("/bills");

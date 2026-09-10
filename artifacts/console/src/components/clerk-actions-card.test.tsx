@@ -15,7 +15,13 @@
 // Plus the console-only mount rule: past decisions keep the card visible
 // even when a dark clerk_actions flag empties the proposals.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   ActionProposal,
@@ -319,8 +325,18 @@ describe("ClerkActionsCard (console)", () => {
     const { rerenderCard } = renderCard();
     await openResults({
       decision: decision([
-        { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
-        { invoiceId: "inv-2", invoiceNumber: "INV-002", outcome: "submitted", error: null },
+        {
+          invoiceId: "inv-1",
+          invoiceNumber: "INV-001",
+          outcome: "submitted",
+          error: null,
+        },
+        {
+          invoiceId: "inv-2",
+          invoiceNumber: "INV-002",
+          outcome: "submitted",
+          error: null,
+        },
       ]),
       drafts: null,
     });
@@ -342,7 +358,12 @@ describe("ClerkActionsCard (console)", () => {
     const { invalidatedKeys, rerenderCard } = renderCard();
     await openResults({
       decision: decision([
-        { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+        {
+          invoiceId: "inv-1",
+          invoiceNumber: "INV-001",
+          outcome: "submitted",
+          error: null,
+        },
       ]),
       drafts: null,
     });
@@ -374,7 +395,12 @@ describe("ClerkActionsCard (console)", () => {
 
     await openResults({
       decision: decision([
-        { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+        {
+          invoiceId: "inv-1",
+          invoiceNumber: "INV-001",
+          outcome: "submitted",
+          error: null,
+        },
       ]),
       drafts: null,
     });
@@ -445,7 +471,14 @@ describe("ClerkActionsCard (console)", () => {
     await openResults(
       {
         decision: decision(
-          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "drafted", error: null }],
+          [
+            {
+              invoiceId: "inv-1",
+              invoiceNumber: "INV-001",
+              outcome: "drafted",
+              error: null,
+            },
+          ],
           { kind: "draft_chasers" },
         ),
         drafts: [draft],
@@ -467,7 +500,12 @@ describe("ClerkActionsCard (console)", () => {
     harness.decisions.data = {
       decisions: [
         decision([
-          { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+          {
+            invoiceId: "inv-1",
+            invoiceNumber: "INV-001",
+            outcome: "submitted",
+            error: null,
+          },
         ]),
       ],
     };
@@ -622,11 +660,25 @@ describe("ClerkActionsCard (console)", () => {
     harness.decisions.data = {
       decisions: [
         decision(
-          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null }],
+          [
+            {
+              invoiceId: "inv-1",
+              invoiceNumber: "INV-001",
+              outcome: "submitted",
+              error: null,
+            },
+          ],
           { policyId: "pol-1" },
         ),
         decision(
-          [{ invoiceId: "inv-2", invoiceNumber: "INV-002", outcome: "submitted", error: null }],
+          [
+            {
+              invoiceId: "inv-2",
+              invoiceNumber: "INV-002",
+              outcome: "submitted",
+              error: null,
+            },
+          ],
           { id: "dec-2" },
         ),
       ],
@@ -758,7 +810,12 @@ describe("ClerkActionsCard (console)", () => {
     harness.decisions.data = {
       decisions: [
         decision([
-          { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+          {
+            invoiceId: "inv-1",
+            invoiceNumber: "INV-001",
+            outcome: "submitted",
+            error: null,
+          },
         ]),
       ],
     };

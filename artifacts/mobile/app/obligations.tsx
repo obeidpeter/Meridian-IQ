@@ -62,7 +62,11 @@ function ObligationRow({
     .join(", ");
 
   return (
-    <View accessible accessibilityLabel={a11yLabel} testID={`obligation-${obligation.id}`}>
+    <View
+      accessible
+      accessibilityLabel={a11yLabel}
+      testID={`obligation-${obligation.id}`}
+    >
       <Card style={{ gap: 6 }}>
         <View style={rowBetween}>
           <AppText
@@ -174,4 +178,3 @@ export default function ObligationsScreen() {
     </>
   );
 }
-

@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { getDb, auditEventsTable } from "@workspace/db";
 import auditRouter from "../../routes/audit.ts";
-import {
-  appendAudit,
-  exportAuditBundle,
-  verifyChain,
-} from "./audit.ts";
+import { appendAudit, exportAuditBundle, verifyChain } from "./audit.ts";
 import {
   appFor,
   listen,
@@ -112,23 +108,41 @@ test("the export bundle is one window with the verification of exactly those row
     complete: true,
   });
   const firstPage = await exportAuditBundle({ afterSeq: seqs[0], limit: 1 });
-  assert.deepEqual(firstPage.events.map((e) => e.seq), [seqs[1]]);
+  assert.deepEqual(
+    firstPage.events.map((e) => e.seq),
+    [seqs[1]],
+  );
   assert.equal(firstPage.complete, false);
   assert.equal(firstPage.verification.complete, false);
 });
 
 test("routes: verify and export take a window; the CSV ledger reports its cursor", async () => {
-  const base = await listen(appFor(crossTenantPrincipal("operator"), auditRouter as express.Router));
+  const base = await listen(
+    appFor(crossTenantPrincipal("operator"), auditRouter as express.Router),
+  );
 
   const verify = (await (
     await fetch(`${base}/audit/verify?afterSeq=${seqs[0]}&limit=1`)
   ).json()) as Record<string, unknown>;
-  assert.deepEqual(verify, { valid: true, count: 1, brokenAtSeq: null, lastSeq: seqs[1], complete: false });
+  assert.deepEqual(verify, {
+    valid: true,
+    count: 1,
+    brokenAtSeq: null,
+    lastSeq: seqs[1],
+    complete: false,
+  });
 
   const exported = (await (
     await fetch(`${base}/audit/export?afterSeq=${seqs[0]}&limit=1`)
-  ).json()) as { events: { seq: number }[]; lastSeq: number | null; complete: boolean };
-  assert.deepEqual(exported.events.map((e) => e.seq), [seqs[1]]);
+  ).json()) as {
+    events: { seq: number }[];
+    lastSeq: number | null;
+    complete: boolean;
+  };
+  assert.deepEqual(
+    exported.events.map((e) => e.seq),
+    [seqs[1]],
+  );
   assert.equal(exported.lastSeq, seqs[1]);
   assert.equal(exported.complete, false);
 

@@ -95,10 +95,8 @@ const stepProps = (
   month: { enum: string[] };
   client: { enum: string[] };
 } =>
-  (
-    (schema.properties as { steps: { items: { properties: unknown } } }).steps
-      .items.properties
-  ) as {
+  (schema.properties as { steps: { items: { properties: unknown } } }).steps
+    .items.properties as {
     key: { enum: string[] };
     month: { enum: string[] };
     client: { enum: string[] };
@@ -463,7 +461,9 @@ test("a data answer runs zero lookups for a foreign firm id", async () => {
   // lookup returns firm B's row and nothing of firm A's.
   const result = await lookup("data.overdue_submissions", firmB);
   assert.equal(result?.facts.find((f) => f.key === "count")?.value, "1");
-  assert.ok(result?.facts.find((f) => f.key === "sample")?.value.includes(FOREIGN_NUM));
+  assert.ok(
+    result?.facts.find((f) => f.key === "sample")?.value.includes(FOREIGN_NUM),
+  );
   assert.ok(!result?.text.includes(OVERDUE_NUM));
 });
 
@@ -578,9 +578,14 @@ test("a parameter the lookup cannot honour refuses — never a silently unfilter
       month: MONTHS[1].key,
     }),
   );
-  const monthCase = await askClerk("Overdue in a past month?", askerId, monthGateway, {
-    firmId: firmA,
-  });
+  const monthCase = await askClerk(
+    "Overdue in a past month?",
+    askerId,
+    monthGateway,
+    {
+      firmId: firmA,
+    },
+  );
   assert.equal(monthCase.status, "escalated");
   assert.equal(monthCase.answer?.answered, false);
   assert.ok(
@@ -672,7 +677,10 @@ test("money intents: outstanding, expected inflows and chase list", async () => 
     }),
   );
   assert.ok(scoped);
-  assert.match(scoped.text, new RegExp(`Nothing is outstanding for DI Party Z ${SALT}`));
+  assert.match(
+    scoped.text,
+    new RegExp(`Nothing is outstanding for DI Party Z ${SALT}`),
+  );
 
   // Firm isolation: firm B's only invoice is a draft — and firm A's rows
   // must never bleed into its answer.
@@ -696,7 +704,10 @@ test("payables intents: bills due and total owed are buyer-side, client-pinnable
   const owed = await lookup("data.total_owed");
   assert.ok(owed);
   assert.equal(owed.facts.find((f) => f.key === "count")?.value, "2");
-  assert.equal(owed.facts.find((f) => f.key === "total_value")?.value, "500.00");
+  assert.equal(
+    owed.facts.find((f) => f.key === "total_value")?.value,
+    "500.00",
+  );
   assert.ok(owed.text.includes(BILL_OLD_NUM));
   assert.equal(owed.links, undefined);
 
@@ -721,7 +732,11 @@ test("payables intents: bills due and total owed are buyer-side, client-pinnable
   // oriented) — the earlier overdue test's count of 3 already pins this;
   // here the sample is checked by name.
   const overdue = await lookup("data.overdue_submissions");
-  assert.ok(!overdue?.facts.find((f) => f.key === "sample")?.value.includes(BILL_OLD_NUM));
+  assert.ok(
+    !overdue?.facts
+      .find((f) => f.key === "sample")
+      ?.value.includes(BILL_OLD_NUM),
+  );
 });
 
 test("data.vat_position phrases platform-computed totals — client-pinnable, month-aware and linkless", async () => {
@@ -822,7 +837,10 @@ test("multi-turn: a previous data answer threads follow-up context by keys only"
     prompts[0].includes("data.overdue_submissions"),
     "previous intent named",
   );
-  assert.ok(prompts[0].includes("client c1"), "client carried as an opaque key");
+  assert.ok(
+    prompts[0].includes("client c1"),
+    "client carried as an opaque key",
+  );
   assert.ok(
     !prompts[0].includes(partyA),
     "raw party ids never reach the prompt",
@@ -932,11 +950,16 @@ test("client-scoped Ask offers only the caller's own party and pins the lookup t
       client: "none",
     });
   });
-  const kase = await askClerk(`What is overdue? ${SALT}`, clientAskerId, gateway, {
-    firmId: firmA,
-    clientScoped: true,
-    clientPartyId: partyA2,
-  });
+  const kase = await askClerk(
+    `What is overdue? ${SALT}`,
+    clientAskerId,
+    gateway,
+    {
+      firmId: firmA,
+      clientScoped: true,
+      clientPartyId: partyA2,
+    },
+  );
   assert.equal(kase.status, "approved");
   assert.equal(kase.answer?.answered, true);
   assert.equal(kase.answer?.dataIntent, "data.overdue_submissions");
@@ -1070,12 +1093,17 @@ test("multi-turn for a client threads only its OWN cases; firm staff keep firm-w
       client: "none",
     });
   });
-  await askClerk(`And unsubmitted too? ${SALT}`, clientAskerId, ownFollowGateway, {
-    firmId: firmA,
-    clientScoped: true,
-    clientPartyId: partyA2,
-    previousCaseId: ownCase.id,
-  });
+  await askClerk(
+    `And unsubmitted too? ${SALT}`,
+    clientAskerId,
+    ownFollowGateway,
+    {
+      firmId: firmA,
+      clientScoped: true,
+      clientPartyId: partyA2,
+      previousCaseId: ownCase.id,
+    },
+  );
   assert.ok(
     ownPrompts[0].includes("Previous question context"),
     "the client's own thread still carries context",
@@ -1094,10 +1122,15 @@ test("multi-turn for a client threads only its OWN cases; firm staff keep firm-w
       client: "none",
     });
   });
-  await askClerk(`And unsubmitted, colleague? ${SALT}`, secondStaffId, staff2Gateway, {
-    firmId: firmA,
-    previousCaseId: staffCase.id,
-  });
+  await askClerk(
+    `And unsubmitted, colleague? ${SALT}`,
+    secondStaffId,
+    staff2Gateway,
+    {
+      firmId: firmA,
+      previousCaseId: staffCase.id,
+    },
+  );
   assert.ok(
     staff2Prompts[0].includes("Previous question context"),
     "firm staff threading stays firm-wide",
@@ -1136,13 +1169,20 @@ test("a data answer carries open-the-invoice links with real invoice ids", async
     assert.equal(link.kind, "invoice");
     const row = await invoiceById(link.id);
     assert.ok(row, "every link id is a real invoice row");
-    assert.equal(row.invoiceNumber, link.label, "id and label name the same invoice");
+    assert.equal(
+      row.invoiceNumber,
+      link.label,
+      "id and label name the same invoice",
+    );
     assert.equal(row.firmId, firmA, "links never leave the asker's firm");
   }
 
   // The full ask path spreads the links into the stored answer.
   const gateway = fakeGateway(() =>
-    JSON.stringify({ claimKey: "data.overdue_submissions", category: "unknown" }),
+    JSON.stringify({
+      claimKey: "data.overdue_submissions",
+      category: "unknown",
+    }),
   );
   const kase = await askClerk(`Overdue with links? ${SALT}`, askerId, gateway, {
     firmId: firmA,
@@ -1175,7 +1215,10 @@ test("chase-list answers link the named invoices; linkless intents stay linkless
   assert.equal(scoped.links.length, 2);
 
   // Deliberately linkless: debtor rankings, inflow projections, allowance.
-  assert.equal((await lookup("data.outstanding_receivables"))?.links, undefined);
+  assert.equal(
+    (await lookup("data.outstanding_receivables"))?.links,
+    undefined,
+  );
   assert.equal((await lookup("data.expected_inflows"))?.links, undefined);
   assert.equal((await lookup("data.clerk_allowance"))?.links, undefined);
   // An empty sample carries no links key at all (additive, never noisy).
@@ -1222,35 +1265,57 @@ test("a client-scoped ask's links stay within the client's own invoices (SEC-03)
 
 test("register answers and refusals carry no links", async () => {
   const claimKey = `test.link_free_claim_${SALT}`;
-  await getDb().insert(claimRecordsTable).values({
-    claimKey,
-    version: 1,
-    state: "active",
-    title: `Link-free claim ${SALT}`,
-    proposition: "The standard VAT rate is {rate}.",
-    protectedFacts: [
-      { key: "rate", label: "Standard rate", kind: "rate", value: "7.5", unit: "%" },
-    ],
-    citation: "Test Act s.1",
-    effectiveFrom: "2020-01-01",
-    createdBy: askerId,
-  });
+  await getDb()
+    .insert(claimRecordsTable)
+    .values({
+      claimKey,
+      version: 1,
+      state: "active",
+      title: `Link-free claim ${SALT}`,
+      proposition: "The standard VAT rate is {rate}.",
+      protectedFacts: [
+        {
+          key: "rate",
+          label: "Standard rate",
+          kind: "rate",
+          value: "7.5",
+          unit: "%",
+        },
+      ],
+      citation: "Test Act s.1",
+      effectiveFrom: "2020-01-01",
+      createdBy: askerId,
+    });
   const claimGateway = fakeGateway(() =>
     JSON.stringify({ claimKey, category: "unknown" }),
   );
-  const claimCase = await askClerk(`What is the rate? ${SALT}`, askerId, claimGateway, {
-    firmId: firmA,
-  });
+  const claimCase = await askClerk(
+    `What is the rate? ${SALT}`,
+    askerId,
+    claimGateway,
+    {
+      firmId: firmA,
+    },
+  );
   assert.equal(claimCase.status, "approved");
   assert.equal(claimCase.answer?.claimKey, claimKey);
-  assert.equal(claimCase.answer?.links, undefined, "claim answers carry no links");
+  assert.equal(
+    claimCase.answer?.links,
+    undefined,
+    "claim answers carry no links",
+  );
 
   const refuseGateway = fakeGateway(() =>
     JSON.stringify({ claimKey: "none", category: "unknown" }),
   );
-  const refused = await askClerk(`Unanswerable? ${SALT}`, askerId, refuseGateway, {
-    firmId: firmA,
-  });
+  const refused = await askClerk(
+    `Unanswerable? ${SALT}`,
+    askerId,
+    refuseGateway,
+    {
+      firmId: firmA,
+    },
+  );
   assert.equal(refused.answer?.answered, false);
   assert.equal(refused.answer?.links, undefined, "refusals carry no links");
 });
@@ -1278,43 +1343,45 @@ test("data.open_obligations counts open notices, pins to a client and stays clie
   // Seed: an open due-soon notice for partyA, an open overdue one for
   // partyA2, a closed one (never counted) and a foreign firm's (never
   // visible to firm A).
-  await getDb().insert(obligationsTable).values([
-    {
-      firmId: firmA,
-      clientPartyId: partyA,
-      noticeType: "assessment",
-      authority: "firs",
-      reference: `OBL-A-${SALT}`,
-      responseDueDate: lagosDateOffset(3),
-      createdBy: askerId,
-    },
-    {
-      firmId: firmA,
-      clientPartyId: partyA2,
-      noticeType: "demand",
-      authority: "state_irs",
-      reference: `OBL-Z-${SALT}`,
-      responseDueDate: lagosDateOffset(-2),
-      createdBy: askerId,
-    },
-    {
-      firmId: firmA,
-      clientPartyId: partyA,
-      noticeType: "reminder",
-      authority: "firs",
-      status: "closed",
-      responseDueDate: lagosDateOffset(1),
-      createdBy: askerId,
-    },
-    {
-      firmId: firmB,
-      clientPartyId: partyB,
-      noticeType: "assessment",
-      authority: "firs",
-      responseDueDate: lagosDateOffset(1),
-      createdBy: askerId,
-    },
-  ]);
+  await getDb()
+    .insert(obligationsTable)
+    .values([
+      {
+        firmId: firmA,
+        clientPartyId: partyA,
+        noticeType: "assessment",
+        authority: "firs",
+        reference: `OBL-A-${SALT}`,
+        responseDueDate: lagosDateOffset(3),
+        createdBy: askerId,
+      },
+      {
+        firmId: firmA,
+        clientPartyId: partyA2,
+        noticeType: "demand",
+        authority: "state_irs",
+        reference: `OBL-Z-${SALT}`,
+        responseDueDate: lagosDateOffset(-2),
+        createdBy: askerId,
+      },
+      {
+        firmId: firmA,
+        clientPartyId: partyA,
+        noticeType: "reminder",
+        authority: "firs",
+        status: "closed",
+        responseDueDate: lagosDateOffset(1),
+        createdBy: askerId,
+      },
+      {
+        firmId: firmB,
+        clientPartyId: partyB,
+        noticeType: "assessment",
+        authority: "firs",
+        responseDueDate: lagosDateOffset(1),
+        createdBy: askerId,
+      },
+    ]);
 
   // Firm-wide: two open (one due soon, one overdue); the nearest deadline is
   // the overdue one; the closed and foreign rows never count.
@@ -1426,40 +1493,42 @@ test("data.open_filings counts unfiled returns, pins to a client and stays clien
   // partyA2 (prepared still owes the authority a return), a filed one (never
   // counted) and a foreign firm's (never visible to firm A). Far-past
   // periods keep the natural key clear of any sweep-minted rows.
-  await getDb().insert(filingReturnsTable).values([
-    {
-      firmId: firmA,
-      clientPartyId: partyA,
-      taxType: "vat",
-      period: "2097-01",
-      dueDate: lagosDateOffset(3),
-      status: "upcoming",
-    },
-    {
-      firmId: firmA,
-      clientPartyId: partyA2,
-      taxType: "paye",
-      period: "2097-01",
-      dueDate: lagosDateOffset(-2),
-      status: "prepared",
-    },
-    {
-      firmId: firmA,
-      clientPartyId: partyA,
-      taxType: "paye",
-      period: "2097-02",
-      dueDate: lagosDateOffset(1),
-      status: "filed",
-    },
-    {
-      firmId: firmB,
-      clientPartyId: partyB,
-      taxType: "vat",
-      period: "2097-01",
-      dueDate: lagosDateOffset(1),
-      status: "upcoming",
-    },
-  ]);
+  await getDb()
+    .insert(filingReturnsTable)
+    .values([
+      {
+        firmId: firmA,
+        clientPartyId: partyA,
+        taxType: "vat",
+        period: "2097-01",
+        dueDate: lagosDateOffset(3),
+        status: "upcoming",
+      },
+      {
+        firmId: firmA,
+        clientPartyId: partyA2,
+        taxType: "paye",
+        period: "2097-01",
+        dueDate: lagosDateOffset(-2),
+        status: "prepared",
+      },
+      {
+        firmId: firmA,
+        clientPartyId: partyA,
+        taxType: "paye",
+        period: "2097-02",
+        dueDate: lagosDateOffset(1),
+        status: "filed",
+      },
+      {
+        firmId: firmB,
+        clientPartyId: partyB,
+        taxType: "vat",
+        period: "2097-01",
+        dueDate: lagosDateOffset(1),
+        status: "upcoming",
+      },
+    ]);
 
   // Firm-wide: two unfiled (one due soon, one overdue); the next filing date
   // is the overdue one's; the filed and foreign rows never count.
@@ -1538,57 +1607,61 @@ test("data.wht_credits counts the chase ledger, pins to a client and stays clien
   // partyA2's note received (never in the awaiting count or sum).
   const whtInvA = randomUUID();
   const whtInvZ = randomUUID();
-  await getDb().insert(invoicesTable).values([
-    {
-      id: whtInvA,
-      firmId: firmA,
-      supplierPartyId: partyA,
-      buyerPartyId: vendorParty,
-      invoiceNumber: `WHT-A-${SALT}`,
-      status: "settled",
-      issueDate: lagosDateOffset(-40),
-      subtotal: "100000.00",
-      vatTotal: "7500.00",
-      grandTotal: "107500.00",
-      whtCategory: "services_5",
-    },
-    {
-      id: whtInvZ,
-      firmId: firmA,
-      supplierPartyId: partyA2,
-      buyerPartyId: vendorParty,
-      invoiceNumber: `WHT-Z-${SALT}`,
-      status: "settled",
-      issueDate: lagosDateOffset(-40),
-      subtotal: "40000.00",
-      vatTotal: "3000.00",
-      grandTotal: "43000.00",
-      whtCategory: "rent_10",
-    },
-  ]);
-  await getDb().insert(whtCreditsTable).values([
-    {
-      firmId: firmA,
-      clientPartyId: partyA,
-      invoiceId: whtInvA,
-      category: "services_5",
-      amount: "5000.00",
-      deductedDate: lagosDateOffset(-10),
-      source: "manual",
-    },
-    {
-      firmId: firmA,
-      clientPartyId: partyA2,
-      invoiceId: whtInvZ,
-      category: "rent_10",
-      amount: "4000.00",
-      deductedDate: lagosDateOffset(-20),
-      source: "manual",
-      status: "note_received",
-      noteReference: `NOTE-${SALT}`,
-      noteDate: lagosDateOffset(-1),
-    },
-  ]);
+  await getDb()
+    .insert(invoicesTable)
+    .values([
+      {
+        id: whtInvA,
+        firmId: firmA,
+        supplierPartyId: partyA,
+        buyerPartyId: vendorParty,
+        invoiceNumber: `WHT-A-${SALT}`,
+        status: "settled",
+        issueDate: lagosDateOffset(-40),
+        subtotal: "100000.00",
+        vatTotal: "7500.00",
+        grandTotal: "107500.00",
+        whtCategory: "services_5",
+      },
+      {
+        id: whtInvZ,
+        firmId: firmA,
+        supplierPartyId: partyA2,
+        buyerPartyId: vendorParty,
+        invoiceNumber: `WHT-Z-${SALT}`,
+        status: "settled",
+        issueDate: lagosDateOffset(-40),
+        subtotal: "40000.00",
+        vatTotal: "3000.00",
+        grandTotal: "43000.00",
+        whtCategory: "rent_10",
+      },
+    ]);
+  await getDb()
+    .insert(whtCreditsTable)
+    .values([
+      {
+        firmId: firmA,
+        clientPartyId: partyA,
+        invoiceId: whtInvA,
+        category: "services_5",
+        amount: "5000.00",
+        deductedDate: lagosDateOffset(-10),
+        source: "manual",
+      },
+      {
+        firmId: firmA,
+        clientPartyId: partyA2,
+        invoiceId: whtInvZ,
+        category: "rent_10",
+        amount: "4000.00",
+        deductedDate: lagosDateOffset(-20),
+        source: "manual",
+        status: "note_received",
+        noteReference: `NOTE-${SALT}`,
+        noteDate: lagosDateOffset(-1),
+      },
+    ]);
 
   // Firm-wide: one awaiting (partyA's 5000), one received; linkless.
   const firmWide = await lookup("data.wht_credits");

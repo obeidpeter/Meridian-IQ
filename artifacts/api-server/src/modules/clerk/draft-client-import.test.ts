@@ -112,7 +112,11 @@ test("a hallucinated optional column is dropped, the draft survives", async () =
 
 test("discarded model output is a clean 502, never a partial draft", async () => {
   await assert.rejects(
-    draftClientImportWithClerk(SAMPLE, firmId, fakeGateway(() => "not json")),
+    draftClientImportWithClerk(
+      SAMPLE,
+      firmId,
+      fakeGateway(() => "not json"),
+    ),
     (err: Error & { code?: string; status?: number }) =>
       err.code === "CLERK_DRAFT_FAILED" && err.status === 502,
   );
@@ -133,7 +137,11 @@ test("a preamble label repeating the header text cannot hijack the header row", 
   );
   assert.equal(draft.rows.length, 1);
   assert.equal(draft.rows[0].legalName, `Adaeze Foods ${SALT} Ltd`);
-  assert.equal(draft.rows[0].city, "Ikeja", "columns resolved on the real header");
+  assert.equal(
+    draft.rows[0].city,
+    "Ikeja",
+    "columns resolved on the real header",
+  );
 });
 
 test("a data cell cannot vouch for a proposed column", async () => {
@@ -171,7 +179,11 @@ test("a proposal matching two identical headers is ambiguous and dropped", async
       }),
     ),
   );
-  assert.equal(draft.columns.email, null, "ambiguous column resolves to nothing");
+  assert.equal(
+    draft.columns.email,
+    null,
+    "ambiguous column resolves to nothing",
+  );
   assert.equal(draft.rows[0].legalName, `Adaeze Foods ${SALT} Ltd`);
 });
 

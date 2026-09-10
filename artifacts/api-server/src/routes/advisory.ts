@@ -35,7 +35,9 @@ const router: IRouter = Router();
 // ADV-01: the readiness-assessment questionnaire template (client-facing kit).
 router.get("/assessments/questionnaire", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.read");
-  res.json(GetAssessmentQuestionnaireResponse.parse(getQuestionnaireTemplate()));
+  res.json(
+    GetAssessmentQuestionnaireResponse.parse(getQuestionnaireTemplate()),
+  );
 });
 
 // ADV-01: run an assessment. The gap report + remediation plan are persisted as
@@ -128,9 +130,7 @@ router.post("/vat-risk/analyze", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.write");
   const firmId = requireFirmScope(req.principal);
   const parsed = parseOrThrow(AnalyzeVatRiskBody, req.body);
-  const rows = parsed.csv
-    ? parseLedgerCsv(parsed.csv)
-    : (parsed.rows ?? []);
+  const rows = parsed.csv ? parseLedgerCsv(parsed.csv) : (parsed.rows ?? []);
   if (rows.length === 0) {
     res
       .status(400)
@@ -170,7 +170,10 @@ router.post("/vat-risk/analyze", async (req, res): Promise<void> => {
       action: "vatrisk.analyze",
       entityType: "engagement",
       entityId: row.id,
-      after: { totalVatAtRisk: report.totalVatAtRisk, atRiskCount: report.atRiskCount },
+      after: {
+        totalVatAtRisk: report.totalVatAtRisk,
+        atRiskCount: report.atRiskCount,
+      },
     });
   }
 

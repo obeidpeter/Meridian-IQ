@@ -76,7 +76,9 @@ test("revocation gate: a token predating the user's epoch is stale", async () =>
   assert.ok(v0.epoch < current!, "stale token must be detectable");
 
   // A freshly issued token carries the new epoch and passes.
-  const fresh = await verifySessionToken(await issueSessionToken(userId, current!));
+  const fresh = await verifySessionToken(
+    await issueSessionToken(userId, current!),
+  );
   assert.ok(fresh && fresh.epoch >= current!);
 });
 
@@ -91,7 +93,10 @@ test("authenticate fails closed for a wrong password and an unknown email", asyn
   assert.equal(await authenticate(email, "wrong"), null);
   // The unknown-email path burns a decoy scrypt (timing) and returns null; here
   // we only assert the functional outcome, not the latency.
-  assert.equal(await authenticate(`nobody-${SALT}@test.local`, "whatever"), null);
+  assert.equal(
+    await authenticate(`nobody-${SALT}@test.local`, "whatever"),
+    null,
+  );
 });
 
 test("currentSessionEpoch is null for a non-existent user", async () => {

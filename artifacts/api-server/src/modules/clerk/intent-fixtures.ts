@@ -198,10 +198,7 @@ export const INTENT_FIXTURES: IntentFixture[] = [
     // legacy-shaped stub answer scores on the leading lookup alone.
     expected: {
       claimKey: "data.overdue_submissions",
-      plan: [
-        { key: "data.overdue_submissions" },
-        { key: "data.payables_due" },
-      ],
+      plan: [{ key: "data.overdue_submissions" }, { key: "data.payables_due" }],
     },
   },
   {

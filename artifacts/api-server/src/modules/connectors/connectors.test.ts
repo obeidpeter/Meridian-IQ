@@ -40,14 +40,27 @@ test("both connectors satisfy the single contract shape", () => {
 });
 
 test("authentication is connector configuration, not engine logic", async () => {
-  assert.equal((await sageproConnector.authenticate({ apiKey: "sp_live" })).ok, true);
-  assert.equal((await sageproConnector.authenticate({ apiKey: "bad" })).ok, false);
-  assert.equal((await quickliteConnector.authenticate({ token: "t" })).ok, true);
+  assert.equal(
+    (await sageproConnector.authenticate({ apiKey: "sp_live" })).ok,
+    true,
+  );
+  assert.equal(
+    (await sageproConnector.authenticate({ apiKey: "bad" })).ok,
+    false,
+  );
+  assert.equal(
+    (await quickliteConnector.authenticate({ token: "t" })).ok,
+    true,
+  );
   assert.equal((await quickliteConnector.authenticate({})).ok, false);
 });
 
 test("golden fixtures: SagePro native rows map through the default field map", async () => {
-  const pull = await sageproConnector.pullInvoices({ company: "acme" }, null, 5);
+  const pull = await sageproConnector.pullInvoices(
+    { company: "acme" },
+    null,
+    5,
+  );
   assert.equal(pull.rows.length, 5);
   assert.equal(pull.nextCursor, "5");
   assert.ok(pull.hasMore);
@@ -60,7 +73,11 @@ test("golden fixtures: SagePro native rows map through the default field map", a
 });
 
 test("golden fixtures: QuickLite native rows map through the default field map", async () => {
-  const pull = await quickliteConnector.pullInvoices({ realm: "demo" }, null, 5);
+  const pull = await quickliteConnector.pullInvoices(
+    { realm: "demo" },
+    null,
+    5,
+  );
   const mapped = mapRow(pull.rows[0], quickliteConnector.defaultFieldMap);
   assert.ok(mapped.row, JSON.stringify(mapped.errors));
   assert.match(mapped.row.invoiceNumber, /^QL-\d+$/);
@@ -68,8 +85,16 @@ test("golden fixtures: QuickLite native rows map through the default field map",
 });
 
 test("incremental pull is deterministic and cursor-resumable", async () => {
-  const first = await sageproConnector.pullInvoices({ company: "acme" }, null, 10);
-  const again = await sageproConnector.pullInvoices({ company: "acme" }, null, 10);
+  const first = await sageproConnector.pullInvoices(
+    { company: "acme" },
+    null,
+    10,
+  );
+  const again = await sageproConnector.pullInvoices(
+    { company: "acme" },
+    null,
+    10,
+  );
   assert.deepEqual(first.rows, again.rows, "same cursor must yield same rows");
   const second = await sageproConnector.pullInvoices(
     { company: "acme" },
@@ -81,7 +106,11 @@ test("incremental pull is deterministic and cursor-resumable", async () => {
     assert.ok(!firstRefs.has(row.DocNo), "resumed pull must not repeat rows");
   }
   // Draining the whole book terminates.
-  const all = await sageproConnector.pullInvoices({ company: "acme" }, "0", 1000);
+  const all = await sageproConnector.pullInvoices(
+    { company: "acme" },
+    "0",
+    1000,
+  );
   assert.equal(all.hasMore, false);
 });
 

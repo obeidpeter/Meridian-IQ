@@ -15,7 +15,9 @@ test("fractionToPercent translates the API dialect to the form's", () => {
   assert.equal(fractionToPercent("1.5"), "7.5", "out-of-range falls back");
 });
 
-function result(over: Partial<InvoiceDraftResult["proposal"]>): InvoiceDraftResult {
+function result(
+  over: Partial<InvoiceDraftResult["proposal"]>,
+): InvoiceDraftResult {
   return {
     proposal: {
       buyerName: "Adaeze Foods",

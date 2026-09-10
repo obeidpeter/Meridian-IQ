@@ -467,9 +467,13 @@ export async function retryDelivery(
 // starts from "now", never from history. Early-exits before touching the
 // ledgers when no firm has an active webhook — the common case must cost one
 // cheap probe.
-export async function fanOutWebhookEvents(batchSize = FAN_OUT_BATCH_SIZE): Promise<number> {
+export async function fanOutWebhookEvents(
+  batchSize = FAN_OUT_BATCH_SIZE,
+): Promise<number> {
   if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 1_000) {
-    throw new Error("Webhook fanout batch size must be an integer between 1 and 1000");
+    throw new Error(
+      "Webhook fanout batch size must be an integer between 1 and 1000",
+    );
   }
   return runInBypassContext(async () => {
     const active = rowsOf<{ n: number }>(
@@ -515,7 +519,10 @@ export async function fanOutWebhookEvents(batchSize = FAN_OUT_BATCH_SIZE): Promi
       `),
     );
     inserted += Number(invoiceRes[0]?.inserted ?? 0);
-    webhookFanoutOldestAge.set({ source: "lifecycle" }, Math.max(0, Number(invoiceRes[0]?.oldest_age ?? 0)));
+    webhookFanoutOldestAge.set(
+      { source: "lifecycle" },
+      Math.max(0, Number(invoiceRes[0]?.oldest_age ?? 0)),
+    );
 
     // statement.reconciled from the audit ledger (audit_events.firm_id is
     // text; compare on the webhook side cast so a malformed historical value
@@ -551,7 +558,10 @@ export async function fanOutWebhookEvents(batchSize = FAN_OUT_BATCH_SIZE): Promi
       `),
     );
     inserted += Number(statementRes[0]?.inserted ?? 0);
-    webhookFanoutOldestAge.set({ source: "audit" }, Math.max(0, Number(statementRes[0]?.oldest_age ?? 0)));
+    webhookFanoutOldestAge.set(
+      { source: "audit" },
+      Math.max(0, Number(statementRes[0]?.oldest_age ?? 0)),
+    );
 
     return inserted;
   });

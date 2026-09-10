@@ -16,12 +16,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import React, { useCallback } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -200,7 +195,9 @@ export default function HomeScreen() {
               label="At risk"
               value={String(summary.atRiskCount)}
               icon="alert-triangle"
-              tone={summary.atRiskCount > 0 ? colors.destructiveText : undefined}
+              tone={
+                summary.atRiskCount > 0 ? colors.destructiveText : undefined
+              }
             />
           </View>
           <View style={{ flexDirection: "row", gap: 12 }}>
@@ -372,7 +369,11 @@ function PenaltyRiskCard({
         ? colors.warningForeground
         : colors.primaryForeground;
   const watermark: React.ComponentProps<typeof Feather>["name"] =
-    risk === "high" ? "alert-triangle" : risk === "medium" ? "alert-circle" : "shield";
+    risk === "high"
+      ? "alert-triangle"
+      : risk === "medium"
+        ? "alert-circle"
+        : "shield";
   const copy = RISK_COPY[risk] ?? RISK_COPY_FALLBACK;
 
   return (
@@ -585,7 +586,11 @@ function NextDeadlineCard({
           <AppText variant="overline" color={colors.mutedForeground}>
             Next deadline
           </AppText>
-          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+          <Feather
+            name="chevron-right"
+            size={18}
+            color={colors.mutedForeground}
+          />
         </View>
         <AppText variant="heading" style={{ marginTop: 8 }}>
           {deadline.title}
@@ -645,7 +650,11 @@ function ActivityRow({
         {timeAgo(item.at)}
       </AppText>
       {onPress ? (
-        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+        <Feather
+          name="chevron-right"
+          size={16}
+          color={colors.mutedForeground}
+        />
       ) : null}
     </View>
   );

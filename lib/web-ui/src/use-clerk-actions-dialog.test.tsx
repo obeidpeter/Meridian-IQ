@@ -10,7 +10,9 @@ type Decision = { id: string };
 
 function harness(over: {
   isPending?: boolean;
-  run?: (a: Action) => Promise<{ decision: Decision; drafts?: string[] | null }>;
+  run?: (
+    a: Action,
+  ) => Promise<{ decision: Decision; drafts?: string[] | null }>;
 }) {
   const onExecuted = vi.fn();
   const onCloseAfterDecision = vi.fn();
@@ -36,7 +38,9 @@ describe("useClerkActionsDialog", () => {
     act(() => rendered.result.current.beginConfirm({ kind: "submit_overdue" }));
     expect(rendered.result.current.dialogOpen).toBe(true);
 
-    await act(() => rendered.result.current.runAction({ kind: "submit_overdue" }));
+    await act(() =>
+      rendered.result.current.runAction({ kind: "submit_overdue" }),
+    );
     expect(rendered.result.current.decision).toEqual({ id: "d1" });
     expect(rendered.result.current.drafts).toEqual(["a"]);
     expect(onExecuted).toHaveBeenCalledTimes(1);
@@ -73,11 +77,15 @@ describe("useClerkActionsDialog", () => {
       },
     });
     act(() => rendered.result.current.beginConfirm({ kind: "draft_chasers" }));
-    await act(() => rendered.result.current.runAction({ kind: "draft_chasers" }));
+    await act(() =>
+      rendered.result.current.runAction({ kind: "draft_chasers" }),
+    );
     expect(onError).toHaveBeenCalledWith(boom);
     expect(onExecuted).not.toHaveBeenCalled();
     expect(rendered.result.current.decision).toBeNull();
-    expect(rendered.result.current.confirming).toEqual({ kind: "draft_chasers" });
+    expect(rendered.result.current.confirming).toEqual({
+      kind: "draft_chasers",
+    });
     // Closing from the (still-confirm) step never fires the deferred pair.
     act(() => rendered.result.current.closeDialog());
     expect(onCloseAfterDecision).not.toHaveBeenCalled();

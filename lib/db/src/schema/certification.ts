@@ -62,4 +62,3 @@ export const cpdEnrollmentsTable = pgTable(
   // its RLS-scoped existence check cannot see the first firm's row.
   (t) => [unique().on(t.courseId, t.firmId, t.userId)],
 );
-

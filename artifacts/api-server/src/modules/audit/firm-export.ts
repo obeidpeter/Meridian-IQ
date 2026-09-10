@@ -67,10 +67,10 @@ export async function exportFirmData(
   firmId: string,
   cap: number = EXPORT_SECTION_ROW_CAP,
 ): Promise<FirmExportBundle> {
-  return baseDb.transaction(
-    (tx) => exportFirmDataWithin(tx, firmId, cap),
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+  return baseDb.transaction((tx) => exportFirmDataWithin(tx, firmId, cap), {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
 }
 
 async function exportFirmDataWithin(

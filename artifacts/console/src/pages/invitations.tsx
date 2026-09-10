@@ -575,8 +575,8 @@ export function Invitations() {
                 {create.isPending ? "Creating…" : "Create invite link"}
               </Button>
               <p className="text-xs text-muted-foreground">
-                Valo does not email the invite — you copy the one-time
-                link and share it yourself.
+                Valo does not email the invite — you copy the one-time link and
+                share it yourself.
               </p>
             </div>
           </form>
@@ -782,7 +782,10 @@ export function Invitations() {
             />
           ) : (
             <ScrollRegion label="Invitations table">
-              <table className="w-full border-collapse text-sm" data-testid="table-invitations">
+              <table
+                className="w-full border-collapse text-sm"
+                data-testid="table-invitations"
+              >
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th scope="col" className="py-2 pr-3 font-medium">

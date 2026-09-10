@@ -25,7 +25,15 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SPEC_PATH = path.join(ROOT, "lib/api-spec/openapi.yaml");
 const OUT_PATH = path.join(ROOT, "artifacts/console/public/api-reference.html");
 
-const METHODS = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
+const METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "head",
+  "options",
+]);
 
 function fail(msg) {
   console.error(`render-api-reference: ${msg}`);
@@ -168,7 +176,9 @@ function parseSpec(text) {
         continue;
       }
       if (!response) continue;
-      const sharedRef = trimmed.match(/^\$ref:\s*"#\/components\/responses\/(\w+)"$/);
+      const sharedRef = trimmed.match(
+        /^\$ref:\s*"#\/components\/responses\/(\w+)"$/,
+      );
       if (sharedRef) {
         response.sharedRef = sharedRef[1];
         continue;
@@ -188,7 +198,9 @@ function parseSpec(text) {
         response.isArray = true;
         continue;
       }
-      const schemaRef = trimmed.match(/^\$ref:\s*"#\/components\/schemas\/(\w+)"$/);
+      const schemaRef = trimmed.match(
+        /^\$ref:\s*"#\/components\/schemas\/(\w+)"$/,
+      );
       if (schemaRef && response.schema === null) response.schema = schemaRef[1];
     }
   }
@@ -228,9 +240,13 @@ function renderResponse(r) {
     )}</span>`;
   } else {
     const parts = [];
-    if (r.schema) parts.push(`<code>${r.isArray ? `${esc(r.schema)}[]` : esc(r.schema)}</code>`);
+    if (r.schema)
+      parts.push(
+        `<code>${r.isArray ? `${esc(r.schema)}[]` : esc(r.schema)}</code>`,
+      );
     if (r.csv) parts.push(`<code>text/csv</code>`);
-    if (r.description) parts.push(`<span class="dim">${esc(r.description)}</span>`);
+    if (r.description)
+      parts.push(`<span class="dim">${esc(r.description)}</span>`);
     body = parts.join(" ") || `<span class="dim">no body</span>`;
   }
   return `<li><span class="status s${r.status[0]}xx">${r.status}</span> ${body}</li>`;
@@ -279,7 +295,8 @@ ${groups.get(t).map(renderOp).join("\n")}
     )
     .join("\n");
 
-  const verifySnippet = esc(`import { createHash, createHmac } from "node:crypto";
+  const verifySnippet =
+    esc(`import { createHash, createHmac } from "node:crypto";
 
 // Hash your stored whsec_ secret ONCE — that hash is the HMAC key.
 const key = createHash("sha256").update(process.env.WEBHOOK_SECRET).digest("hex");

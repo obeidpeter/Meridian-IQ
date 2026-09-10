@@ -46,7 +46,12 @@ const operatorRef = pointerEntityRef("usr", operatorUserId);
 
 // Captures every transport call; individual tests may swap it and put this
 // one back.
-const sends: { channel: string; recipientRef: string; templateKey: string; entityRef: string | null }[] = [];
+const sends: {
+  channel: string;
+  recipientRef: string;
+  templateKey: string;
+  entityRef: string | null;
+}[] = [];
 const capturingTransport = async (
   channel: string,
   recipientRef: string,
@@ -90,7 +95,9 @@ before(async () => {
     .onConflictDoNothing();
   // Cross-tenant operator membership (firmId null) — the offer rail's
   // recipient enumeration.
-  await db.insert(membershipsTable).values({ userId: operatorUserId, role: "operator" });
+  await db
+    .insert(membershipsTable)
+    .values({ userId: operatorUserId, role: "operator" });
 
   setMessageTransport(capturingTransport);
 });
@@ -113,7 +120,11 @@ test("an open rail circuit alerts once per outage instance, not per pass", async
   const first = await sweepHealthWatch(deps);
   assert.equal(first.openRails, 1);
   assert.equal(first.alerted, 1);
-  assert.equal(first.offered, 0, "messaging is dark: no offers, and that is correct");
+  assert.equal(
+    first.offered,
+    0,
+    "messaging is dark: no offers, and that is correct",
+  );
 
   const event = await latestAuditEvent(
     RAIL_CIRCUIT_OPEN_ACTION,
@@ -125,8 +136,14 @@ test("an open rail circuit alerts once per outage instance, not per pass", async
   assert.equal((event.after as { failureCount?: number }).failureCount, 3);
   // R102: the failure class rides on the alert (pointer-only) so a refused
   // credential reads differently from an outage, in the evidence AND the reason.
-  assert.equal((event.after as { lastErrorCode?: string }).lastErrorCode, "RAIL_UNAUTHORIZED");
-  assert.match(String((event.after as { reason?: string }).reason), /credentials/);
+  assert.equal(
+    (event.after as { lastErrorCode?: string }).lastErrorCode,
+    "RAIL_UNAUTHORIZED",
+  );
+  assert.match(
+    String((event.after as { reason?: string }).reason),
+    /credentials/,
+  );
 
   // Same outage instance on the next pass: the ledger dedups.
   const second = await sweepHealthWatch(deps);
@@ -141,12 +158,20 @@ test("an open rail circuit alerts once per outage instance, not per pass", async
   const third = await sweepHealthWatch({
     ...quiet,
     openRails: async () => [
-      { rail, openedAt: reopenedAt, failureCount: 4, lastErrorCode: "RAIL_TIMEOUT" },
+      {
+        rail,
+        openedAt: reopenedAt,
+        failureCount: 4,
+        lastErrorCode: "RAIL_TIMEOUT",
+      },
     ],
   });
   assert.equal(third.alerted, 1);
   assert.ok(
-    await latestAuditEvent(RAIL_CIRCUIT_OPEN_ACTION, `${rail}:${reopenedAt.toISOString()}`),
+    await latestAuditEvent(
+      RAIL_CIRCUIT_OPEN_ACTION,
+      `${rail}:${reopenedAt.toISOString()}`,
+    ),
   );
 });
 
@@ -158,7 +183,12 @@ test("dead outbox events and webhook deliveries alert once each; the webhook ale
   const deps: HealthWatchDeps = {
     openRails: async () => [],
     deadOutboxEvents: async () => [
-      { id: eventId, aggregateType: "invoice", type: "invoice.submitted", attempts: 6 },
+      {
+        id: eventId,
+        aggregateType: "invoice",
+        type: "invoice.submitted",
+        attempts: 6,
+      },
     ],
     deadWebhookDeliveries: async () => [
       { id: deliveryId, firmId, webhookId, attempts: 6 },
@@ -173,19 +203,32 @@ test("dead outbox events and webhook deliveries alert once each; the webhook ale
   const outboxEvent = await latestAuditEvent(OUTBOX_DEAD_ACTION, eventId);
   assert.ok(outboxEvent);
   assert.equal(outboxEvent.entityType, "outbox_event");
-  assert.equal((outboxEvent.after as { type?: string }).type, "invoice.submitted");
+  assert.equal(
+    (outboxEvent.after as { type?: string }).type,
+    "invoice.submitted",
+  );
 
-  const webhookEvent = await latestAuditEvent(WEBHOOK_DELIVERY_DEAD_ACTION, deliveryId);
+  const webhookEvent = await latestAuditEvent(
+    WEBHOOK_DELIVERY_DEAD_ACTION,
+    deliveryId,
+  );
   assert.ok(webhookEvent);
   assert.equal(webhookEvent.entityType, "webhook_delivery");
-  assert.equal(webhookEvent.firmId, firmId, "the audit row names the owning firm");
+  assert.equal(
+    webhookEvent.firmId,
+    firmId,
+    "the audit row names the owning firm",
+  );
   // Pointer-only evidence (SEC-12): the webhook id plus the human reason —
   // never the endpoint URL, the event payload or the delivery error.
   assert.deepEqual(
     Object.keys(webhookEvent.after as Record<string, unknown>).sort(),
     ["reason", "webhookId"],
   );
-  assert.equal((webhookEvent.after as { webhookId?: string }).webhookId, webhookId);
+  assert.equal(
+    (webhookEvent.after as { webhookId?: string }).webhookId,
+    webhookId,
+  );
 
   const second = await sweepHealthWatch(deps);
   assert.equal(second.alerted, 0, "both units are already alerted");
@@ -202,7 +245,12 @@ test("a NEW alert is offered to operators: identity-stamped, pointer-only, dedup
   const deps: HealthWatchDeps = {
     ...quiet,
     deadOutboxEvents: async () => [
-      { id: eventId, aggregateType: "invoice", type: "invoice.submitted", attempts: 6 },
+      {
+        id: eventId,
+        aggregateType: "invoice",
+        type: "invoice.submitted",
+        attempts: 6,
+      },
     ],
   };
 
@@ -231,7 +279,10 @@ test("a NEW alert is offered to operators: identity-stamped, pointer-only, dedup
 
   // Second pass, same dead event: the alert dedups, so nothing is re-offered.
   const again = await sweepHealthWatch(deps);
-  assert.deepEqual({ alerted: again.alerted, offered: again.offered }, { alerted: 0, offered: 0 });
+  assert.deepEqual(
+    { alerted: again.alerted, offered: again.offered },
+    { alerted: 0, offered: 0 },
+  );
   assert.equal((await operatorHealthMessages()).length, 1);
 });
 
@@ -244,7 +295,12 @@ test("a throwing transport never fails the sweep; the durable alert stands", asy
     const result = await sweepHealthWatch({
       ...quiet,
       deadOutboxEvents: async () => [
-        { id: eventId, aggregateType: "invoice", type: "invoice.submitted", attempts: 6 },
+        {
+          id: eventId,
+          aggregateType: "invoice",
+          type: "invoice.submitted",
+          attempts: 6,
+        },
       ],
     });
     assert.equal(result.alerted, 1, "the audit alert appended regardless");

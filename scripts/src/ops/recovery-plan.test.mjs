@@ -119,10 +119,7 @@ function planFile(t, bytes = Buffer.from(JSON.stringify(fixture()))) {
 
 test("rollback stays the default and requires approval record configuration", (t) => {
   const rollback = rollbackFile(t);
-  assert.equal(
-    recoveryMode(rollback),
-    "rollback",
-  );
+  assert.equal(recoveryMode(rollback), "rollback");
   assert.equal(
     recoveryMode({
       ...rollback,
@@ -132,7 +129,11 @@ test("rollback stays the default and requires approval record configuration", (t
   );
   for (const rollback of [undefined, "", "main", revision.slice(0, 7)])
     assert.throws(
-      () => recoveryMode({ ...rollbackFile(t), RELEASE_ROLLBACK_REVISION: rollback }),
+      () =>
+        recoveryMode({
+          ...rollbackFile(t),
+          RELEASE_ROLLBACK_REVISION: rollback,
+        }),
       /RELEASE_ROLLBACK_REVISION/,
     );
   assert.throws(
@@ -149,14 +150,21 @@ test("rollback approval binds exact bytes, candidate, fallback, review and expir
     now,
   };
   assert.equal(validateRollbackApproval(record, context), record);
-  assert.deepEqual(loadRollbackApproval(rollbackFile(t, record), context), record);
+  assert.deepEqual(
+    loadRollbackApproval(rollbackFile(t, record), context),
+    record,
+  );
   for (const [change, expected] of [
     [{ revision: "d".repeat(40) }, /candidate mismatch/],
     [{ rollbackRevision: "d".repeat(40) }, /revision mismatch/],
     [{ now: Date.parse(record.expiresAt) }, /expired/],
   ])
     assert.throws(
-      () => loadRollbackApproval(rollbackFile(t, record), { ...context, ...change }),
+      () =>
+        loadRollbackApproval(rollbackFile(t, record), {
+          ...context,
+          ...change,
+        }),
       expected,
     );
   for (const mutate of [

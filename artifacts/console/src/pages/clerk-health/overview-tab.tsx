@@ -1,11 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTile } from "@/components/stat-tile";
 import { ScrollRegion } from "@/components/scroll-region";
-import {
-  formatPct,
-  pillClasses,
-  type BadgeTone,
-} from "@/lib/format";
+import { formatPct, pillClasses, type BadgeTone } from "@/lib/format";
 import { STATUS_TONE } from "@/pages/clerk-shared";
 import {
   OUTCOME_TONE,
@@ -128,9 +124,7 @@ export function OverviewTab({ withMetrics }: { withMetrics: MetricsGuard }) {
                         <th className="py-2 pr-3 font-medium text-right">
                           Total
                         </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          OK
-                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">OK</th>
                         <th className="py-2 font-medium text-right">p95</th>
                       </tr>
                     </thead>
@@ -144,9 +138,7 @@ export function OverviewTab({ withMetrics }: { withMetrics: MetricsGuard }) {
                             <code className="text-xs">{c.model}</code>
                           </td>
                           <td className="py-2 pr-3">
-                            <code className="text-xs">
-                              {c.promptVersion}
-                            </code>
+                            <code className="text-xs">{c.promptVersion}</code>
                           </td>
                           <td className="py-2 pr-3">{c.purpose}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">

@@ -163,7 +163,8 @@ export async function computeVatSettlementCheck(
     otherTotal: String(agg?.other_total ?? "0.00"),
     settledShare:
       Number(acceptedTotal) > 0 && !mixedCurrencies
-        ? Math.round((Number(settledTotal) / Number(acceptedTotal)) * 10000) / 10000
+        ? Math.round((Number(settledTotal) / Number(acceptedTotal)) * 10000) /
+          10000
         : null,
     unsettled: unsettledRows.slice(0, MAX_UNSETTLED_ROWS).map((r) => ({
       invoiceId: r.id,

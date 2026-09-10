@@ -192,7 +192,10 @@ test("check refuses a malformed floors file and a missing lcov file", () => {
 });
 
 test("the runner kind picks the command and each restricts coverage to the areas' globs", () => {
-  const floors = { runner: { kind: "vitest", exclude: ["src/**/*.stories.*"] }, areas };
+  const floors = {
+    runner: { kind: "vitest", exclude: ["src/**/*.stories.*"] },
+    areas,
+  };
   const vitest = vitestArgs(floors);
   assert.deepEqual(vitest.slice(0, 3), ["exec", "vitest", "run"]);
   assert.ok(vitest.includes("--coverage.provider=v8"));
@@ -217,7 +220,10 @@ test("the runner kind picks the command and each restricts coverage to the areas
 
   const dir = mkdtempSync(path.join(tmpdir(), "coverage-floors-"));
   const floorsFile = path.join(dir, "coverage-floors.json");
-  writeFileSync(floorsFile, JSON.stringify({ runner: { kind: "jest" }, areas }));
+  writeFileSync(
+    floorsFile,
+    JSON.stringify({ runner: { kind: "jest" }, areas }),
+  );
   assert.throws(
     () => readFloors(floorsFile),
     /runner\.kind must be node-test or vitest, not jest/,

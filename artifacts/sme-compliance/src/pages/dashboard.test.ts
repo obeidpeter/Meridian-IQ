@@ -26,7 +26,11 @@ describe("showFirstInvoiceCta", () => {
 describe("planPolicyStatusLine", () => {
   test("a fresh grant promises eligibility, not a calendar event", () => {
     expect(
-      planPolicyStatusLine({ pausedAt: null, pausedReason: null, lastRunMonth: null }),
+      planPolicyStatusLine({
+        pausedAt: null,
+        pausedReason: null,
+        lastRunMonth: null,
+      }),
     ).toBe("Runs monthly · runs when there is eligible paper");
   });
 
@@ -42,7 +46,10 @@ describe("planPolicyStatusLine", () => {
 
   test("every tripwire reason has legible copy; unknown reasons stay honest", () => {
     expect(
-      planPolicyStatusLine({ pausedAt: "2026-08-01T00:00:00Z", pausedReason: "run_halted" }),
+      planPolicyStatusLine({
+        pausedAt: "2026-08-01T00:00:00Z",
+        pausedReason: "run_halted",
+      }),
     ).toBe("Paused — the last run halted");
     expect(
       planPolicyStatusLine({

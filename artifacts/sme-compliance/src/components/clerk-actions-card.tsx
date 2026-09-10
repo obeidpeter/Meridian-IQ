@@ -25,7 +25,10 @@ import type {
   ClerkActionPolicy,
   PaymentChaserDraft,
 } from "@workspace/api-client-react";
-import { useActionPolicyControls, useClerkActionsDialog } from "@workspace/web-ui";
+import {
+  useActionPolicyControls,
+  useClerkActionsDialog,
+} from "@workspace/web-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,12 +306,19 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             </p>
           )}
         {proposals.actions.map((action) => (
-          <div key={action.kind} className="space-y-2" data-testid={`action-${action.kind}`}>
+          <div
+            key={action.kind}
+            className="space-y-2"
+            data-testid={`action-${action.kind}`}
+          >
             <p className="font-medium">{action.title}</p>
             <p className="text-sm text-muted-foreground">{action.why}</p>
             <div className="space-y-1 text-xs text-muted-foreground">
               {action.targets.slice(0, ACTION_TARGET_DISPLAY_CAP).map((t) => (
-                <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
+                <p
+                  key={t.invoiceId}
+                  data-testid={`action-target-${t.invoiceId}`}
+                >
                   {t.invoiceNumber} · issued {formatDate(t.issueDate)}
                   {action.kind === "submit_overdue" && (
                     <>
@@ -438,7 +448,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
           {proposals.note}
         </p>
       </CardContent>
-      <Dialog open={!!confirming} onOpenChange={(open) => !open && closeDialog()}>
+      <Dialog
+        open={!!confirming}
+        onOpenChange={(open) => !open && closeDialog()}
+      >
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           {decision === null ? (
             <>
@@ -504,9 +517,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               {drafts && drafts.length > 0 && (
                 <div className="space-y-3 border-t pt-3">
                   <p className="text-sm font-medium">
-                    Your drafted reminders — copy each into your own email.
-                    This dialog will not show them again: copy them before
-                    closing.
+                    Your drafted reminders — copy each into your own email. This
+                    dialog will not show them again: copy them before closing.
                   </p>
                   {drafts.map((d) => (
                     <div
@@ -520,9 +532,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                           size="sm"
                           variant="outline"
                           onClick={() =>
-                            navigator.clipboard.writeText(
-                              draftClipboardText(d),
-                            )
+                            navigator.clipboard.writeText(draftClipboardText(d))
                           }
                           data-testid={`button-copy-draft-${d.invoiceId}`}
                         >

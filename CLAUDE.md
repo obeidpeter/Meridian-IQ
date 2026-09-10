@@ -121,7 +121,7 @@ observability (`/api/healthz`, `/api/readyz`, `/api/metrics`).
 A scratch Postgres 16 is required (`DATABASE_URL=postgresql://…/meridian_ci`).
 
 ```
-pnpm run check                                  # architecture + secret + docs + brand gates, complexity ratchet, typecheck, lint, DB-free unit suites (incl. api-server test:pure)
+pnpm run check                                  # architecture + secret + docs + brand gates, complexity ratchet, format check, typecheck, lint, DB-free unit suites (incl. api-server test:pure)
 pnpm --filter @workspace/api-spec run codegen   # must produce zero drift
 pnpm run typecheck                              # libs + all packages
 pnpm run lint

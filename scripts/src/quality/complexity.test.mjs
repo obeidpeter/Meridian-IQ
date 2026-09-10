@@ -44,7 +44,9 @@ test("ESLint's message yields the function label and its complexity", () => {
     { label: "Function 'submit'", complexity: 25 },
   );
   assert.deepEqual(
-    parseFinding("Async arrow function has a complexity of 11. Maximum allowed is 10."),
+    parseFinding(
+      "Async arrow function has a complexity of 11. Maximum allowed is 10.",
+    ),
     { label: "Async arrow function", complexity: 11 },
   );
   assert.equal(parseFinding("Unexpected any."), null);
@@ -130,10 +132,16 @@ test("write records the hotspots one label per line and read validates the shape
   assert.deepEqual(readBaseline(file), baseline);
 
   writeFileSync(file, JSON.stringify({ threshold: 0, files: {} }));
-  assert.throws(() => readBaseline(file), /threshold must be a positive integer/);
+  assert.throws(
+    () => readBaseline(file),
+    /threshold must be a positive integer/,
+  );
   writeFileSync(
     file,
-    JSON.stringify({ threshold: 20, files: { "src/a.ts": { "Function 'x'": ["25"] } } }),
+    JSON.stringify({
+      threshold: 20,
+      files: { "src/a.ts": { "Function 'x'": ["25"] } },
+    }),
   );
   assert.throws(() => readBaseline(file), /must list integer complexities/);
   assert.throws(

@@ -221,9 +221,7 @@ export async function computeComplianceScorecard(
       issuedCount: Number(r.issued),
       acceptedCount: accepted,
       withinWindowRate:
-        accepted >= MIN_RATE_SAMPLE
-          ? Number(r.within_window) / accepted
-          : null,
+        accepted >= MIN_RATE_SAMPLE ? Number(r.within_window) / accepted : null,
       failureRate:
         attempted >= MIN_RATE_SAMPLE ? Number(r.failed) / attempted : null,
       prevWithinWindowRate:
@@ -234,8 +232,7 @@ export async function computeComplianceScorecard(
         prevAttempted >= MIN_RATE_SAMPLE
           ? Number(r.prev_failed) / prevAttempted
           : null,
-      medianDaysToStamp:
-        r.median_days !== null ? Number(r.median_days) : null,
+      medianDaysToStamp: r.median_days !== null ? Number(r.median_days) : null,
       overdueNow: Number(r.overdue_now),
       unverifiedBills: unverifiedByClient.get(r.client_party_id) ?? 0,
     };

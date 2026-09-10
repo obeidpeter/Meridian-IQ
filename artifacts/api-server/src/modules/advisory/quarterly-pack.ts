@@ -53,7 +53,11 @@ export interface QuarterlyReview {
   rejectionTotal: number;
   receivables: {
     asOf: string;
-    groups: { currency: string; outstandingTotal: string; invoiceCount: number }[];
+    groups: {
+      currency: string;
+      outstandingTotal: string;
+      invoiceCount: number;
+    }[];
   };
   clerk: { captures: number; approved: number; rejected: number };
   note: string;
@@ -71,7 +75,9 @@ export function closedLagosQuarters(
   const [y, m] = lagosMonthStart(0, now).split("-").map(Number);
   const currentQuarterFirstMonth = m - ((m - 1) % 3);
   return Array.from({ length: count }, (_, i) => {
-    const d = new Date(Date.UTC(y, currentQuarterFirstMonth - 1 - 3 * (i + 1), 1));
+    const d = new Date(
+      Date.UTC(y, currentQuarterFirstMonth - 1 - 3 * (i + 1), 1),
+    );
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${d.getUTCFullYear()}-${mm}-01`;
   });
@@ -193,7 +199,11 @@ export async function computeQuarterlyReview(
   // were decided (a case opened in the quarter and decided after still counts
   // as a capture of this quarter).
   const [clerkRow] = (
-    await db.execute<{ captures: number; approved: number; rejected: number }>(sql`
+    await db.execute<{
+      captures: number;
+      approved: number;
+      rejected: number;
+    }>(sql`
       SELECT
         COUNT(*)::int AS captures,
         COUNT(*) FILTER (WHERE status = 'approved')::int AS approved,

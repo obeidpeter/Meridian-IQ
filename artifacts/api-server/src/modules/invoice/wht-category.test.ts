@@ -18,9 +18,15 @@ const buyerParty = randomUUID();
 
 before(async () => {
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `WHT Cat Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `WHT Cat Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: supplierParty, type: "client_business", legalName: `WHT Cat Client ${SALT}` },
+    {
+      id: supplierParty,
+      type: "client_business",
+      legalName: `WHT Cat Client ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `WHT Cat Buyer ${SALT}` },
   ]);
 });
@@ -34,7 +40,12 @@ test("create persists the category; PATCH replaces, leaves and clears it", async
     issueDate: "2026-07-01",
     whtCategory: "services_5",
     lines: [
-      { description: "Advisory", quantity: "1", unitPrice: "100000.00", vatRate: "0.075" },
+      {
+        description: "Advisory",
+        quantity: "1",
+        unitPrice: "100000.00",
+        vatRate: "0.075",
+      },
     ],
   });
   assert.equal(invoice.whtCategory, "services_5");
@@ -69,7 +80,12 @@ test("create without a category stores null — no WHT applies by default", asyn
     invoiceNumber: `WCAT-NONE-${SALT}`,
     issueDate: "2026-07-01",
     lines: [
-      { description: "Goods", quantity: "1", unitPrice: "5000.00", vatRate: "0.075" },
+      {
+        description: "Goods",
+        quantity: "1",
+        unitPrice: "5000.00",
+        vatRate: "0.075",
+      },
     ],
   });
   assert.equal(invoice.whtCategory, null);

@@ -33,7 +33,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -68,7 +72,8 @@ function PriceReviewHistory({ tierId }: { tierId: string }) {
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            {r.oldValue ?? "—"} → <span className="font-medium">{r.newValue}</span>
+            {r.oldValue ?? "—"} →{" "}
+            <span className="font-medium">{r.newValue}</span>
             {r.note ? ` · ${r.note}` : ""}
           </p>
         </div>
@@ -90,15 +95,32 @@ interface TierForm {
 // field, never toast-only).
 function validateForm(form: TierForm): Partial<Record<keyof TierForm, string>> {
   const errors: Partial<Record<keyof TierForm, string>> = {};
-  if (form.monthlyPrice.trim() === "" || Number(form.monthlyPrice) < 0 || Number.isNaN(Number(form.monthlyPrice)))
+  if (
+    form.monthlyPrice.trim() === "" ||
+    Number(form.monthlyPrice) < 0 ||
+    Number.isNaN(Number(form.monthlyPrice))
+  )
     errors.monthlyPrice = "Enter a price of ₦0 or more.";
   const included = Number(form.includedInvoices);
-  if (form.includedInvoices.trim() === "" || !Number.isInteger(included) || included < 0)
+  if (
+    form.includedInvoices.trim() === "" ||
+    !Number.isInteger(included) ||
+    included < 0
+  )
     errors.includedInvoices = "Enter a whole number of invoices.";
-  if (form.overagePrice.trim() === "" || Number(form.overagePrice) < 0 || Number.isNaN(Number(form.overagePrice)))
+  if (
+    form.overagePrice.trim() === "" ||
+    Number(form.overagePrice) < 0 ||
+    Number.isNaN(Number(form.overagePrice))
+  )
     errors.overagePrice = "Enter a price of ₦0 or more.";
   const share = Number(form.revenueSharePct);
-  if (form.revenueSharePct.trim() === "" || Number.isNaN(share) || share < 0 || share > 100)
+  if (
+    form.revenueSharePct.trim() === "" ||
+    Number.isNaN(share) ||
+    share < 0 ||
+    share > 100
+  )
     errors.revenueSharePct = "Enter a percentage between 0 and 100.";
   if (!form.effectiveDate) errors.effectiveDate = "Pick the effective date.";
   return errors;
@@ -176,7 +198,10 @@ export function Billing() {
       },
       {
         onSuccess: () => {
-          toast({ title: "Tier updated", description: "Price review recorded." });
+          toast({
+            title: "Tier updated",
+            description: "Price review recorded.",
+          });
           queryClient.invalidateQueries({ queryKey: getListTiersQueryKey() });
           queryClient.invalidateQueries({
             queryKey: getGetSubscriptionQueryKey(),
@@ -231,7 +256,10 @@ export function Billing() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
           Plans & billing
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -284,7 +312,9 @@ export function Billing() {
                 <Card
                   key={t.id}
                   data-testid={`card-tier-${t.key}`}
-                  className={isCurrent ? "border-primary ring-1 ring-primary" : ""}
+                  className={
+                    isCurrent ? "border-primary ring-1 ring-primary" : ""
+                  }
                 >
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center justify-between text-base">
@@ -320,7 +350,10 @@ export function Billing() {
                       >
                         {isCurrent ? (
                           <>
-                            <Check className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
+                            <Check
+                              className="w-4 h-4 mr-1"
+                              aria-hidden="true"
+                            />{" "}
                             Selected
                           </>
                         ) : (
@@ -396,9 +429,7 @@ export function Billing() {
       <Dialog open={!!editTier} onOpenChange={(o) => !o && setEditTier(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Price review — {editTier?.name}
-            </DialogTitle>
+            <DialogTitle>Price review — {editTier?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">

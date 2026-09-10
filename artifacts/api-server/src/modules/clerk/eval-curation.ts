@@ -1,4 +1,13 @@
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -286,7 +295,9 @@ async function setRetired(
   retire: boolean,
 ): Promise<EvalFixtureSummary> {
   assertNotStatic(key);
-  const action = retire ? "clerk.eval.fixture.retire" : "clerk.eval.fixture.restore";
+  const action = retire
+    ? "clerk.eval.fixture.retire"
+    : "clerk.eval.fixture.restore";
 
   if (key.startsWith(GROWN_KEY_PREFIX)) {
     const row = await findGrownRow(key.slice(GROWN_KEY_PREFIX.length));
@@ -483,12 +494,17 @@ export async function mintFixtureFromCase(
       // client_user creator's own party).
       const names: string[] = [];
       const tins: string[] = [];
-      const collect = (field: string, value: string | null | undefined): void => {
+      const collect = (
+        field: string,
+        value: string | null | undefined,
+      ): void => {
         if (!value) return;
-        if (field === "supplierName" || field === "buyerName") names.push(value);
+        if (field === "supplierName" || field === "buyerName")
+          names.push(value);
         if (field === "supplierTin" || field === "buyerTin") tins.push(value);
       };
-      for (const [field, value] of Object.entries(expected)) collect(field, value);
+      for (const [field, value] of Object.entries(expected))
+        collect(field, value);
       for (const f of kase.extraction?.fields ?? []) collect(f.field, f.value);
       const partyIds = [
         invoiceSupplierPartyId,

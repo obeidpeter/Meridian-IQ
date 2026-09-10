@@ -120,16 +120,14 @@ export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
   consent_missing: "paused — compliance consent is missing",
   failed_targets: "paused — too many failures in the last run",
   unknown_kind: "paused — this action kind can't run automatically",
-  rail_rejections: "paused — the last run's submissions were rejected by the rails",
+  rail_rejections:
+    "paused — the last run's submissions were rejected by the rails",
   engagement_closed: "paused — the engagement with this client has ended",
   run_error: "paused — the last run hit an unexpected error",
 };
 
 export function policyPauseReasonLabel(reason: string | null): string {
-  return (
-    POLICY_PAUSE_REASON_LABELS[reason ?? "manual"] ??
-    `paused — ${reason}`
-  );
+  return POLICY_PAUSE_REASON_LABELS[reason ?? "manual"] ?? `paused — ${reason}`;
 }
 
 // The per-run ceiling on a grant (GrantActionPolicyInput.maxTargetsPerRun,

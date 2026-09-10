@@ -57,6 +57,9 @@ export function useRecordRecentItem(
   const detail = item?.detail;
   useEffect(() => {
     if (!key || !id || !label) return;
-    recordRecentItem(key, detail === undefined ? { id, label } : { id, label, detail });
+    recordRecentItem(
+      key,
+      detail === undefined ? { id, label } : { id, label, detail },
+    );
   }, [key, id, label, detail]);
 }

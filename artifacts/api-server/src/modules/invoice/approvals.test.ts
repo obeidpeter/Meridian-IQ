@@ -17,11 +17,7 @@ import {
 } from "@workspace/db";
 import invoicesRouter from "../../routes/invoices/index.ts";
 import firmPoliciesRouter from "../../routes/firm-policies.ts";
-import {
-  createDraft,
-  submitInvoice,
-  updateInvoiceContent,
-} from "./service.ts";
+import { createDraft, submitInvoice, updateInvoiceContent } from "./service.ts";
 import {
   firmSubmitApprovalRequired,
   listApprovals,
@@ -39,7 +35,11 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Maker-checker submission approval + FX capture (contract 0.45.0). Pinned:
 //  - the policy DEFAULTS OFF: with no firm_policies row a single actor still
@@ -163,9 +163,24 @@ before(async () => {
     { id: buyerParty, type: "buyer", legalName: `Approvals Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId: firmOff, clientPartyId: clientOff, type: "retainer", title: `ap-off ${SALT}` },
-    { firmId: firmOn, clientPartyId: clientOn, type: "retainer", title: `ap-on ${SALT}` },
-    { firmId: firmOn, clientPartyId: clientBulk, type: "retainer", title: `ap-bulk ${SALT}` },
+    {
+      firmId: firmOff,
+      clientPartyId: clientOff,
+      type: "retainer",
+      title: `ap-off ${SALT}`,
+    },
+    {
+      firmId: firmOn,
+      clientPartyId: clientOn,
+      type: "retainer",
+      title: `ap-on ${SALT}`,
+    },
+    {
+      firmId: firmOn,
+      clientPartyId: clientBulk,
+      type: "retainer",
+      title: `ap-bulk ${SALT}`,
+    },
   ]);
   // Layer-1 compliance consent so submits reach the approval guard, not the
   // consent gate.
@@ -227,7 +242,11 @@ after(async () => {
 // ---------------------------------------------------------------------------
 
 test("policy defaults off: a single actor still submits alone", async () => {
-  assert.equal(await firmSubmitApprovalRequired(firmOff), false, "no row = off");
+  assert.equal(
+    await firmSubmitApprovalRequired(firmOff),
+    false,
+    "no row = off",
+  );
   const base = await listen(appFor(makerOff, invoicesRouter));
   const res = await fetch(`${base}/invoices/${invOffId}/submit`, {
     method: "POST",
@@ -274,14 +293,18 @@ test("policy on: submit without any approval 409s APPROVAL_REQUIRED", async () =
 test("a self-approval never satisfies the submitter's own policy", async () => {
   const base = await listen(appFor(makerOn, invoicesRouter));
   // A body-less approval cannot claim which revision was reviewed.
-  const missingRevision = await fetch(`${base}/invoices/${invPairId}/approve`, { method: "POST" });
+  const missingRevision = await fetch(`${base}/invoices/${invPairId}/approve`, {
+    method: "POST",
+  });
   assert.equal(missingRevision.status, 400);
   await missingRevision.text();
   // The maker's revision-bound approval is evidence for any OTHER submitter.
   const approve = await fetch(`${base}/invoices/${invPairId}/approve`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ expectedRevision: (await loadInvoice(invPairId)).contentRevision }),
+    body: JSON.stringify({
+      expectedRevision: (await loadInvoice(invPairId)).contentRevision,
+    }),
   });
   assert.equal(approve.status, 201);
   const approval = (await approve.json()) as {
@@ -297,7 +320,11 @@ test("a self-approval never satisfies the submitter's own policy", async () => {
     method: "POST",
     headers: JSON_HEADERS,
   });
-  assert.equal(submit.status, 409, "one human clicking twice is not dual control");
+  assert.equal(
+    submit.status,
+    409,
+    "one human clicking twice is not dual control",
+  );
 });
 
 test("a colleague's approval clears the submit; the list is newest first", async () => {
@@ -305,7 +332,10 @@ test("a colleague's approval clears the submit; the list is newest first", async
   const approve = await fetch(`${checkerBase}/invoices/${invPairId}/approve`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ note: "totals verified against the engagement", expectedRevision: (await loadInvoice(invPairId)).contentRevision }),
+    body: JSON.stringify({
+      note: "totals verified against the engagement",
+      expectedRevision: (await loadInvoice(invPairId)).contentRevision,
+    }),
   });
   assert.equal(approve.status, 201);
   const view = (await approve.json()) as {
@@ -351,7 +381,10 @@ test("a content edit revokes live approvals and the submit closes again", async 
   const patch = await fetch(`${base}/invoices/${invEditId}`, {
     method: "PATCH",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ notes: "quantity corrected after approval", expectedRevision: (await loadInvoice(invEditId)).contentRevision }),
+    body: JSON.stringify({
+      notes: "quantity corrected after approval",
+      expectedRevision: (await loadInvoice(invEditId)).contentRevision,
+    }),
   });
   assert.equal(patch.status, 200);
 
@@ -363,7 +396,11 @@ test("a content edit revokes live approvals and the submit closes again", async 
   assert.equal(rows.length, 1);
   assert.ok(rows[0].revokedAt, "the approval is revoked, not deleted");
   const views = await listApprovals(invEditId);
-  assert.equal(typeof views[0].revokedAt, "string", "view carries the ISO stamp");
+  assert.equal(
+    typeof views[0].revokedAt,
+    "string",
+    "view carries the ISO stamp",
+  );
 
   const submit = await fetch(`${base}/invoices/${invEditId}/submit`, {
     method: "POST",
@@ -389,7 +426,9 @@ test("approving a bill is the submit guard's own 409 NOT_SUBMITTABLE", async () 
   const res = await fetch(`${base}/invoices/${billId}/approve`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ expectedRevision: (await loadInvoice(billId)).contentRevision }),
+    body: JSON.stringify({
+      expectedRevision: (await loadInvoice(billId)).contentRevision,
+    }),
   });
   assert.equal(res.status, 409);
   assert.match(
@@ -407,7 +446,9 @@ test("approving post-submission paper is APPROVAL_BAD_STATE", async () => {
   const res = await fetch(`${base}/invoices/${stampedId}/approve`, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ expectedRevision: (await loadInvoice(stampedId)).contentRevision }),
+    body: JSON.stringify({
+      expectedRevision: (await loadInvoice(stampedId)).contentRevision,
+    }),
   });
   assert.equal(res.status, 409);
   assert.match(((await res.json()) as { error: string }).error, /stamped/);
@@ -523,11 +564,20 @@ test("createDraft persists a valid rate and refuses NGN or malformed rates", asy
   };
   // Explicit NGN + rate, and the currency DEFAULT (NGN) + rate.
   await assert.rejects(
-    createDraft({ ...baseInput, invoiceNumber: `FX-${SALT}-NGN-EXPL`, currency: "NGN", fxRateToNgn: "1500" }),
+    createDraft({
+      ...baseInput,
+      invoiceNumber: `FX-${SALT}-NGN-EXPL`,
+      currency: "NGN",
+      fxRateToNgn: "1500",
+    }),
     isDomainError("FX_RATE_INVALID", 400),
   );
   await assert.rejects(
-    createDraft({ ...baseInput, invoiceNumber: `FX-${SALT}-NGN-DEF`, fxRateToNgn: "1500" }),
+    createDraft({
+      ...baseInput,
+      invoiceNumber: `FX-${SALT}-NGN-DEF`,
+      fxRateToNgn: "1500",
+    }),
     isDomainError("FX_RATE_INVALID", 400),
   );
   // Malformed: grouping separators, >6 decimals, non-positive.
@@ -560,13 +610,21 @@ test("update sets, validates and clears the rate", async () => {
   );
   assert.equal(invoice.fxRateToNgn, null, "no rate captured");
 
-  const set = await updateInvoiceContent(invoice.id, { fxRateToNgn: "1712.25" }, makerId);
+  const set = await updateInvoiceContent(
+    invoice.id,
+    { fxRateToNgn: "1712.25" },
+    makerId,
+  );
   assert.equal(Number(set.invoice.fxRateToNgn), 1712.25);
   await assert.rejects(
     updateInvoiceContent(invoice.id, { fxRateToNgn: "1.2345678" }, makerId),
     isDomainError("FX_RATE_INVALID", 400),
   );
-  const cleared = await updateInvoiceContent(invoice.id, { fxRateToNgn: null }, makerId);
+  const cleared = await updateInvoiceContent(
+    invoice.id,
+    { fxRateToNgn: null },
+    makerId,
+  );
   assert.equal(cleared.invoice.fxRateToNgn, null, "null clears the rate");
 });
 
@@ -594,7 +652,9 @@ test("the CSV export appends fxRateToNgn and ngnEquivalent", async () => {
     assert.ok(header.includes(col), `header carries ${col}`);
   }
   const idx = (name: string) => header.indexOf(name);
-  const byNumber = new Map(rows.slice(1).map((r) => [r[idx("invoiceNumber")], r]));
+  const byNumber = new Map(
+    rows.slice(1).map((r) => [r[idx("invoiceNumber")], r]),
+  );
 
   const usd = byNumber.get(`FX-${SALT}-USD`)!;
   assert.equal(usd[idx("currency")], "USD");
@@ -609,5 +669,9 @@ test("the CSV export appends fxRateToNgn and ngnEquivalent", async () => {
 
   const eur = byNumber.get(`FX-${SALT}-EUR`)!;
   assert.equal(eur[idx("fxRateToNgn")], "");
-  assert.equal(eur[idx("ngnEquivalent")], "", "no rate = unconvertible, never 1.0");
+  assert.equal(
+    eur[idx("ngnEquivalent")],
+    "",
+    "no rate = unconvertible, never 1.0",
+  );
 });

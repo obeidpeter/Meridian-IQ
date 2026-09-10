@@ -1,6 +1,10 @@
 import { Router, type IRouter } from "express";
 import { and, desc, isNotNull, notInArray, sql } from "drizzle-orm";
-import { getDb, submissionAttemptsTable, errorCatalogueTable } from "@workspace/db";
+import {
+  getDb,
+  submissionAttemptsTable,
+  errorCatalogueTable,
+} from "@workspace/db";
 import {
   ListErrorCatalogueResponse,
   GetErrorCatalogueEntryParams,

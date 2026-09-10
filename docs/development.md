@@ -82,6 +82,16 @@ deliberate new hotspot is the same `write`, reviewed in the diff of the
 baseline. `pnpm run complexity:report` is the unchanged advisory listing of
 everything over 10.
 
+`pnpm run check` also runs `pnpm run format:check` (R124): every code file
+Prettier covers must already be formatted, and `pnpm run format` fixes a
+failure. `.prettierignore` keeps the generated clients, build and test
+output, and the non-code formats (Markdown, YAML, JSON, HTML, CSS, SVG) out
+of the check, so the docs gates keep parsing the Markdown tables and the
+scripts keep writing the JSON baselines in their own shape. Format a file
+in the same change that touches it; the mechanical pass that brought the
+tree in line was R124 (588 files), and `.git-blame-ignore-revs` names that
+commit so blame looks through it.
+
 Database-backed server and migration validation:
 
 ```bash

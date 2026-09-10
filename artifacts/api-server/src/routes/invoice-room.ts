@@ -247,7 +247,11 @@ router.post("/public/invoice-room/otp", async (req, res): Promise<void> => {
   ]) {
     const retryAfter = await throttleActionAttempt(key);
     if (retryAfter !== null) {
-      sendThrottled429(res, retryAfter, "Too many verification codes requested");
+      sendThrottled429(
+        res,
+        retryAfter,
+        "Too many verification codes requested",
+      );
       return;
     }
   }

@@ -110,7 +110,8 @@ export function computeStatusLight(input: StatusLightInput): StatusLightResult {
     return {
       light: "amber",
       reasons: ["Submitted and awaiting the tax authority stamp"],
-      recommendedAction: "No action needed; the stamp normally arrives shortly.",
+      recommendedAction:
+        "No action needed; the stamp normally arrives shortly.",
     };
   }
   if (lastConfirmation?.state === "queried") {
@@ -121,7 +122,8 @@ export function computeStatusLight(input: StatusLightInput): StatusLightResult {
           ? `Buyer queried the invoice: ${lastConfirmation.note}`
           : "Buyer queried the invoice",
       ],
-      recommendedAction: "Answer the buyer's query so confirmation can proceed.",
+      recommendedAction:
+        "Answer the buyer's query so confirmation can proceed.",
     };
   }
   if (invoice.status === "cancelled") {

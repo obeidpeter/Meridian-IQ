@@ -37,8 +37,13 @@ const buyerX = randomUUID(); // on clientA's invoice — NOT engaged
 const buyerY = randomUUID(); // on clientB's invoice only
 const buyerOther = randomUUID(); // firm B's buyer — never visible to firm A
 
-const staff: Principal = firmPrincipal(firmId, { userId: userStaff, role: "firm_staff" });
-const clientUserA: Principal = clientPrincipal(firmId, clientA, { userId: userClientA });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userStaff,
+  role: "firm_staff",
+});
+const clientUserA: Principal = clientPrincipal(firmId, clientA, {
+  userId: userClientA,
+});
 
 after(async () => {
   await closeAllServers();
@@ -65,8 +70,18 @@ before(async () => {
     { id: buyerOther, type: "buyer", legalName: `Gap Buyer Other ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientA, type: "readiness_assessment", title: "gap A" },
-    { firmId, clientPartyId: clientB, type: "readiness_assessment", title: "gap B" },
+    {
+      firmId,
+      clientPartyId: clientA,
+      type: "readiness_assessment",
+      title: "gap A",
+    },
+    {
+      firmId,
+      clientPartyId: clientB,
+      type: "readiness_assessment",
+      title: "gap B",
+    },
   ]);
   await db.insert(invoicesTable).values([
     // clientA's book: one badly overdue, one current — both outstanding.
@@ -140,9 +155,18 @@ test("firm staff see their sphere: engaged, invoice-referenced, and firm-capture
   const ids = new Set(rows.map((p) => p.id));
   assert.ok(ids.has(clientA), "engaged client visible");
   assert.ok(ids.has(clientB), "engaged sibling visible to firm staff");
-  assert.ok(ids.has(buyerX), "invoice-referenced buyer visible (the gap, closed)");
-  assert.ok(ids.has(buyerY), "sibling's invoice-referenced buyer visible to firm staff");
-  assert.ok(ids.has(capturedByFirm.id), "just-captured buyer visible before any invoice");
+  assert.ok(
+    ids.has(buyerX),
+    "invoice-referenced buyer visible (the gap, closed)",
+  );
+  assert.ok(
+    ids.has(buyerY),
+    "sibling's invoice-referenced buyer visible to firm staff",
+  );
+  assert.ok(
+    ids.has(capturedByFirm.id),
+    "just-captured buyer visible before any invoice",
+  );
   assert.ok(!ids.has(buyerOther), "another firm's buyer never leaks");
 });
 
@@ -167,7 +191,10 @@ test("a client_user sees only its own sphere (SEC-03)", async () => {
   const ids = new Set(rows.map((p) => p.id));
   assert.ok(ids.has(clientA), "own party visible");
   assert.ok(ids.has(buyerX), "buyers on OWN invoices visible");
-  assert.ok(ids.has(capturedByClient.id), "own captured customer visible immediately");
+  assert.ok(
+    ids.has(capturedByClient.id),
+    "own captured customer visible immediately",
+  );
   assert.ok(!ids.has(clientB), "sibling client party hidden");
   assert.ok(!ids.has(buyerY), "sibling client's customer list hidden");
   assert.ok(!ids.has(buyerOther), "other firm's buyer hidden");
@@ -181,7 +208,11 @@ test("firm receivables rollup ranks clients and debtors, worst first", async () 
   assert.ok(a && b, "both clients with outstanding invoices appear");
   assert.equal(a!.outstandingTotal, "600.00");
   assert.equal(a!.invoiceCount, 2);
-  assert.equal(a!.overdue90Amount, "500.00", "the 100-day invoice is 90+ overdue");
+  assert.equal(
+    a!.overdue90Amount,
+    "500.00",
+    "the 100-day invoice is 90+ overdue",
+  );
   assert.equal(a!.oldestDueDate, daysAgo(100));
   assert.equal(b!.outstandingTotal, "200.00");
   assert.ok(

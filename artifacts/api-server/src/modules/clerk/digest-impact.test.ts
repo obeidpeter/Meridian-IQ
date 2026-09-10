@@ -29,15 +29,17 @@ async function seedDigest(
   urgent: { overdue: number; failed: number },
   delivered: boolean,
 ): Promise<void> {
-  await getDb().insert(clerkDigestsTable).values({
-    firmId,
-    weekStart: week(weekNo),
-    headline: `w${weekNo} ${SALT}`,
-    bullets: [],
-    source: "template",
-    facts: { overdueCount: urgent.overdue, failedCount: urgent.failed },
-    deliveredAt: delivered ? new Date() : null,
-  });
+  await getDb()
+    .insert(clerkDigestsTable)
+    .values({
+      firmId,
+      weekStart: week(weekNo),
+      headline: `w${weekNo} ${SALT}`,
+      bullets: [],
+      source: "template",
+      facts: { overdueCount: urgent.overdue, failedCount: urgent.failed },
+      deliveredAt: delivered ? new Date() : null,
+    });
 }
 
 before(async () => {
@@ -60,14 +62,16 @@ before(async () => {
   await seedDigest(firmDark, 3, { overdue: 5, failed: 1 }, false);
   // A null-facts legacy row inside the run: contributes nothing, and must
   // not break the 7-day chain arithmetic for rows around it.
-  await getDb().insert(clerkDigestsTable).values({
-    firmId: firmDark,
-    weekStart: week(5),
-    headline: `legacy ${SALT}`,
-    bullets: [],
-    source: "template",
-    facts: null,
-  });
+  await getDb()
+    .insert(clerkDigestsTable)
+    .values({
+      firmId: firmDark,
+      weekStart: week(5),
+      headline: `legacy ${SALT}`,
+      bullets: [],
+      source: "template",
+      facts: null,
+    });
 });
 
 test("consecutive snapshot pairs split by delivery", async () => {
@@ -76,7 +80,7 @@ test("consecutive snapshot pairs split by delivery", async () => {
   assert.equal(delivered.delivered.pairs, 3, "the week-4 gap pair is excluded");
   assert.ok(
     delivered.delivered.meanUrgentDelta !== null &&
-      Math.abs(delivered.delivered.meanUrgentDelta - (-5 / 3)) < 1e-9,
+      Math.abs(delivered.delivered.meanUrgentDelta - -5 / 3) < 1e-9,
     `mean delta ${delivered.delivered.meanUrgentDelta} — (−2, 0, −3)/3`,
   );
   assert.ok(

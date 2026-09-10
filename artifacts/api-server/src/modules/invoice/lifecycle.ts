@@ -38,10 +38,7 @@ const IMMUTABLE_STATUSES: InvoiceStatus[] = [
 
 const TERMINAL_STATUSES: InvoiceStatus[] = ["cancelled", "credited"];
 
-export function canTransition(
-  from: InvoiceStatus,
-  to: InvoiceStatus,
-): boolean {
+export function canTransition(from: InvoiceStatus, to: InvoiceStatus): boolean {
   return TRANSITIONS[from].includes(to);
 }
 
@@ -142,14 +139,21 @@ export async function recordTransition(
 export async function tryTransition(
   invoice: Pick<Invoice, "id" | "status" | "firmId">,
   to: InvoiceStatus,
-  actor: { actorId: string | null; actorRole: string | null; reason?: string | null },
+  actor: {
+    actorId: string | null;
+    actorRole: string | null;
+    reason?: string | null;
+  },
 ): Promise<boolean> {
   if (!canTransition(invoice.status, to)) return false;
   const [moved] = await getDb()
     .update(invoicesTable)
     .set({ status: to })
     .where(
-      and(eq(invoicesTable.id, invoice.id), eq(invoicesTable.status, invoice.status)),
+      and(
+        eq(invoicesTable.id, invoice.id),
+        eq(invoicesTable.status, invoice.status),
+      ),
     )
     .returning({ id: invoicesTable.id });
   if (!moved) return false;

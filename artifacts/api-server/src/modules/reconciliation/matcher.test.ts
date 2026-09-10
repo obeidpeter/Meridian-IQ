@@ -123,7 +123,9 @@ test("SME-07: >= 85% of true matches are proposed on the fixture book", () => {
   const proposals = proposeMatches(lines, candidates);
   let hit = 0;
   for (const [lineId, invoiceId] of truth) {
-    if (proposals.some((p) => p.lineId === lineId && p.invoiceId === invoiceId)) {
+    if (
+      proposals.some((p) => p.lineId === lineId && p.invoiceId === invoiceId)
+    ) {
       hit++;
     }
   }

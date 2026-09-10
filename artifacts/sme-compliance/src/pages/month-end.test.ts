@@ -12,16 +12,34 @@ const NONE = new Set<string>();
 
 describe("destinationFor", () => {
   test("routes every contract key to the surface that resolves it", () => {
-    expect(destinationFor("overdue_submissions", ALL_FEATURES, ALL_CAPS)).toBe("/invoices");
-    expect(destinationFor("unbilled_income", ALL_FEATURES, ALL_CAPS)).toBe("/invoices/new");
-    expect(destinationFor("unmatched_credits", ALL_FEATURES, ALL_CAPS)).toBe("/reconciliation");
-    expect(destinationFor("missing_bills", ALL_FEATURES, ALL_CAPS)).toBe("/bills");
-    expect(destinationFor("double_payments", ALL_FEATURES, ALL_CAPS)).toBe("/bills");
-    expect(destinationFor("unmatched_collections", ALL_FEATURES, ALL_CAPS)).toBe("/collections");
-    expect(destinationFor("open_obligations", ALL_FEATURES, ALL_CAPS)).toBe("/obligations");
-    expect(destinationFor("open_filings", ALL_FEATURES, ALL_CAPS)).toBe("/filings");
+    expect(destinationFor("overdue_submissions", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/invoices",
+    );
+    expect(destinationFor("unbilled_income", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/invoices/new",
+    );
+    expect(destinationFor("unmatched_credits", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/reconciliation",
+    );
+    expect(destinationFor("missing_bills", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/bills",
+    );
+    expect(destinationFor("double_payments", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/bills",
+    );
+    expect(
+      destinationFor("unmatched_collections", ALL_FEATURES, ALL_CAPS),
+    ).toBe("/collections");
+    expect(destinationFor("open_obligations", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/obligations",
+    );
+    expect(destinationFor("open_filings", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/filings",
+    );
     expect(destinationFor("wht_credits", ALL_FEATURES, ALL_CAPS)).toBe("/wht");
-    expect(destinationFor("pending_approvals", ALL_FEATURES, ALL_CAPS)).toBe("/invoices");
+    expect(destinationFor("pending_approvals", ALL_FEATURES, ALL_CAPS)).toBe(
+      "/invoices",
+    );
   });
 
   test("a dark feature hides the destination instead of misrouting", () => {

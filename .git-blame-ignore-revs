@@ -1,0 +1,6 @@
+# Mechanical formatting passes. Local blame looks through them with
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# and the GitHub blame view reads this file by default.
+
+# R124: one mechanical Prettier pass over the code files
+14dbb8fcb5e608a40e50826406634e9b3ee36048

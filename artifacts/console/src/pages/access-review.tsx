@@ -5,11 +5,7 @@ import {
   useGetAccessRegister,
   type AccessRegisterMember,
 } from "@workspace/api-client-react";
-import {
-  Download,
-  ShieldCheck,
-  UserCheck,
-} from "lucide-react";
+import { Download, ShieldCheck, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QueryError } from "@/components/query-error";
@@ -133,14 +129,18 @@ export function AccessReview() {
             <Metric
               label="Last attested"
               value={
-                lastAttestation ? formatDate(lastAttestation.attestedAt) : "Never"
+                lastAttestation
+                  ? formatDate(lastAttestation.attestedAt)
+                  : "Never"
               }
               detail={
                 lastAttestation
                   ? `by ${lastAttestation.byName ?? "a firm admin"} · ${lastAttestation.memberCount} members${upToDate ? "" : " · register has changed since"}`
                   : "No review recorded yet"
               }
-              tone={upToDate ? "positive" : lastAttestation ? "warning" : "default"}
+              tone={
+                upToDate ? "positive" : lastAttestation ? "warning" : "default"
+              }
               icon={<ShieldCheck className="size-4" aria-hidden="true" />}
               testId="stat-last-attested"
             />
@@ -186,7 +186,9 @@ export function AccessReview() {
                               {m.fullName ?? m.email ?? m.userId}
                             </p>
                             {m.email && m.fullName ? (
-                              <p className="text-xs text-muted-foreground">{m.email}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {m.email}
+                              </p>
                             ) : null}
                             {flags.length > 0 ? (
                               <p
@@ -198,12 +200,21 @@ export function AccessReview() {
                             ) : null}
                           </td>
                           <td className="px-3 py-2">{roleLabel(m.role)}</td>
-                          <td className="px-3 py-2 tabular-nums">{formatDate(m.since)}</td>
                           <td className="px-3 py-2 tabular-nums">
-                            {m.lastSignInAt ? formatDate(m.lastSignInAt) : "Never"}
+                            {formatDate(m.since)}
                           </td>
-                          <td className="px-3 py-2">{m.mfaEnabled ? "On" : "Off"}</td>
-                          <td className="px-3 py-2" data-testid={`text-member-clients-${m.userId}`}>
+                          <td className="px-3 py-2 tabular-nums">
+                            {m.lastSignInAt
+                              ? formatDate(m.lastSignInAt)
+                              : "Never"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {m.mfaEnabled ? "On" : "Off"}
+                          </td>
+                          <td
+                            className="px-3 py-2"
+                            data-testid={`text-member-clients-${m.userId}`}
+                          >
                             {m.assignedClients.length > 0
                               ? m.assignedClients.join(", ")
                               : m.role === "client_user"

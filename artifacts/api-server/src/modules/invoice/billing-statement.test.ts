@@ -52,7 +52,8 @@ const buyerX = randomUUID();
 
 // The newest closed Lagos month (what the statement defaults to).
 const MONTH = lagosMonthStart(1);
-const monthDay = (day: number) => `${MONTH.slice(0, 8)}${String(day).padStart(2, "0")}`;
+const monthDay = (day: number) =>
+  `${MONTH.slice(0, 8)}${String(day).padStart(2, "0")}`;
 // Inside the month in BOTH calendars (noon UTC on the 10th).
 const inMonthUtc = new Date(`${monthDay(10)}T12:00:00.000Z`);
 // The month-edge instant: 23:30 UTC the day BEFORE the month starts is
@@ -97,8 +98,16 @@ before(async () => {
     { id: firmC, name: `Bill Firm C ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: supplierA, type: "client_business", legalName: `Bill Supplier A ${SALT}` },
-    { id: supplierB, type: "client_business", legalName: `Bill Supplier B ${SALT}` },
+    {
+      id: supplierA,
+      type: "client_business",
+      legalName: `Bill Supplier A ${SALT}`,
+    },
+    {
+      id: supplierB,
+      type: "client_business",
+      legalName: `Bill Supplier B ${SALT}`,
+    },
     { id: buyerX, type: "buyer", legalName: `Bill Buyer ${SALT}` },
   ]);
 
@@ -181,12 +190,22 @@ before(async () => {
   await attempt(inv1, 1, "accepted", inMonthUtc);
   // Accepted AFTER the month closed — the invoice still counts (issue-month
   // basis, acceptance whenever it happened), the attempt traffic does not.
-  await attempt(inv2, 1, "accepted", new Date(monthStartUtc.getTime() + 33 * 86_400_000));
+  await attempt(
+    inv2,
+    1,
+    "accepted",
+    new Date(monthStartUtc.getTime() + 33 * 86_400_000),
+  );
   await attempt(inv3, 1, "accepted", inMonthUtc);
   await attempt(inv4, 1, "rejected", inMonthUtc);
   await attempt(inv5, 1, "accepted", inMonthUtc);
   await attempt(cn1, 1, "accepted", inMonthUtc);
-  await attempt(invPrev, 1, "accepted", new Date(monthStartUtc.getTime() - 10 * 86_400_000));
+  await attempt(
+    invPrev,
+    1,
+    "accepted",
+    new Date(monthStartUtc.getTime() - 10 * 86_400_000),
+  );
   await attempt(invB, 1, "accepted", inMonthUtc);
   // Lagos-in / UTC-out edge attempt: counts toward the Lagos attempt traffic.
   await attempt(inv1, 2, "rejected", edgeInstant);
@@ -228,7 +247,11 @@ after(async () => {
 });
 
 test("computeBillingFee: overage maths, 2dp strings", () => {
-  const tier = { monthlyPrice: "40000", includedInvoices: 2, overagePrice: "125" };
+  const tier = {
+    monthlyPrice: "40000",
+    includedInvoices: 2,
+    overagePrice: "125",
+  };
   assert.deepEqual(computeBillingFee(tier, 0), {
     base: "40000.00",
     overageInvoices: 0,
@@ -357,5 +380,8 @@ test("routes: gates, closed-month discipline and CSV attachment", async () => {
   assert.ok(text.includes("totalFee,40125.00"));
   assert.ok(text.includes("clerkTokens:extract_invoice,1700"));
   assert.ok(text.includes("UTC"), "disclosure travels with the file");
-  assert.equal((await fetch(`${asClient}/billing/statement/export`)).status, 403);
+  assert.equal(
+    (await fetch(`${asClient}/billing/statement/export`)).status,
+    403,
+  );
 });

@@ -96,10 +96,7 @@ function assertBundlePageCap(total: number): void {
 
 // Render the bundle's pages. Throws SCAN_TOO_LONG past the page cap and
 // PDF_UNREADABLE when nothing renders — both fail the batch with the message.
-async function rasterizeBundle(
-  buf: Buffer,
-  width: number,
-): Promise<string[]> {
+async function rasterizeBundle(buf: Buffer, width: number): Promise<string[]> {
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buf });
   try {
@@ -203,7 +200,8 @@ export function validateScanSegments(
   if (sorted[0].startPage !== 1) bad("does not start at page 1");
   for (let i = 0; i < sorted.length; i++) {
     const s = sorted[i];
-    if (s.endPage < s.startPage) bad(`range ${s.startPage}-${s.endPage} is inverted`);
+    if (s.endPage < s.startPage)
+      bad(`range ${s.startPage}-${s.endPage} is inverted`);
     // One segment = one invoice, and a single capture takes at most
     // MAX_SCAN_PAGES pages. Refusing here mirrors the single-scan cap —
     // silently truncating a long invoice to its first pages would put a

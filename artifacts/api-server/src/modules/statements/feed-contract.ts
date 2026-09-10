@@ -234,7 +234,11 @@ async function bankRelayRequest(
     );
     throw new Error("Live bank feed rejected the request");
   }
-  return readBoundedJsonObject(response, BANK_RELAY_MAX_BYTES, "Live bank feed");
+  return readBoundedJsonObject(
+    response,
+    BANK_RELAY_MAX_BYTES,
+    "Live bank feed",
+  );
 }
 
 export const liveBankRelayConnector: StatementFeedConnector = {

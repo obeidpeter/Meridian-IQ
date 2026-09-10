@@ -101,10 +101,7 @@ export function computeBillingFee(
   tier: Pick<BillingTier, "monthlyPrice" | "includedInvoices" | "overagePrice">,
   acceptedInvoices: number,
 ): BillingStatementFee {
-  const overageInvoices = Math.max(
-    0,
-    acceptedInvoices - tier.includedInvoices,
-  );
+  const overageInvoices = Math.max(0, acceptedInvoices - tier.includedInvoices);
   const base = Number(tier.monthlyPrice);
   const overage = overageInvoices * Number(tier.overagePrice);
   return {

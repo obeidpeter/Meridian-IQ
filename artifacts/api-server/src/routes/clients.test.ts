@@ -18,7 +18,11 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
-import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  crossTenantPrincipal,
+  firmPrincipal,
+} from "../test-helpers/principals.ts";
 
 // POST /clients — single engaged-client creation: party (shared spine, with
 // provenance + party.create audit via createParty) plus the retainer
@@ -46,10 +50,12 @@ const TIN = "12345678-0001";
 const LEGAL_NAME = `Create Client Alpha ${SALT}`;
 
 before(async () => {
-  await getDb().insert(firmsTable).values([
-    { id: firmA, name: `Create Client Firm A ${SALT}` },
-    { id: firmB, name: `Create Client Firm B ${SALT}` },
-  ]);
+  await getDb()
+    .insert(firmsTable)
+    .values([
+      { id: firmA, name: `Create Client Firm A ${SALT}` },
+      { id: firmB, name: `Create Client Firm B ${SALT}` },
+    ]);
 });
 
 after(async () => {
@@ -158,13 +164,20 @@ test("the check is firm-scoped: another firm may create the same TIN (no cross-t
       tin: TIN,
     }),
   });
-  assert.equal(res.status, 201, "a TIN engaged elsewhere creates a NEW party here");
+  assert.equal(
+    res.status,
+    201,
+    "a TIN engaged elsewhere creates a NEW party here",
+  );
   const body = (await res.json()) as { partyId: string };
   const rows = await getDb()
     .select({ id: partiesTable.id })
     .from(partiesTable)
     .where(eq(partiesTable.tin, TIN));
-  assert.ok(rows.length >= 2, "two independent parties share the TIN across firms");
+  assert.ok(
+    rows.length >= 2,
+    "two independent parties share the TIN across firms",
+  );
   assert.ok(rows.some((r) => r.id === body.partyId));
 });
 

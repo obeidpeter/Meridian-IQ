@@ -23,9 +23,7 @@ test("Postgres enforces claim singleton, bypass-only reads and immutability", as
     );
 
     await client.query("SET LOCAL ROLE meridian_app");
-    await client.query(
-      "SELECT set_config('app.bypass', 'off', true)",
-    );
+    await client.query("SELECT set_config('app.bypass', 'off', true)");
     const hidden = await client.query(
       "SELECT key FROM production_bootstrap_claims WHERE key = $1",
       [key],
@@ -64,10 +62,9 @@ test("Postgres enforces claim singleton, bypass-only reads and immutability", as
 
     await client.query("SAVEPOINT delete_claim");
     await assert.rejects(
-      client.query(
-        "DELETE FROM production_bootstrap_claims WHERE key = $1",
-        [key],
-      ),
+      client.query("DELETE FROM production_bootstrap_claims WHERE key = $1", [
+        key,
+      ]),
       (error: unknown) => (error as { code?: string }).code === "42501",
     );
     await client.query("ROLLBACK TO SAVEPOINT delete_claim");

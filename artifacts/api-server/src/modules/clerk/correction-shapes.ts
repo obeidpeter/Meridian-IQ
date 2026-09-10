@@ -57,7 +57,14 @@ export function classifyCorrectionShape(
     const ex = parseDateParts(extracted);
     const fi = parseDateParts(final);
     // The classic scan error: day and month transposed in the same year.
-    if (ex && fi && ex.y === fi.y && ex.m === fi.d && ex.d === fi.m && ex.m !== ex.d) {
+    if (
+      ex &&
+      fi &&
+      ex.y === fi.y &&
+      ex.m === fi.d &&
+      ex.d === fi.m &&
+      ex.m !== ex.d
+    ) {
       return "date_dmy_flip";
     }
     return "date_other";

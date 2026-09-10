@@ -2,7 +2,13 @@ import { Feather } from "@expo/vector-icons";
 import { PartyType, useListParties } from "@workspace/api-client-react";
 import type { Party } from "@workspace/api-client-react";
 import React, { useEffect, useMemo } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -27,15 +33,16 @@ export function ClientPicker() {
   const { selectClient, signOut } = useSession();
   // Bounded reads (R98): client businesses only, at the reference-list
   // ceiling, so the auto-select below sees the whole set.
-  const parties = useListParties({ type: PartyType.client_business, limit: 500 });
+  const parties = useListParties({
+    type: PartyType.client_business,
+    limit: 500,
+  });
 
   // Memoized so the auto-select effect below has a stable dependency (a fresh
   // filter() each render would otherwise re-run the effect every render).
   const clients = useMemo<Party[]>(
     () =>
-      (parties.data ?? []).filter(
-        (p) => p.type === PartyType.client_business,
-      ),
+      (parties.data ?? []).filter((p) => p.type === PartyType.client_business),
     [parties.data],
   );
 

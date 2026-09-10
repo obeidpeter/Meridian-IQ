@@ -36,7 +36,10 @@ test("base32 encodes the RFC test key exactly and round-trips random buffers", (
   assert.equal(base32Encode(RFC_KEY), RFC_KEY_B32);
   assert.deepEqual(base32Decode(RFC_KEY_B32), RFC_KEY);
   // Presentation tolerance: lowercase, whitespace and padding still decode.
-  assert.deepEqual(base32Decode("gezd gnbv gy3t qojq GEZDGNBVGY3TQOJQ=="), RFC_KEY);
+  assert.deepEqual(
+    base32Decode("gezd gnbv gy3t qojq GEZDGNBVGY3TQOJQ=="),
+    RFC_KEY,
+  );
   for (const len of [1, 2, 3, 4, 5, 19, 20, 32]) {
     const buf = randomBytes(len);
     assert.deepEqual(
@@ -122,7 +125,11 @@ test("lastUsedStep blocks replay of a code at or before the accepted step", () =
 
 test("generated secrets are 20 bytes of base32; the otpauth URI carries the app's identity", () => {
   const secret = generateTotpSecret();
-  assert.match(secret, /^[A-Z2-7]{32}$/, "20 bytes → 32 base32 chars, no padding");
+  assert.match(
+    secret,
+    /^[A-Z2-7]{32}$/,
+    "20 bytes → 32 base32 chars, no padding",
+  );
   assert.equal(base32Decode(secret).length, 20);
   const uri = buildOtpauthUri("ada@firm.ng", secret);
   assert.ok(uri.startsWith("otpauth://totp/Valo%3Aada%40firm.ng?"));
@@ -153,7 +160,10 @@ test("mfa pending token round-trips, expires, and honours its epoch", async () =
   assert.deepEqual(await verifyMfaToken(token, now), { userId, epoch: 7 });
   // Still valid just inside the TTL; dead just past it.
   assert.ok(await verifyMfaToken(token, now + MFA_TOKEN_TTL_MS - 1_000));
-  assert.equal(await verifyMfaToken(token, now + MFA_TOKEN_TTL_MS + 1_000), null);
+  assert.equal(
+    await verifyMfaToken(token, now + MFA_TOKEN_TTL_MS + 1_000),
+    null,
+  );
   // Tampered signature is rejected.
   const tampered = token.slice(0, -2) + (token.endsWith("aa") ? "bb" : "aa");
   assert.equal(await verifyMfaToken(tampered, now), null);

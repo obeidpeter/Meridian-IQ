@@ -143,7 +143,9 @@ function capabilityFor(
 // stored grant's check.
 export function templateCapabilities(
   templateKey: string,
-): Array<"invoice.submit" | "clerk.capture" | "invoice.write" | "reconciliation.act"> {
+): Array<
+  "invoice.submit" | "clerk.capture" | "invoice.write" | "reconciliation.act"
+> {
   const template = PLAN_TEMPLATES[templateKey];
   if (!template) return [];
   // REQUIRED kinds only: an optional kind is skipped for approvers who
@@ -290,7 +292,9 @@ export async function createPlanRunFromCase(
   // SEC-03/IDOR wall per distinct client the plan touches (the execute
   // route's own posture, in an explicit firm-bound context because this
   // route runs outside the request transaction).
-  for (const clientPartyId of [...new Set(actions.map((a) => a.clientPartyId))]) {
+  for (const clientPartyId of [
+    ...new Set(actions.map((a) => a.clientPartyId)),
+  ]) {
     await runRequestContext({ bypass: false, firmId }, () =>
       assertPartyAccess(principal, clientPartyId),
     );
@@ -352,7 +356,11 @@ export async function createPlanRunFromTemplate(
   }
   const template = PLAN_TEMPLATES[templateKey];
   if (!template) {
-    throw new DomainError("UNKNOWN_TEMPLATE", "That plan template does not exist", 400);
+    throw new DomainError(
+      "UNKNOWN_TEMPLATE",
+      "That plan template does not exist",
+      400,
+    );
   }
   if (!(await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId))) {
     throw new DomainError(
@@ -608,7 +616,10 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
   const steps = [...run.steps];
   const cursor = run.processedSteps;
   if (cursor >= steps.length) {
-    const held = await fencedPatch(runId, stamp, { status: "done", claimedAt: null });
+    const held = await fencedPatch(runId, stamp, {
+      status: "done",
+      claimedAt: null,
+    });
     if (held) await notifyClosePackBestEffort(run);
     return "terminal";
   }

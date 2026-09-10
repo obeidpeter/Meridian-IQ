@@ -245,36 +245,55 @@ const METRICS: Metric[] = [
 ];
 
 export const auditLockWaitSeconds = new Histogram(
-  "valo_audit_lock_wait_seconds", "Time waiting for the global audit chain lock.",
+  "valo_audit_lock_wait_seconds",
+  "Time waiting for the global audit chain lock.",
   [0.001, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
 );
 export const auditLockFailures = new Counter(
-  "valo_audit_lock_failures_total", "Audit lock acquisition failures; no event was appended.",
+  "valo_audit_lock_failures_total",
+  "Audit lock acquisition failures; no event was appended.",
 );
 export const webhookFanoutOldestAge = new LabeledGauge(
-  "valo_webhook_fanout_oldest_age_seconds", "Age of the oldest eligible event in the latest bounded fanout batch.",
+  "valo_webhook_fanout_oldest_age_seconds",
+  "Age of the oldest eligible event in the latest bounded fanout batch.",
 );
 export const clerkAdmissionRejected = new Counter(
-  "valo_clerk_admission_rejected_total", "Clerk admissions refused before provider execution.",
+  "valo_clerk_admission_rejected_total",
+  "Clerk admissions refused before provider execution.",
 );
-METRICS.push(auditLockWaitSeconds, auditLockFailures, webhookFanoutOldestAge, clerkAdmissionRejected);
+METRICS.push(
+  auditLockWaitSeconds,
+  auditLockFailures,
+  webhookFanoutOldestAge,
+  clerkAdmissionRejected,
+);
 
 function poolMetrics(): string {
   const pools = databasePoolMetrics();
   const fields = [
-    ["total", "connections", "gauge"], ["idle", "idle_connections", "gauge"],
-    ["active", "active_connections", "gauge"], ["waiting", "waiting_requests", "gauge"],
-    ["max", "max_connections", "gauge"], ["idleErrors", "idle_errors_total", "counter"],
+    ["total", "connections", "gauge"],
+    ["idle", "idle_connections", "gauge"],
+    ["active", "active_connections", "gauge"],
+    ["waiting", "waiting_requests", "gauge"],
+    ["max", "max_connections", "gauge"],
+    ["idleErrors", "idle_errors_total", "counter"],
     ["oldestAcquisitionSeconds", "oldest_acquisition_seconds", "gauge"],
     ["acquisitionCount", "acquisitions_total", "counter"],
     ["acquisitionFailures", "acquisition_failures_total", "counter"],
     ["acquisitionSeconds", "acquisition_seconds_total", "counter"],
   ] as const;
-  return fields.map(([key, suffix, type]) => {
-    const metric = `valo_pg_pool_${suffix}`;
-    return [`# HELP ${metric} PostgreSQL pool ${suffix}.`, `# TYPE ${metric} ${type}`,
-      ...pools.map((entry) => `${metric}{pool="${entry.name}"} ${entry[key]}`)].join("\n");
-  }).join("\n");
+  return fields
+    .map(([key, suffix, type]) => {
+      const metric = `valo_pg_pool_${suffix}`;
+      return [
+        `# HELP ${metric} PostgreSQL pool ${suffix}.`,
+        `# TYPE ${metric} ${type}`,
+        ...pools.map(
+          (entry) => `${metric}{pool="${entry.name}"} ${entry[key]}`,
+        ),
+      ].join("\n");
+    })
+    .join("\n");
 }
 
 export function recordUsabilityEvent(event: string, surface: string): void {
@@ -311,12 +330,19 @@ function processMetrics(): string {
 export const registry = {
   contentType: CONTENT_TYPE,
   async metrics(): Promise<string> {
-    const current = [processMetrics(), poolMetrics(), ...METRICS.map((m) => m.expose())].join("\n");
+    const current = [
+      processMetrics(),
+      poolMetrics(),
+      ...METRICS.map((m) => m.expose()),
+    ].join("\n");
     // Preserve existing dashboards and alerts while new integrations adopt Valo.
     // Alias metric identifiers only, never labels or arbitrary help text.
-    const legacy = current.split("\n")
+    const legacy = current
+      .split("\n")
       .filter((line) => /^(?:# (?:HELP|TYPE) )?valo_/.test(line))
-      .map((line) => line.replace(/^((?:# (?:HELP|TYPE) )?)valo_/, "$1meridian_"))
+      .map((line) =>
+        line.replace(/^((?:# (?:HELP|TYPE) )?)valo_/, "$1meridian_"),
+      )
       .join("\n");
     return current + "\n" + legacy + "\n";
   },

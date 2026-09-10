@@ -2,7 +2,10 @@ import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/sweeps";
-import { AUTO_RECONCILE_FLAG_KEY, AUTO_RECONCILE_THRESHOLD } from "./plan-steps";
+import {
+  AUTO_RECONCILE_FLAG_KEY,
+  AUTO_RECONCILE_THRESHOLD,
+} from "./plan-steps";
 import {
   alertOnceViaAuditLedger,
   atMostHourly,
@@ -148,9 +151,7 @@ export function detectAgreementDrop(
   minDecisions = MIN_DECISIONS,
   dropPoints = DROP_POINTS,
 ): AgreementDrop | null {
-  const measured = months.filter(
-    (m) => m.agreed + m.disagreed >= minDecisions,
-  );
+  const measured = months.filter((m) => m.agreed + m.disagreed >= minDecisions);
   if (measured.length < 2) return null;
   const from = measured[measured.length - 2];
   const to = measured[measured.length - 1];
@@ -240,4 +241,6 @@ export async function sweepAgreementWatch(
   });
 }
 
-registerSweep("clerk.agreement_watch", atMostHourly(sweepAgreementWatch), { critical: false });
+registerSweep("clerk.agreement_watch", atMostHourly(sweepAgreementWatch), {
+  critical: false,
+});

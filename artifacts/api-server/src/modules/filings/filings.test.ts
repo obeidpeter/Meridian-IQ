@@ -13,10 +13,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { DomainError } from "../errors.ts";
-import {
-  narrowToClientPartyScope,
-  type Principal,
-} from "../auth/rbac.ts";
+import { narrowToClientPartyScope, type Principal } from "../auth/rbac.ts";
 import {
   countOpenFilings,
   listFilings,
@@ -413,7 +410,9 @@ test("SEC-03: the loader's 404 non-disclosure and the list narrowing", async () 
   assert.equal((await loadFilingForScope(rowA.id, firmStaff)).id, rowA.id);
 
   const notFound = (err: unknown) =>
-    err instanceof DomainError && err.code === "NOT_FOUND" && err.status === 404;
+    err instanceof DomainError &&
+    err.code === "NOT_FOUND" &&
+    err.status === 404;
   // Missing id, foreign tenant and sibling client are indistinguishable.
   await assert.rejects(loadFilingForScope(randomUUID(), firmStaff), notFound);
   await assert.rejects(loadFilingForScope(rowA.id, foreignStaff), notFound);
@@ -432,8 +431,7 @@ test("SEC-03: the loader's 404 non-disclosure and the list narrowing", async () 
   assert.ok(narrowed.every((r) => r.clientPartyId === clientB));
   assert.throws(
     () => narrowToClientPartyScope(clientUserB, clientA),
-    (err: unknown) =>
-      err instanceof DomainError && err.code === "CROSS_CLIENT",
+    (err: unknown) => err instanceof DomainError && err.code === "CROSS_CLIENT",
   );
 });
 
@@ -498,10 +496,20 @@ test("wht rows mint ONLY for clients with withholding bills in the period", asyn
   const plainClient = randomUUID();
   const whtVendor = randomUUID();
   const db = getDb();
-  await db.insert(firmsTable).values({ id: whtFirmId, name: `Filing WHT Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: whtFirmId, name: `Filing WHT Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: whtClient, type: "client_business", legalName: `Filing WHT Client ${SALT}` },
-    { id: plainClient, type: "client_business", legalName: `Filing Plain Client ${SALT}` },
+    {
+      id: whtClient,
+      type: "client_business",
+      legalName: `Filing WHT Client ${SALT}`,
+    },
+    {
+      id: plainClient,
+      type: "client_business",
+      legalName: `Filing Plain Client ${SALT}`,
+    },
     { id: whtVendor, type: "buyer", legalName: `Filing WHT Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
@@ -540,11 +548,13 @@ test("wht rows mint ONLY for clients with withholding bills in the period", asyn
     grandTotal: "107500.00",
     whtCategory: "services_5",
   });
-  await db.insert(invoicesTable).values([
-    bill(whtClient, `FW-IN-${SALT}`, "2026-07-15"),
-    bill(plainClient, `FW-CANCEL-${SALT}`, "2026-07-10", "cancelled"),
-    bill(plainClient, `FW-OLD-${SALT}`, "2026-06-15"),
-  ]);
+  await db
+    .insert(invoicesTable)
+    .values([
+      bill(whtClient, `FW-IN-${SALT}`, "2026-07-15"),
+      bill(plainClient, `FW-CANCEL-${SALT}`, "2026-07-10", "cancelled"),
+      bill(plainClient, `FW-OLD-${SALT}`, "2026-06-15"),
+    ]);
 
   // 2 clients × (vat, paye) + ONE wht row for the withholding client.
   assert.equal(await mintFilingsForFirm(whtFirmId, FROZEN_NOW), 5);

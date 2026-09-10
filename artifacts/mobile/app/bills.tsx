@@ -15,12 +15,7 @@ import type {
 } from "@workspace/api-client-react";
 import { Stack } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";

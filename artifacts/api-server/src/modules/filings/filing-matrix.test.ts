@@ -60,7 +60,11 @@ before(async () => {
     { id: routeFirmId, name: `Matrix Route Firm ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: alphaParty, type: "client_business", legalName: `MX Alpha A ${SALT}` },
+    {
+      id: alphaParty,
+      type: "client_business",
+      legalName: `MX Alpha A ${SALT}`,
+    },
     { id: zuluParty, type: "client_business", legalName: `MX Zulu Z ${SALT}` },
     {
       id: archivedParty,
@@ -116,12 +120,14 @@ before(async () => {
     dueDate: filingDueDate(PERIOD, taxType),
     status,
   });
-  await db.insert(filingReturnsTable).values([
-    seed(alphaParty, "vat", "filed"),
-    seed(alphaParty, "paye", "upcoming"),
-    seed(alphaParty, "wht", "upcoming"),
-    seed(zuluParty, "vat", "prepared"),
-  ]);
+  await db
+    .insert(filingReturnsTable)
+    .values([
+      seed(alphaParty, "vat", "filed"),
+      seed(alphaParty, "paye", "upcoming"),
+      seed(alphaParty, "wht", "upcoming"),
+      seed(zuluParty, "vat", "prepared"),
+    ]);
 });
 
 after(async () => {
@@ -176,7 +182,12 @@ test("totals: filed/unfiled count minted cells; overdue flips past the statutory
   });
 
   const late = await computeFilingMatrix(firmId, LATE);
-  assert.deepEqual(late.totals, { clients: 2, filed: 1, unfiled: 3, overdue: 3 });
+  assert.deepEqual(late.totals, {
+    clients: 2,
+    filed: 1,
+    unfiled: 3,
+    overdue: 3,
+  });
 });
 
 test("a foreign firm reads empty — rows and totals alike", async () => {
@@ -201,7 +212,12 @@ test("the route serves the caller's firm under the console rollup posture", asyn
   const body = (await res.json()) as {
     period: string;
     rows: { clientPartyId: string; vat: null; paye: null; wht: null }[];
-    totals: { clients: number; filed: number; unfiled: number; overdue: number };
+    totals: {
+      clients: number;
+      filed: number;
+      unfiled: number;
+      overdue: number;
+    };
   };
   // The LIVE period (the route takes no clock): shape-pinned, not value-
   // pinned. The route firm's client has no minted rows, so every cell is

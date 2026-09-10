@@ -2,11 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  getDb,
-  statementFormatMappingsTable,
-  usersTable,
-} from "@workspace/db";
+import { getDb, statementFormatMappingsTable, usersTable } from "@workspace/db";
 import {
   parseWithCustomFormats,
   saveFormatMapping,

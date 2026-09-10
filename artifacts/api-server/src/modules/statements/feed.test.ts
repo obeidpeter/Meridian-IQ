@@ -42,7 +42,10 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal,
+} from "../../test-helpers/principals.ts";
 
 // Bank-feed connector seam (Wave C): the contract round-trip (pull -> render ->
 // ingestStatement -> reconcile outbox -> proposals), cursor idempotency, the
@@ -60,9 +63,14 @@ const noConsentParty = randomUUID(); // engaged, NO consent (CORE-03 probe)
 const foreignParty = randomUUID(); // engaged by firmDark, not by firmId
 const buyerParty = randomUUID();
 
-const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userId,
+  role: "firm_staff",
+});
 const staffDark: Principal = { ...staff, firmId: firmDark };
-const clientUser: Principal = clientPrincipal(firmId, clientParty, { userId: userId });
+const clientUser: Principal = clientPrincipal(firmId, clientParty, {
+  userId: userId,
+});
 
 const goodConfig = { apiKey: `demo_${SALT}`, account: `acct-${SALT}` };
 
@@ -77,15 +85,42 @@ before(async () => {
     { id: firmDark, name: `Feed Dark Firm ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `Feed Client ${SALT}` },
-    { id: noConsentParty, type: "client_business", legalName: `Feed NoConsent ${SALT}` },
-    { id: foreignParty, type: "client_business", legalName: `Feed Foreign ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `Feed Client ${SALT}`,
+    },
+    {
+      id: noConsentParty,
+      type: "client_business",
+      legalName: `Feed NoConsent ${SALT}`,
+    },
+    {
+      id: foreignParty,
+      type: "client_business",
+      legalName: `Feed Foreign ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `Feed Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: clientParty, type: "retainer", title: `feed A ${SALT}` },
-    { firmId, clientPartyId: noConsentParty, type: "retainer", title: `feed B ${SALT}` },
-    { firmId: firmDark, clientPartyId: foreignParty, type: "retainer", title: `feed C ${SALT}` },
+    {
+      firmId,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `feed A ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: noConsentParty,
+      type: "retainer",
+      title: `feed B ${SALT}`,
+    },
+    {
+      firmId: firmDark,
+      clientPartyId: foreignParty,
+      type: "retainer",
+      title: `feed C ${SALT}`,
+    },
   ]);
   // Layer-1 consent for clientParty only — ingestStatement's CORE-03 gate.
   await db.insert(consentRecordsTable).values({
@@ -136,7 +171,11 @@ test("feed connectors satisfy the contract and register in the map", async () =>
 test("pull is deterministic, cursor-resumable, and renders loss-free through generic_csv", async () => {
   const first = await demobankConnector.pullLines(goodConfig, null, 200);
   const again = await demobankConnector.pullLines(goodConfig, null, 200);
-  assert.deepEqual(first.lines, again.lines, "same cursor must yield same lines");
+  assert.deepEqual(
+    first.lines,
+    again.lines,
+    "same cursor must yield same lines",
+  );
   assert.ok(first.lines.length > 0);
   assert.equal(first.nextCursor, String(first.lines.length));
   // A drained book pulls empty with a null cursor (= keep the stored one).
@@ -150,7 +189,10 @@ test("pull is deterministic, cursor-resumable, and renders loss-free through gen
 
   // The rendered CSV must round-trip through the ordinary parser exactly —
   // this is the invariant that lets the engine trust ingestStatement.
-  const parsed = parseStatementText(renderFeedCsv(first.lines), FEED_FORMAT_KEY);
+  const parsed = parseStatementText(
+    renderFeedCsv(first.lines),
+    FEED_FORMAT_KEY,
+  );
   assert.ok(parsed, "generic_csv must parse the rendered feed");
   assert.equal(parsed.lineCount, first.lines.length);
   assert.equal(parsed.parsedCount, first.lines.length, "every line parses");
@@ -238,14 +280,22 @@ test("create validates connector key, config, and party tenancy", async () => {
     clientPartyId: clientParty,
     config: { apiKey: "wrong" },
   });
-  assert.equal(badAuth.status, 422, "a config the connector rejects is rejected");
+  assert.equal(
+    badAuth.status,
+    422,
+    "a config the connector rejects is rejected",
+  );
 
   const crossTenant = await post({
     connectorKey: "demobank",
     clientPartyId: foreignParty,
     config: goodConfig,
   });
-  assert.equal(crossTenant.status, 403, "another firm's client party is rejected");
+  assert.equal(
+    crossTenant.status,
+    403,
+    "another firm's client party is rejected",
+  );
 
   const ok = await post({
     connectorKey: "demobank",
@@ -305,17 +355,19 @@ test("feed sync round-trip: pulled lines land via ingestStatement and reconcile 
   )
     .toISOString()
     .slice(0, 10);
-  await getDb().insert(invoicesTable).values({
-    id: invoiceId,
-    firmId,
-    supplierPartyId: clientParty,
-    buyerPartyId: buyerParty,
-    invoiceNumber: `FEED-${SALT}-1`,
-    issueDate,
-    status: "stamped",
-    subtotal: firstCredit.amount,
-    grandTotal: firstCredit.amount,
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id: invoiceId,
+      firmId,
+      supplierPartyId: clientParty,
+      buyerPartyId: buyerParty,
+      invoiceNumber: `FEED-${SALT}-1`,
+      issueDate,
+      status: "stamped",
+      subtotal: firstCredit.amount,
+      grandTotal: firstCredit.amount,
+    });
 
   const base = await listen(appFor(staff, router));
   const create = await fetch(`${base}/statement-connections`, {
@@ -556,7 +608,8 @@ test("concurrent syncs of one connection are mutually exclusive (advisory xact l
         return { kind: "done" as const, message: "" };
       } catch (err) {
         return {
-          kind: err instanceof DomainError ? ("dead" as const) : ("retry" as const),
+          kind:
+            err instanceof DomainError ? ("dead" as const) : ("retry" as const),
           message: String((err as Error).message),
         };
       }
@@ -571,7 +624,11 @@ test("concurrent syncs of one connection are mutually exclusive (advisory xact l
     release();
   }
   await holder;
-  assert.equal(await statementCount(), countBefore, "the blocked sync ingested nothing");
+  assert.equal(
+    await statementCount(),
+    countBefore,
+    "the blocked sync ingested nothing",
+  );
   const [blockedRun] = await getDb()
     .select()
     .from(statementSyncRunsTable)
@@ -585,7 +642,11 @@ test("concurrent syncs of one connection are mutually exclusive (advisory xact l
   const result = await runInBypassContext(() => runFeedSync(connection.id));
   assert.ok(result.linesPulled > 0);
   assert.ok(result.statementId);
-  assert.equal(await statementCount(), countBefore + 1, "one page ingested once");
+  assert.equal(
+    await statementCount(),
+    countBefore + 1,
+    "one page ingested once",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -602,9 +663,8 @@ test("authentication failure marks the run failed and syncs nothing", async () =
       config: { apiKey: "expired" }, // fails authenticate at sync time
     })
     .returning();
-  await assert.rejects(
-    runFeedSync(connection.id),
-    (err: unknown) => /apiKey/.test(String((err as Error).message)),
+  await assert.rejects(runFeedSync(connection.id), (err: unknown) =>
+    /apiKey/.test(String((err as Error).message)),
   );
   const [run] = await getDb()
     .select()
@@ -619,7 +679,11 @@ test("authentication failure marks the run failed and syncs nothing", async () =
     .select()
     .from(statementConnectionsTable)
     .where(eq(statementConnectionsTable.id, connection.id));
-  assert.equal(after1.lastSyncAt, null, "a failed sync never advances the clock");
+  assert.equal(
+    after1.lastSyncAt,
+    null,
+    "a failed sync never advances the clock",
+  );
   assert.equal(after1.cursor, null, "a failed sync never advances the cursor");
 });
 
@@ -633,9 +697,8 @@ test("missing layer-1 consent fails the run cleanly (gate lives inside ingestSta
       config: goodConfig,
     })
     .returning();
-  await assert.rejects(
-    runFeedSync(connection.id),
-    (err: unknown) => /consent/i.test(String((err as Error).message)),
+  await assert.rejects(runFeedSync(connection.id), (err: unknown) =>
+    /consent/i.test(String((err as Error).message)),
   );
   const [run] = await getDb()
     .select()
@@ -723,7 +786,10 @@ test("RLS: statement_connections and statement_sync_runs are firm-walled", async
       }),
     ),
     (err: unknown) => {
-      assert.ok(isRlsViolation(err), `expected RLS violation, got ${String(err)}`);
+      assert.ok(
+        isRlsViolation(err),
+        `expected RLS violation, got ${String(err)}`,
+      );
       return true;
     },
   );

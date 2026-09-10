@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { LEDGER_TOKENS_SQL } from "./budget";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/sweeps";
-import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
+import {
+  alertOnceViaAuditLedger,
+  atMostHourly,
+  envThreshold,
+} from "./watch-shared";
 import { median } from "../invoice/date-math";
 
 // Firm spend anomaly watch. The per-firm monthly budget is a hard monthly
@@ -68,7 +72,6 @@ export async function firmSpendDays(days = 15): Promise<FirmSpendDay[]> {
     tokens: Number(r.tokens),
   }));
 }
-
 
 // Pure detection, exported for tests: per firm, the LATEST measured day is
 // compared against the median of that firm's OTHER days in the window. Both
@@ -151,4 +154,6 @@ export async function sweepSpendWatch(
   });
 }
 
-registerSweep("clerk.spend_watch", atMostHourly(sweepSpendWatch), { critical: false });
+registerSweep("clerk.spend_watch", atMostHourly(sweepSpendWatch), {
+  critical: false,
+});

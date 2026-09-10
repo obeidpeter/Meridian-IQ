@@ -24,7 +24,11 @@ import {
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { formatDate } from "@/lib/format";
-import { closeHeaderPill, closeItemRoute, closeItemTitle } from "@/lib/month-end";
+import {
+  closeHeaderPill,
+  closeItemRoute,
+  closeItemTitle,
+} from "@/lib/month-end";
 import { useSession } from "@/lib/session";
 
 function CloseItemRow({
@@ -82,7 +86,11 @@ function CloseItemRow({
 
   if (!onOpen) {
     return (
-      <View accessible accessibilityLabel={a11yLabel} testID={`close-item-${item.key}`}>
+      <View
+        accessible
+        accessibilityLabel={a11yLabel}
+        testID={`close-item-${item.key}`}
+      >
         {content}
       </View>
     );
@@ -166,8 +174,8 @@ export default function MonthEndScreen() {
           <View style={{ gap: 12 }}>
             <AppText variant="body" color={colors.mutedForeground}>
               The platform&apos;s advisories composed into one checklist —
-              review each item before closing the month. Advisory only; a
-              human closes the month.
+              review each item before closing the month. Advisory only; a human
+              closes the month.
             </AppText>
 
             <Card style={{ gap: 4 }}>

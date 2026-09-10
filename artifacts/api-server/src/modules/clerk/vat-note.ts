@@ -47,7 +47,9 @@ export function vatNoteFacts(pack: VatPack): string {
     `Output VAT: NGN ${pack.totals.acceptedVat}`,
     `Credit notes: ${pack.totals.creditCount} reducing VAT by NGN ${pack.totals.creditVat}`,
     `Net output VAT: NGN ${pack.totals.netVat}`,
-    ...(top.length > 0 ? [`Largest clients by net VAT — ${top.join("; ")}`] : []),
+    ...(top.length > 0
+      ? [`Largest clients by net VAT — ${top.join("; ")}`]
+      : []),
     `Basis note: ${pack.note}`,
   ].join("\n");
 }

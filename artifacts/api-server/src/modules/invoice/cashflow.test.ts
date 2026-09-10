@@ -83,8 +83,16 @@ test("projectReceivables picks rhythm > dueDate > terms", () => {
   });
   const projections = projectReceivables(
     [
-      row({ buyerPartyId: "rhythm", issueDate: "2026-06-01", dueDate: "2026-07-20" }),
-      row({ buyerPartyId: "due", issueDate: "2026-06-01", dueDate: "2026-06-20" }),
+      row({
+        buyerPartyId: "rhythm",
+        issueDate: "2026-06-01",
+        dueDate: "2026-07-20",
+      }),
+      row({
+        buyerPartyId: "due",
+        issueDate: "2026-06-01",
+        dueDate: "2026-06-20",
+      }),
       row({ buyerPartyId: "bare", issueDate: "2026-06-01" }),
     ],
     new Map([["rhythm", behaviour("rhythm", 14)]]),
@@ -255,7 +263,9 @@ before(async () => {
   ]);
 
   // --- Multi-client fixture (loop-vs-set equivalence) -----------------------
-  await db.insert(firmsTable).values({ id: firmMulti, name: `CF Multi Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmMulti, name: `CF Multi Firm ${SALT}` });
   await db.insert(partiesTable).values([
     { id: clientC1, type: "client_business", legalName: `CF Multi C1 ${SALT}` },
     { id: clientC2, type: "client_business", legalName: `CF Multi C2 ${SALT}` },

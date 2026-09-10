@@ -52,7 +52,9 @@ const candidate = (reason: string | null) => ({
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values({ id: firmId, name: `Triage Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Triage Firm ${SALT}` });
   await db.insert(partiesTable).values({
     id: partyId,
     type: "client_business",
@@ -175,15 +177,17 @@ test("the sweep is dark without the opt-in clerk_triage flag", async () => {
   // A fresh untriaged case; the flag is absent (or off), so the sweep must
   // not touch it — triage spends platform tokens and is opt-in.
   const darkCaseId = randomUUID();
-  await getDb().insert(operatorCasesTable).values({
-    id: darkCaseId,
-    firmId,
-    clientPartyId: partyId,
-    invoiceId,
-    title: `TRIAGE-DARK-${SALT}`,
-    priority: "medium",
-    status: "open",
-  });
+  await getDb()
+    .insert(operatorCasesTable)
+    .values({
+      id: darkCaseId,
+      firmId,
+      clientPartyId: partyId,
+      invoiceId,
+      title: `TRIAGE-DARK-${SALT}`,
+      priority: "medium",
+      status: "open",
+    });
   await getDb()
     .delete(featureFlagsTable)
     .where(eq(featureFlagsTable.key, "clerk_triage"));

@@ -12,7 +12,13 @@
 //    @workspace/format (no raw enum string leaks into the dialog).
 //  - Chaser drafts render subject/body and copy as "subject\n\nbody".
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   ActionProposal,
@@ -305,8 +311,18 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     const { rerenderCard } = renderCard();
     await openResults({
       decision: decision([
-        { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
-        { invoiceId: "inv-2", invoiceNumber: "INV-002", outcome: "submitted", error: null },
+        {
+          invoiceId: "inv-1",
+          invoiceNumber: "INV-001",
+          outcome: "submitted",
+          error: null,
+        },
+        {
+          invoiceId: "inv-2",
+          invoiceNumber: "INV-002",
+          outcome: "submitted",
+          error: null,
+        },
       ]),
       drafts: null,
     });
@@ -330,7 +346,12 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     const { invalidatedKeys, rerenderCard } = renderCard();
     await openResults({
       decision: decision([
-        { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+        {
+          invoiceId: "inv-1",
+          invoiceNumber: "INV-001",
+          outcome: "submitted",
+          error: null,
+        },
       ]),
       drafts: null,
     });
@@ -362,7 +383,12 @@ describe("ClerkActionsCard (SME dashboard)", () => {
 
     await openResults({
       decision: decision([
-        { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+        {
+          invoiceId: "inv-1",
+          invoiceNumber: "INV-001",
+          outcome: "submitted",
+          error: null,
+        },
       ]),
       drafts: null,
     });
@@ -434,7 +460,14 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     await openResults(
       {
         decision: decision(
-          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "drafted", error: null }],
+          [
+            {
+              invoiceId: "inv-1",
+              invoiceNumber: "INV-001",
+              outcome: "drafted",
+              error: null,
+            },
+          ],
           { kind: "draft_chasers" },
         ),
         drafts: [draft],
@@ -671,7 +704,12 @@ describe("ClerkActionsCard (SME dashboard)", () => {
 
     // An empty sample: no rate from nothing — no line, no placeholder.
     harness.evidence.data = evidence([
-      evidenceKind({ sample: 0, agreed: 0, agreementRate: null, medianLeadDays: null }),
+      evidenceKind({
+        sample: 0,
+        agreed: 0,
+        agreementRate: null,
+        medianLeadDays: null,
+      }),
     ]);
     renderCard();
     await click(screen.getByTestId("button-automate-submit_overdue"));
@@ -691,11 +729,25 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     harness.decisions.data = {
       decisions: [
         decision(
-          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null }],
+          [
+            {
+              invoiceId: "inv-1",
+              invoiceNumber: "INV-001",
+              outcome: "submitted",
+              error: null,
+            },
+          ],
           { policyId: "pol-1" },
         ),
         decision(
-          [{ invoiceId: "inv-2", invoiceNumber: "INV-002", outcome: "submitted", error: null }],
+          [
+            {
+              invoiceId: "inv-2",
+              invoiceNumber: "INV-002",
+              outcome: "submitted",
+              error: null,
+            },
+          ],
           { id: "dec-2" },
         ),
       ],

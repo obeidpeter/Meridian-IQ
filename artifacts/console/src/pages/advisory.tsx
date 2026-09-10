@@ -154,7 +154,8 @@ function AssessmentTab() {
   };
 
   const questionCount = useMemo(
-    () => (template?.sections ?? []).reduce((n, s) => n + s.questions.length, 0),
+    () =>
+      (template?.sections ?? []).reduce((n, s) => n + s.questions.length, 0),
     [template],
   );
   const answeredCount = Object.keys(answers).length;
@@ -220,7 +221,11 @@ function AssessmentTab() {
               title="Add a client to run an assessment"
               description="Assessments are recorded against a client's engagement. Add your first client from the portfolio, then come back here."
             >
-              <Button asChild variant="outline" data-testid="link-advisory-add-client">
+              <Button
+                asChild
+                variant="outline"
+                data-testid="link-advisory-add-client"
+              >
                 <Link href="/portfolio">Go to your portfolio</Link>
               </Button>
             </EmptyState>
@@ -313,8 +318,8 @@ function AssessmentTab() {
           <CardContent className="space-y-4">
             {report.gaps.length === 0 ? (
               <p className="text-sm text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> No gaps — this client is
-                submission-ready.
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> No gaps
+                — this client is submission-ready.
               </p>
             ) : (
               <div className="space-y-2">
@@ -455,7 +460,9 @@ function VatRiskTab() {
             </Card>
             <Card data-testid="stat-vat-at-risk">
               <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Input VAT at risk</p>
+                <p className="text-sm text-muted-foreground">
+                  Input VAT at risk
+                </p>
                 <p className="text-2xl font-bold mt-1 tabular-nums text-red-600 dark:text-red-400">
                   {formatNaira(report.totalVatAtRisk)}
                 </p>
@@ -470,8 +477,11 @@ function VatRiskTab() {
           <Card data-testid="card-vat-rows">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-primary" aria-hidden="true" /> Per-invoice
-                results
+                <ShieldAlert
+                  className="w-4 h-4 text-primary"
+                  aria-hidden="true"
+                />{" "}
+                Per-invoice results
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -488,8 +498,7 @@ function VatRiskTab() {
                         {row.supplierName ? ` · ${row.supplierName}` : ""}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        TIN {row.supplierTin} · VAT{" "}
-                        {formatNaira(row.vatAmount)}
+                        TIN {row.supplierTin} · VAT {formatNaira(row.vatAmount)}
                         {row.detail ? ` · ${row.detail}` : ""}
                       </p>
                     </div>

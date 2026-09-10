@@ -19,7 +19,10 @@ import { routeBlock, setBlock, src } from "../test-helpers/source-pins.ts";
 //    the firm that pays it.
 
 test("the confirmation webhook is public, and ONLY because it fails closed", () => {
-  const set = setBlock(src("middleware/principal.ts"), "PUBLIC_PATHS = new Set(");
+  const set = setBlock(
+    src("middleware/principal.ts"),
+    "PUBLIC_PATHS = new Set(",
+  );
   assert.ok(
     set.includes('"/api/billing/payments/confirm"'),
     "the provider webhook has no session — the shared secret is the credential",
@@ -47,13 +50,18 @@ test("the confirmation webhook is public, and ONLY because it fails closed", () 
 });
 
 test("the webhook skips the request transaction; the module owns its commit", () => {
-  const set = setBlock(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set(");
+  const set = setBlock(
+    src("middleware/request-policy.ts"),
+    "NO_CONTEXT_ROUTES = new Set(",
+  );
   assert.ok(
     set.includes('"POST /api/billing/payments/confirm"'),
     "the settle must not ride the buffered request transaction — the module commits durably before the 202, and the global audit lock is held per-settle only",
   );
   const moduleSrc = src("modules/billing/payments.ts");
-  const confirmAt = moduleSrc.indexOf("export async function confirmPaymentIntent");
+  const confirmAt = moduleSrc.indexOf(
+    "export async function confirmPaymentIntent",
+  );
   assert.ok(confirmAt >= 0);
   assert.ok(
     moduleSrc.slice(confirmAt).includes("runInBypassContext("),
@@ -90,7 +98,9 @@ test("the contract routes keep the billing statement's audience", () => {
 
 test("the amount is computed server-side, never read from the request", () => {
   const moduleSrc = src("modules/billing/payments.ts");
-  const createAt = moduleSrc.indexOf("export async function createPaymentIntent");
+  const createAt = moduleSrc.indexOf(
+    "export async function createPaymentIntent",
+  );
   const feeAt = moduleSrc.indexOf("computeBillingStatement(", createAt);
   const insertAt = moduleSrc.indexOf(".insert(paymentIntentsTable)", createAt);
   assert.ok(

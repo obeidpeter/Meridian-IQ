@@ -119,12 +119,31 @@ before(async () => {
     { id: siblingParty, type: "client_business", legalName: SIBLING_NAME },
     { id: buyerParty, type: "buyer", legalName: `Resp Buyer ${SALT}` },
     { id: vendorParty, type: "buyer", legalName: `Resp Vendor ${SALT}` },
-    { id: brokeParty, type: "client_business", legalName: `Resp Broke ${SALT}` },
+    {
+      id: brokeParty,
+      type: "client_business",
+      legalName: `Resp Broke ${SALT}`,
+    },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId: firmA, clientPartyId: clientParty, type: "retainer", title: `resp A ${SALT}` },
-    { firmId: firmA, clientPartyId: siblingParty, type: "retainer", title: `resp B ${SALT}` },
-    { firmId: brokeFirmId, clientPartyId: brokeParty, type: "retainer", title: `resp C ${SALT}` },
+    {
+      firmId: firmA,
+      clientPartyId: clientParty,
+      type: "retainer",
+      title: `resp A ${SALT}`,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: siblingParty,
+      type: "retainer",
+      title: `resp B ${SALT}`,
+    },
+    {
+      firmId: brokeFirmId,
+      clientPartyId: brokeParty,
+      type: "retainer",
+      title: `resp C ${SALT}`,
+    },
   ]);
 
   // The month's paper: a rails-accepted invoice (register + output VAT), an
@@ -286,10 +305,10 @@ test("facts join the obligation to its client's period figures", async () => {
 
   // The figure lines speak the pack's own numbers (one home).
   const lines = responsePackLines(facts.pack);
-  assert.ok(lines.some((l) => l === `Output VAT: NGN ${facts.pack.vat.outputVat}`));
   assert.ok(
-    lines.some((l) => l.startsWith("Documents issued in the month: ")),
+    lines.some((l) => l === `Output VAT: NGN ${facts.pack.vat.outputVat}`),
   );
+  assert.ok(lines.some((l) => l.startsWith("Documents issued in the month: ")));
 });
 
 test("404 non-disclosure: foreign tenant, sibling client and unknown id are indistinguishable", async () => {
@@ -305,7 +324,10 @@ test("404 non-disclosure: foreign tenant, sibling client and unknown id are indi
   );
   // Sibling client_user: NOT_FOUND, never CROSS_CLIENT.
   await assert.rejects(
-    computeObligationResponseFacts(obMainId, clientPrincipal(firmA, siblingParty)),
+    computeObligationResponseFacts(
+      obMainId,
+      clientPrincipal(firmA, siblingParty),
+    ),
     isNotFound,
   );
   // A missing id produces the exact same refusal.
@@ -326,7 +348,10 @@ test("no gateway: the template answers with the notice's reference and due date"
   assert.equal(draft.monthStart, MONTH);
   assert.equal(draft.monthLabel, monthLabel(MONTH));
   assert.ok(draft.letter.includes(REFERENCE), "the reference is stated");
-  assert.ok(draft.letter.includes(lagosDateOffset(10)), "the due date is stated");
+  assert.ok(
+    draft.letter.includes(lagosDateOffset(10)),
+    "the due date is stated",
+  );
   assert.ok(draft.letter.includes(CLIENT_NAME), "the client is named");
 
   // Pointer-only audit: obligation id, month, source — nothing else.
@@ -454,7 +479,11 @@ test("a client_user (obligation.read only) is refused on both endpoints", async 
   const pack = await fetch(
     `${base}/obligation-response-pack?obligationId=${obMainId}`,
   );
-  assert.equal(pack.status, 403, "firm work product — read alone must not pull it");
+  assert.equal(
+    pack.status,
+    403,
+    "firm work product — read alone must not pull it",
+  );
   const draft = await fetch(`${base}/obligations/${obMainId}/response-draft`, {
     method: "POST",
     headers: JSON_HEADERS,

@@ -116,15 +116,15 @@ export function parseLedgerCsv(csv: string): LedgerRow[] {
 function isValidRow(row: LedgerRow): boolean {
   return Boolean(
     row.invoiceNumber &&
-      row.supplierTin &&
-      row.irn &&
-      row.csid &&
-      typeof row.invoiceAmount === "number" &&
-      Number.isFinite(row.invoiceAmount) &&
-      row.invoiceAmount >= 0 &&
-      typeof row.vatAmount === "number" &&
-      Number.isFinite(row.vatAmount) &&
-      row.vatAmount >= 0,
+    row.supplierTin &&
+    row.irn &&
+    row.csid &&
+    typeof row.invoiceAmount === "number" &&
+    Number.isFinite(row.invoiceAmount) &&
+    row.invoiceAmount >= 0 &&
+    typeof row.vatAmount === "number" &&
+    Number.isFinite(row.vatAmount) &&
+    row.vatAmount >= 0,
   );
 }
 

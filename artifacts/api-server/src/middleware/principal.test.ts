@@ -30,11 +30,22 @@ after(async () => {
 const COOKIE = { cookie: `${SESSION_COOKIE}=some-session-token` };
 
 test("mock identity requires exact explicit opt-in in development/test and is always forbidden in production", () => {
-  for (const nodeEnv of [undefined, "", "production", "staging", "preview", "developmnt", "development", "test"]) {
+  for (const nodeEnv of [
+    undefined,
+    "",
+    "production",
+    "staging",
+    "preview",
+    "developmnt",
+    "development",
+    "test",
+  ]) {
     for (const flag of [undefined, "", "false", "1", "TRUE", "true"]) {
-      assert.equal(devAuthEnabled({ NODE_ENV: nodeEnv, ENABLE_DEV_AUTH: flag }),
+      assert.equal(
+        devAuthEnabled({ NODE_ENV: nodeEnv, ENABLE_DEV_AUTH: flag }),
         (nodeEnv === "development" || nodeEnv === "test") && flag === "true",
-        `NODE_ENV=${nodeEnv}, ENABLE_DEV_AUTH=${flag}`);
+        `NODE_ENV=${nodeEnv}, ENABLE_DEV_AUTH=${flag}`,
+      );
     }
   }
 });
@@ -83,7 +94,8 @@ test("Valo-only and matching dual CSRF markers preserve the same guard", async (
     assert.equal(res.status, 200);
   }
   const empty = await fetch(`${base}/api/auth/login`, {
-    method: "POST", headers: { ...COOKIE, "x-valo-csrf": "" },
+    method: "POST",
+    headers: { ...COOKIE, "x-valo-csrf": "" },
   });
   assert.equal(empty.status, 403);
 });

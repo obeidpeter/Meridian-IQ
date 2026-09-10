@@ -70,19 +70,21 @@ async function creditFor(
   status: WhtCredit["status"] = "awaiting_note",
 ): Promise<WhtCredit> {
   const invoiceId = randomUUID();
-  await getDb().insert(invoicesTable).values({
-    id: invoiceId,
-    firmId,
-    supplierPartyId: clientPartyId,
-    buyerPartyId: buyerParty,
-    invoiceNumber: `WR-${invoiceId.slice(0, 8)}-${SALT}`,
-    status: "settled",
-    issueDate: deductedDate,
-    subtotal: "100000.00",
-    vatTotal: "7500.00",
-    grandTotal: "107500.00",
-    whtCategory: "services_5",
-  });
+  await getDb()
+    .insert(invoicesTable)
+    .values({
+      id: invoiceId,
+      firmId,
+      supplierPartyId: clientPartyId,
+      buyerPartyId: buyerParty,
+      invoiceNumber: `WR-${invoiceId.slice(0, 8)}-${SALT}`,
+      status: "settled",
+      issueDate: deductedDate,
+      subtotal: "100000.00",
+      vatTotal: "7500.00",
+      grandTotal: "107500.00",
+      whtCategory: "services_5",
+    });
   const [row] = await getDb()
     .insert(whtCreditsTable)
     .values({

@@ -35,17 +35,14 @@ export function useUrlTab<T extends string>(
     return () => window.removeEventListener("popstate", onPopState);
   }, [read]);
 
-  const select = useCallback(
-    (next: T) => {
-      setTab(next);
-      const { param, fallback } = latest.current;
-      const url = new URL(window.location.href);
-      if (next === fallback) url.searchParams.delete(param);
-      else url.searchParams.set(param, next);
-      window.history.replaceState(window.history.state, "", url);
-    },
-    [],
-  );
+  const select = useCallback((next: T) => {
+    setTab(next);
+    const { param, fallback } = latest.current;
+    const url = new URL(window.location.href);
+    if (next === fallback) url.searchParams.delete(param);
+    else url.searchParams.set(param, next);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
 
   return [tab, select];
 }

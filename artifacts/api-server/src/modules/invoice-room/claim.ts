@@ -6,7 +6,11 @@ import {
   usersTable,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
-import { hashPassword, issueSessionToken, normalizeEmail } from "../auth/session";
+import {
+  hashPassword,
+  issueSessionToken,
+  normalizeEmail,
+} from "../auth/session";
 import { DomainError } from "../errors";
 import { digestRoomSecret } from "./security";
 import { loadRoomAccess, appendRoomEvent } from "./core";

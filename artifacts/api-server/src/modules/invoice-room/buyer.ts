@@ -1,11 +1,5 @@
 import { randomInt } from "node:crypto";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-} from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   collectionAccountsTable,
   confirmationsTable,

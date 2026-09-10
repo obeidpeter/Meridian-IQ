@@ -81,33 +81,37 @@ export const escalationStatusEnum = pgEnum("escalation_status", [
   "resolved",
 ]);
 
-export const escalationsTable = pgTable("escalations", {
-  id: id(),
-  invoiceId: uuid("invoice_id")
-    .notNull()
-    .references(() => invoicesTable.id),
-  firmId: uuid("firm_id")
-    .notNull()
-    .references(() => firmsTable.id),
-  clientPartyId: uuid("client_party_id")
-    .notNull()
-    .references(() => partiesTable.id),
-  reason: text("reason").notNull(),
-  errorCode: text("error_code"),
-  status: escalationStatusEnum("status").notNull().default("open"),
-  context: jsonb("context").$type<Record<string, unknown>>(),
-  // Operator reply (idea #5): the operator's answer to the client, shown on
-  // the SME escalation card. Written through the reply route only — a Clerk
-  // DRAFT never lands here without an operator pressing send.
-  operatorReply: text("operator_reply"),
-  repliedAt: timestamp("replied_at", { withTimezone: true }),
-  createdAt: createdAt(),
-}, (t) => [
-  // The operator case view and the SME escalation list both look up by
-  // invoice; the firm index backs tenant-scoped scans.
-  index("escalations_invoice_idx").on(t.invoiceId),
-  index("escalations_firm_idx").on(t.firmId),
-]);
+export const escalationsTable = pgTable(
+  "escalations",
+  {
+    id: id(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoicesTable.id),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    reason: text("reason").notNull(),
+    errorCode: text("error_code"),
+    status: escalationStatusEnum("status").notNull().default("open"),
+    context: jsonb("context").$type<Record<string, unknown>>(),
+    // Operator reply (idea #5): the operator's answer to the client, shown on
+    // the SME escalation card. Written through the reply route only — a Clerk
+    // DRAFT never lands here without an operator pressing send.
+    operatorReply: text("operator_reply"),
+    repliedAt: timestamp("replied_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // The operator case view and the SME escalation list both look up by
+    // invoice; the firm index backs tenant-scoped scans.
+    index("escalations_invoice_idx").on(t.invoiceId),
+    index("escalations_firm_idx").on(t.firmId),
+  ],
+);
 export type Escalation = typeof escalationsTable.$inferSelect;
 
 // Expo push-notification device registrations (mobile companion app). One row

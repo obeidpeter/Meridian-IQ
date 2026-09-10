@@ -310,7 +310,10 @@ test("answerSourceNote cites the approved claim for register answers", () => {
     }),
     "Source: VAT Act s.4 · approved claim vat.standard_rate v3",
   );
-  assert.equal(answerSourceNote({ citation: "VAT Act s.4" }), "Source: VAT Act s.4");
+  assert.equal(
+    answerSourceNote({ citation: "VAT Act s.4" }),
+    "Source: VAT Act s.4",
+  );
   // A claim without a version number never renders "vundefined".
   assert.equal(
     answerSourceNote({ claimKey: "vat.standard_rate" }),

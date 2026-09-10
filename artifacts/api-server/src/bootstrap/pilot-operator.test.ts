@@ -79,10 +79,26 @@ test("rejects partial, weak and historical demo credentials without throwing (R1
 test("settings verdicts are stable phrases that never carry a value", () => {
   const secret = "a-unique-password-1234";
   const cases: [PilotOperatorEnvironment, RegExp][] = [
-    [{ NODE_ENV: "production", PILOT_OPERATOR_EMAIL: "pilot@example.com" }, /set together/],
-    [{ ...validEnv, PILOT_OPERATOR_PASSWORD: "too-short" }, /at least 16 characters/],
-    [{ ...validEnv, PILOT_OPERATOR_EMAIL: "ops@valo.example" }, /historical demo identities/],
-    [{ ...validEnv, PILOT_OPERATOR_PASSWORD: "PILOT@EXAMPLE.COM", PILOT_OPERATOR_EMAIL: "pilot@example.com" }, /must not equal the email/],
+    [
+      { NODE_ENV: "production", PILOT_OPERATOR_EMAIL: "pilot@example.com" },
+      /set together/,
+    ],
+    [
+      { ...validEnv, PILOT_OPERATOR_PASSWORD: "too-short" },
+      /at least 16 characters/,
+    ],
+    [
+      { ...validEnv, PILOT_OPERATOR_EMAIL: "ops@valo.example" },
+      /historical demo identities/,
+    ],
+    [
+      {
+        ...validEnv,
+        PILOT_OPERATOR_PASSWORD: "PILOT@EXAMPLE.COM",
+        PILOT_OPERATOR_EMAIL: "pilot@example.com",
+      },
+      /must not equal the email/,
+    ],
   ];
   for (const [env, expected] of cases) {
     const verdict = checkPilotOperatorSettings(env);

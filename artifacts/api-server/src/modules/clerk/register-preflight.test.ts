@@ -14,10 +14,7 @@ import {
   issueDateIssues,
   registerPreflightChecks,
 } from "./register-preflight.ts";
-import {
-  restoreClerkFlag,
-  saveAndEnableClerkFlag,
-} from "./test-support.ts";
+import { restoreClerkFlag, saveAndEnableClerkFlag } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Register-history pre-flight (exhaust idea #6). Pinned invariants:
@@ -42,9 +39,7 @@ const BUYER_NAME = `Adaeze Retail ${SALT}`;
 const FOREIGN_NAME = `Okafor Logistics ${SALT}`;
 const BUYER_TIN = `9876543${SALT.slice(-3)}1`;
 
-function extraction(
-  values: Record<string, string | null>,
-): ClerkExtraction {
+function extraction(values: Record<string, string | null>): ClerkExtraction {
   return {
     fields: Object.entries(values).map(([field, value]) => ({
       field: field as never,
@@ -239,15 +234,30 @@ test("issueDateIssues: overdue-on-arrival and future dates are advisory; fresh d
   assert.equal(stale[0].severity, "advisory");
   assert.ok(stale[0].message.includes("already past"));
 
-  const future = issueDateIssues(extraction({ issueDate: "2026-07-20" }), TODAY);
+  const future = issueDateIssues(
+    extraction({ issueDate: "2026-07-20" }),
+    TODAY,
+  );
   assert.equal(future.length, 1);
   assert.ok(future[0].message.includes("in the future"));
 
   // Tomorrow is clock-skew slack, yesterday is normal, garbage is silent.
-  assert.equal(issueDateIssues(extraction({ issueDate: "2026-07-17" }), TODAY).length, 0);
-  assert.equal(issueDateIssues(extraction({ issueDate: "2026-07-14" }), TODAY).length, 0);
-  assert.equal(issueDateIssues(extraction({ issueDate: "June 2026" }), TODAY).length, 0);
-  assert.equal(issueDateIssues(extraction({ buyerName: "X" }), TODAY).length, 0);
+  assert.equal(
+    issueDateIssues(extraction({ issueDate: "2026-07-17" }), TODAY).length,
+    0,
+  );
+  assert.equal(
+    issueDateIssues(extraction({ issueDate: "2026-07-14" }), TODAY).length,
+    0,
+  );
+  assert.equal(
+    issueDateIssues(extraction({ issueDate: "June 2026" }), TODAY).length,
+    0,
+  );
+  assert.equal(
+    issueDateIssues(extraction({ buyerName: "X" }), TODAY).length,
+    0,
+  );
 
   // Operator captures (no firm) get date sanity too — it needs no register.
   return registerPreflightChecks(
@@ -269,7 +279,11 @@ test("a duplicate invoice number for the same supplier is a full issue", async (
   );
   const dup = issues.find((i) => i.field === "invoiceNumber");
   assert.ok(dup, "the existing invoice number is caught");
-  assert.equal(dup.severity, undefined, "a duplicate number costs the fast lane");
+  assert.equal(
+    dup.severity,
+    undefined,
+    "a duplicate number costs the fast lane",
+  );
   assert.ok(dup.message.includes("duplicate"));
   assert.ok(dup.message.includes("submitted"), "names the existing status");
 });
@@ -376,7 +390,10 @@ test("a total far outside the supplier's usual range is an advisory outlier", as
     }),
     firmA,
   );
-  assert.equal(normal.some((i) => i.field === "grandTotal"), false);
+  assert.equal(
+    normal.some((i) => i.field === "grandTotal"),
+    false,
+  );
 });
 
 test("unusual VAT treatment for a known supplier is flagged; thin history is not", async () => {
@@ -401,7 +418,10 @@ test("unusual VAT treatment for a known supplier is flagged; thin history is not
     }),
     firmA,
   );
-  assert.equal(unknown.some((i) => i.field === "vatTotal"), false);
+  assert.equal(
+    unknown.some((i) => i.field === "vatTotal"),
+    false,
+  );
 });
 
 test("line-item price deviation flags on the supplier's own habit, gated by SEC-03", async () => {
@@ -460,8 +480,9 @@ test("line-item price deviation flags on the supplier's own habit, gated by SEC-
   assert.ok(priceIssue.message.includes("Line 1"));
   assert.ok(priceIssue.message.includes("10000"), "quotes the usual price");
   assert.equal(
-    issues.filter((i) => i.field === "lines" && i.message.includes("unit price"))
-      .length,
+    issues.filter(
+      (i) => i.field === "lines" && i.message.includes("unit price"),
+    ).length,
     1,
     "the in-band line stays silent",
   );
@@ -470,7 +491,9 @@ test("line-item price deviation flags on the supplier's own habit, gated by SEC-
   // line-history messages — same gate as the other history checks.
   const sibling = await registerPreflightChecks(withLines, firmA, buyerId);
   assert.equal(
-    sibling.some((i) => i.field === "lines" && i.message.includes("unit price")),
+    sibling.some(
+      (i) => i.field === "lines" && i.message.includes("unit price"),
+    ),
     false,
   );
 });

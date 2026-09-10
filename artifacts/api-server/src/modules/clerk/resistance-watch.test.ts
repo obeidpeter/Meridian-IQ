@@ -26,7 +26,12 @@ const month = (
   m: string,
   injectionFixtures: number,
   injectionResisted: number,
-): ResistanceMonth => ({ month: m, runs: 1, injectionFixtures, injectionResisted });
+): ResistanceMonth => ({
+  month: m,
+  runs: 1,
+  injectionFixtures,
+  injectionResisted,
+});
 
 test("detectResistanceDrop compares the newest two MEASURED months", () => {
   // A material drop between the two newest measured months alerts.
@@ -81,10 +86,7 @@ test("the sweep alerts once per degraded month via the audit ledger", async () =
   // test files stored, and unique across repeated local runs.
   const fromMonth = `A-${SALT}`;
   const toMonth = `B-${SALT}`;
-  const months = async () => [
-    month(fromMonth, 20, 19),
-    month(toMonth, 20, 10),
-  ];
+  const months = async () => [month(fromMonth, 20, 19), month(toMonth, 20, 10)];
 
   const first = await sweepResistanceWatch({ months });
   assert.deepEqual(first, { checked: true, dropped: true, alerted: true });

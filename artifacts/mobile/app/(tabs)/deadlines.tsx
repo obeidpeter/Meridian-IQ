@@ -9,12 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import type { ComplianceDeadline } from "@workspace/api-client-react";
 import React, { useCallback, useMemo } from "react";
-import {
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  View,
-} from "react-native";
+import { RefreshControl, SectionList, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -357,11 +352,22 @@ function DeadlineRow({ deadline }: { deadline: ComplianceDeadline }) {
           {humanize(deadline.kind)} · {formatDate(deadline.dueDate)}
         </AppText>
         {deadline.description ? (
-          <AppText variant="caption" color={colors.mutedForeground} numberOfLines={2}>
+          <AppText
+            variant="caption"
+            color={colors.mutedForeground}
+            numberOfLines={2}
+          >
             {deadline.description}
           </AppText>
         ) : null}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 2,
+          }}
+        >
           <Badge label={humanize(deadline.status)} tone={statusTone} />
           {deadline.status !== "met" ? (
             <AppText

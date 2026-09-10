@@ -30,7 +30,10 @@ describe("ScrollRegion", () => {
 
   test("forwards an id when passed (aria-controls targets)", () => {
     render(
-      <ScrollRegion label="Evaluation corpus table" id="table-eval-corpus-region">
+      <ScrollRegion
+        label="Evaluation corpus table"
+        id="table-eval-corpus-region"
+      >
         <table />
       </ScrollRegion>,
     );

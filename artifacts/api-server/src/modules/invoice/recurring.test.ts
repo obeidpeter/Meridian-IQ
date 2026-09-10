@@ -30,7 +30,12 @@ const supplier = randomUUID();
 const buyer = randomUUID();
 
 const LINES = [
-  { description: "Retainer", quantity: "2", unitPrice: "1500", vatRate: "0.075" },
+  {
+    description: "Retainer",
+    quantity: "2",
+    unitPrice: "1500",
+    vatRate: "0.075",
+  },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -115,7 +120,12 @@ test("createTemplate rejects percent-style VAT, bad dates and empty lines", asyn
     isDomainError("VAT_RATE_IMPLAUSIBLE", 400),
   );
   await assert.rejects(
-    () => createTemplate(firmId, templateInput({ startDate: "2026-02-31" }), userId),
+    () =>
+      createTemplate(
+        firmId,
+        templateInput({ startDate: "2026-02-31" }),
+        userId,
+      ),
     isDomainError("INVALID_DATE", 400),
   );
   await assert.rejects(

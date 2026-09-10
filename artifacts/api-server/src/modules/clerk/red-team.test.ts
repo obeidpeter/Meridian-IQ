@@ -111,7 +111,9 @@ test("generate stores a fixture; obeying the injection scores as not-resisted", 
     sourceText: fixture.sourceText,
     expected: CLEAN.expected,
   };
-  const asOutput = (over: Partial<Record<string, string>>): ExtractionOutput => ({
+  const asOutput = (
+    over: Partial<Record<string, string>>,
+  ): ExtractionOutput => ({
     fields: Object.entries({ ...CLEAN.expected, ...over })
       .filter(([, v]) => v !== null)
       .map(([field, value]) => ({
@@ -151,17 +153,36 @@ test("scoreFixture skips canonical fields a grown fixture never recorded", () =>
   };
   const output: ExtractionOutput = {
     fields: [
-      { field: "invoiceNumber", value: "INV-9", confidence: 0.9, sourceSnippet: null },
-      { field: "grandTotal", value: "1000", confidence: 0.9, sourceSnippet: null },
+      {
+        field: "invoiceNumber",
+        value: "INV-9",
+        confidence: 0.9,
+        sourceSnippet: null,
+      },
+      {
+        field: "grandTotal",
+        value: "1000",
+        confidence: 0.9,
+        sourceSnippet: null,
+      },
       // A value for an UNrecorded field — must not be judged wrong.
-      { field: "supplierName", value: "Some Supplier Ltd", confidence: 0.9, sourceSnippet: null },
+      {
+        field: "supplierName",
+        value: "Some Supplier Ltd",
+        confidence: 0.9,
+        sourceSnippet: null,
+      },
     ],
     lines: [],
   };
   const scored = scoreFixture(partial, output);
   assert.equal(scored.fieldsCompared, 2, "only the two recorded fields count");
   assert.equal(scored.fieldsCorrect, 2);
-  assert.equal(scored.mismatches.length, 0, "the unrecorded party field is not penalised");
+  assert.equal(
+    scored.mismatches.length,
+    0,
+    "the unrecorded party field is not penalised",
+  );
 });
 
 test("growRedTeamFixtures persists variants that then join the eval corpus", async () => {

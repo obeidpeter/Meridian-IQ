@@ -8,4 +8,8 @@ import { sweepOnboardingRuns } from "./sweep";
 // cadence keeps the recomputation off the minute loop while the checklist
 // still follows within the hour. Kept out of sweep.ts so that module stays
 // importable by node --test without the pipeline worker's dependency graph.
-registerSweep("onboarding.runs", atMostHourly(() => sweepOnboardingRuns()), { critical: false });
+registerSweep(
+  "onboarding.runs",
+  atMostHourly(() => sweepOnboardingRuns()),
+  { critical: false },
+);

@@ -16,7 +16,13 @@
 //    assert — WHT credits are invoice-spine evidence): a read-only viewer sees
 //    the ledger and its pills but no buttons that could only ever 403.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { WhtCredit, WhtRemittance } from "@workspace/api-client-react";
 
@@ -261,9 +267,7 @@ describe("WhtCard", () => {
     const row2 = screen.getByTestId("row-wht-whc-2");
     expect(row2.textContent).toContain("Rent & hire — 10%");
     expect(row2.textContent).toContain("Note WHT/CN/44");
-    expect(screen.getByTestId("pill-wht-whc-2").className).toContain(
-      "emerald",
-    );
+    expect(screen.getByTestId("pill-wht-whc-2").className).toContain("emerald");
     expect(screen.queryByTestId("button-wht-note-whc-2")).toBeNull();
 
     const totals = screen.getByTestId("text-wht-totals");

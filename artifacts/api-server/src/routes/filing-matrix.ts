@@ -21,11 +21,15 @@ const router: IRouter = Router();
 // would intercept every request that merely flows past this router
 // (including the principal-less machine rails).
 
-router.get("/console/filing-matrix", requireFlag("statutory_desks"), async (req, res): Promise<void> => {
-  assertCan(req.principal, "console.portfolio.read");
-  const firmId = firmScope(req.principal);
-  const matrix = await computeFilingMatrix(firmId);
-  res.json(GetFilingMatrixResponse.parse(matrix));
-});
+router.get(
+  "/console/filing-matrix",
+  requireFlag("statutory_desks"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "console.portfolio.read");
+    const firmId = firmScope(req.principal);
+    const matrix = await computeFilingMatrix(firmId);
+    res.json(GetFilingMatrixResponse.parse(matrix));
+  },
+);
 
 export default router;

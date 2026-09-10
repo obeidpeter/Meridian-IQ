@@ -90,7 +90,11 @@ export const ONBOARDING_INTENTS: readonly DataIntent[] = [
             : `${plural(active, "client onboarding run")} ${isAre(active)} in progress — the checklist settles itself as history, statements and consent land. ${plural(completed, "run")} ${completed === 1 ? "has" : "have"} completed.`,
         facts: [
           countFact("onboarding_active", "Onboarding runs in progress", active),
-          countFact("onboarding_completed", "Onboarding runs completed", completed),
+          countFact(
+            "onboarding_completed",
+            "Onboarding runs completed",
+            completed,
+          ),
         ],
       };
     },

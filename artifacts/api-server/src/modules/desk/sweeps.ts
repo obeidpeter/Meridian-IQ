@@ -1,4 +1,13 @@
-import { and, desc, eq, inArray, isNotNull, like, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  like,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -81,15 +90,17 @@ async function sweepUnmappedCodesInner(): Promise<void> {
       .limit(1);
     if (!latest) continue;
 
-    await getDb().insert(operatorCasesTable).values({
-      firmId: latest.firmId,
-      clientPartyId: latest.supplierPartyId,
-      invoiceId: latest.invoiceId,
-      title: `${UNMAPPED_TITLE_PREFIX}${code}: add a catalogue entry (seen ×${row.occurrences})`,
-      errorCode: code,
-      priority: "medium",
-      status: "open",
-    });
+    await getDb()
+      .insert(operatorCasesTable)
+      .values({
+        firmId: latest.firmId,
+        clientPartyId: latest.supplierPartyId,
+        invoiceId: latest.invoiceId,
+        title: `${UNMAPPED_TITLE_PREFIX}${code}: add a catalogue entry (seen ×${row.occurrences})`,
+        errorCode: code,
+        priority: "medium",
+        status: "open",
+      });
   }
 }
 

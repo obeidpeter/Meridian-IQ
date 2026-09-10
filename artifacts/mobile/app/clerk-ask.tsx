@@ -1,5 +1,8 @@
 import { Feather } from "@expo/vector-icons";
-import { useAskClerk, useSubmitClerkFeedback } from "@workspace/api-client-react";
+import {
+  useAskClerk,
+  useSubmitClerkFeedback,
+} from "@workspace/api-client-react";
 import type { ClerkAnswer } from "@workspace/api-client-react";
 import { Stack, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -86,7 +89,11 @@ export default function ClerkAskScreen() {
         },
       });
       setLastAnswer((prev) =>
-        heldAnswer(prev, { type: "success", answer: row.answer, caseId: row.id }),
+        heldAnswer(prev, {
+          type: "success",
+          answer: row.answer,
+          caseId: row.id,
+        }),
       );
       // Only an answer carrying scope worth inheriting threads: a data
       // answer, a multi-intent (sections) answer, or pinned scope (Ask 2.0).
@@ -216,7 +223,10 @@ export default function ClerkAskScreen() {
                     ]}
                     testID={`chip-suggested-${i}`}
                   >
-                    <AppText variant="caption" color={colors.secondaryForeground}>
+                    <AppText
+                      variant="caption"
+                      color={colors.secondaryForeground}
+                    >
                       {q}
                     </AppText>
                   </Pressable>
@@ -330,9 +340,8 @@ function AnswerCard({
                 {s.action ? (
                   <View testID={`text-action-web-only-${i}`}>
                     <AppText variant="caption" color={colors.mutedForeground}>
-                      To approve and run this proposal, open Valo on
-                      the web — approvals are not available in the mobile
-                      app yet.
+                      To approve and run this proposal, open Valo on the web —
+                      approvals are not available in the mobile app yet.
                     </AppText>
                   </View>
                 ) : null}
@@ -400,7 +409,11 @@ function AnswerCard({
                 <AppText variant="caption" color={colors.mutedForeground}>
                   {f.label}
                 </AppText>
-                <AppText variant="label" numberOfLines={2} style={styles.factValue}>
+                <AppText
+                  variant="label"
+                  numberOfLines={2}
+                  style={styles.factValue}
+                >
                   {f.value}
                   {f.unit ? ` ${f.unit}` : ""}
                 </AppText>
@@ -458,9 +471,7 @@ function AnswerCard({
               name="thumbs-up"
               size={16}
               color={
-                feedback === "helpful"
-                  ? colors.primary
-                  : colors.mutedForeground
+                feedback === "helpful" ? colors.primary : colors.mutedForeground
               }
             />
           </Pressable>
@@ -476,9 +487,7 @@ function AnswerCard({
                 borderColor:
                   feedback === "not_helpful" ? colors.primary : colors.border,
                 backgroundColor:
-                  feedback === "not_helpful"
-                    ? colors.secondary
-                    : "transparent",
+                  feedback === "not_helpful" ? colors.secondary : "transparent",
                 opacity: pressed ? 0.7 : 1,
               },
             ]}

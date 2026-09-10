@@ -87,7 +87,10 @@ export async function computeFilingMatrix(
         eq(filingReturnsTable.period, period),
       ),
     );
-  const byCell = new Map<string, { status: FilingReturn["status"]; dueDate: string }>();
+  const byCell = new Map<
+    string,
+    { status: FilingReturn["status"]; dueDate: string }
+  >();
   for (const f of filings) {
     byCell.set(`${f.clientPartyId}:${f.taxType}`, {
       status: f.status,

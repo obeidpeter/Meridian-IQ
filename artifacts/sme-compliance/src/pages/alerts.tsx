@@ -140,7 +140,10 @@ export function Alerts() {
             onClick={() => {
               void (async () => {
                 try {
-                  await update.mutateAsync({ id: clientPartyId, data: previous });
+                  await update.mutateAsync({
+                    id: clientPartyId,
+                    data: previous,
+                  });
                   setForm(previous);
                   queryClient.invalidateQueries({
                     queryKey: getGetAlertPreferencesQueryKey(clientPartyId),
@@ -211,15 +214,52 @@ export function Alerts() {
     icon: typeof MessageSquare;
     placeholder: string;
   }[] = [
-    { key: "whatsapp", enabledKey: "whatsappEnabled", contactKey: "whatsappTo", label: "WhatsApp", icon: MessageSquare, placeholder: "+234 800 000 0000" },
-    { key: "sms", enabledKey: "smsEnabled", contactKey: "phone", label: "SMS", icon: Phone, placeholder: "+234 800 000 0000" },
-    { key: "email", enabledKey: "emailEnabled", contactKey: "email", label: "Email", icon: Mail, placeholder: "you@business.com" },
+    {
+      key: "whatsapp",
+      enabledKey: "whatsappEnabled",
+      contactKey: "whatsappTo",
+      label: "WhatsApp",
+      icon: MessageSquare,
+      placeholder: "+234 800 000 0000",
+    },
+    {
+      key: "sms",
+      enabledKey: "smsEnabled",
+      contactKey: "phone",
+      label: "SMS",
+      icon: Phone,
+      placeholder: "+234 800 000 0000",
+    },
+    {
+      key: "email",
+      enabledKey: "emailEnabled",
+      contactKey: "email",
+      label: "Email",
+      icon: Mail,
+      placeholder: "you@business.com",
+    },
   ];
 
-  const alertTypes: { key: keyof AlertPreferencesInput; label: string; desc: string }[] = [
-    { key: "deadlineAlerts", label: "Deadline reminders", desc: "Upcoming VAT and filing deadlines." },
-    { key: "failureAlerts", label: "Submission failures", desc: "When an invoice is rejected by the rail." },
-    { key: "penaltyAlerts", label: "Penalty watch", desc: "When an invoice is overdue for stamping." },
+  const alertTypes: {
+    key: keyof AlertPreferencesInput;
+    label: string;
+    desc: string;
+  }[] = [
+    {
+      key: "deadlineAlerts",
+      label: "Deadline reminders",
+      desc: "Upcoming VAT and filing deadlines.",
+    },
+    {
+      key: "failureAlerts",
+      label: "Submission failures",
+      desc: "When an invoice is rejected by the rail.",
+    },
+    {
+      key: "penaltyAlerts",
+      label: "Penalty watch",
+      desc: "When an invoice is overdue for stamping.",
+    },
   ];
 
   return (
@@ -233,7 +273,10 @@ export function Alerts() {
         {isLoading ? (
           <AlertsSkeleton />
         ) : isError ? (
-          <QueryError thing="your alert preferences" onRetry={() => refetch()} />
+          <QueryError
+            thing="your alert preferences"
+            onRetry={() => refetch()}
+          />
         ) : (
           <div className="space-y-6">
             {messagingDark && (
@@ -260,13 +303,19 @@ export function Alerts() {
                   return (
                     <div key={ch.key} className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor={switchId} className="flex items-center gap-2">
-                          <Icon className="w-4 h-4" aria-hidden="true" /> {ch.label}
+                        <Label
+                          htmlFor={switchId}
+                          className="flex items-center gap-2"
+                        >
+                          <Icon className="w-4 h-4" aria-hidden="true" />{" "}
+                          {ch.label}
                         </Label>
                         <Switch
                           id={switchId}
                           checked={enabled}
-                          onCheckedChange={(v) => set(ch.enabledKey, v as never)}
+                          onCheckedChange={(v) =>
+                            set(ch.enabledKey, v as never)
+                          }
                         />
                       </div>
                       {enabled && (
@@ -278,7 +327,9 @@ export function Alerts() {
                             id={inputId}
                             placeholder={ch.placeholder}
                             value={(form[ch.contactKey] as string) || ""}
-                            onChange={(e) => set(ch.contactKey, e.target.value as never)}
+                            onChange={(e) =>
+                              set(ch.contactKey, e.target.value as never)
+                            }
                           />
                         </div>
                       )}
@@ -294,9 +345,15 @@ export function Alerts() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {alertTypes.map((a) => (
-                  <div key={a.key} className="flex items-center justify-between gap-4">
+                  <div
+                    key={a.key}
+                    className="flex items-center justify-between gap-4"
+                  >
                     <div>
-                      <Label htmlFor={`switch-${a.key}`} className="font-medium">
+                      <Label
+                        htmlFor={`switch-${a.key}`}
+                        className="font-medium"
+                      >
                         {a.label}
                       </Label>
                       <p className="text-sm text-muted-foreground">{a.desc}</p>
@@ -347,7 +404,9 @@ export function Alerts() {
                         key={i}
                         className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
                       >
-                        <span className="font-medium">{humanize(r.channel)}</span>
+                        <span className="font-medium">
+                          {humanize(r.channel)}
+                        </span>
                         <span
                           className={
                             r.status === "failed"

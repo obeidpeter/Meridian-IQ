@@ -27,25 +27,27 @@ export const engagementStatusEnum = pgEnum("engagement_status", [
   "archived",
 ]);
 
-export const engagementsTable = pgTable("engagements", {
-  id: id(),
-  firmId: uuid("firm_id")
-    .notNull()
-    .references(() => firmsTable.id),
-  clientPartyId: uuid("client_party_id")
-    .notNull()
-    .references(() => partiesTable.id),
-  type: engagementTypeEnum("type").notNull(),
-  status: engagementStatusEnum("status").notNull().default("open"),
-  title: text("title").notNull(),
-  findings: jsonb("findings").$type<Record<string, unknown>>(),
-  schemaVersion: integer("schema_version").notNull().default(1),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-},
-// Firm scoping and party-in-firm checks probe these on nearly every request.
-(t) => [
-  index("engagements_firm_idx").on(t.firmId),
-  index("engagements_client_party_idx").on(t.clientPartyId),
-]);
-
+export const engagementsTable = pgTable(
+  "engagements",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    type: engagementTypeEnum("type").notNull(),
+    status: engagementStatusEnum("status").notNull().default("open"),
+    title: text("title").notNull(),
+    findings: jsonb("findings").$type<Record<string, unknown>>(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  // Firm scoping and party-in-firm checks probe these on nearly every request.
+  (t) => [
+    index("engagements_firm_idx").on(t.firmId),
+    index("engagements_client_party_idx").on(t.clientPartyId),
+  ],
+);

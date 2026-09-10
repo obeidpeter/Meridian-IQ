@@ -108,7 +108,9 @@ export const runPhoneDigits = `${Date.now()}${process.pid}`.slice(-8);
 // keeps claims greppable and an unclaimed prefix a type error):
 //   70–75  whatsapp.test.ts
 //   76     triage.test.ts
-export function testPhone(prefix: 70 | 71 | 72 | 73 | 74 | 75 | 76 | 77): string {
+export function testPhone(
+  prefix: 70 | 71 | 72 | 73 | 74 | 75 | 76 | 77,
+): string {
   return `+234${prefix}${runPhoneDigits}`;
 }
 
@@ -178,7 +180,8 @@ export async function eventually<T>(
   for (;;) {
     const value = await probe();
     if (value) return value;
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    if (Date.now() > deadline)
+      throw new Error(`Timed out waiting for ${label}`);
     await new Promise((r) => setTimeout(r, 50));
   }
 }

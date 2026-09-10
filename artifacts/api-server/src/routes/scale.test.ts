@@ -46,35 +46,105 @@ const supplierB = randomUUID(); // sibling client of the same firm
 const buyerZebra = randomUUID();
 const buyerYak = randomUUID();
 
-const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
-const clientUserA: Principal = clientPrincipal(firmId, supplierA, { userId: userId });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userId,
+  role: "firm_staff",
+});
+const clientUserA: Principal = clientPrincipal(firmId, supplierA, {
+  userId: userId,
+});
 
 // Six invoices for supplier A with staggered created_at (deterministic paging
 // order) plus one for sibling supplier B (SEC-03 must hide it from A's user).
 // Receivables spread: current / 31-60 / 90+ buckets, one settled (excluded),
 // one draft (excluded), one credit note (excluded).
 const INVOICES = [
-  { num: `INV-${SALT}-1`, status: "submitted", due: daysAgo(10), buyer: buyerZebra, total: "100.00", kind: "invoice" },
-  { num: `INV-${SALT}-2`, status: "stamped", due: daysAgo(45), buyer: buyerZebra, total: "200.00", kind: "invoice" },
-  { num: `INV-${SALT}-3`, status: "confirmed", due: daysAgo(100), buyer: buyerYak, total: "700.00", kind: "invoice" },
-  { num: `INV-${SALT}-4`, status: "settled", due: daysAgo(10), buyer: buyerYak, total: "400.00", kind: "invoice" },
-  { num: `INV-${SALT}-5`, status: "draft", due: daysAgo(10), buyer: buyerZebra, total: "500.00", kind: "invoice" },
-  { num: `INV-${SALT}-6`, status: "stamped", due: daysAgo(10), buyer: buyerZebra, total: "50.00", kind: "credit_note" },
+  {
+    num: `INV-${SALT}-1`,
+    status: "submitted",
+    due: daysAgo(10),
+    buyer: buyerZebra,
+    total: "100.00",
+    kind: "invoice",
+  },
+  {
+    num: `INV-${SALT}-2`,
+    status: "stamped",
+    due: daysAgo(45),
+    buyer: buyerZebra,
+    total: "200.00",
+    kind: "invoice",
+  },
+  {
+    num: `INV-${SALT}-3`,
+    status: "confirmed",
+    due: daysAgo(100),
+    buyer: buyerYak,
+    total: "700.00",
+    kind: "invoice",
+  },
+  {
+    num: `INV-${SALT}-4`,
+    status: "settled",
+    due: daysAgo(10),
+    buyer: buyerYak,
+    total: "400.00",
+    kind: "invoice",
+  },
+  {
+    num: `INV-${SALT}-5`,
+    status: "draft",
+    due: daysAgo(10),
+    buyer: buyerZebra,
+    total: "500.00",
+    kind: "invoice",
+  },
+  {
+    num: `INV-${SALT}-6`,
+    status: "stamped",
+    due: daysAgo(10),
+    buyer: buyerZebra,
+    total: "50.00",
+    kind: "credit_note",
+  },
 ] as const;
 
 before(async () => {
   const db = getDb();
-  await db.insert(usersTable).values({ id: userId, email: `scale-${SALT}@test.local` }).onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Scale Test Firm ${SALT}` });
+  await db
+    .insert(usersTable)
+    .values({ id: userId, email: `scale-${SALT}@test.local` })
+    .onConflictDoNothing();
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Scale Test Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: supplierA, type: "client_business", legalName: `Scale Supplier Alpha ${SALT}` },
-    { id: supplierB, type: "client_business", legalName: `Scale Supplier Beta ${SALT}` },
+    {
+      id: supplierA,
+      type: "client_business",
+      legalName: `Scale Supplier Alpha ${SALT}`,
+    },
+    {
+      id: supplierB,
+      type: "client_business",
+      legalName: `Scale Supplier Beta ${SALT}`,
+    },
     { id: buyerZebra, type: "buyer", legalName: `Zebra${SALT} Logistics` },
     { id: buyerYak, type: "buyer", legalName: `Yak${SALT} Traders` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: supplierA, type: "readiness_assessment", title: "scale A" },
-    { firmId, clientPartyId: supplierB, type: "readiness_assessment", title: "scale B" },
+    {
+      firmId,
+      clientPartyId: supplierA,
+      type: "readiness_assessment",
+      title: "scale A",
+    },
+    {
+      firmId,
+      clientPartyId: supplierB,
+      type: "readiness_assessment",
+      title: "scale B",
+    },
   ]);
   const base = Date.now() - 60_000;
   await db.insert(invoicesTable).values(
@@ -114,7 +184,9 @@ before(async () => {
 test("every invoice request is bounded and newest-first; a bare request is the default page", async () => {
   const base = await listen(appFor(staff, invoicesRouter as express.Router));
 
-  const paged = (await (await fetch(`${base}/invoices?limit=3&q=${SALT}`)).json()) as {
+  const paged = (await (
+    await fetch(`${base}/invoices?limit=3&q=${SALT}`)
+  ).json()) as {
     invoiceNumber: string;
     createdAt: string;
   }[];
@@ -152,7 +224,9 @@ test("every invoice request is bounded and newest-first; a bare request is the d
 
   // A bare limit alone bounds the page (it used to take q/offset to leave the
   // legacy full-list mode).
-  const two = (await (await fetch(`${base}/invoices?limit=2`)).json()) as unknown[];
+  const two = (await (
+    await fetch(`${base}/invoices?limit=2`)
+  ).json()) as unknown[];
   assert.equal(two.length, 2, "limit alone bounds the page");
 
   // Over the ceiling is a 400 — never a silent fall-through to the whole book.
@@ -176,17 +250,26 @@ test("q matches invoice number and buyer legal name; wildcards are literal", asy
   const byBuyer = (await (
     await fetch(`${base}/invoices?q=Zebra${SALT}`)
   ).json()) as { invoiceNumber: string }[];
-  assert.ok(byBuyer.length >= 3, "buyer-name search finds that buyer's invoices");
+  assert.ok(
+    byBuyer.length >= 3,
+    "buyer-name search finds that buyer's invoices",
+  );
   assert.ok(byBuyer.every((r) => r.invoiceNumber.includes(SALT)));
 
   const literal = (await (
     await fetch(`${base}/invoices?q=${encodeURIComponent(`%${SALT}`)}`)
   ).json()) as unknown[];
-  assert.equal(literal.length, 0, "a % in the query is a literal, not a wildcard");
+  assert.equal(
+    literal.length,
+    0,
+    "a % in the query is a literal, not a wildcard",
+  );
 });
 
 test("a client_user's search stays confined to its own invoices (SEC-03)", async () => {
-  const base = await listen(appFor(clientUserA, invoicesRouter as express.Router));
+  const base = await listen(
+    appFor(clientUserA, invoicesRouter as express.Router),
+  );
   const rows = (await (await fetch(`${base}/invoices?q=${SALT}`)).json()) as {
     invoiceNumber: string;
   }[];
@@ -206,7 +289,10 @@ test("party search filters by name within the caller's scope", async () => {
   const hits = (await (
     await fetch(`${base}/parties?q=Supplier Alpha ${SALT}`)
   ).json()) as { id: string }[];
-  assert.deepEqual(hits.map((p) => p.id), [supplierA]);
+  assert.deepEqual(
+    hits.map((p) => p.id),
+    [supplierA],
+  );
 
   // A client_user searching a sibling client's name gets nothing (SEC-03).
   const clientBase = await listen(
@@ -297,9 +383,11 @@ test("healthz reports the baked-in contract version", async () => {
 test("parties are alphabetical, type-filtered and paged; the ceiling is enforced", async () => {
   const base = await listen(appFor(staff, partiesRouter as express.Router));
   const names = async (qs: string) =>
-    ((await (await fetch(`${base}/parties?${qs}`)).json()) as { legalName: string }[]).map(
-      (p) => p.legalName,
-    );
+    (
+      (await (await fetch(`${base}/parties?${qs}`)).json()) as {
+        legalName: string;
+      }[]
+    ).map((p) => p.legalName);
 
   // The firm's sphere for this run: two engaged clients + two buyers seen on
   // invoices, alphabetical by legal name.
@@ -326,8 +414,12 @@ test("parties are alphabetical, type-filtered and paged; the ceiling is enforced
 });
 
 test("engagements are paged and every page stays SEC-03 scoped", async () => {
-  const staffBase = await listen(appFor(staff, engagementsRouter as express.Router));
-  const page1 = (await (await fetch(`${staffBase}/engagements?limit=1`)).json()) as {
+  const staffBase = await listen(
+    appFor(staff, engagementsRouter as express.Router),
+  );
+  const page1 = (await (
+    await fetch(`${staffBase}/engagements?limit=1`)
+  ).json()) as {
     id: string;
     title: string;
   }[];
@@ -347,8 +439,12 @@ test("engagements are paged and every page stays SEC-03 scoped", async () => {
   // A client_user's pages hold only its own engagement — the sibling never
   // appears on a later page, because the scope predicate is in the same
   // query as the bound.
-  const clientBase = await listen(appFor(clientUserA, engagementsRouter as express.Router));
-  const own = (await (await fetch(`${clientBase}/engagements?limit=10`)).json()) as {
+  const clientBase = await listen(
+    appFor(clientUserA, engagementsRouter as express.Router),
+  );
+  const own = (await (
+    await fetch(`${clientBase}/engagements?limit=10`)
+  ).json()) as {
     clientPartyId: string;
   }[];
   assert.equal(own.length, 1);

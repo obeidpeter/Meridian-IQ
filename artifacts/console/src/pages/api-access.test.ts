@@ -88,9 +88,9 @@ describe("API key status", () => {
     expect(apiKeyStatusLabel({ revokedAt: "2026-07-01T00:00:00Z" })).toBe(
       "Revoked",
     );
-    expect(
-      apiKeyBadgeClasses({ revokedAt: "2026-07-01T00:00:00Z" }),
-    ).toContain("slate");
+    expect(apiKeyBadgeClasses({ revokedAt: "2026-07-01T00:00:00Z" })).toContain(
+      "slate",
+    );
   });
 });
 
@@ -177,7 +177,10 @@ describe("retryDeliveryErrorNote", () => {
 
   test("other failures relay the server's words when it sent any", () => {
     expect(
-      retryDeliveryErrorNote({ status: 500, data: { error: "outbox is full" } }),
+      retryDeliveryErrorNote({
+        status: 500,
+        data: { error: "outbox is full" },
+      }),
     ).toBe("outbox is full");
   });
 
@@ -198,10 +201,7 @@ describe("fireDeliveryRetry", () => {
     };
     fireDeliveryRetry(mutate, { webhookId: "wh_1", deliveryId: "d_9" }, cbs);
     expect(mutate).toHaveBeenCalledTimes(1);
-    expect(mutate).toHaveBeenCalledWith(
-      { id: "wh_1", deliveryId: "d_9" },
-      cbs,
-    );
+    expect(mutate).toHaveBeenCalledWith({ id: "wh_1", deliveryId: "d_9" }, cbs);
   });
 
   test("the 409 path lands in the inline note via the wired onError", () => {

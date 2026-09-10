@@ -35,8 +35,14 @@ test("items without a mobile surface render without a link", () => {
 });
 
 test("closeHeaderPill: amber count while anything needs review, else all clear", () => {
-  assert.deepEqual(closeHeaderPill(3), { label: "3 to review", tone: "warning" });
-  assert.deepEqual(closeHeaderPill(1), { label: "1 to review", tone: "warning" });
+  assert.deepEqual(closeHeaderPill(3), {
+    label: "3 to review",
+    tone: "warning",
+  });
+  assert.deepEqual(closeHeaderPill(1), {
+    label: "1 to review",
+    tone: "warning",
+  });
   assert.deepEqual(closeHeaderPill(0), { label: "All clear", tone: "success" });
 });
 

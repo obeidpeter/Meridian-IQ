@@ -196,15 +196,12 @@ function deliveryBody(row: FirmWebhookDeliveryRow) {
   };
 }
 
-router.get(
-  "/firm-webhooks/:id/deliveries",
-  async (req, res): Promise<void> => {
-    const firmId = firmAdminScope(req.principal);
-    const params = parseOrThrow(ListFirmWebhookDeliveriesParams, req.params);
-    const rows = await listWebhookDeliveries(firmId, params.id);
-    res.json(ListFirmWebhookDeliveriesResponse.parse(rows.map(deliveryBody)));
-  },
-);
+router.get("/firm-webhooks/:id/deliveries", async (req, res): Promise<void> => {
+  const firmId = firmAdminScope(req.principal);
+  const params = parseOrThrow(ListFirmWebhookDeliveriesParams, req.params);
+  const rows = await listWebhookDeliveries(firmId, params.id);
+  res.json(ListFirmWebhookDeliveriesResponse.parse(rows.map(deliveryBody)));
+});
 
 // Re-queue one dead delivery (contract 0.42.0): the CAS + ownership vetting
 // live in the module (404 unknown/foreign, 409 when live or when the endpoint

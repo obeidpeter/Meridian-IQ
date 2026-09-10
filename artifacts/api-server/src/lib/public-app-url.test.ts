@@ -26,14 +26,24 @@ test("a trimmed https origin passes in every environment", () => {
 });
 
 test("loopback http is accepted only outside production", () => {
-  for (const PUBLIC_APP_URL of ["http://localhost:5173", "http://127.0.0.1:4000"]) {
-    assert.equal(checkPublicAppUrl({ NODE_ENV: "test", PUBLIC_APP_URL }).ok, true);
-    const production = checkPublicAppUrl({ NODE_ENV: "production", PUBLIC_APP_URL });
+  for (const PUBLIC_APP_URL of [
+    "http://localhost:5173",
+    "http://127.0.0.1:4000",
+  ]) {
+    assert.equal(
+      checkPublicAppUrl({ NODE_ENV: "test", PUBLIC_APP_URL }).ok,
+      true,
+    );
+    const production = checkPublicAppUrl({
+      NODE_ENV: "production",
+      PUBLIC_APP_URL,
+    });
     assert.equal(production.ok, false);
     if (!production.ok) assert.match(production.reason, /https/);
   }
   assert.equal(
-    checkPublicAppUrl({ NODE_ENV: "test", PUBLIC_APP_URL: `http://${HOST}` }).ok,
+    checkPublicAppUrl({ NODE_ENV: "test", PUBLIC_APP_URL: `http://${HOST}` })
+      .ok,
     false,
     "non-loopback http is refused everywhere",
   );
@@ -52,7 +62,10 @@ test("unset, relative, non-https and credentialed values are refused with value-
     assert.equal(verdict.ok, false);
     if (!verdict.ok) {
       assert.match(verdict.reason, expected);
-      assert.doesNotMatch(verdict.reason, /valo\.example|secret|reset-password/);
+      assert.doesNotMatch(
+        verdict.reason,
+        /valo\.example|secret|reset-password/,
+      );
     }
     assert.equal(publicAppUrl({ NODE_ENV: "production", ...env }), null);
   }
@@ -80,7 +93,9 @@ test("the production boot gate throws with the reason and never the value, and i
       PUBLIC_APP_URL: `https://${HOST}`,
     }),
   );
-  assert.doesNotThrow(() => assertPublicAppUrlConfigured({ NODE_ENV: "development" }));
+  assert.doesNotThrow(() =>
+    assertPublicAppUrlConfigured({ NODE_ENV: "development" }),
+  );
   assert.doesNotThrow(() => assertPublicAppUrlConfigured({ NODE_ENV: "test" }));
 });
 
@@ -100,7 +115,14 @@ test("public links ride the configured origin with the credential in the fragmen
 });
 
 test("without a safe origin, links go dark in production and fall back to the local origin elsewhere", () => {
-  assert.equal(publicAppLink("/reset-password", { token: "t" }, { NODE_ENV: "production" }), null);
+  assert.equal(
+    publicAppLink(
+      "/reset-password",
+      { token: "t" },
+      { NODE_ENV: "production" },
+    ),
+    null,
+  );
   assert.equal(
     publicAppLink(
       "/invoice-room",
@@ -110,7 +132,11 @@ test("without a safe origin, links go dark in production and fall back to the lo
     null,
   );
   assert.equal(
-    publicAppLink("/reset-password", { token: "t" }, { NODE_ENV: "development" }),
+    publicAppLink(
+      "/reset-password",
+      { token: "t" },
+      { NODE_ENV: "development" },
+    ),
     `${DEVELOPMENT_PUBLIC_APP_URL}/reset-password#token=t`,
   );
 });

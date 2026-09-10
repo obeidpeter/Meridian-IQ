@@ -74,32 +74,35 @@ export interface NarrationSuggestion {
   at: string;
 }
 
-export const bankStatementLinesTable = pgTable("bank_statement_lines", {
-  id: id(),
-  statementId: uuid("statement_id")
-    .notNull()
-    .references(() => bankStatementsTable.id, { onDelete: "cascade" }),
-  lineNo: integer("line_no").notNull(),
-  valueDate: date("value_date", { mode: "string" }),
-  amount: numeric("amount", { precision: 18, scale: 2 }),
-  direction: statementDirectionEnum("direction"),
-  narration: text("narration"),
-  counterpartyRef: text("counterparty_ref"),
-  parseStatus: statementLineParseStatusEnum("parse_status").notNull(),
-  parseError: text("parse_error"),
-  // The raw source line is retained so a parse failure is always diagnosable.
-  rawLine: text("raw_line").notNull(),
-  // Clerk's narration reading for this line (narration-match lane): which of
-  // the line's own proposals the model believes the narration names, or an
-  // explicit abstention (proposalId null). Advisory only — acceptance stays
-  // the human decision path; nothing downstream keys on this column.
-  narrationSuggestion: jsonb(
-    "narration_suggestion",
-  ).$type<NarrationSuggestion>(),
-  createdAt: createdAt(),
-},
-// Every reconciliation view loads a statement's lines by this FK.
-(t) => [index("bank_statement_lines_statement_idx").on(t.statementId)]);
+export const bankStatementLinesTable = pgTable(
+  "bank_statement_lines",
+  {
+    id: id(),
+    statementId: uuid("statement_id")
+      .notNull()
+      .references(() => bankStatementsTable.id, { onDelete: "cascade" }),
+    lineNo: integer("line_no").notNull(),
+    valueDate: date("value_date", { mode: "string" }),
+    amount: numeric("amount", { precision: 18, scale: 2 }),
+    direction: statementDirectionEnum("direction"),
+    narration: text("narration"),
+    counterpartyRef: text("counterparty_ref"),
+    parseStatus: statementLineParseStatusEnum("parse_status").notNull(),
+    parseError: text("parse_error"),
+    // The raw source line is retained so a parse failure is always diagnosable.
+    rawLine: text("raw_line").notNull(),
+    // Clerk's narration reading for this line (narration-match lane): which of
+    // the line's own proposals the model believes the narration names, or an
+    // explicit abstention (proposalId null). Advisory only — acceptance stays
+    // the human decision path; nothing downstream keys on this column.
+    narrationSuggestion: jsonb(
+      "narration_suggestion",
+    ).$type<NarrationSuggestion>(),
+    createdAt: createdAt(),
+  },
+  // Every reconciliation view loads a statement's lines by this FK.
+  (t) => [index("bank_statement_lines_statement_idx").on(t.statementId)],
+);
 
 // Reconciliation proposals (SME-07): the matcher scores candidate invoices per
 // credit line; a firm user accepts or rejects. Accepting writes the

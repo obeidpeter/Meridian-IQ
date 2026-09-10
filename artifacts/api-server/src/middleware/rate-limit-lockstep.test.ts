@@ -136,7 +136,10 @@ test("every NO_CONTEXT route is rate-classed or explicitly allowlisted", () => {
 
 test("the allowlists stay honest", () => {
   const noContext = new Set(
-    literalEntries(src("middleware/request-policy.ts"), "NO_CONTEXT_ROUTES = new Set("),
+    literalEntries(
+      src("middleware/request-policy.ts"),
+      "NO_CONTEXT_ROUTES = new Set(",
+    ),
   );
   const model = new Set(
     literalEntries(

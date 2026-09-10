@@ -1,9 +1,5 @@
 import { test, expect, describe } from "vitest";
-import {
-  eligibleBadge,
-  stampBadge,
-  stampRiskLabel,
-} from "./format";
+import { eligibleBadge, stampBadge, stampRiskLabel } from "./format";
 
 // The shared formatters are tested once, in @workspace/format; this file
 // covers only the buyer-portal-specific boolean pill vocabulary.
@@ -47,4 +43,3 @@ describe("stampRiskLabel", () => {
     );
   });
 });
-

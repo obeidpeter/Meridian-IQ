@@ -139,7 +139,11 @@ export default function EstimatorScreen() {
 
       {showInvoice ? (
         <>
-          <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+          <AppText
+            variant="overline"
+            color={colors.mutedForeground}
+            style={styles.sectionLabel}
+          >
             Turnover band
           </AppText>
           <Card padded={false}>
@@ -163,7 +167,11 @@ export default function EstimatorScreen() {
         </>
       ) : null}
 
-      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+      <AppText
+        variant="overline"
+        color={colors.mutedForeground}
+        style={styles.sectionLabel}
+      >
         Details
       </AppText>
       <Card style={{ gap: 16 }}>
@@ -193,7 +201,11 @@ export default function EstimatorScreen() {
         ) : null}
       </Card>
 
-      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+      <AppText
+        variant="overline"
+        color={colors.mutedForeground}
+        style={styles.sectionLabel}
+      >
         Estimated exposure
       </AppText>
       <Card>
@@ -236,9 +248,8 @@ export default function EstimatorScreen() {
           color={colors.mutedForeground}
           style={{ flex: 1 }}
         >
-          This is Valo's penalty model, provided as an estimate only —
-          not tax or legal advice. Actual assessments are made by the tax
-          authority.
+          This is Valo's penalty model, provided as an estimate only — not tax
+          or legal advice. Actual assessments are made by the tax authority.
         </AppText>
       </View>
     </KeyboardAwareScrollViewCompat>

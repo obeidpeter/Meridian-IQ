@@ -188,9 +188,7 @@ test("runEvalCorpus routes notice fixtures to the notice prompt under eval_extra
       noticeCalls.push(req);
       const text = req.user as string;
       const fixture = NOTICE_EVAL_FIXTURES.find((f) =>
-        text.includes(
-          f.expected.referenceNumber ?? "never-matches",
-        ),
+        text.includes(f.expected.referenceNumber ?? "never-matches"),
       );
       // Static notice fixtures answer with their legitimate printed values;
       // grown notice fixtures from other suites get a schema-valid stub.
@@ -254,13 +252,38 @@ test("growth ingests a corrected notice approval as a kind-notice fixture the ca
       sourceName: `notice-${SALT}.txt`,
       sourceText: `NOTICE OF ASSESSMENT Ref: ${reference} respond by 2026-09-30`,
       corrections: [
-        { field: "noticeType", extracted: "demand", final: "assessment", changed: true },
-        { field: "referenceNumber", extracted: reference, final: reference, changed: false },
-        { field: "responseDueDate", extracted: null, final: "2026-09-30", changed: true },
+        {
+          field: "noticeType",
+          extracted: "demand",
+          final: "assessment",
+          changed: true,
+        },
+        {
+          field: "referenceNumber",
+          extracted: reference,
+          final: reference,
+          changed: false,
+        },
+        {
+          field: "responseDueDate",
+          extracted: null,
+          final: "2026-09-30",
+          changed: true,
+        },
         // Catalogue-key rows: the approved values are contract KEYS, not
         // what the letter prints — growth must drop them (review M1).
-        { field: "authority", extracted: "Federal Inland Revenue Service", final: "firs", changed: true },
-        { field: "taxType", extracted: "Value Added Tax", final: "vat", changed: true },
+        {
+          field: "authority",
+          extracted: "Federal Inland Revenue Service",
+          final: "firs",
+          changed: true,
+        },
+        {
+          field: "taxType",
+          extracted: "Value Added Tax",
+          final: "vat",
+          changed: true,
+        },
       ],
       firmId,
       createdBy: userId,

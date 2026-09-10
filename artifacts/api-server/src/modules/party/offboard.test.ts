@@ -143,8 +143,18 @@ before(async () => {
     },
   ]);
   await db.insert(membershipsTable).values([
-    { userId: userA, firmId: firmA, role: "client_user", clientPartyId: partyId },
-    { userId: userB, firmId: firmB, role: "client_user", clientPartyId: partyId },
+    {
+      userId: userA,
+      firmId: firmA,
+      role: "client_user",
+      clientPartyId: partyId,
+    },
+    {
+      userId: userB,
+      firmId: firmB,
+      role: "client_user",
+      clientPartyId: partyId,
+    },
   ]);
   await db.insert(partyNameAliasesTable).values([
     { firmId: firmA, partyId, alias: `OFF ALIAS A ${SALT}` },
@@ -387,7 +397,11 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
     .select()
     .from(invitationsTable)
     .where(eq(invitationsTable.tokenHash, `off-token-${SALT}`));
-  assert.equal(invite.status, "revoked", "the pending invite cannot re-open access");
+  assert.equal(
+    invite.status,
+    "revoked",
+    "the pending invite cannot re-open access",
+  );
 
   // The critical shared-spine property: firm B still serves this client, so
   // the party-keyed contact rails must be fully intact.
@@ -516,7 +530,11 @@ test("last firm offboards: contact PII cleared, devices removed, statutory ident
   assert.equal(prefs.whatsappTo, null);
   assert.equal(prefs.phone, null);
   assert.equal(prefs.email, null);
-  assert.equal(prefs.contactSetByRole, null, "the WhatsApp routing gate is closed");
+  assert.equal(
+    prefs.contactSetByRole,
+    null,
+    "the WhatsApp routing gate is closed",
+  );
   assert.equal(prefs.whatsappEnabled, false);
   assert.equal(prefs.smsEnabled, false);
   assert.equal(prefs.emailEnabled, false);
@@ -526,7 +544,11 @@ test("last firm offboards: contact PII cleared, devices removed, statutory ident
     .select()
     .from(pushDevicesTable)
     .where(eq(pushDevicesTable.clientPartyId, partyId));
-  assert.equal(devices.length, 0, "all push registrations for the party removed");
+  assert.equal(
+    devices.length,
+    0,
+    "all push registrations for the party removed",
+  );
 
   const memberships = await getDb()
     .select()

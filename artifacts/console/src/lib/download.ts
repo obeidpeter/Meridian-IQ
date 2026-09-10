@@ -26,7 +26,11 @@ import { triggerDownload } from "@workspace/web-ui";
  * Save in-memory bytes as a named download: wrap them in a Blob, click a
  * temporary object-URL anchor (via triggerDownload), then revoke the URL.
  */
-export function downloadBlob(filename: string, content: BlobPart, type: string): void {
+export function downloadBlob(
+  filename: string,
+  content: BlobPart,
+  type: string,
+): void {
   const url = URL.createObjectURL(new Blob([content], { type }));
   triggerDownload(url, filename);
   URL.revokeObjectURL(url);

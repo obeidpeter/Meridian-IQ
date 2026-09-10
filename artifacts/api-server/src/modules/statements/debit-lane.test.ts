@@ -47,7 +47,10 @@ const vendorParty = randomUUID(); // not engaged: the bills' supplier
 const buyerParty = randomUUID(); // the receivable's buyer
 const userId = randomUUID();
 
-const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userId,
+  role: "firm_staff",
+});
 
 const BILL_TOTAL = "129000.00";
 const RECV_TOTAL = "500000.00";
@@ -76,11 +79,13 @@ async function drainUntil(eventId: string): Promise<void> {
   assert.fail("outbox event did not settle within the drain budget");
 }
 
-async function seedStatement(lines: {
-  amount: string;
-  direction: "credit" | "debit";
-  narration: string;
-}[]): Promise<{ statementId: string; lineIds: string[] }> {
+async function seedStatement(
+  lines: {
+    amount: string;
+    direction: "credit" | "debit";
+    narration: string;
+  }[],
+): Promise<{ statementId: string; lineIds: string[] }> {
   const [statement] = await getDb()
     .insert(bankStatementsTable)
     .values({
@@ -128,10 +133,20 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `debit-lane-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Debit Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Debit Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `Debit Client ${SALT}` },
-    { id: vendorParty, type: "buyer", legalName: `Debit Vendor Supplies ${SALT}` },
+    {
+      id: clientParty,
+      type: "client_business",
+      legalName: `Debit Client ${SALT}`,
+    },
+    {
+      id: vendorParty,
+      type: "buyer",
+      legalName: `Debit Vendor Supplies ${SALT}`,
+    },
     { id: buyerParty, type: "buyer", legalName: `Debit Buyer ${SALT}` },
   ]);
   await db.insert(engagementsTable).values({
@@ -287,7 +302,11 @@ test("accepting a bill proposal records evidence without any transition", async 
     role: "firm_staff",
   });
   assert.equal(result.status, "accepted");
-  assert.equal(result.invoiceStatus, "draft", "no transition — a bill stays a draft");
+  assert.equal(
+    result.invoiceStatus,
+    "draft",
+    "no transition — a bill stays a draft",
+  );
   assert.ok(result.settlementEventId);
 
   const [invoice] = await getDb()

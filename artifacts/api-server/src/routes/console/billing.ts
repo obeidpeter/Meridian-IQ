@@ -24,11 +24,7 @@ import {
   GenerateStatementsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
-import {
-  assertCan,
-  firmScope,
-  tenantFirmId,
-} from "../../modules/auth/rbac";
+import { assertCan, firmScope, tenantFirmId } from "../../modules/auth/rbac";
 import { appendAudit } from "../../modules/audit/audit";
 import { DomainError } from "../../modules/errors";
 import { billingTierForFirm } from "../../modules/invoice/billing-statement";
@@ -175,24 +171,25 @@ router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
     action: "billing.tier.price_review",
     entityType: "billing_tier",
     entityId: existing.id,
-    before: Object.fromEntries(
-      reviewRows.map((r) => [r.field, r.oldValue]),
-    ),
+    before: Object.fromEntries(reviewRows.map((r) => [r.field, r.oldValue])),
     after: changes,
   });
   res.json(UpdateTierResponse.parse(row));
 });
 
-router.get("/billing/tiers/:id/price-reviews", async (req, res): Promise<void> => {
-  assertCan(req.principal, "billing.read");
-  const params = parseOrThrow(ListPriceReviewsParams, req.params);
-  const rows = await getDb()
-    .select()
-    .from(priceReviewsTable)
-    .where(eq(priceReviewsTable.tierId, params.id))
-    .orderBy(desc(priceReviewsTable.createdAt));
-  res.json(ListPriceReviewsResponse.parse(rows));
-});
+router.get(
+  "/billing/tiers/:id/price-reviews",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "billing.read");
+    const params = parseOrThrow(ListPriceReviewsParams, req.params);
+    const rows = await getDb()
+      .select()
+      .from(priceReviewsTable)
+      .where(eq(priceReviewsTable.tierId, params.id))
+      .orderBy(desc(priceReviewsTable.createdAt));
+    res.json(ListPriceReviewsResponse.parse(rows));
+  },
+);
 
 router.get("/billing/subscription", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.read");

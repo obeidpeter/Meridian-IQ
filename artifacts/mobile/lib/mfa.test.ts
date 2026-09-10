@@ -124,4 +124,3 @@ test("the expiry hint phrases the remainder for the help text", () => {
     "this step has expired",
   );
 });
-

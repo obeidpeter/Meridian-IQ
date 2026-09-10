@@ -24,7 +24,10 @@ import {
   listActionDecisions,
   listActionProposals,
 } from "./actions.ts";
-import { CLIENT_SAFE_DATA_INTENTS, DATA_INTENTS } from "./data-intents/index.ts";
+import {
+  CLIENT_SAFE_DATA_INTENTS,
+  DATA_INTENTS,
+} from "./data-intents/index.ts";
 import { executeActionBodyInvoiceIdsMax } from "@workspace/api-zod";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
@@ -148,8 +151,18 @@ before(async () => {
     },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: supplier, type: "readiness_assessment", title: "act A" },
-    { firmId, clientPartyId: supplierNoConsent, type: "readiness_assessment", title: "act B" },
+    {
+      firmId,
+      clientPartyId: supplier,
+      type: "readiness_assessment",
+      title: "act A",
+    },
+    {
+      firmId,
+      clientPartyId: supplierNoConsent,
+      type: "readiness_assessment",
+      title: "act B",
+    },
   ]);
   await grantComplianceConsent(supplier, userId);
 
@@ -312,7 +325,14 @@ test("the catalogue is closed and the batch is bounded", async () => {
     isDomainError("UNKNOWN_ACTION", 400),
   );
   await assert.rejects(
-    executeAction(firmId, supplier, userId, "submit_overdue", [], firmPrincipal),
+    executeAction(
+      firmId,
+      supplier,
+      userId,
+      "submit_overdue",
+      [],
+      firmPrincipal,
+    ),
     isDomainError("BAD_TARGETS", 400),
   );
   await assert.rejects(
@@ -450,7 +470,10 @@ test("draft_chasers drafts staged reminders — the platform sends nothing", asy
   assert.equal(byId.get(chaseInv)?.outcome, "drafted");
   assert.equal(byId.get(fresh)?.outcome, "skipped_not_eligible");
   assert.equal(decision.executedCount, 1);
-  assert.ok(drafts && drafts.length === 1, "the drafted text rides the response");
+  assert.ok(
+    drafts && drafts.length === 1,
+    "the drafted text rides the response",
+  );
   assert.equal(
     drafts[0].source,
     "template",

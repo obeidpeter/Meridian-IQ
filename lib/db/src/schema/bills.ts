@@ -1,4 +1,11 @@
-import { pgTable, uuid, text, boolean, timestamp, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  boolean,
+  timestamp,
+  index,
+} from "drizzle-orm/pg-core";
 import { firmsTable } from "./organizations.ts";
 import { invoicesTable } from "./invoices.ts";
 import { createdAt, id } from "./columns.ts";

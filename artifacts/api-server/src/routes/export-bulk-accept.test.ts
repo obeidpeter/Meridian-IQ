@@ -39,8 +39,13 @@ const supplier = randomUUID();
 const supplierB = randomUUID(); // sibling client (SEC-03)
 const buyer = randomUUID();
 
-const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
-const clientUserA: Principal = clientPrincipal(firmId, supplier, { userId: userId });
+const staff: Principal = firmPrincipal(firmId, {
+  userId: userId,
+  role: "firm_staff",
+});
+const clientUserA: Principal = clientPrincipal(firmId, supplier, {
+  userId: userId,
+});
 
 after(async () => {
   await closeAllServers();
@@ -60,15 +65,35 @@ before(async () => {
     .insert(usersTable)
     .values({ id: userId, email: `xbulk-${SALT}@test.local` })
     .onConflictDoNothing();
-  await db.insert(firmsTable).values({ id: firmId, name: `Export Firm ${SALT}` });
+  await db
+    .insert(firmsTable)
+    .values({ id: firmId, name: `Export Firm ${SALT}` });
   await db.insert(partiesTable).values([
-    { id: supplier, type: "client_business", legalName: `Export Supplier ${SALT}` },
-    { id: supplierB, type: "client_business", legalName: `Export Sibling ${SALT}` },
+    {
+      id: supplier,
+      type: "client_business",
+      legalName: `Export Supplier ${SALT}`,
+    },
+    {
+      id: supplierB,
+      type: "client_business",
+      legalName: `Export Sibling ${SALT}`,
+    },
     { id: buyer, type: "buyer", legalName: `Comma, Buyer "${SALT}"` },
   ]);
   await db.insert(engagementsTable).values([
-    { firmId, clientPartyId: supplier, type: "readiness_assessment", title: "x A" },
-    { firmId, clientPartyId: supplierB, type: "readiness_assessment", title: "x B" },
+    {
+      firmId,
+      clientPartyId: supplier,
+      type: "readiness_assessment",
+      title: "x A",
+    },
+    {
+      firmId,
+      clientPartyId: supplierB,
+      type: "readiness_assessment",
+      title: "x B",
+    },
   ]);
   await db.insert(invoicesTable).values([
     {
@@ -163,7 +188,10 @@ test("receivables CSV exports outstanding rows only, with aging", async () => {
   assert.equal(res.status, 200);
   const csv = await res.text();
   const lines = csv.trim().split("\r\n");
-  assert.match(lines[0], /invoiceNumber,buyer,issueDate,dueDate,ageDays,bucket/);
+  assert.match(
+    lines[0],
+    /invoiceNumber,buyer,issueDate,dueDate,ageDays,bucket/,
+  );
   const dataLines = lines.slice(1).filter((l) => l.includes(SALT));
   assert.equal(dataLines.length, 1, "only the outstanding invoice exports");
   assert.ok(dataLines[0].includes(`EXP-${SALT}-1`));
@@ -227,15 +255,45 @@ test("bulk-accept settles high-confidence matches, dedupes lines, reports confli
   await db.insert(matchProposalsTable).values([
     // Line 1: two proposals for the same line — only the best is attempted,
     // its sibling is superseded by the accept, never a failure row.
-    { firmId, statementLineId: lines[0].id, invoiceId: invA, confidence: "0.9500", status: "proposed" },
-    { firmId, statementLineId: lines[0].id, invoiceId: invB, confidence: "0.9000", status: "proposed" },
+    {
+      firmId,
+      statementLineId: lines[0].id,
+      invoiceId: invA,
+      confidence: "0.9500",
+      status: "proposed",
+    },
+    {
+      firmId,
+      statementLineId: lines[0].id,
+      invoiceId: invB,
+      confidence: "0.9000",
+      status: "proposed",
+    },
     // Line 2: high confidence, distinct invoice — accepted.
-    { firmId, statementLineId: lines[1].id, invoiceId: invB, confidence: "0.9100", status: "proposed" },
+    {
+      firmId,
+      statementLineId: lines[1].id,
+      invoiceId: invB,
+      confidence: "0.9100",
+      status: "proposed",
+    },
     // Line 3: BELOW threshold — untouched, left for the human.
-    { firmId, statementLineId: lines[2].id, invoiceId: invC, confidence: "0.6000", status: "proposed" },
+    {
+      firmId,
+      statementLineId: lines[2].id,
+      invoiceId: invC,
+      confidence: "0.6000",
+      status: "proposed",
+    },
     // Line 4: high confidence but points at the SAME invoice as line 2 — the
     // second acceptance must fail (invoice already settled) and be reported.
-    { firmId, statementLineId: lines[3].id, invoiceId: invB, confidence: "0.8800", status: "proposed" },
+    {
+      firmId,
+      statementLineId: lines[3].id,
+      invoiceId: invB,
+      confidence: "0.8800",
+      status: "proposed",
+    },
   ]);
 
   const result = await bulkAcceptProposals(statement.id, {
@@ -258,17 +316,21 @@ test("bulk-accept settles high-confidence matches, dedupes lines, reports confli
     )[0]!.status;
   assert.equal(await statusOf(invA), "settled");
   assert.equal(await statusOf(invB), "settled");
-  assert.equal(await statusOf(invC), "stamped", "below-threshold match left alone");
+  assert.equal(
+    await statusOf(invC),
+    "stamped",
+    "below-threshold match left alone",
+  );
 
   // Line 1's weaker sibling was superseded by the accept, not failed.
   const proposals = await db
     .select({ status: matchProposalsTable.status })
     .from(matchProposalsTable)
     .where(eq(matchProposalsTable.statementLineId, lines[0].id));
-  assert.deepEqual(
-    proposals.map((p) => p.status).sort(),
-    ["accepted", "superseded"],
-  );
+  assert.deepEqual(proposals.map((p) => p.status).sort(), [
+    "accepted",
+    "superseded",
+  ]);
 
   // The batch is audited with its tallies.
   const [auditRow] = await db

@@ -51,13 +51,19 @@ export function createGracefulShutdown(
   let started = false;
   return async (signal: string) => {
     if (started) {
-      deps.log.info({ signal }, "Shutdown already in progress; ignoring signal");
+      deps.log.info(
+        { signal },
+        "Shutdown already in progress; ignoring signal",
+      );
       return;
     }
     started = true;
     const timeoutMs = deps.timeoutMs ?? shutdownTimeoutMs();
     const startedAt = Date.now();
-    deps.log.info({ signal, timeoutMs }, "Shutting down: readiness off, draining");
+    deps.log.info(
+      { signal, timeoutMs },
+      "Shutting down: readiness off, draining",
+    );
     const deadline = setTimeout(() => {
       deps.log.error(
         { timeoutMs },
@@ -74,7 +80,10 @@ export function createGracefulShutdown(
       Math.max(1, timeoutMs - (Date.now() - startedAt)),
     );
     if (!idle) {
-      deps.log.warn({}, "A worker pass was still running at shutdown; exiting anyway");
+      deps.log.warn(
+        {},
+        "A worker pass was still running at shutdown; exiting anyway",
+      );
     }
     try {
       await deps.closePool();

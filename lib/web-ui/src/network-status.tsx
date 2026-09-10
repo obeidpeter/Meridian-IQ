@@ -10,16 +10,17 @@ interface NetworkInformationLike extends EventTarget {
 function connection(): NetworkInformationLike | null {
   if (typeof navigator === "undefined") return null;
   return (
-    navigator as Navigator & { connection?: NetworkInformationLike }
-  ).connection ?? null;
+    (navigator as Navigator & { connection?: NetworkInformationLike })
+      .connection ?? null
+  );
 }
 
 function isConstrained(): boolean {
   const current = connection();
   return Boolean(
     current?.saveData ||
-      current?.effectiveType === "slow-2g" ||
-      current?.effectiveType === "2g",
+    current?.effectiveType === "slow-2g" ||
+    current?.effectiveType === "2g",
   );
 }
 
@@ -85,7 +86,12 @@ export function NetworkStatus() {
   if (online && !constrained && !restored) return null;
   const tone = !online ? "offline" : constrained ? "constrained" : "restored";
   return (
-    <div className="mi-network-status" data-tone={tone} role="status" aria-live="polite">
+    <div
+      className="mi-network-status"
+      data-tone={tone}
+      role="status"
+      aria-live="polite"
+    >
       <span className="mi-network-status__icon" aria-hidden="true">
         {!online ? <CloudOff /> : constrained ? <Gauge /> : <Wifi />}
       </span>
@@ -107,7 +113,10 @@ export function NetworkStatus() {
       </span>
       {!online ? (
         <button type="button" onClick={check} disabled={checking}>
-          <RefreshCw className={checking ? "is-spinning" : undefined} aria-hidden="true" />
+          <RefreshCw
+            className={checking ? "is-spinning" : undefined}
+            aria-hidden="true"
+          />
           {checking ? "Checking" : "Check again"}
         </button>
       ) : null}

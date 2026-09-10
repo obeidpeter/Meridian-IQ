@@ -78,12 +78,32 @@ export interface RailFaultShape {
 
 export const RAIL_FAULT_TABLE: Record<RailFaultOutcome, RailFaultShape> = {
   accept: { httpStatus: 201, status: "accepted" },
-  reject: { httpStatus: 422, status: "rejected", errorCode: "MBS_SCHEMA_INVALID" },
-  duplicate: { httpStatus: 409, status: "rejected", errorCode: "MBS_DUPLICATE" },
+  reject: {
+    httpStatus: 422,
+    status: "rejected",
+    errorCode: "MBS_SCHEMA_INVALID",
+  },
+  duplicate: {
+    httpStatus: 409,
+    status: "rejected",
+    errorCode: "MBS_DUPLICATE",
+  },
   timeout: { httpStatus: 0, status: "error", errorCode: "RAIL_TIMEOUT" },
-  rate_limit: { httpStatus: 429, status: "error", errorCode: "RAIL_RATE_LIMITED" },
-  unavailable: { httpStatus: 503, status: "error", errorCode: "RAIL_UNAVAILABLE" },
-  unauthorized: { httpStatus: 401, status: "error", errorCode: "RAIL_UNAUTHORIZED" },
+  rate_limit: {
+    httpStatus: 429,
+    status: "error",
+    errorCode: "RAIL_RATE_LIMITED",
+  },
+  unavailable: {
+    httpStatus: 503,
+    status: "error",
+    errorCode: "RAIL_UNAVAILABLE",
+  },
+  unauthorized: {
+    httpStatus: 401,
+    status: "error",
+    errorCode: "RAIL_UNAUTHORIZED",
+  },
   malformed: { httpStatus: 200, status: "error", errorCode: "RAIL_PROTOCOL" },
 };
 
@@ -146,7 +166,12 @@ export function deterministicStamp(
     .update(canonicalJson(inv))
     .digest("base64");
   const qrPayload = Buffer.from(
-    JSON.stringify({ irn, csid, tin: inv.supplier.tin, total: inv.payableAmount }),
+    JSON.stringify({
+      irn,
+      csid,
+      tin: inv.supplier.tin,
+      total: inv.payableAmount,
+    }),
   ).toString("base64");
   return { irn, csid, qrPayload, signedArtifactRef };
 }

@@ -50,7 +50,8 @@ export function packFigureLines(
   container: "pack" | "bundle",
 ): string[] {
   const receivables = facts.receivables.groups.map(
-    (g) => `${g.currency} ${g.outstandingTotal} across ${g.invoiceCount} invoice(s)`,
+    (g) =>
+      `${g.currency} ${g.outstandingTotal} across ${g.invoiceCount} invoice(s)`,
   );
   const payables = facts.payables.groups.map(
     (g) => `${g.currency} ${g.total.amount} across ${g.total.count} bill(s)`,
@@ -107,7 +108,8 @@ export async function draftPackCoverNote(
   precomputed?: CompliancePackFacts,
 ): Promise<CompliancePackCoverNote> {
   const facts =
-    precomputed ?? (await computeCompliancePack(firmId, clientPartyId, monthStart));
+    precomputed ??
+    (await computeCompliancePack(firmId, clientPartyId, monthStart));
   const fallback: CompliancePackCoverNote = {
     monthStart: facts.monthStart,
     monthLabel: facts.monthLabel,

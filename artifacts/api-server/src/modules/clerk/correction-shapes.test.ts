@@ -117,7 +117,10 @@ test("classifyCorrectionShape: the closed taxonomy, case by case", () => {
 
 test("line fields normalize by position; lines.count is bookkeeping, not a field", () => {
   assert.equal(normalizeCorrectionField("lines.3.vatRate"), "lines.vatRate");
-  assert.equal(normalizeCorrectionField("lines.0.unitPrice"), "lines.unitPrice");
+  assert.equal(
+    normalizeCorrectionField("lines.0.unitPrice"),
+    "lines.unitPrice",
+  );
   assert.equal(normalizeCorrectionField("lines.count"), null);
   assert.equal(normalizeCorrectionField("issueDate"), "issueDate");
 });
@@ -127,15 +130,35 @@ test("the fold groups changed corrections by normalized field and shape, newest 
     // Newest case first — its values must win the example slot.
     {
       corrections: [
-        { field: "lines.0.vatRate", extracted: "750", final: "7.5", changed: true },
+        {
+          field: "lines.0.vatRate",
+          extracted: "750",
+          final: "7.5",
+          changed: true,
+        },
         { field: "lines.count", extracted: "2", final: "3", changed: true },
-        { field: "invoiceNumber", extracted: "A-1", final: "A-1", changed: false },
+        {
+          field: "invoiceNumber",
+          extracted: "A-1",
+          final: "A-1",
+          changed: false,
+        },
       ],
     },
     {
       corrections: [
-        { field: "lines.2.vatRate", extracted: "7.5", final: "0.075", changed: true },
-        { field: "issueDate", extracted: null, final: "2026-01-01", changed: true },
+        {
+          field: "lines.2.vatRate",
+          extracted: "7.5",
+          final: "0.075",
+          changed: true,
+        },
+        {
+          field: "issueDate",
+          extracted: null,
+          final: "2026-01-01",
+          changed: true,
+        },
       ],
     },
     { corrections: null },

@@ -43,8 +43,12 @@ router.get("/audit/export", async (req, res): Promise<void> => {
 router.get("/audit/export/csv", async (req, res): Promise<void> => {
   assertCan(req.principal, "audit.export");
   const query = parseOrThrow(ExportAuditCsvQueryParams, req.query);
-  const { rows: events, verification, lastSeq, complete } =
-    await exportAuditLedger(query.afterSeq);
+  const {
+    rows: events,
+    verification,
+    lastSeq,
+    complete,
+  } = await exportAuditLedger(query.afterSeq);
   const csv = toCsv(
     [
       "seq",
@@ -113,7 +117,9 @@ router.get("/firms/:id/export", async (req, res): Promise<void> => {
     entityType: "firm",
     entityId: params.id,
     after: {
-      sections: Object.fromEntries(bundle.counts.map((c) => [c.section, c.rows])),
+      sections: Object.fromEntries(
+        bundle.counts.map((c) => [c.section, c.rows]),
+      ),
       truncated: bundle.counts.filter((c) => c.truncated).map((c) => c.section),
     },
   });
