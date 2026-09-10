@@ -75,5 +75,4 @@ export const invoiceApprovalsTable = pgTable(
   ],
 );
 
-export type FirmPoliciesRow = typeof firmPoliciesTable.$inferSelect;
 export type InvoiceApprovalRow = typeof invoiceApprovalsTable.$inferSelect;

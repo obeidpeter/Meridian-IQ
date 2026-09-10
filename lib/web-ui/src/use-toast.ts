@@ -1,8 +1,7 @@
 // Canonical shadcn toast store, shared by the four web apps (console, SME,
 // buyer portal, penalty calculator). Each app's src/hooks/use-toast.ts is a
 // one-line re-export of this module, so `@/hooks/use-toast` imports keep
-// working; the vendored ui/toast.tsx / ui/toaster.tsx presentation files
-// stay per-app.
+// working.
 //
 // Typed WITHOUT importing app code: ToastProps mirrors each app's vendored
 // ui/toast.tsx — the Radix Root props plus the toastVariants variant union.

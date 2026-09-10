@@ -62,7 +62,7 @@ export {
 
 export const DUE_SOON_WINDOW_DAYS = OBLIGATION_DUE_SOON_DAYS;
 
-export function filingBadgeClasses(status: string): string {
+function filingBadgeClasses(status: string): string {
   switch (status) {
     case "upcoming":
       return pillClasses("slate");

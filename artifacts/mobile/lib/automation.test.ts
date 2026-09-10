@@ -1,11 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type {
+  ClerkActionDecision,
+  ClerkActionPolicy,
+} from "@workspace/api-client-react";
 import {
   actionConfirmButtonLabel,
   actionConfirmDescription,
   actionOutcomeSummary,
   automatableActionKind,
   AUTOMATION_PAUSED_HOME_MESSAGE,
+  automationLists,
+  DECISION_DISPLAY_CAP,
   decisionLine,
   isPolicyPaused,
   pausedPolicyCount,
@@ -249,6 +255,91 @@ test("policyGrantAlertMessage: no backtest, no matching kind, or an empty sample
     ]),
     consent,
   );
+});
+
+const policyOf = (kind: string): ClerkActionPolicy => ({
+  id: `pol-${kind}`,
+  firmId: "firm-1",
+  clientPartyId: "client-1",
+  kind,
+  maxTargetsPerRun: 10,
+  grantedBy: "user-1",
+  grantedByRole: "sme_owner",
+  pausedAt: null,
+  pausedReason: null,
+  pausedBy: null,
+  revokedAt: null,
+  revokedBy: null,
+  lastRunAt: null,
+  lastRunDay: null,
+  createdAt: "2026-07-29T05:00:00Z",
+});
+
+const decisionOf = (id: string): ClerkActionDecision => ({
+  id,
+  firmId: "firm-1",
+  clientPartyId: "client-1",
+  kind: "submit_overdue",
+  decidedBy: "user-1",
+  policyId: null,
+  evidence: {},
+  targets: [],
+  requestedCount: 1,
+  executedCount: 1,
+  skippedCount: 0,
+  failedCount: 0,
+  createdAt: "2026-07-29T05:00:00Z",
+});
+
+test("automationLists: absent payloads read as three empty lists and an empty screen", () => {
+  const lists = automationLists(undefined, undefined, undefined);
+  assert.deepEqual(lists.proposals, []);
+  assert.deepEqual(lists.policies, []);
+  assert.deepEqual(lists.decisions, []);
+  assert.equal(lists.policyKinds.size, 0);
+  assert.equal(lists.isEmpty, true);
+});
+
+test("automationLists: the live grants' kinds are the automate-button gate, and any list defeats isEmpty", () => {
+  const policies = [policyOf("submit_overdue"), policyOf("retry_failed")];
+  const lists = automationLists(
+    { actions: [], note: "" },
+    { policies, enabled: true },
+    { decisions: [] },
+  );
+  assert.deepEqual(lists.policies, policies);
+  assert.equal(lists.policyKinds.has("submit_overdue"), true);
+  assert.equal(lists.policyKinds.has("retry_failed"), true);
+  assert.equal(lists.policyKinds.has("draft_chasers"), false);
+  assert.equal(lists.isEmpty, false);
+  assert.equal(
+    automationLists(undefined, undefined, { decisions: [decisionOf("d1")] })
+      .isEmpty,
+    false,
+  );
+  assert.equal(
+    automationLists(
+      {
+        actions: [
+          {
+            kind: "submit_overdue",
+            title: "t",
+            why: "w",
+            targets: [],
+            targetCount: 0,
+            truncated: false,
+            evidence: {},
+          },
+        ],
+        note: "",
+      },
+      undefined,
+      undefined,
+    ).isEmpty,
+    false,
+  );
+  // The run record shows a bounded trail, never the archive.
+  assert.equal(DECISION_DISPLAY_CAP, 10);
 });
 
 test("decisionLine carries the counts and tags policy runs with · auto", () => {

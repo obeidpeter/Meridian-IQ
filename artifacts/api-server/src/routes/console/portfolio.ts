@@ -286,7 +286,7 @@ async function clientAssignees(firmId: string, clientPartyId: string) {
   };
 }
 
-export function assignmentSetVersion(
+function assignmentSetVersion(
   firmId: string,
   clientPartyId: string,
   userIds: string[],

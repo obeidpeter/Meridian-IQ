@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-export const ROLE_FIELDS =
+const ROLE_FIELDS =
   "rolname,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole,rolreplication,rolcanlogin,rolinherit";
 const literal = (value) =>
   `E'${value.replaceAll("\\", "\\\\").replaceAll("'", "''")}'`;

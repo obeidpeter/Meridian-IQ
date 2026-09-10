@@ -115,6 +115,3 @@ export const obligationReminderSendsTable = pgTable(
     index("obligation_reminder_firm_idx").on(t.firmId),
   ],
 );
-
-export type ObligationReminderSend =
-  typeof obligationReminderSendsTable.$inferSelect;

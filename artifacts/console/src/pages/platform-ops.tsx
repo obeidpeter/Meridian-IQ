@@ -175,7 +175,7 @@ export function retryingLine(
 export const RETRYING_EMPTY =
   "Nothing retrying — every queued event delivered or is waiting for its first try.";
 
-export function readinessBadge(status: "ready" | "warning" | "blocked") {
+function readinessBadge(status: "ready" | "warning" | "blocked") {
   return {
     label:
       status === "ready"

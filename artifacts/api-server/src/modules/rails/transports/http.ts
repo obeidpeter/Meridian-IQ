@@ -81,7 +81,7 @@ const PRINTABLE = /^[\x21-\x7e]+$/;
 const BASE64ISH = /^[A-Za-z0-9+/=_-]+$/;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
-export const HTTP_RAIL_TRANSPORT_NAME = "http";
+const HTTP_RAIL_TRANSPORT_NAME = "http";
 
 export function railTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.RAIL_TIMEOUT_MS);

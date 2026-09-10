@@ -32,7 +32,7 @@ export const RAISE_MARGIN = 5;
 // run-to-run variance (timing-dependent branches, a skipped fixture) does
 // not fail CI the next day; the raise advice fires at RAISE_MARGIN above the
 // floor, so it only speaks once coverage has genuinely moved.
-export const WRITE_MARGIN = 2;
+const WRITE_MARGIN = 2;
 
 export function parseLcov(text) {
   const files = new Map();
@@ -143,7 +143,7 @@ export function evaluate(measured, areas) {
   return { failures, raises };
 }
 
-export function renderTable(measured, areas) {
+function renderTable(measured, areas) {
   const rows = Object.entries(areas).map(([name, area]) => {
     const result = measured[name];
     return [

@@ -226,7 +226,7 @@ export const outboxOldestPendingAgeSeconds = new Gauge(
   "valo_outbox_oldest_pending_age_seconds",
   "Age of the oldest pending outbox event, in seconds (0 when none).",
 );
-export const usabilityEventsTotal = new Counter(
+const usabilityEventsTotal = new Counter(
   "valo_usability_events_total",
   "Privacy-safe aggregate product usability events by closed event and surface.",
 );

@@ -96,7 +96,7 @@ export function obligationOverdue(
  * pending — the console's non-terminal colour, cf. sent:blue vs
  * delivered:emerald in lib/format), amber an awaiting row, red overdue.
  */
-export function obligationPill(
+function obligationPill(
   o: Pick<Obligation, "status">,
   overdue: boolean,
 ): { tone: BadgeTone; label: string } {

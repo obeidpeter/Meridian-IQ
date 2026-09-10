@@ -6,6 +6,7 @@
  * apps); this module re-exports it and keeps the mobile-specific wrappers.
  */
 
+import type { FieldError } from "@workspace/api-client-react";
 import { errorStatus } from "@workspace/api-errors";
 
 /** The HTTP status carried by a thrown API error, if it has a numeric one. */
@@ -33,6 +34,23 @@ export function serverMessage(error: unknown): string | null {
   if (data && typeof data === "object" && "message" in data) {
     const message = (data as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
+  }
+  return null;
+}
+
+/**
+ * The per-field validation errors from a thrown API error's payload (the
+ * `{ errors: FieldError[] }` shape the invoice routes return), or null when
+ * the payload carries no such array.
+ */
+export function serverFieldErrors(error: unknown): FieldError[] | null {
+  const data =
+    error && typeof error === "object"
+      ? (error as { data?: unknown }).data
+      : null;
+  if (data && typeof data === "object") {
+    const errs = (data as { errors?: unknown }).errors;
+    if (Array.isArray(errs)) return errs as FieldError[];
   }
   return null;
 }

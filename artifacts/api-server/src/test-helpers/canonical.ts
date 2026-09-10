@@ -2,7 +2,7 @@ import type { CanonicalInvoice } from "../modules/invoice/canonical";
 
 // A well-formed canonical invoice for rail-level tests (the transport and the
 // fakes only need a valid shape; the pipeline suites build theirs from rows).
-export function sampleParty(tin: string): CanonicalInvoice["supplier"] {
+function sampleParty(tin: string): CanonicalInvoice["supplier"] {
   return {
     legalName: `Party ${tin}`,
     tin,

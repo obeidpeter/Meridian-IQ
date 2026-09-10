@@ -27,7 +27,7 @@ import {
 } from "./release-candidate-github.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const EVIDENCE_FILES = [
+const EVIDENCE_FILES = [
   "candidate.json",
   "checklist.md",
   "gates.log",
@@ -283,7 +283,7 @@ export function stageSource(reservation, revision) {
   return staging;
 }
 
-export function runArtifactGates(staging, manifestHash) {
+function runArtifactGates(staging, manifestHash) {
   const code = `import { promoteReplit } from ${JSON.stringify(pathToFileURL(path.join(HERE, "replit-promote.mjs")).href)}; promoteReplit(process.argv[1], process.env, process.cwd());`;
   const env = {
     ...processEnvironment(),

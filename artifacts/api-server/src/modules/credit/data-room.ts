@@ -40,7 +40,7 @@ interface BankAccessContext {
 
 // The bank principal runs with database bypass, so this application predicate
 // is a hard security boundary and is deliberately repeated on every route.
-export async function assertBankDataRoomAccess(
+async function assertBankDataRoomAccess(
   principal: Principal,
 ): Promise<BankAccessContext> {
   if (principal.role !== "bank_user" || !isUuid(principal.userId)) {

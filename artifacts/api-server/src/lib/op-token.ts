@@ -30,11 +30,11 @@ import { rawBodyOf } from "./body";
 // and never echoed:
 // rail-config reports key IDS only.
 
-export const OP_TOKEN_HEADER = "x-op-token";
+const OP_TOKEN_HEADER = "x-op-token";
 export const OP_KEY_ID_HEADER = "x-op-key-id";
 export const OP_TIMESTAMP_HEADER = "x-op-timestamp";
 export const OP_SIGNATURE_HEADER = "x-op-signature";
-export const LEGACY_KEY_ID = "legacy";
+const LEGACY_KEY_ID = "legacy";
 const DEFAULT_WINDOW_SECONDS = 300;
 const KEY_ID_SHAPE = /^[A-Za-z0-9_-]{1,32}$/;
 const MIN_SECRET_LENGTH = 32;
@@ -116,7 +116,7 @@ export function legacyTokenPathEnabled(): boolean {
   );
 }
 
-export function signatureWindowSeconds(): number {
+function signatureWindowSeconds(): number {
   const configured = Number(process.env.OP_SIGNATURE_WINDOW_SECONDS);
   return Number.isFinite(configured) && configured > 0
     ? Math.floor(configured)
@@ -131,8 +131,8 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-/** The string a signature covers. Exported so tests and senders share it. */
-export function opSigningString(input: {
+/** The string a signature covers — one home for signing and verification. */
+function opSigningString(input: {
   method: string;
   path: string;
   timestamp: number | string;
@@ -178,7 +178,7 @@ export type OpAuth =
  * The secret as the caller presented it on the legacy path. Header-only by
  * design.
  */
-export function presentedOpToken(req: Request): string | undefined {
+function presentedOpToken(req: Request): string | undefined {
   return req.get(OP_TOKEN_HEADER) ?? undefined;
 }
 

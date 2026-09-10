@@ -45,7 +45,7 @@ const LAYERS = [
   },
 ] as const;
 
-export function ConsentCapture({
+function ConsentCapture({
   clientPartyId,
   onCaptured,
 }: {

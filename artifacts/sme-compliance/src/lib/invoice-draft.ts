@@ -96,7 +96,7 @@ function removeFrom(storage: Storage, key: string): void {
   }
 }
 
-export function removeInvoiceDraft(key: string): void {
+function removeInvoiceDraft(key: string): void {
   if (typeof window === "undefined") return;
   try {
     removeFrom(window.localStorage, key);

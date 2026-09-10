@@ -45,5 +45,3 @@ export const billVerificationsTable = pgTable(
     index("bill_verifications_firm_idx").on(t.firmId),
   ],
 );
-
-export type BillVerificationRow = typeof billVerificationsTable.$inferSelect;

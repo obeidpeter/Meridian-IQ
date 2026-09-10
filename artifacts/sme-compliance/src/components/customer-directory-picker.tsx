@@ -15,12 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const PAGE_SIZE = 30;
-export function useDirectoryScope() {
+function useDirectoryScope() {
   const { data: me } = useGetMe();
   return me ? `${me.firmId}:${me.userId}:${me.clientPartyId}` : "";
 }
 
-export const customerKey = (scope: string, id: string) => [
+const customerKey = (scope: string, id: string) => [
   "customer-directory",
   scope,
   id,

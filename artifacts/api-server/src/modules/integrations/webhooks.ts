@@ -47,7 +47,7 @@ const WEBHOOK_EVENT_SET: ReadonlySet<string> = new Set(WEBHOOK_EVENTS);
 
 // Delivery keys are the durable progress ledger. Scan all missing eligible
 // keys, oldest first; never use a timestamp watermark that can skip late commits.
-export const FAN_OUT_BATCH_SIZE = 250;
+const FAN_OUT_BATCH_SIZE = 250;
 
 // Dispatch: outbox semantics (pipeline.ts precedent) — exponential backoff,
 // dead after MAX_ATTEMPTS. The backoff is PRE-CHARGED at claim time (the
@@ -63,7 +63,7 @@ const CLAIM_BATCH = 10;
 const LAST_ERROR_MAX = 300;
 
 export const SIGNATURE_HEADER = "x-valo-signature";
-export const LEGACY_SIGNATURE_HEADER = "x-meridian-signature";
+const LEGACY_SIGNATURE_HEADER = "x-meridian-signature";
 
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");

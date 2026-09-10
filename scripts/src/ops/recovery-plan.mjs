@@ -11,9 +11,9 @@ import {
 import { TextDecoder } from "node:util";
 
 export const RECOVERY_PLAN_MAX_BYTES = 64 * 1024;
-export const ROLLBACK_APPROVAL_MAX_BYTES = 64 * 1024;
-export const MAINTENANCE_WINDOW_MAX_MS = 4 * 3600_000;
-export const PLAN_APPROVAL_MAX_AGE_MS = 3600_000;
+const ROLLBACK_APPROVAL_MAX_BYTES = 64 * 1024;
+const MAINTENANCE_WINDOW_MAX_MS = 4 * 3600_000;
+const PLAN_APPROVAL_MAX_AGE_MS = 3600_000;
 
 const REVISION = /^[a-f0-9]{40}$/;
 const SHA256 = /^[a-f0-9]{64}$/;

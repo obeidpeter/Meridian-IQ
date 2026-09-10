@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BUYER_PAGE_SIZE,
   BUYER_SEARCH_DELAY,
+  buyerPageView,
   buyerScopeKey,
   buyerSearchKey,
   buyerSearchParams,
+  buyerSelectionView,
   readAuthorizedBuyer,
   readBuyerPage,
   selectedBuyerKey,
@@ -110,12 +112,7 @@ export function useBuyerPicker(
       setSearchValue(value.slice(0, 120));
     },
     offset,
-    items:
-      available && !debouncing && !page.isError ? (page.data?.items ?? []) : [],
-    hasNext: available && !debouncing && !page.isError && !!page.data?.hasNext,
-    loading: available && (debouncing || page.isPending || page.isFetching),
-    paused: available && page.fetchStatus === "paused",
-    error: available && !debouncing && page.isError,
+    ...buyerPageView(available, debouncing, page),
     available,
     retry: () => {
       if (isCurrent()) void page.refetch();
@@ -124,21 +121,7 @@ export function useBuyerPicker(
     next: () => {
       if (page.data?.hasNext) setOffset((value) => value + BUYER_PAGE_SIZE);
     },
-    selected:
-      available &&
-      !selection.isError &&
-      !selection.isFetching &&
-      selection.fetchStatus !== "paused" &&
-      selection.data?.id === selectedId
-        ? selection.data
-        : null,
-    selectionLoading:
-      available &&
-      !!selectedId &&
-      (selection.isPending || selection.isFetching),
-    selectionPaused:
-      available && !!selectedId && selection.fetchStatus === "paused",
-    selectionError: available && !!selectedId && selection.isError,
+    ...buyerSelectionView(available, selectedId, selection),
     retrySelection: () => {
       if (isCurrent()) void selection.refetch();
     },

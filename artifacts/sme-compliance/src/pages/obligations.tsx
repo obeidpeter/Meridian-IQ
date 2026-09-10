@@ -50,7 +50,7 @@ export {
 
 export const DUE_SOON_WINDOW_DAYS = OBLIGATION_DUE_SOON_DAYS;
 
-export function obligationBadgeClasses(status: string): string {
+function obligationBadgeClasses(status: string): string {
   switch (status) {
     case "open":
       return pillClasses("amber");

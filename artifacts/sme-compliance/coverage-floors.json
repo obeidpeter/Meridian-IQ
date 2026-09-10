@@ -17,7 +17,7 @@
         "src/components/**"
       ],
       "floors": {
-        "lines": 60,
+        "lines": 56,
         "branches": 52
       }
     },

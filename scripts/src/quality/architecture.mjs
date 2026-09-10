@@ -1,10 +1,17 @@
 import { existsSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
-import { displayPath, readText, sourceFiles } from "./shared.mjs";
+import {
+  displayPath,
+  readText,
+  SOURCE_EXTENSIONS,
+  sourceFiles,
+} from "./shared.mjs";
 
 const files = sourceFiles();
 const fileSet = new Set(files.map((file) => normalize(file)));
-const extensions = [".ts", ".tsx", ".mts", ".mjs", ".js", ".jsx"];
+// SOURCE_EXTENSIONS is a Set; resolveRelativeImport needs array semantics
+// (`.includes`/`.map`), so spread it in the same insertion order.
+const extensions = [...SOURCE_EXTENSIONS];
 
 function importSpecifiers(source) {
   const found = new Set();

@@ -109,9 +109,9 @@ export interface ChainWindow {
 // walks it in VERIFY_BATCH-row batches carrying only the running hash, and
 // every export is one window the caller pages with `afterSeq = lastSeq`.
 const VERIFY_BATCH = 1_000;
-export const EXPORT_DEFAULT_LIMIT = 1_000;
-export const EXPORT_MAX_LIMIT = 5_000;
-export const LEDGER_CSV_CAP = 50_000;
+const EXPORT_DEFAULT_LIMIT = 1_000;
+const EXPORT_MAX_LIMIT = 5_000;
+const LEDGER_CSV_CAP = 50_000;
 
 function eventPayload(e: AuditEvent): Record<string, unknown> {
   return {

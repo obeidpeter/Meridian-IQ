@@ -154,7 +154,7 @@ export function compareSecurityCatalog(expected, actual) {
   }
 }
 
-export function canonicalSecurityCatalog(catalog) {
+function canonicalSecurityCatalog(catalog) {
   const result = structuredClone(catalog);
   // Physical column placement and generated object names differ between a
   // scratch schema push and an additive upgrade. Definitions and multiplicity

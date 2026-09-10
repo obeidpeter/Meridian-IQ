@@ -35,7 +35,6 @@ import {
   type Obligation,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -43,7 +42,6 @@ import {
   killSwitchTripped,
   serverErrorMessage,
 } from "@/lib/errors";
-import { pillClasses } from "@/lib/format";
 import {
   type ApproveForm,
   type NoticeApproveForm,
@@ -53,22 +51,19 @@ import {
   bulkDialogPhase,
   clerkDisabledToast,
   fastLaneCaseSummary,
-  fieldLabel,
   fieldWeights,
   fileIsPdf,
   fileToBase64,
   groupQueueByBatch,
   isReadyToApprove,
   noticeApproveFormFromCase,
-  noticeFieldLabel,
-  relativeTime,
   reviewEffort,
   serverErrorToast,
-  shortActor,
-  vatPercentInvalid,
 } from "@/pages/clerk-shared";
 import { useVoiceRecorder } from "@/pages/use-voice-recorder";
 import { BULK_APPROVE_MAX, PAGE_SIZE, type QueueKind } from "./constants";
+import { ClaimControls } from "./claim-controls";
+import { approveDisabledFor, reviewPaneFields } from "./review-derivations";
 
 // Everything the Clerk intake workspace holds and does (R120 moved it out of
 // the page shell): the queue paging, the capture state, the decision forms,
@@ -791,48 +786,18 @@ export function useClerkWorkspace() {
     [queueBatches],
   );
 
-  const approveDisabled =
-    !form ||
-    !form.firmId ||
-    !form.supplierPartyId ||
-    !form.buyerPartyId ||
-    !form.invoiceNumber.trim() ||
-    !form.issueDate ||
-    form.lines.length === 0 ||
-    form.lines.some(
-      (l) =>
-        !l.description.trim() ||
-        !l.quantity ||
-        !l.unitPrice ||
-        vatPercentInvalid(l.vatRate),
-    );
+  const approveDisabled = approveDisabledFor(form);
 
   // Only the FIRST page's load blanks the whole workspace; loading a later
   // page keeps the rows already on screen and spins the Load more button.
 
-  // The review pane's fields table serves both case kinds: an invoice case
-  // carries `extraction`, a notice case carries `noticeExtraction` — same
-  // field shape (value/confidence/flagged/critical/snippet), same
-  // presentation, different label vocabulary. Correction hints stay
-  // invoice-only: the corrections exhaust is invoice-field evidence.
-  const detailExtraction =
-    selected?.extraction ?? selected?.noticeExtraction ?? null;
-  const detailFieldLabel =
-    selected?.kind === "notice" ? noticeFieldLabel : fieldLabel;
-
-  // Pre-flight issues only steer the review while the case is still
-  // decidable; decided cases keep their history without the amber paint.
-  const activePreflight =
-    selected != null &&
-    (selected.status === "extracted" || selected.status === "in_review")
-      ? (selected.preflight ?? [])
-      : [];
-  const preflightFields = new Set(activePreflight.map((i) => i.field));
-  // "lines" / "lines.0.quantity" style issues point at the lines table as a
-  // whole — per-cell targeting isn't worth the noise.
-  const linesPreflightHit = activePreflight.some(
-    (i) => i.field === "lines" || i.field.startsWith("lines."),
-  );
+  const {
+    detailExtraction,
+    detailFieldLabel,
+    activePreflight,
+    preflightFields,
+    linesPreflightHit,
+  } = reviewPaneFields(selected);
 
   // Claiming is optional: deciding straight from "extracted" stays possible
   // (solo-operator fast path). A claim only marks the case as actively being
@@ -840,41 +805,11 @@ export function useClerkWorkspace() {
   // invoice and notice decision forms.
   const claimControls =
     selected == null ? null : (
-      <>
-        {selected.status === "extracted" && !selected.claimedBy && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => claimCase.mutate({ id: selected.id })}
-              disabled={claimCase.isPending}
-              data-testid="button-claim-case"
-            >
-              {claimCase.isPending ? "Claiming…" : "Claim for review"}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Optional — deciding below works without claiming.
-            </p>
-          </div>
-        )}
-        {selected.status === "in_review" && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={pillClasses("amber")} data-testid="badge-claimed">
-              Claimed by {shortActor(selected.claimedBy)} ·{" "}
-              {relativeTime(selected.claimedAt)}
-            </span>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => releaseCase.mutate({ id: selected.id })}
-              disabled={releaseCase.isPending}
-              data-testid="button-release-case"
-            >
-              {releaseCase.isPending ? "Releasing…" : "Release"}
-            </Button>
-          </div>
-        )}
-      </>
+      <ClaimControls
+        selected={selected}
+        claimCase={claimCase}
+        releaseCase={releaseCase}
+      />
     );
 
   return {

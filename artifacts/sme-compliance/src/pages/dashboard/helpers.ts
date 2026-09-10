@@ -1,7 +1,9 @@
 import {
   type CashflowBucket,
+  type DashboardSummary,
   type PayablesSummaryGroupsItem,
 } from "@workspace/api-client-react";
+import { lagosDayDiff } from "@workspace/format";
 
 // First-run nudge gate: the quiet "create your first invoice" link renders
 // ONLY when the client has no invoices AT ALL — an active book whose
@@ -94,3 +96,59 @@ export const DASHBOARD_VIEWS = [
 ] as const;
 
 export type DashboardView = (typeof DASHBOARD_VIEWS)[number];
+
+// The header says what today amounts to (R70): the queue length and the
+// next statutory day, both from the same summary the cards below render,
+// so the sentence can never disagree with the page.
+export function todaySummaryLine(
+  summary: DashboardSummary | undefined,
+  workItemCount: number,
+): string {
+  const deadlineDays = lagosDayDiff(summary?.nextDeadline?.dueDate);
+  const plural = (n: number, word: string) =>
+    `${n} ${word}${n === 1 ? "" : "s"}`;
+  const todaySummary = summary
+    ? [
+        workItemCount === 0
+          ? "Nothing needs your attention right now"
+          : `${plural(workItemCount, "item")} need${workItemCount === 1 ? "s" : ""} your attention`,
+        deadlineDays === null
+          ? null
+          : deadlineDays < 0
+            ? `a statutory deadline passed ${plural(-deadlineDays, "day")} ago`
+            : deadlineDays === 0
+              ? "a statutory deadline is due today"
+              : `the next statutory deadline is in ${plural(deadlineDays, "day")}`,
+      ]
+        .filter(Boolean)
+        .join("; ") + "."
+    : "Your compliance work, in one place: what needs attention, money in motion and filing readiness.";
+  return todaySummary;
+}
+
+// The view chips of the segmented control, each with the count its pane
+// answers for; the Clerk chip only when the dual gate is open.
+export function dashboardViewItems(
+  summary: DashboardSummary | undefined,
+  agedReceivableCount: number,
+  workItemCount: number,
+  canAskClerk: boolean,
+): Array<{ value: DashboardView; label: string; count?: number }> {
+  const dashboardViews: Array<{
+    value: DashboardView;
+    label: string;
+    count?: number;
+  }> = [
+    { value: "today", label: "Today", count: workItemCount },
+    { value: "money", label: "Money", count: agedReceivableCount },
+    {
+      value: "compliance",
+      label: "Compliance",
+      count: summary?.upcomingDeadlineCount ?? 0,
+    },
+  ];
+  if (canAskClerk) {
+    dashboardViews.push({ value: "clerk", label: "Clerk" });
+  }
+  return dashboardViews;
+}

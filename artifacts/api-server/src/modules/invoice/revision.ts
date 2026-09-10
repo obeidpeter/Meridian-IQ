@@ -7,7 +7,7 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 
-export function assertContentRevision(actual: number, expected: number): void {
+function assertContentRevision(actual: number, expected: number): void {
   if (!Number.isSafeInteger(expected) || expected < 1) {
     throw new DomainError(
       "REVISION_REQUIRED",

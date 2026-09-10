@@ -37,7 +37,7 @@ function git(root, args) {
   return result.stdout.trim();
 }
 
-export function hashFiles(root, files) {
+function hashFiles(root, files) {
   return digest(
     JSON.stringify(
       files.sort().map((file) => {

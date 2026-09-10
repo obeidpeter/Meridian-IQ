@@ -85,9 +85,6 @@ export const clerkMemoryEmbeddingsTable = pgTable(
   ],
 );
 
-export type ClerkMemoryEmbedding =
-  typeof clerkMemoryEmbeddingsTable.$inferSelect;
-
 // Retrieval eval lane (round 47, Phase 3): per-fixture outcome of one
 // labeled query — which document it should have found and where that
 // document actually ranked (null = not found at all). Stored whole so a

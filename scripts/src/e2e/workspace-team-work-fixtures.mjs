@@ -25,8 +25,8 @@ export const applications = [
   },
 ];
 
-export const longClient = `Client${"LongLegalReference".repeat(10)}`;
-export const longDescription = `Handoff ${"UnbrokenEvidenceReference".repeat(10)}`;
+const longClient = `Client${"LongLegalReference".repeat(10)}`;
+const longDescription = `Handoff ${"UnbrokenEvidenceReference".repeat(10)}`;
 export const longTitle = `Task 001 ${"LongTitle".repeat(12)}`;
 
 export function createTeamFixture(app) {

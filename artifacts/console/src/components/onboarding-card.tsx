@@ -1,49 +1,16 @@
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  useGetMe,
-  useListOnboardingRuns,
-  useCreateOnboardingRun,
-  useRefreshOnboardingRun,
-  useSkipOnboardingStep,
-  useAbandonOnboardingRun,
-  useGetOnboardingOpeningPosition,
-  getListOnboardingRunsQueryKey,
-  getGetOnboardingOpeningPositionQueryKey,
-  getGetOnboardingReportUrl,
-} from "@workspace/api-client-react";
-import type {
-  OnboardingRun,
-  OnboardingStep,
-  OpeningPosition,
-} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
+import { ClipboardCheck, RefreshCw } from "lucide-react";
+import { onboardingProgress } from "./onboarding-helpers";
+import { useOnboardingRun } from "./use-onboarding-run";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
-import { serverErrorToast } from "@/lib/errors";
-import { pillClasses, type BadgeTone } from "@/lib/format";
-import { ClipboardCheck, Download, RefreshCw } from "lucide-react";
-import { onboardingStepLabel as sharedOnboardingStepLabel } from "@workspace/format/onboarding-copy";
-import { triggerDownload } from "@/lib/download";
-import {
-  beginOperation,
-  operationSessionKey,
-  updateOperation,
-} from "@workspace/web-ui";
+  OnboardingRunActions,
+  OnboardingStatusPill,
+  OnboardingStepRow,
+  OpeningPositionSection,
+} from "./onboarding-card-parts";
 
 // Client onboarding checklist (Onboard with Clerk Phase 1): the run the firm
 // opens when it takes on a new client. Every step's state is DETECTED
@@ -53,294 +20,44 @@ import {
 // records as the honest gap. Buttons gate on engagement.write (the server
 // enforces it regardless — the filings-card mirror), so a read-only viewer
 // sees the checklist but no dead buttons.
+//
+// R126 split the pure helpers, the run hook and the presentational parts
+// into siblings; the unit suite pins the helpers through this module.
 
-// ---- Pure helpers (unit-tested directly) -----------------------------------
-
-// Labels come from the shared vocabulary (@workspace/format/onboarding-copy
-// — one home with the server-side readiness report), narrowed here to the
-// contract's key type; re-exported so the card's tests keep their surface.
-export function onboardingStepLabel(key: OnboardingStep["key"]): string {
-  return sharedOnboardingStepLabel(key);
-}
-
-/**
- * Pill tone per step state: done emerald, skipped slate (a recorded gap, not
- * an achievement), pending amber (work outstanding — never red: onboarding
- * is a checklist, not an overdue alarm).
- */
-export function onboardingStepPill(step: Pick<OnboardingStep, "status">): {
-  tone: BadgeTone;
-  label: string;
-} {
-  if (step.status === "done") return { tone: "emerald", label: "Done" };
-  if (step.status === "skipped") return { tone: "slate", label: "Skipped" };
-  return { tone: "amber", label: "Pending" };
-}
-
-/** "3 of 5 settled" — done and skipped both settle a step. */
-export function onboardingProgress(run: Pick<OnboardingRun, "steps">): string {
-  const settled = run.steps.filter((s) => s.status !== "pending").length;
-  return `${settled} of ${run.steps.length} settled`;
-}
-
-/** The run the card shows: the active one if any, else the newest. */
-export function pickOnboardingRun(runs: OnboardingRun[]): OnboardingRun | null {
-  return runs.find((r) => r.status === "active") ?? runs[0] ?? null;
-}
-
-const AUTOMATION_LABELS: Record<string, string> = {
-  reconcile_matches: "Receipt matching",
-  submit_overdue: "Overdue submission",
-  retry_failed: "Failed-submission retry",
-  draft_recurring: "Recurring drafts",
-};
-
-/**
- * The opening position as compact label/value lines, in reading order.
- * The core day-one facts always render — "0 invoices" and "None" are
- * honest baseline statements. Receivables emit ONE LINE PER CURRENCY
- * (cross-currency totals cannot be summed, and dropping a currency would
- * understate the book). The conditional sections (WHT, notices,
- * automation evidence) render only when there is something to report.
- */
-export function openingSummaryLines(
-  p: OpeningPosition,
-): { label: string; value: string }[] {
-  const lines: { label: string; value: string }[] = [];
-  lines.push({
-    label: "Invoice history",
-    value:
-      p.history.invoiceCount > 0
-        ? `${p.history.invoiceCount} invoice(s), ${p.history.earliestIssueDate} → ${p.history.latestIssueDate}`
-        : "0 invoices on record",
-  });
-  for (const group of p.receivables.groups) {
-    lines.push({
-      label:
-        p.receivables.groups.length > 1
-          ? `Outstanding receivables (${group.currency})`
-          : "Outstanding receivables",
-      value: `${group.currency} ${group.outstandingTotal} across ${group.invoiceCount} invoice(s)`,
-    });
-  }
-  lines.push({
-    // All VAT-position amounts are NGN by module doctrine (non-NGN
-    // documents convert at their captured rate) — say so.
-    label: "Net VAT (this month)",
-    value: `NGN ${p.vat.netVat}`,
-  });
-  lines.push({
-    label: "Unfiled returns",
-    value:
-      p.filings.unfiled > 0
-        ? `${p.filings.unfiled} unfiled (${p.filings.overdue} overdue)`
-        : "None",
-  });
-  if (p.wht.awaiting > 0) {
-    lines.push({
-      label: "WHT credit notes awaited",
-      value: `${p.wht.awaiting} (${p.wht.awaitingAmount})`,
-    });
-  }
-  if (p.obligations.open > 0) {
-    lines.push({
-      label: "Open authority notices",
-      value: `${p.obligations.open} (${p.obligations.overdue} overdue)`,
-    });
-  }
-  for (const kind of p.automation.kinds) {
-    if (kind.sample > 0 && kind.agreementRate !== null) {
-      lines.push({
-        label: `${AUTOMATION_LABELS[kind.kind] ?? kind.kind} evidence`,
-        value: `${Math.round(kind.agreementRate * 100)}% agreement over ${kind.sample} decision(s)`,
-      });
-    }
-  }
-  return lines;
-}
+export {
+  onboardingStepLabel,
+  onboardingStepPill,
+  onboardingProgress,
+  pickOnboardingRun,
+  openingSummaryLines,
+} from "./onboarding-helpers";
 
 // ---- The card ---------------------------------------------------------------
 
 export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const params = { clientPartyId };
-  const { data, isLoading, error, refetch } = useListOnboardingRuns(params, {
-    query: {
-      enabled: !!clientPartyId,
-      queryKey: getListOnboardingRunsQueryKey(params),
-      staleTime: 60_000,
-      retry: false,
-    },
-  });
-
-  const run = pickOnboardingRun(data?.runs ?? []);
-
-  const invalidate = () => {
-    void queryClient.invalidateQueries({
-      queryKey: getListOnboardingRunsQueryKey(),
-    });
-    if (run) {
-      void queryClient.invalidateQueries({
-        queryKey: getGetOnboardingOpeningPositionQueryKey(run.id),
-      });
-    }
-  };
-
-  // The day-one position: frozen once the run completes, a live provisional
-  // picture while it is active. NOT fetched for an abandoned run — its
-  // picture would stay "provisional" forever at full recompute cost, a
-  // baseline pending nothing.
-  const wantPosition = !!run && run.status !== "abandoned";
-  const { data: position } = useGetOnboardingOpeningPosition(run?.id ?? "", {
-    query: {
-      enabled: wantPosition,
-      queryKey: getGetOnboardingOpeningPositionQueryKey(run?.id ?? ""),
-      staleTime: 60_000,
-      retry: false,
-    },
-  });
-
-  const { data: me } = useGetMe();
-  const canWrite = !!me?.capabilities.includes("engagement.write");
-  const operationKey = operationSessionKey(me);
-
-  const [skipPanelKey, setSkipPanelKey] = useState<string | null>(null);
-  const [skipReason, setSkipReason] = useState("");
-  const [confirmAbandon, setConfirmAbandon] = useState(false);
-
-  const onError = (title: string) => (e: unknown) =>
-    serverErrorToast(toast, e, { title, fallback: "Try again." });
-
-  const create = useCreateOnboardingRun({
-    mutation: {
-      onSuccess: () => {
-        invalidate();
-        toast({ title: "Onboarding started" });
-      },
-      onError: onError("Could not start onboarding"),
-    },
-  });
-  const refresh = useRefreshOnboardingRun({
-    mutation: {
-      onSuccess: () => invalidate(),
-      onError: onError("Could not refresh the checklist"),
-    },
-  });
-  const skip = useSkipOnboardingStep({
-    mutation: {
-      onSuccess: () => {
-        invalidate();
-        setSkipPanelKey(null);
-        setSkipReason("");
-        toast({ title: "Gap recorded" });
-      },
-      onError: onError("Could not record the skip"),
-    },
-  });
-  const abandon = useAbandonOnboardingRun({
-    mutation: {
-      onSuccess: () => {
-        invalidate();
-        toast({ title: "Onboarding closed" });
-      },
-      onError: onError("Could not close the run"),
-    },
-  });
-
-  const startOnboarding = () => {
-    const operation = beginOperation(operationKey, {
-      title: "Start client onboarding",
-      kind: "onboarding",
-      route: `/clients/${clientPartyId}?view=setup`,
-    });
-    create.mutate(
-      { data: { clientPartyId } },
-      {
-        onSuccess: () =>
-          updateOperation(operationKey, operation?.id, {
-            status: "succeeded",
-            detail: "The onboarding run and evidence checklist were created.",
-            savedSummary: "A new onboarding run is active.",
-          }),
-        onError: () =>
-          updateOperation(operationKey, operation?.id, {
-            status: "failed",
-            detail: "The onboarding run could not be created.",
-            savedSummary: "No onboarding run was started.",
-          }),
-      },
-    );
-  };
-
-  const refreshOnboarding = () => {
-    if (!run) return;
-    const operation = beginOperation(operationKey, {
-      title: `Re-check onboarding for ${run.clientName}`,
-      kind: "onboarding",
-      route: `/clients/${clientPartyId}?view=setup`,
-    });
-    refresh.mutate(
-      { id: run.id },
-      {
-        onSuccess: () =>
-          updateOperation(operationKey, operation?.id, {
-            status: "succeeded",
-            detail: "Every checklist step was checked against current records.",
-            savedSummary: "The onboarding checklist was refreshed.",
-          }),
-        onError: () =>
-          updateOperation(operationKey, operation?.id, {
-            status: "failed",
-            detail: "The checklist could not be refreshed.",
-            savedSummary: "The previous checklist state remains available.",
-          }),
-      },
-    );
-  };
-
-  const closeOnboarding = () => {
-    if (!run) return;
-    const operation = beginOperation(operationKey, {
-      title: `Close onboarding for ${run.clientName}`,
-      kind: "onboarding",
-      route: `/clients/${clientPartyId}?view=setup`,
-    });
-    abandon.mutate(
-      { id: run.id },
-      {
-        onSuccess: () =>
-          updateOperation(operationKey, operation?.id, {
-            status: "succeeded",
-            detail: "The run was closed with its current evidence preserved.",
-            savedSummary: "The onboarding checklist is frozen and auditable.",
-          }),
-        onError: () =>
-          updateOperation(operationKey, operation?.id, {
-            status: "failed",
-            detail: "The onboarding run could not be closed.",
-            savedSummary: "The run remains active.",
-          }),
-      },
-    );
-  };
-
-  const downloadReadinessReport = () => {
-    if (!run) return;
-    const filename = `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`;
-    const operation = beginOperation(operationKey, {
-      title: `Download onboarding report for ${run.clientName}`,
-      kind: "export",
-      route: `/clients/${clientPartyId}?view=setup`,
-    });
-    triggerDownload(getGetOnboardingReportUrl(run.id), filename);
-    updateOperation(operationKey, operation?.id, {
-      status: "succeeded",
-      detail: "The readiness-report download was started.",
-      savedSummary: `The browser was asked to save ${filename}.`,
-    });
-  };
+  const {
+    isLoading,
+    error,
+    refetch,
+    run,
+    wantPosition,
+    position,
+    canWrite,
+    skipPanelKey,
+    setSkipPanelKey,
+    skipReason,
+    setSkipReason,
+    confirmAbandon,
+    setConfirmAbandon,
+    create,
+    refresh,
+    skip,
+    abandon,
+    startOnboarding,
+    refreshOnboarding,
+    closeOnboarding,
+    downloadReadinessReport,
+  } = useOnboardingRun(clientPartyId);
 
   return (
     <Card data-testid="card-onboarding">
@@ -397,22 +114,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
         ) : (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span
-                className={pillClasses(
-                  run.status === "completed"
-                    ? "emerald"
-                    : run.status === "abandoned"
-                      ? "slate"
-                      : "blue",
-                )}
-                data-testid="pill-onboarding-status"
-              >
-                {run.status === "completed"
-                  ? "Completed"
-                  : run.status === "abandoned"
-                    ? "Closed"
-                    : "In progress"}
-              </span>
+              <OnboardingStatusPill run={run} />
               <span
                 className="text-xs text-muted-foreground"
                 data-testid="text-onboarding-progress"
@@ -421,202 +123,34 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               </span>
             </div>
             <div className="space-y-2">
-              {run.steps.map((step) => {
-                const pill = onboardingStepPill(step);
-                return (
-                  <div
-                    key={step.key}
-                    className="border rounded-md p-3"
-                    data-testid={`row-onboarding-${step.key}`}
-                  >
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <p className="font-medium text-sm">
-                        {onboardingStepLabel(step.key)}
-                      </p>
-                      <span
-                        className={pillClasses(pill.tone)}
-                        data-testid={`pill-onboarding-${step.key}`}
-                      >
-                        {pill.label}
-                      </span>
-                    </div>
-                    {step.status === "skipped" && step.skippedReason && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Skipped: {step.skippedReason}
-                      </p>
-                    )}
-                    {step.status === "pending" &&
-                      step.gaps.map((gap, i) => (
-                        <p
-                          key={i}
-                          className="text-xs text-muted-foreground mt-1"
-                          data-testid={`gap-onboarding-${step.key}-${i}`}
-                        >
-                          {gap}
-                        </p>
-                      ))}
-                    {canWrite &&
-                      run.status === "active" &&
-                      step.status === "pending" && (
-                        <div className="mt-2">
-                          <Button
-                            size="sm"
-                            variant={
-                              skipPanelKey === step.key
-                                ? "secondary"
-                                : "outline"
-                            }
-                            onClick={() => {
-                              setSkipPanelKey((cur) =>
-                                cur === step.key ? null : step.key,
-                              );
-                              setSkipReason("");
-                            }}
-                            data-testid={`button-onboarding-skip-${step.key}`}
-                          >
-                            Skip with reason
-                          </Button>
-                          {skipPanelKey === step.key && (
-                            <div
-                              className="mt-2 rounded-md border p-3 space-y-2"
-                              data-testid={`panel-onboarding-skip-${step.key}`}
-                            >
-                              <div className="space-y-1">
-                                <Label htmlFor={`onboarding-skip-${step.key}`}>
-                                  Why is this step not needed?
-                                </Label>
-                                <Input
-                                  id={`onboarding-skip-${step.key}`}
-                                  value={skipReason}
-                                  onChange={(e) =>
-                                    setSkipReason(e.target.value)
-                                  }
-                                  placeholder="e.g. client is newly incorporated — no history to import"
-                                  data-testid={`input-onboarding-skip-${step.key}`}
-                                />
-                              </div>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  skip.mutate({
-                                    id: run.id,
-                                    stepKey: step.key,
-                                    data: { reason: skipReason.trim() },
-                                  })
-                                }
-                                disabled={
-                                  skipReason.trim().length < 3 || skip.isPending
-                                }
-                                data-testid={`button-onboarding-skip-confirm-${step.key}`}
-                              >
-                                {skip.isPending
-                                  ? "Recording…"
-                                  : "Record the gap"}
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                  </div>
-                );
-              })}
+              {run.steps.map((step) => (
+                <OnboardingStepRow
+                  key={step.key}
+                  run={run}
+                  step={step}
+                  canWrite={canWrite}
+                  skipPanelKey={skipPanelKey}
+                  setSkipPanelKey={setSkipPanelKey}
+                  skipReason={skipReason}
+                  setSkipReason={setSkipReason}
+                  skip={skip}
+                />
+              ))}
             </div>
             {wantPosition && position && (
-              <div
-                className="border rounded-md p-3 space-y-1"
-                data-testid="section-onboarding-position"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium text-sm">Day-one position</p>
-                  {position.provisional && (
-                    <span
-                      className={pillClasses("slate")}
-                      data-testid="pill-onboarding-position-provisional"
-                    >
-                      Provisional
-                    </span>
-                  )}
-                </div>
-                {openingSummaryLines(position).map((line) => (
-                  <p
-                    key={line.label}
-                    className="text-xs text-muted-foreground"
-                    data-testid={`line-onboarding-position-${line.label
-                      .toLowerCase()
-                      .replace(/[^a-z0-9]+/g, "-")
-                      .replace(/^-|-$/g, "")}`}
-                  >
-                    {line.label}:{" "}
-                    <span className="text-foreground">{line.value}</span>
-                  </p>
-                ))}
-              </div>
+              <OpeningPositionSection position={position} />
             )}
-            {run.status === "completed" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={downloadReadinessReport}
-                data-testid="button-onboarding-report"
-              >
-                <Download className="w-4 h-4 mr-1" aria-hidden="true" />
-                Readiness report (PDF)
-              </Button>
-            )}
-            {canWrite && run.status === "active" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setConfirmAbandon(true)}
-                disabled={abandon.isPending}
-                data-testid="button-onboarding-abandon"
-              >
-                Close without completing
-              </Button>
-            )}
-            {canWrite && run.status === "abandoned" && (
-              <div className="space-y-2">
-                <p
-                  className="text-sm text-muted-foreground"
-                  data-testid="text-onboarding-closed"
-                >
-                  This run was closed without completing — its checklist is
-                  frozen above. Start a fresh run to reopen onboarding.
-                </p>
-                <Button
-                  size="sm"
-                  onClick={startOnboarding}
-                  disabled={create.isPending}
-                  data-testid="button-onboarding-restart"
-                >
-                  {create.isPending ? "Starting…" : "Start onboarding"}
-                </Button>
-              </div>
-            )}
-            <AlertDialog open={confirmAbandon} onOpenChange={setConfirmAbandon}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Close onboarding without completing it?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    The run closes and its checklist freezes where it stands —
-                    steps stop re-checking themselves. You can start a fresh
-                    onboarding run for {run.clientName} afterwards.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    disabled={abandon.isPending}
-                    onClick={closeOnboarding}
-                    data-testid="button-onboarding-abandon-confirm"
-                  >
-                    Close without completing
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <OnboardingRunActions
+              run={run}
+              canWrite={canWrite}
+              create={create}
+              abandon={abandon}
+              confirmAbandon={confirmAbandon}
+              setConfirmAbandon={setConfirmAbandon}
+              startOnboarding={startOnboarding}
+              closeOnboarding={closeOnboarding}
+              downloadReadinessReport={downloadReadinessReport}
+            />
             <p className="text-xs text-muted-foreground">
               Steps settle themselves from the record — the checklist only ever
               claims what the data shows; a skip records the gap it leaves.

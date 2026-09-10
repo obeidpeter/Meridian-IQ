@@ -105,5 +105,3 @@ export const whtReminderSendsTable = pgTable(
     index("wht_reminder_firm_idx").on(t.firmId),
   ],
 );
-
-export type WhtReminderSend = typeof whtReminderSendsTable.$inferSelect;

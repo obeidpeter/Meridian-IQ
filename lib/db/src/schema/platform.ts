@@ -270,6 +270,4 @@ export type FeatureFlag = typeof featureFlagsTable.$inferSelect;
 export type FeatureFlagOverride = typeof featureFlagOverridesTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type OutboxEvent = typeof outboxTable.$inferSelect;
-export type OperationalHeartbeat =
-  typeof operationalHeartbeatsTable.$inferSelect;
 export type MessageChannel = (typeof messageChannelEnum.enumValues)[number];

@@ -12,7 +12,7 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 
-export const INVOICE_GROUPS = [
+const INVOICE_GROUPS = [
   "all",
   "draft",
   "pending",

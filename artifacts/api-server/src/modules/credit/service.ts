@@ -55,9 +55,7 @@ function toNgn(row: {
 
 const iso = (value: Date): string => value.toISOString();
 
-export function assessmentView(
-  row: typeof eligibilityAssessmentsTable.$inferSelect,
-) {
+function assessmentView(row: typeof eligibilityAssessmentsTable.$inferSelect) {
   return {
     id: row.id,
     invoiceId: row.invoiceId,
@@ -447,7 +445,7 @@ function deriveKybStatus(input: RecordKybInput) {
   return "verified" as const;
 }
 
-export function kybView(row: typeof creditKybChecksTable.$inferSelect) {
+function kybView(row: typeof creditKybChecksTable.$inferSelect) {
   return {
     id: row.id,
     firmId: row.firmId,
@@ -602,9 +600,7 @@ export interface RecordBankAccessInput {
   idempotencyKey: string;
 }
 
-export function bankAccessView(
-  row: typeof creditBankAccessEventsTable.$inferSelect,
-) {
+function bankAccessView(row: typeof creditBankAccessEventsTable.$inferSelect) {
   return {
     id: row.id,
     bankPartyId: row.bankPartyId,

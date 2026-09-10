@@ -1,15 +1,2 @@
-import { cn } from "@/lib/utils";
-
-function Skeleton({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn("animate-pulse rounded-md bg-primary/10", className)}
-      {...props}
-    />
-  );
-}
-
-export { Skeleton };
+// The primitive lives in the workspace package so the shell apps render it identically.
+export * from "@workspace/web-ui/ui/skeleton";

@@ -9,13 +9,16 @@ import {
 } from "@workspace/api-client-react";
 import {
   BUYER_PAGE_SIZE,
+  buyerPageView,
   buyerScopeKey,
   buyerSearchKey,
   buyerSearchParams,
+  buyerSelectionView,
   readAuthorizedBuyer,
   readBuyerPage,
   selectedBuyerKey,
   type BuyerScope,
+  type QueryView,
 } from "./buyer-picker";
 import { applyDraftProposal } from "./draft-voice";
 
@@ -238,6 +241,172 @@ for (const changed of [
     );
   });
 }
+
+// The derived view the hook spreads into its state, driven through the query
+// states react-query can be in. `available` folds enabled + current scope.
+const idle = { isError: false, isPending: false, isFetching: false };
+const pageOf = (
+  items: Party[],
+  hasNext: boolean,
+  overrides: Partial<QueryView<{ items: Party[]; hasNext: boolean }>> = {},
+): QueryView<{ items: Party[]; hasNext: boolean }> => ({
+  ...idle,
+  fetchStatus: "idle",
+  data: { items, hasNext },
+  ...overrides,
+});
+
+test("buyerPageView: a settled page shows its items and lookahead only while available and not debouncing", () => {
+  const page = pageOf([party(1), party(2)], true);
+  assert.deepEqual(buyerPageView(true, false, page), {
+    items: [party(1), party(2)],
+    hasNext: true,
+    loading: false,
+    paused: false,
+    error: false,
+  });
+  assert.deepEqual(buyerPageView(false, false, page), {
+    items: [],
+    hasNext: false,
+    loading: false,
+    paused: false,
+    error: false,
+  });
+  assert.deepEqual(buyerPageView(true, true, page), {
+    items: [],
+    hasNext: false,
+    loading: true,
+    paused: false,
+    error: false,
+  });
+});
+
+test("buyerPageView: pending, fetching, paused and error states", () => {
+  const empty = pageOf([], false);
+  const pending = buyerPageView(true, false, {
+    ...empty,
+    data: undefined,
+    isPending: true,
+    fetchStatus: "fetching",
+  });
+  assert.deepEqual(pending, {
+    items: [],
+    hasNext: false,
+    loading: true,
+    paused: false,
+    error: false,
+  });
+  const refetching = buyerPageView(true, false, {
+    ...pageOf([party(3)], false),
+    isFetching: true,
+    fetchStatus: "fetching",
+  });
+  assert.deepEqual(refetching.items, [party(3)]);
+  assert.equal(refetching.loading, true);
+  const paused = buyerPageView(true, false, {
+    ...empty,
+    data: undefined,
+    isPending: true,
+    fetchStatus: "paused",
+  });
+  assert.equal(paused.paused, true);
+  assert.equal(paused.loading, true);
+  const failed = buyerPageView(true, false, {
+    ...pageOf([party(4)], true),
+    isError: true,
+  });
+  assert.deepEqual(failed, {
+    items: [],
+    hasNext: false,
+    loading: false,
+    paused: false,
+    error: true,
+  });
+  // An error while the search is still debouncing is not yet reportable, and
+  // neither is one outside the current scope.
+  assert.equal(
+    buyerPageView(true, true, { ...empty, isError: true }).error,
+    false,
+  );
+  assert.equal(
+    buyerPageView(false, false, { ...empty, isError: true }).error,
+    false,
+  );
+});
+
+test("buyerSelectionView: only a fresh read of the selected ID counts as selected", () => {
+  const selection: QueryView<Party> = {
+    ...idle,
+    fetchStatus: "idle",
+    data: party(7),
+  };
+  assert.deepEqual(buyerSelectionView(true, id(7), selection), {
+    selected: party(7),
+    selectionLoading: false,
+    selectionPaused: false,
+    selectionError: false,
+  });
+  // A stale read (the selection moved on) is not a selection.
+  assert.equal(buyerSelectionView(true, id(8), selection).selected, null);
+  // Nothing selected: no loading, no error, whatever the query says.
+  assert.deepEqual(
+    buyerSelectionView(true, null, { ...selection, isError: true }),
+    {
+      selected: null,
+      selectionLoading: false,
+      selectionPaused: false,
+      selectionError: false,
+    },
+  );
+  // Out of scope: the read is withheld entirely.
+  assert.deepEqual(buyerSelectionView(false, id(7), selection), {
+    selected: null,
+    selectionLoading: false,
+    selectionPaused: false,
+    selectionError: false,
+  });
+});
+
+test("buyerSelectionView: pending, refetching, paused and error reads", () => {
+  const base: QueryView<Party> = { ...idle, fetchStatus: "idle" };
+  assert.deepEqual(
+    buyerSelectionView(true, id(7), {
+      ...base,
+      isPending: true,
+      fetchStatus: "fetching",
+    }),
+    {
+      selected: null,
+      selectionLoading: true,
+      selectionPaused: false,
+      selectionError: false,
+    },
+  );
+  const refetching = buyerSelectionView(true, id(7), {
+    ...base,
+    data: party(7),
+    isFetching: true,
+    fetchStatus: "fetching",
+  });
+  assert.equal(refetching.selected, null);
+  assert.equal(refetching.selectionLoading, true);
+  const paused = buyerSelectionView(true, id(7), {
+    ...base,
+    data: party(7),
+    isPending: true,
+    fetchStatus: "paused",
+  });
+  assert.equal(paused.selected, null);
+  assert.equal(paused.selectionPaused, true);
+  assert.equal(paused.selectionLoading, true);
+  const failed = buyerSelectionView(true, id(7), {
+    ...base,
+    data: party(7),
+    isError: true,
+  });
+  assert.equal(failed.selected, null);
+  assert.equal(failed.selectionError, true);
+});
 
 test("cancelled search and hydration cannot publish late responses", async () => {
   const search = new AbortController();

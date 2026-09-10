@@ -195,7 +195,7 @@ export function usagePct(used: number, budget: number): number {
 export type UsagePurposeRow = { purpose: string; tokens: number };
 
 /** Purpose rows shown under the meter before folding into "+N more". */
-export const USAGE_BREAKDOWN_MAX_ROWS = 4;
+const USAGE_BREAKDOWN_MAX_ROWS = 4;
 
 /**
  * Rows for the per-purpose breakdown under the usage meter: zero, negative

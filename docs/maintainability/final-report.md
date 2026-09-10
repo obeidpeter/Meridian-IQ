@@ -34,7 +34,11 @@ The candidate report counts 1,235 hand-written source/test/tool files, 283,974
 lines, 101 files above 600 lines, 21 above 1,000 lines, and 21 exact duplicate
 groups. These counts include the new quality tooling and tests and should be
 used as the ratchet baseline; they are not directly comparable to older counts
-that excluded different operational and test paths.
+that excluded different operational and test paths. R126 moved the shadcn
+primitives the shell apps shared byte-for-byte into `lib/web-ui/src/ui` (each
+app file is now a re-export shim), so the exact-duplicate count is 2: the
+buyer/console `main.tsx` entry pair and the api-errors/format `vitest.config.ts`
+pair, both kept local by design.
 
 ## Implemented Changes
 
