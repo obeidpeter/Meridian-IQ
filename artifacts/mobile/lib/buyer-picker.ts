@@ -112,3 +112,56 @@ export async function readAuthorizedBuyer(
   }
   return party;
 }
+
+// The react-query result shape the hook's derived booleans read, typed
+// structurally so this module carries no @tanstack import and node:test can
+// drive the helpers with plain objects. The hook passes its live query
+// objects straight through (the tracked-props proxies record the reads).
+export interface QueryView<T> {
+  data?: T;
+  isError: boolean;
+  isPending: boolean;
+  isFetching: boolean;
+  fetchStatus: "fetching" | "paused" | "idle";
+}
+
+/** The search-page half of the picker state: what the list may show now. */
+export function buyerPageView(
+  available: boolean,
+  debouncing: boolean,
+  page: QueryView<{ items: Party[]; hasNext: boolean }>,
+) {
+  return {
+    items:
+      available && !debouncing && !page.isError ? (page.data?.items ?? []) : [],
+    hasNext: available && !debouncing && !page.isError && !!page.data?.hasNext,
+    loading: available && (debouncing || page.isPending || page.isFetching),
+    paused: available && page.fetchStatus === "paused",
+    error: available && !debouncing && page.isError,
+  };
+}
+
+/** The selected-buyer half: only a fresh, authorized read counts as selected. */
+export function buyerSelectionView(
+  available: boolean,
+  selectedId: string | null,
+  selection: QueryView<Party>,
+) {
+  return {
+    selected:
+      available &&
+      !selection.isError &&
+      !selection.isFetching &&
+      selection.fetchStatus !== "paused" &&
+      selection.data?.id === selectedId
+        ? selection.data
+        : null,
+    selectionLoading:
+      available &&
+      !!selectedId &&
+      (selection.isPending || selection.isFetching),
+    selectionPaused:
+      available && !!selectedId && selection.fetchStatus === "paused",
+    selectionError: available && !!selectedId && selection.isError,
+  };
+}

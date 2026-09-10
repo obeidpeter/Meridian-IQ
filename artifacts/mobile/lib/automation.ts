@@ -23,6 +23,11 @@
  *    running it here would silently burn the drafts.
  */
 
+import type {
+  ActionDecisionList,
+  ActionPolicyList,
+  ActionProposals,
+} from "@workspace/api-client-react";
 import {
   actionConfirmDescription as sharedActionConfirmDescription,
   policyEvidenceLine,
@@ -213,6 +218,31 @@ export const POLICY_REVOKE_CONFIRM = {
     "This permanently removes the standing approval — Clerk stops running this action for you. You can grant it again later.",
   confirmLabel: "Revoke",
 } as const;
+
+// ---- The screen's three lists ----------------------------------------------
+
+// How many run-record lines the screen shows — the evidence trail, not an
+// archive (the web card shows 5; a phone screen affords a few more).
+export const DECISION_DISPLAY_CAP = 10;
+
+/**
+ * The three lists the Automation screen renders, read from the (possibly
+ * still absent) query payloads, plus the kinds that already carry a live
+ * grant and the all-empty predicate behind the screen's EmptyState.
+ */
+export function automationLists(
+  proposalsData: ActionProposals | undefined,
+  policiesData: ActionPolicyList | undefined,
+  decisionsData: ActionDecisionList | undefined,
+) {
+  const proposals = proposalsData?.actions ?? [];
+  const policies = policiesData?.policies ?? [];
+  const policyKinds = new Set(policies.map((p) => p.kind));
+  const decisions = decisionsData?.decisions ?? [];
+  const isEmpty =
+    proposals.length === 0 && policies.length === 0 && decisions.length === 0;
+  return { proposals, policies, policyKinds, decisions, isEmpty };
+}
 
 // ---- Run record ------------------------------------------------------------
 
