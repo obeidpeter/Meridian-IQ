@@ -19,6 +19,7 @@ import type {
   DashboardSummary,
   Me,
   MonthEndClose,
+  PayablesSummary,
 } from "@workspace/api-client-react";
 
 // Controllable stand-ins for the generated hooks the page renders with.
@@ -27,11 +28,15 @@ const harness = vi.hoisted(() => ({
   summary: undefined as unknown,
   close: undefined as unknown,
   closeSuccess: false,
+  payables: undefined as unknown,
+  payablesSuccess: false,
   reset() {
     this.me = undefined;
     this.summary = undefined;
     this.close = undefined;
     this.closeSuccess = false;
+    this.payables = undefined;
+    this.payablesSuccess = false;
   },
 }));
 
@@ -68,7 +73,10 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     }),
     useGetReceivablesSummary: emptyQuery,
     useListPaymentBehaviour: emptyQuery,
-    useGetPayablesSummary: emptyQuery,
+    useGetPayablesSummary: () => ({
+      data: harness.payables,
+      isSuccess: harness.payablesSuccess,
+    }),
     useListUnbilledIncome: emptyQuery,
     useGetUnmatchedCredits: emptyQuery,
     useGetCashflowOutlook: emptyQuery,
@@ -273,5 +281,70 @@ describe("Clerk tab dual gate and floor", () => {
     expect(screen.getByTestId("link-ask-clerk").getAttribute("href")).toContain(
       "/clerk/ask",
     );
+  });
+});
+
+function payablesSummary(): PayablesSummary {
+  return {
+    clientPartyId: "cp-1",
+    groups: [
+      {
+        currency: "NGN",
+        overdue: { amount: "120000.00", count: 2 },
+        dueWeeks: [{ startDate: "2026-07-27", amount: "50000.00", count: 1 }],
+        later: { amount: "80000.00", count: 2 },
+        total: { amount: "250000.00", count: 5 },
+      },
+    ],
+    topSuppliers: [],
+  };
+}
+
+describe("Money view", () => {
+  test("the deep link presses the Money chip and leaves the Today blocks out", () => {
+    window.history.replaceState(null, "", "?view=money");
+    harness.summary = summary({ totalInvoices: 3 });
+    renderWithClient(<Dashboard />);
+    expect(
+      screen
+        .getByRole("button", { name: /Money/ })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: /Today/ })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    // The receivables card is shared with the Today view and stays mounted.
+    expect(screen.getByText("Receivables")).toBeTruthy();
+    // Today-only content: the work queue, the setup block, the activity card.
+    expect(screen.queryByText("What needs attention")).toBeNull();
+    expect(screen.queryByText("Today is clear")).toBeNull();
+    expect(screen.queryByTestId("card-first-run")).toBeNull();
+    expect(screen.queryByText("Recent activity")).toBeNull();
+    expect(screen.queryByText("Next deadline")).toBeNull();
+  });
+
+  test("a zero-invoice book gets no setup block on the Money view either", () => {
+    window.history.replaceState(null, "", "?view=money");
+    harness.summary = summary({ totalInvoices: 0 });
+    renderWithClient(<Dashboard />);
+    expect(screen.queryByTestId("card-first-run")).toBeNull();
+    expect(screen.queryByTestId("text-first-run")).toBeNull();
+    expect(screen.getByText("Receivables")).toBeTruthy();
+  });
+
+  test("Receivables precedes Payables in document order", () => {
+    window.history.replaceState(null, "", "?view=money");
+    harness.summary = summary({ totalInvoices: 3 });
+    harness.payables = payablesSummary();
+    harness.payablesSuccess = true;
+    renderWithClient(<Dashboard />);
+    const receivables = screen.getByText("Receivables");
+    const payables = screen.getByTestId("card-payables");
+    expect(
+      receivables.compareDocumentPosition(payables) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
