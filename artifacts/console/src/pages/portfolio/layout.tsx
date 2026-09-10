@@ -3,8 +3,18 @@ import { Link } from "wouter";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Upload, GitBranch } from "lucide-react";
-import { WorkspaceHeader } from "@workspace/web-ui";
+import {
+  Plus,
+  Upload,
+  GitBranch,
+  AlertTriangle,
+  Users,
+  FileWarning,
+  Clock,
+} from "lucide-react";
+import type { PortfolioSummary } from "@workspace/api-client-react";
+import { formatNaira } from "@/lib/format";
+import { Metric, MetricStrip, WorkspaceHeader } from "@workspace/web-ui";
 
 // A labeled group of cards. scroll-mt keeps an anchor-jumped heading clear of
 // the sticky console header.
@@ -99,5 +109,44 @@ export function PortfolioHeader({
         </>
       }
     />
+  );
+}
+
+// The four firm-wide stat tiles under the header.
+export function PortfolioSummaryStrip({ data }: { data: PortfolioSummary }) {
+  return (
+    <MetricStrip label="Firm portfolio summary">
+      <Metric
+        label="Clients"
+        value={String(data.clientCount)}
+        detail="Active client book"
+        icon={<Users className="size-4" aria-hidden="true" />}
+        testId="stat-clients"
+      />
+      <Metric
+        label="High-risk clients"
+        value={String(data.highRiskCount)}
+        detail="Partner attention"
+        icon={<AlertTriangle className="size-4" aria-hidden="true" />}
+        tone={data.highRiskCount > 0 ? "critical" : "default"}
+        testId="stat-high-risk"
+      />
+      <Metric
+        label="Unsubmitted invoices"
+        value={String(data.totalUnsubmittedCount)}
+        detail={`${formatNaira(data.totalUnsubmittedValue)} awaiting submission`}
+        icon={<FileWarning className="size-4" aria-hidden="true" />}
+        tone={data.totalUnsubmittedCount > 0 ? "warning" : "default"}
+        testId="stat-unsubmitted"
+      />
+      <Metric
+        label="Overdue deadlines"
+        value={String(data.totalOverdueCount)}
+        detail="Across the firm"
+        icon={<Clock className="size-4" aria-hidden="true" />}
+        tone={data.totalOverdueCount > 0 ? "critical" : "default"}
+        testId="stat-overdue"
+      />
+    </MetricStrip>
   );
 }

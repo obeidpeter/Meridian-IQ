@@ -4,50 +4,21 @@
 // (portfolio.test.ts) and the collections desk keep importing
 // "@/pages/portfolio" / "./portfolio": this module is the page's surface.
 
-import { useEffect, useRef, useState } from "react";
-import {
-  getGetVatPackQueryKey,
-  getGetRejectionPatternsQueryKey,
-  useGetMe,
-  useGetPortfolio,
-  useGetVatPack,
-  useGetRejectionPatterns,
-  useGetFirmComplianceCalendar,
-  getGetFirmComplianceCalendarQueryKey,
-  useGetVatSettlementCheck,
-  getGetVatSettlementCheckQueryKey,
-  useGetFirmVatPositions,
-  getGetFirmVatPositionsQueryKey,
-  useGetQuarterlyReview,
-  getGetQuarterlyReviewQueryKey,
-  useGetClerkDigest,
-  getGetClerkDigestQueryKey,
-  useListStatementConnections,
-  getListStatementConnectionsQueryKey,
-  useListInvitations,
-  getListInvitationsQueryKey,
-} from "@workspace/api-client-react";
+import { useEffect, useRef } from "react";
+import { useGetMe, useGetPortfolio } from "@workspace/api-client-react";
 import { AutomationRollupCard } from "@/components/automation-rollup-card";
 import { AutomationEvidenceCard } from "@/components/automation-evidence-card";
 import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
-import { GovernanceCard, isFirmAdminRole } from "@/components/governance-card";
+import { GovernanceCard } from "@/components/governance-card";
 import { VatPositionsCard } from "@/components/vat-positions-card";
 import { FilingMatrixCard } from "@/components/filing-matrix-card";
-import {
-  StaffNotificationPrefsCard,
-  isFirmMemberRole,
-} from "@/components/staff-notification-prefs-card";
+import { StaffNotificationPrefsCard } from "@/components/staff-notification-prefs-card";
 import { StatementConnectionsCard } from "@/components/statement-connections-card";
-import { AddClientDialog } from "@/components/add-client-dialog";
 import { QueryError } from "@/components/query-error";
-import { AlertTriangle, Users, FileWarning, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { formatNaira } from "@/lib/format";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
-  Metric,
-  MetricStrip,
   SegmentedControl,
   WorkQueue,
   useUrlParam,
@@ -55,21 +26,14 @@ import {
   useSavedViews,
   type SavedView,
 } from "@workspace/web-ui";
-import {
-  browserStorage,
-  calendarHasContent,
-  canImportClients,
-  gettingStartedSteps,
-  hasClientOwnerInvite,
-  portfolioInvoiceCount,
-  portfolioSubmittedCount,
-  readGettingStartedDismissed,
-  rejectionsHaveContent,
-  shouldShowGettingStarted,
-  writeGettingStartedDismissed,
-} from "./helpers";
+import { canImportClients } from "./helpers";
 import { VatPackCard, VatPositionCard, VatSettlementCard } from "./vat-cards";
-import { PortfolioHeader, PortfolioSection, PortfolioSkeleton } from "./layout";
+import {
+  PortfolioHeader,
+  PortfolioSection,
+  PortfolioSkeleton,
+  PortfolioSummaryStrip,
+} from "./layout";
 import {
   CLIENT_RISK_FILTERS,
   CLIENT_SCOPES,
@@ -95,6 +59,8 @@ import { GettingStartedCard } from "./getting-started-card";
 import { EmptyBookCard } from "./empty-book-card";
 import { firmPriorities } from "./priorities";
 import { QuarterlyReviewCard } from "./quarterly-review-card";
+import { useGettingStarted } from "./use-getting-started";
+import { usePortfolioOccupancy } from "./use-portfolio-occupancy";
 
 export function Portfolio() {
   usePageTitle("Client portfolio");
@@ -168,127 +134,19 @@ export function Portfolio() {
     }
   };
 
-  // Getting-started checklist state: single-client intake dialog + the
-  // localStorage-backed dismissal.
-  const [addClientOpen, setAddClientOpen] = useState(false);
-  const [gettingStartedDismissed, setGettingStartedDismissed] = useState(() =>
-    readGettingStartedDismissed(browserStorage()),
-  );
-  useEffect(() => {
-    if (requestedAction !== "add-client") return;
-    setAddClientOpen(true);
-    setRequestedAction("");
-  }, [requestedAction, setRequestedAction]);
-  // Step 2's evidence. Fetched only while the checklist could still show —
-  // a dismissed card costs nothing.
-  const { data: invitations } = useListInvitations({
-    query: {
-      queryKey: getListInvitationsQueryKey(),
-      retry: false,
-      enabled: !gettingStartedDismissed && !!data,
-    },
-  });
+  const {
+    steps,
+    showGettingStarted,
+    handleDismissGettingStarted,
+    openAddClient,
+    addClientDialog,
+  } = useGettingStarted({ data, requestedAction, setRequestedAction });
 
-  // Section occupancy: observe the SAME queries the section's self-gating
-  // cards gate on — identical query keys, so react-query dedupes each to a
-  // single fetch shared with the card once it mounts. Enabled only once the
-  // book has clients, mirroring when the sections themselves can render.
   const hasBook = !!data && data.clients.length > 0;
-  const gateVatPack = useGetVatPack(undefined, {
-    query: {
-      queryKey: getGetVatPackQueryKey(undefined),
-      retry: false,
-      enabled: hasBook,
-    },
+  const { complianceOccupied, connectionsOccupied } = usePortfolioOccupancy({
+    hasBook,
+    role: me?.role,
   });
-  const gateSettlement = useGetVatSettlementCheck(undefined, {
-    query: {
-      queryKey: getGetVatSettlementCheckQueryKey(undefined),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const gateVatPositions = useGetFirmVatPositions(undefined, {
-    query: {
-      queryKey: getGetFirmVatPositionsQueryKey(undefined),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const gateQuarterly = useGetQuarterlyReview(undefined, {
-    query: {
-      queryKey: getGetQuarterlyReviewQueryKey(undefined),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const gateCalendar = useGetFirmComplianceCalendar({
-    query: {
-      queryKey: getGetFirmComplianceCalendarQueryKey(),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const gateRejections = useGetRejectionPatterns({
-    query: {
-      queryKey: getGetRejectionPatternsQueryKey(),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const gateConnections = useListStatementConnections({
-    query: {
-      queryKey: getListStatementConnectionsQueryKey(),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const gateDigest = useGetClerkDigest({
-    query: {
-      queryKey: getGetClerkDigestQueryKey(),
-      retry: false,
-      enabled: hasBook,
-    },
-  });
-  const complianceOccupied =
-    (gateCalendar.isSuccess && calendarHasContent(gateCalendar.data)) ||
-    gateVatPack.isSuccess ||
-    gateSettlement.isSuccess ||
-    gateVatPositions.isSuccess ||
-    gateQuarterly.isSuccess ||
-    (gateRejections.isSuccess && rejectionsHaveContent(gateRejections.data)) ||
-    // The governance card renders for firm admins (including its inline
-    // error state), and only for them — mirror its role self-gate.
-    isFirmAdminRole(me?.role);
-  const connectionsOccupied =
-    gateConnections.isSuccess ||
-    gateDigest.isSuccess ||
-    // The staff-prefs card renders for firm members (including its inline
-    // error state), and only for them — mirror its role gate.
-    isFirmMemberRole(me?.role);
-  // Checklist inputs, computed from data already on the page (portfolio
-  // counts + the invitations list above).
-  const steps = gettingStartedSteps({
-    clientCount: data?.clients.length ?? 0,
-    hasClientInvite: hasClientOwnerInvite(invitations),
-    invoiceCount: portfolioInvoiceCount(data?.clients ?? []),
-    submittedCount: portfolioSubmittedCount(data?.clients ?? []),
-  });
-  const showGettingStarted =
-    !!data &&
-    shouldShowGettingStarted({
-      clientCount: data.clients.length,
-      steps,
-      dismissed: gettingStartedDismissed,
-    });
-  const handleDismissGettingStarted = () => {
-    writeGettingStartedDismissed(browserStorage());
-    setGettingStartedDismissed(true);
-  };
-  const openAddClient = () => setAddClientOpen(true);
-  const addClientDialog = (
-    <AddClientDialog open={addClientOpen} onOpenChange={setAddClientOpen} />
-  );
 
   if (isLoading) {
     return <PortfolioSkeleton />;
@@ -412,39 +270,7 @@ export function Portfolio() {
         />
       )}
 
-      <MetricStrip label="Firm portfolio summary">
-        <Metric
-          label="Clients"
-          value={String(data.clientCount)}
-          detail="Active client book"
-          icon={<Users className="size-4" aria-hidden="true" />}
-          testId="stat-clients"
-        />
-        <Metric
-          label="High-risk clients"
-          value={String(data.highRiskCount)}
-          detail="Partner attention"
-          icon={<AlertTriangle className="size-4" aria-hidden="true" />}
-          tone={data.highRiskCount > 0 ? "critical" : "default"}
-          testId="stat-high-risk"
-        />
-        <Metric
-          label="Unsubmitted invoices"
-          value={String(data.totalUnsubmittedCount)}
-          detail={`${formatNaira(data.totalUnsubmittedValue)} awaiting submission`}
-          icon={<FileWarning className="size-4" aria-hidden="true" />}
-          tone={data.totalUnsubmittedCount > 0 ? "warning" : "default"}
-          testId="stat-unsubmitted"
-        />
-        <Metric
-          label="Overdue deadlines"
-          value={String(data.totalOverdueCount)}
-          detail="Across the firm"
-          icon={<Clock className="size-4" aria-hidden="true" />}
-          tone={data.totalOverdueCount > 0 ? "critical" : "default"}
-          testId="stat-overdue"
-        />
-      </MetricStrip>
+      <PortfolioSummaryStrip data={data} />
 
       <SegmentedControl<PortfolioView>
         items={portfolioViews}

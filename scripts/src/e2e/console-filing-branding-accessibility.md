@@ -27,7 +27,11 @@ Additional requested state coverage found and fixed:
 - artifacts/console/src/pages/bank-data-room.accessibility.test.tsx
 - artifacts/console/src/pages/filing-desk.tsx
 - artifacts/console/src/pages/filing-desk.accessibility.test.tsx
-- artifacts/console/src/pages/whitelabel.tsx
+- artifacts/console/src/pages/whitelabel/index.tsx
+- artifacts/console/src/pages/whitelabel/use-brand-studio.tsx
+- artifacts/console/src/pages/whitelabel/branding-form-card.tsx
+- artifacts/console/src/pages/whitelabel/preview-cards.tsx
+- artifacts/console/src/pages/whitelabel/theme.ts
 - artifacts/console/src/pages/whitelabel.accessibility.test.tsx
 - scripts/src/e2e/console-filing-branding-accessibility.test.mjs
 - scripts/src/e2e/console-filing-branding-accessibility.md
