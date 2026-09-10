@@ -12,14 +12,16 @@
     "architecture:check": "pnpm --filter @workspace/scripts quality:architecture",
     "security:secrets": "pnpm --filter @workspace/scripts quality:secrets",
     "maintainability:report": "pnpm --filter @workspace/scripts quality:metrics",
-    "complexity:report": "pnpm --filter @workspace/scripts quality:complexity",
+    "complexity:report": "pnpm --filter @workspace/scripts quality:complexity report",
+    "complexity:check": "pnpm --filter @workspace/scripts quality:complexity check",
+    "complexity:write": "pnpm --filter @workspace/scripts quality:complexity write",
     "docs:check": "pnpm --filter @workspace/scripts quality:docs",
     "brand:check": "pnpm --filter @workspace/scripts quality:brand",
     "release:prepare": "node scripts/src/ops/release-candidate.mjs",
     "ops:check": "node scripts/src/ops/operational-check.mjs",
     "test:workspace-usability": "node --test --test-concurrency=1 lib/web-ui/src/first-invoice.browser.test.mjs lib/web-ui/src/business-details.browser.test.mjs scripts/src/e2e/workspace-usability.test.mjs scripts/src/e2e/workspace-usability-hooks.test.mjs scripts/src/e2e/workspace-team-work.test.mjs scripts/src/e2e/workspace-created-task.test.mjs",
     "test:unit": "pnpm --filter @workspace/api-errors --filter @workspace/format --filter @workspace/web-config --filter @workspace/web-ui --filter @workspace/mobile --filter @workspace/landing --filter @workspace/console --filter @workspace/sme-compliance --filter @workspace/buyer-portal --filter @workspace/penalty-calculator run test && pnpm --filter @workspace/api-server run test:pure",
-    "check": "pnpm run architecture:check && pnpm run security:secrets && pnpm run docs:check && pnpm run brand:check && pnpm run typecheck && pnpm run lint && pnpm run test:unit"
+    "check": "pnpm run architecture:check && pnpm run security:secrets && pnpm run docs:check && pnpm run brand:check && pnpm run complexity:check && pnpm run typecheck && pnpm run lint && pnpm run test:unit"
   },
   "engines": {
     "node": ">=22 <25",
