@@ -67,9 +67,14 @@ This cache cleanup is not a session or persisted-work reset.
 
 ## Intentionally stable identifiers
 
-- **Repository identity:** `obeidpeter/Meridian-IQ` and its existing repository
-  URLs remain unchanged. A GitHub display-name/description update does not
-  authorize renaming the repository slug or rewriting links.
+- **Repository identity:** the GitHub repository was renamed from
+  `obeidpeter/Meridian-IQ` to `obeidpeter/Valo` by the project owner on
+  2026-09-10 (R125). GitHub redirects the old slug for web URLs, clones,
+  fetches and pushes, so links in historical records are left as written and
+  keep resolving; new links use the new slug. Never create a repository named
+  `Meridian-IQ` under the same owner, because that would end the redirect.
+  The Replit workspace remote should point at the new slug
+  (`git remote set-url origin https://github.com/obeidpeter/Valo.git`).
 - **External destinations:** the project owner selected `valo-platform.replit.app`
   as the replacement application domain after the shorter name was unavailable.
   `advisory@meridianiq.com` remains pending
@@ -113,8 +118,10 @@ This cache cleanup is not a session or persisted-work reset.
 These steps require deployment-owner action and evidence. They are not
 completed by source edits or documentation checks.
 
-- [ ] Update the GitHub project/repository display description while retaining
-  `obeidpeter/Meridian-IQ`. The Replit project display name is Valo.
+- [x] Rename the GitHub repository to `obeidpeter/Valo` (done 2026-09-10; the
+  old slug redirects). Update its description if it still names the old
+  Replit project URL, and re-point the Replit workspace remote. The Replit
+  project display name is Valo.
 - [ ] Publish the renamed project so `valo-platform.replit.app` becomes live. Verify
   routing, TLS, redirects, app links, allowed origins, and mobile API targets;
   coordinate `PUBLIC_APP_URL` and deployment settings with that selected URL.
