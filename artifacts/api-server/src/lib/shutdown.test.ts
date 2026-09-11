@@ -66,6 +66,9 @@ function runSignalShutdownChild(fatal: boolean): Promise<{
       log: { info() {}, warn() {}, error() {} },
       timeoutMs: 1_000,
     });
+    // The mock server holds no socket. Keep the child alive until the OS
+    // delivers SIGTERM instead of allowing a natural exit with exitCode.
+    setInterval(() => {}, 1_000);
     // Windows cannot deliver a catchable POSIX SIGTERM. Exercise the installed
     // handler there; Unix still verifies the actual OS signal path.
     setTimeout(() => {
