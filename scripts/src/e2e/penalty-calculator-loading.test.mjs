@@ -139,7 +139,7 @@ describe(
           assert.equal(await page.getByRole("contentinfo").count(), 1);
           assert.equal(
             await page
-              .getByRole("link", { name: "Open all apps", exact: true })
+              .getByRole("link", { name: "Open Valo workspaces", exact: true })
               .getAttribute("href"),
             "/login",
           );
@@ -213,7 +213,7 @@ describe(
           });
           assert.match(
             await advisoryForm.innerText(),
-            /That sends your email, optional business name, and the estimate summary to the Valo advisory team/,
+            /Request review sends your email, optional business name and estimate summary to the Valo advisory team/,
           );
           assert.equal(
             await page.locator("#copyright-year").textContent(),
