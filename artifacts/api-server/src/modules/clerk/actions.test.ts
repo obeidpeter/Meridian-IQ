@@ -210,7 +210,6 @@ test("proposals are live: overdue drafts only, oldest first, honest count", asyn
   assert.match(action.why, /7-day legal submission deadline/);
   assert.match(action.why, /estimate, not tax advice/);
   assert.doesNotMatch(action.why, /Submitting them removes it/);
-  assert.match(action.why, /estimate not advice/);
 });
 
 test("execution re-checks every target and records an honest decision", async () => {
@@ -411,7 +410,7 @@ test("retry_failed proposes rail-rejected paper and retries it through the ordin
     "last failure: MBS_INVALID_TIN",
     "the last rail error rides the target so the human can judge the fix",
   );
-  assert.match(retry.why, /fail again/);
+  assert.match(retry.why, /same problem can cause another failure/);
 
   // Approval retries THROUGH submitInvoice (failed → submitted is the
   // lifecycle's own fix-and-retry edge); a non-failed id skips.
@@ -455,7 +454,7 @@ test("draft_chasers drafts staged reminders — the platform sends nothing", asy
   const { actions } = await listActionProposals(firmId, supplier);
   const chase = actions.find((a) => a.kind === "draft_chasers");
   assert.ok(chase, "the late receivable is proposed for a reminder");
-  assert.match(chase.why, /platform sends nothing/);
+  assert.match(chase.why, /Valo does not send them/);
   const target = chase.targets.find((t) => t.invoiceId === chaseInv);
   assert.ok(target, "the chase-worthy invoice is a target");
   assert.match(target.note ?? "", /Actions Buyer/);
