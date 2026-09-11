@@ -92,8 +92,13 @@ security invariants before exclusively creating a `0600` output file. It refuses
 malformed UTF-8/JSON, partial or unknown fields, unsafe state, non-regular or
 symlink input, oversized input/output, an invalid origin, and an existing output
 rather than overwriting evidence. It writes a format-1 envelope with the current
-UTC capture time and prints the SHA-256 of the exact canonical bytes. Obtain or
-approve that printed digest through the independent approved channel, then run:
+UTC capture time and prints the SHA-256 of the exact canonical bytes.
+
+On Windows, use an owner-only directory with restrictive ACLs for both input
+and output; POSIX mode `0600` does not establish Windows file permissions.
+
+Obtain or approve the printed digest through the independent approved channel,
+then run:
 
 ```bash
 RELEASE_MANIFEST=release/build-manifest.json \

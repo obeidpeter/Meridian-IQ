@@ -112,6 +112,16 @@ Quality and regression alerts:
 `ADVISORY_INBOX_MAX_AGE_MS`, `USABILITY_VALIDATED_AT`,
 `USABILITY_MAX_AGE_MS`, `USABILITY_EVIDENCE_REF`.
 
+`PIPELINE_DB_RETRY_BASE_MS` sets the initial delay after a background pass
+fails because PostgreSQL is unavailable. It defaults to 1000 milliseconds;
+successive failures use exponential backoff capped at 30000 milliseconds.
+This delays the next pass; it does not retry a handler or an external payment,
+message, or invoice submission.
+
+`PIPELINE_HARD_STOP_ON_LOCK_LOSS` is not a supported runtime setting. Tests
+set it only to verify that it cannot disable the mandatory shutdown after
+distributed-lock ownership is lost.
+
 Timestamp evidence uses ISO 8601. Future, malformed, missing, or stale
 evidence warns in non-production and blocks where production policy requires.
 
@@ -218,6 +228,10 @@ Release verification uses `RELEASE_MANIFEST` (local CI manifest path),
 `RELEASE_MANIFEST_SHA256` (checksum obtained from the trusted CI artifact record),
 `RELEASE_ROLLBACK_REVISION` (full SHA of a reviewed compatible rollback build),
 and `RELEASE_BASE_URL` (deployment origin for read-only postdeploy checks).
+`RELEASE_SECURITY_CATALOG_SHA256` is required only for credentialless catalog
+verification. It must be the independently approved SHA-256 of the exact
+production capture envelope, bound to the selected manifest and live origin;
+it is not the manifest checksum. Captures expire after one hour.
 `RELEASE_TRAFFIC_DRAINED=1` is an operator assertion, not a traffic-control
 mechanism: it is required for maintenance-forward/RUN and for the separate
 explicit `--offline-bootstrap` path (which maintenance-forward refuses).

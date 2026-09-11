@@ -40,10 +40,13 @@ function fakeDeps(over: Partial<ShutdownDeps> = {}) {
   return { deps, order, exits };
 }
 
-function runSignalShutdownChild(
-  fatal: boolean,
-): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+function runSignalShutdownChild(fatal: boolean): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  output: string;
+}> {
   const script = `
+    import { writeSync } from "node:fs";
     import { installGracefulShutdown } from "./src/lib/shutdown.ts";
     if (${String(fatal)}) {
       process.env.PIPELINE_HARD_STOP_ON_LOCK_LOSS = "0";
@@ -55,7 +58,7 @@ function runSignalShutdownChild(
     };
     installGracefulShutdown({
       server,
-      markUnready() {},
+      markUnready() { writeSync(1, "shutdown-handler-entered\\n"); },
       stopWorker() {},
       awaitWorkerIdle: async () => true,
       closePool: async () => {},
@@ -63,19 +66,33 @@ function runSignalShutdownChild(
       log: { info() {}, warn() {}, error() {} },
       timeoutMs: 1_000,
     });
-    setTimeout(() => process.kill(process.pid, "SIGTERM"), 20);
+    // Windows cannot deliver a catchable POSIX SIGTERM. Exercise the installed
+    // handler there; Unix still verifies the actual OS signal path.
+    setTimeout(() => {
+      if (process.platform === "win32") process.emit("SIGTERM");
+      else process.kill(process.pid, "SIGTERM");
+    }, 20);
   `;
   const child = spawn(
     process.execPath,
     ["--import", "tsx/esm", "--input-type=module", "-e", script],
     {
       cwd: fileURLToPath(new URL("../../", import.meta.url)),
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5_000,
+      killSignal: "SIGKILL",
     },
   );
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
   return new Promise((resolve, reject) => {
     child.once("error", reject);
-    child.once("exit", (code, signal) => resolve({ code, signal }));
+    child.once("close", (code, signal) => resolve({ code, signal, output }));
   });
 }
 
@@ -118,6 +135,31 @@ test("the deadline forces exit 1 when a step hangs", async () => {
   assert.deepEqual(exits, [1], "the deadline fired");
 });
 
+test("ordinary shutdown waits for active work before closing the pool", async () => {
+  let finish!: () => void;
+  let entered!: () => void;
+  const active = new Promise<boolean>((resolve) => {
+    finish = () => resolve(true);
+  });
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const { deps, order, exits } = fakeDeps({
+    awaitWorkerIdle: () => {
+      entered();
+      return active;
+    },
+  });
+  const shutdown = createGracefulShutdown(deps)("SIGTERM");
+  await waiting;
+  assert.deepEqual(exits, []);
+  assert.ok(!order.includes("closePool"));
+  finish();
+  await shutdown;
+  assert.deepEqual(exits, [0]);
+  assert.ok(order.includes("closePool"));
+});
+
 test("a fatal SIGTERM keeps its nonzero exit, ordinary SIGTERM stays zero, and the old opt-out is gone", async () => {
   const pipelineSource = readFileSync(
     new URL("../modules/pipeline/pipeline.ts", import.meta.url),
@@ -128,12 +170,10 @@ test("a fatal SIGTERM keeps its nonzero exit, ordinary SIGTERM stays zero, and t
     /PIPELINE_HARD_STOP_ON_LOCK_LOSS/,
     "lock-loss termination cannot be disabled by the former environment flag",
   );
-  assert.deepEqual(await runSignalShutdownChild(true), {
-    code: 1,
-    signal: null,
-  });
-  assert.deepEqual(await runSignalShutdownChild(false), {
-    code: 0,
-    signal: null,
-  });
+  for (const fatal of [true, false]) {
+    const result = await runSignalShutdownChild(fatal);
+    assert.equal(result.code, fatal ? 1 : 0, result.output);
+    assert.equal(result.signal, null, result.output);
+    assert.match(result.output, /shutdown-handler-entered/);
+  }
 });

@@ -251,7 +251,11 @@ test("a transient database failure after claim retains the lease without replayi
   assert.equal(calls, 1, "a lost database session must not replay the handler");
   const row = await outboxRow(event!.id);
   assert.equal(row.status, "processing");
-  assert.equal(row.attempts, 0, "the infrastructure failure is not a delivery attempt");
+  assert.equal(
+    row.attempts,
+    0,
+    "the infrastructure failure is not a delivery attempt",
+  );
   assert.equal(row.lastError, null, "database details are not persisted");
   assert.ok(row.lockToken, "the lease remains the recovery fence");
 });

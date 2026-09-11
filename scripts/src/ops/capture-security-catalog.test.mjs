@@ -142,7 +142,8 @@ test("creates canonical private checksum-bound capture without overwrite", (t) =
   );
   const bytes = readFileSync(f.output);
   assert.equal(result.sha256, digest(bytes));
-  assert.equal(statSync(f.output).mode & 0o777, 0o600);
+  if (process.platform !== "win32")
+    assert.equal(statSync(f.output).mode & 0o777, 0o600);
   assert.deepEqual(JSON.parse(bytes), {
     format: 1,
     kind: "security-catalog-capture",
@@ -151,7 +152,7 @@ test("creates canonical private checksum-bound capture without overwrite", (t) =
     targetOrigin: f.env.RELEASE_BASE_URL,
     catalog,
   });
-  assert.match(bytes.toString(), /\n  "format": 1,/);
+  assert.match(bytes.toString(), /\n {2}"format": 1,/);
   assert.ok(bytes.toString().endsWith("\n"));
   assert.throws(
     () =>
@@ -164,7 +165,7 @@ test("creates canonical private checksum-bound capture without overwrite", (t) =
   );
 });
 
-test("refuses malformed, partial, unknown, unsafe, and symlink input", (t) => {
+test("refuses malformed, partial, unknown, and unsafe input", (t) => {
   const f = fixture(t);
   const run = () =>
     captureSecurityCatalog(["--input", f.input, "--output", f.output], f.env);
@@ -199,12 +200,27 @@ test("refuses malformed, partial, unknown, unsafe, and symlink input", (t) => {
   unsafe.role.rolsuper = true;
   f.writeInput(unsafe);
   assert.throws(run, /unsafe role privilege/);
+});
 
+test("refuses file symlink input", (t) => {
+  const f = fixture(t);
   const real = path.join(f.root, "real.json");
   writeFileSync(real, JSON.stringify(catalog));
   rmSync(f.input);
-  symlinkSync(real, f.input);
-  assert.throws(run, /non-symlink/);
+  try {
+    symlinkSync(real, f.input);
+  } catch (error) {
+    if (process.platform === "win32" && error.code === "EPERM") {
+      t.skip("Windows file-symlink creation privilege is unavailable");
+      return;
+    }
+    throw error;
+  }
+  assert.throws(
+    () =>
+      captureSecurityCatalog(["--input", f.input, "--output", f.output], f.env),
+    /non-symlink/,
+  );
 });
 
 test("refuses oversized raw input", (t) => {

@@ -7,15 +7,9 @@ import {
   sweepLastSuccess,
   sweepLastSuccessBySweep,
   sweepDurationSeconds,
-  workerDatabaseRecoveryTotal,
 } from "../../lib/metrics";
 import { track } from "./in-flight";
-import {
-  classifyPostgresFailure,
-  withTransientDatabaseRetry,
-  WorkerRetryStoppedError,
-  type WorkerRetryOptions,
-} from "./db-retry";
+import { classifyPostgresFailure } from "./db-retry";
 
 // The compliance sweep registry and pass runner (R107: extracted from
 // pipeline.ts, which keeps the outbox drain, the reconciliation loops and the
@@ -48,10 +42,6 @@ export interface SweepFailureReport {
   databaseFailure?: unknown;
 }
 
-export type SweepRetryDependencies = Pick<
-  WorkerRetryOptions,
-  "random" | "sleep"
->;
 const SWEEPS: RegisteredSweep[] = [];
 const activeSweeps = new Map<
   string,
@@ -60,11 +50,6 @@ const activeSweeps = new Map<
 const SWEEP_NAME = /^[a-z][a-z0-9_.-]{1,63}$/;
 const DEFAULT_SWEEP_TIMEOUT_MS = 120_000;
 
-const DATABASE_RETRY = {
-  maxAttempts: 3,
-  baseDelayMs: 250,
-  maxDelayMs: 5_000,
-} as const;
 export function defaultSweepTimeoutMs(): number {
   const configured = Number(process.env.SWEEP_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0
@@ -251,17 +236,15 @@ export function resumeSweeps(): void {
 // Run sweeps sequentially so one guard covers the whole pass and they don't
 // contend for pool connections; a failing or timed-out sweep is counted under
 // its NAME and logged, not silently dropped, and does not abort its siblings.
-// A database connection failure is retried in place with bounded backoff before
-// the registry moves on, so a transient outage does not create a burst of
-// independent transactions while a prior sweep may have crossed an external
-// boundary.
+// A sweep may cross external boundaries or have a cadence gate that skips a
+// repeated call. Surface database failures without replaying the whole sweep;
+// the normal schedule owns its next attempt.
 // Exported over an explicit list so a test can drive it without touching the
 // registry.
 export async function runSweepsOnce(
   sweeps: RegisteredSweep[],
   owned: Promise<unknown>[] = [],
   report?: SweepFailureReport,
-  retryDependencies: SweepRetryDependencies = {},
   passSignal?: AbortSignal,
 ): Promise<number> {
   let failures = 0;
@@ -288,43 +271,10 @@ export async function runSweepsOnce(
     const abortForPass = () => controller.abort(passSignal?.reason);
     passSignal?.addEventListener("abort", abortForPass, { once: true });
     if (passSignal?.aborted) abortForPass();
-    const work = Promise.resolve().then(() =>
-      withTransientDatabaseRetry(() => sweep.run(controller.signal), {
-        ...DATABASE_RETRY,
-        ...retryDependencies,
-        signal: controller.signal,
-        onRetry: ({ attempt, delayMs, code }) => {
-          workerDatabaseRecoveryTotal.inc({
-            worker: "compliance",
-            outcome: "retry",
-          });
-          logger.warn(
-            { worker: "compliance", sweep: sweep.name, attempt, delayMs, code },
-            "transient database failure; compliance sweep will retry",
-          );
-        },
-        onExhausted: ({ attempts, code }) => {
-          workerDatabaseRecoveryTotal.inc({
-            worker: "compliance",
-            outcome: "exhausted",
-          });
-          logger.error(
-            { worker: "compliance", sweep: sweep.name, attempts, code },
-            "transient database failure exhausted compliance sweep retries",
-          );
-        },
-        onRecovered: ({ attempts }) => {
-          workerDatabaseRecoveryTotal.inc({
-            worker: "compliance",
-            outcome: "recovered",
-          });
-          logger.info(
-            { worker: "compliance", sweep: sweep.name, attempts },
-            "compliance sweep recovered after database retry",
-          );
-        },
-      }),
-    );
+    const work = Promise.resolve().then(() => {
+      controller.signal.throwIfAborted();
+      return sweep.run(controller.signal);
+    });
     activeSweeps.set(sweep.name, { work, controller, timeoutMs });
     owned.push(work);
     track(work);
@@ -344,18 +294,24 @@ export async function runSweepsOnce(
       const kind =
         err instanceof SweepTimeoutError
           ? "timeout"
-          : err instanceof WorkerRetryStoppedError
+          : controller.signal.aborted && err === controller.signal.reason
             ? "stopped"
             : "error";
       sweepErrorsTotal.inc({ sweep: sweep.name, kind });
       stop({ outcome: kind });
       const failure = classifyPostgresFailure(err);
       if (failure.transient && report) report.databaseFailure = err;
-      if (!failure.transient && !(err instanceof WorkerRetryStoppedError))
+      if (failure.transient) {
+        logger.warn(
+          { sweep: sweep.name, code: failure.code },
+          "database failure in compliance sweep; waiting for the next scheduled pass",
+        );
+      } else if (kind !== "stopped") {
         logger.error(
           { err, sweep: sweep.name, timeoutMs },
           "compliance sweep failed",
         );
+      }
     }
   }
   return failures;
@@ -385,7 +341,6 @@ export async function runRegisteredSweeps(
     orderedSweeps(SWEEPS),
     owned,
     report,
-    {},
     passSignal,
   );
   // Record pass health for scraping: the run counter advances every pass (the

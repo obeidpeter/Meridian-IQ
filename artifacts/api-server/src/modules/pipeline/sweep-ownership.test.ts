@@ -89,13 +89,17 @@ test("a timed-out scheduled sweep keeps its distributed lock until underlying se
   }
 });
 
-test("a lost lock session aborts and requires process restart", async (t) => {
+test("a lost lock session requests immediate exit before cooperative cleanup", async (t) => {
   for (const sweep of listSweeps()) unregisterSweep(sweep.name);
   resumeWorker();
   const previousExitCode = process.exitCode;
   const kill = t.mock.method(process, "kill", () => undefined as never);
   let calls = 0;
   let aborted = false;
+  const exit = t.mock.method(process, "exit", () => {
+    assert.equal(aborted, false, "termination must precede abort listeners");
+    return undefined as never;
+  });
   let started!: () => void;
   let releaseSettlement!: () => void;
   const firstStarted = new Promise<void>((resolve) => {
@@ -148,9 +152,14 @@ test("a lost lock session aborts and requires process restart", async (t) => {
     );
     for (let i = 0; i < 50 && !aborted; i += 1)
       await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.equal(aborted, true, "lock loss reaches cooperative pass work");
-    assert.equal(kill.mock.callCount(), 1);
-    assert.deepEqual(kill.mock.calls[0]?.arguments, [process.pid, "SIGTERM"]);
+    assert.equal(aborted, true, "cleanup runs only because the exit is mocked");
+    assert.equal(exit.mock.callCount(), 1);
+    assert.deepEqual(exit.mock.calls[0]?.arguments, [1]);
+    assert.equal(
+      kill.mock.callCount(),
+      0,
+      "ownership loss must not request graceful draining",
+    );
     assert.equal(
       await runSweepPassOnce(),
       false,

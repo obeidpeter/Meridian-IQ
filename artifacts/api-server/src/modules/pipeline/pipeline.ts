@@ -1377,7 +1377,6 @@ let workerRecoveryTimer: NodeJS.Timeout | null = null;
 let workerRecoveryFailures = 0;
 let workerStopped = false;
 let workerRestartRequired = false;
-let workerRecoveryPending: Promise<void> = Promise.resolve();
 
 // Reconciliation runs on a slower cadence than the drain loop.
 const RECONCILE_INTERVAL_MS = 30_000;
@@ -1510,29 +1509,26 @@ function noteDatabaseSuccess(): void {
 // stop before another worker acquires the lock. It therefore fails closed and
 // requires a process restart rather than resuming over an unfenced side effect.
 function pauseWorkerForConnectionLoss(activeWork?: PromiseLike<unknown>): void {
-  if (workerStopped || workerRestartRequired) return;
-  stopping = true;
-  stopSweeps();
-  // Any pass retry currently sleeping must stop with this worker-loss window.
-  // A fresh signal is created only after the bounded recovery window, so a
-  // retry cannot reacquire work while the old lock session is being fenced.
-  workerAbortController.abort();
+  if (workerRestartRequired) return;
   if (activeWork || activePasses.size > 0 || draining) {
+    stopping = true;
     workerRestartRequired = true;
     workerStopped = true;
-    workerRecoveryPending = Promise.resolve(activeWork).then(
-      () => undefined,
-      () => undefined,
-    );
     logger.error(
-      "worker lock connection lost during an active pass; process restart required",
+      "worker lock connection lost during an active pass; exiting without draining",
     );
-    // An arbitrary external call cannot be cancelled safely. Terminate so this
-    // process cannot overlap a replacement worker; tests mock process.kill.
+    // Do not emit SIGTERM or abort callbacks: both can run stale work while a
+    // replacement owns the lock. This also overrides an in-progress graceful
+    // shutdown. Already-issued remote calls still need idempotency/fencing.
     process.exitCode = 1;
-    process.kill(process.pid, "SIGTERM");
+    process.exit(1);
     return;
   }
+  if (workerStopped) return;
+  stopping = true;
+  stopSweeps();
+  // Only an idle ownership loss may resume after a bounded recovery window.
+  workerAbortController.abort();
   workerRecoveryFailures += 1;
   if (workerRecoveryTimer) return;
   const retryInMs = databaseRetryBackoffMs(workerRecoveryFailures);
@@ -1540,19 +1536,16 @@ function pauseWorkerForConnectionLoss(activeWork?: PromiseLike<unknown>): void {
     { retryInMs, failureCount: workerRecoveryFailures },
     "worker lock connection lost; pausing background scheduling",
   );
-  const recoveryWindow = workerRecoveryPending;
   workerRecoveryTimer = setTimeout(() => {
     workerRecoveryTimer = null;
-    void recoveryWindow.then(() => {
-      if (workerStopped || workerRestartRequired) return;
-      workerAbortController = new AbortController();
-      stopping = false;
-      resumeSweeps();
-      workerRecoveryFailures = 0;
-      logger.info(
-        "background scheduling resumed after worker connection recovery window",
-      );
-    });
+    if (workerStopped || workerRestartRequired) return;
+    workerAbortController = new AbortController();
+    stopping = false;
+    resumeSweeps();
+    workerRecoveryFailures = 0;
+    logger.info(
+      "background scheduling resumed after worker connection recovery window",
+    );
   }, retryInMs);
   workerRecoveryTimer.unref?.();
 }
@@ -1574,8 +1567,8 @@ const withPassLock = <T>(
       }
     },
     (activeWork) => {
-      controller.abort(new Error("Worker lock connection lost"));
       pauseWorkerForConnectionLoss(activeWork);
+      controller.abort(new Error("Worker lock connection lost"));
     },
   );
 };
@@ -1620,24 +1613,22 @@ async function guardedSweepPass(): Promise<SweepPassResult> {
     (async () => {
       const failed: SweepFailureReport = { failed: [], critical: 0 };
       try {
-        const result = await retryDatabasePass("compliance", () =>
-          withPassLock(991_102, async (signal) => {
-            const owned: Promise<unknown>[] = [];
-            try {
-              const failures = await runRegisteredSweeps(owned, failed, signal);
-              // A timeout must report failure promptly while retaining ownership
-              // until the underlying work settles. Healthy passes await unlock.
-              if (failures > 0) report(passResult(true, failures, failed));
-              return failures;
-            } finally {
-              // The caller may stop waiting, but another process must not acquire
-              // our pass lock while a timed-out sweep still has side effects —
-              // up to the settle ceiling, past which ownership is released and
-              // the stuck sweep is alerted (R105).
-              await settleOwnedWork(owned);
-            }
-          }),
-        );
+        const result = await withPassLock(991_102, async (signal) => {
+          const owned: Promise<unknown>[] = [];
+          try {
+            const failures = await runRegisteredSweeps(owned, failed, signal);
+            // A timeout must report failure promptly while retaining ownership
+            // until the underlying work settles. Healthy passes await unlock.
+            if (failures > 0) report(passResult(true, failures, failed));
+            return failures;
+          } finally {
+            // The caller may stop waiting, but another process must not acquire
+            // our pass lock while a timed-out sweep still has side effects —
+            // up to the settle ceiling, past which ownership is released and
+            // the stuck sweep is alerted (R105).
+            await settleOwnedWork(owned);
+          }
+        });
         if (failed.databaseFailure) {
           noteDatabaseFailure("sweeps", failed.databaseFailure);
         } else if (result.acquired) {
@@ -1746,8 +1737,7 @@ async function guardedReconcilePass(
           return { ran: false, failed: false };
         const failure = classifyPostgresFailure(err);
         if (failure.transient) noteDatabaseFailure("reconcile", err);
-        else
-          logger.error({ err }, "pipeline reconcile sweep failed");
+        else logger.error({ err }, "pipeline reconcile sweep failed");
         return { ran: false, failed: true };
       } finally {
         reconciling = false;
@@ -1858,7 +1848,6 @@ export function stopWorker(): void {
     workerRecoveryTimer = null;
   }
   workerRecoveryFailures = 0;
-  workerRecoveryPending = Promise.resolve();
   if (timer) {
     clearInterval(timer);
     timer = null;

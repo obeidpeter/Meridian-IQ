@@ -53,3 +53,19 @@ test("normalizing a connection failure preserves identity and cause without maki
   assert.equal(normalized.cause, original);
   assert.equal(asDatabaseConnectionError(normalized), normalized);
 });
+
+test("normalized connection loss remains recognizable without a driver cause", () => {
+  const normalized = asDatabaseConnectionError(
+    new Error("Database context is no longer active"),
+  );
+  assert.equal(isDatabaseConnectionError(normalized), true);
+  assert.equal(isDatabaseConnectionError({ cause: normalized }), true);
+  for (const code of ["28P01", "3D000", "CERT_HAS_EXPIRED"]) {
+    assert.equal(
+      isDatabaseConnectionError(
+        Object.assign(new Error("Configuration refused"), { code }),
+      ),
+      false,
+    );
+  }
+});

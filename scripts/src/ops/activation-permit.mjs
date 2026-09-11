@@ -33,11 +33,7 @@ function validateCatalogSource(value) {
     fields(value, ["kind"], "activation catalogSource");
     return;
   }
-  fields(
-    value,
-    ["kind", "captureSha256"],
-    "activation catalogSource",
-  );
+  fields(value, ["kind", "captureSha256"], "activation catalogSource");
   assert.equal(
     value.kind,
     "credentialless-capture",
