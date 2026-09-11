@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { formatDateTime, formatPct, pillClasses } from "@/lib/format";
 import { EVAL_RISK_TONE, EVAL_OUTCOME_TONE, fmtEvalDuration } from "./format";
 import {
@@ -57,7 +57,7 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
       onError: (e) => {
         toast({
           title: "Evaluation failed",
-          description: serverErrorMessage(e) ?? "Could not run the evaluation.",
+          description: userErrorMessage(e) ?? "Could not run the evaluation.",
           variant: "destructive",
         });
       },
@@ -102,7 +102,7 @@ export function EvalsTab({ metrics }: { metrics: ClerkMetrics | undefined }) {
             <QueryError
               thing="evaluation runs"
               onRetry={() => refetchEvalRuns()}
-              detail={serverErrorMessage(evalRunsError)}
+              detail={userErrorMessage(evalRunsError)}
             />
           ) : !evalRuns || evalRuns.length === 0 ? (
             <p

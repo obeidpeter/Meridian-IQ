@@ -70,7 +70,7 @@ function LandingNav({ onAccountants }: { onAccountants: () => void }) {
     ["Product", "#product-tour"],
     ["How it works", "#workflow"],
     ["For accountants", "#for-accountants"],
-    ["Trust", "#trust"],
+    ["Security and records", "#trust"],
   ];
   const navLinks = links.map(([label, href]) => (
     <a
@@ -177,8 +177,8 @@ function ProductTour({
     >
       <div className="editorial-container">
         <div className="editorial-section-heading">
-          <h2>A considered workspace for what matters.</h2>
-          <p>Different teams. One connected record.</p>
+          <h2>Invoices and records for your team</h2>
+          <p>Manage your business invoices or your clients' compliance work.</p>
         </div>
         <div className="editorial-audience-row">
           <div
@@ -208,7 +208,7 @@ function ProductTour({
             ))}
           </div>
           <span className="editorial-upcoming">
-            Buyer Rails <span>Planned</span>
+            Buyer workspace <span>Planned</span>
           </span>
         </div>
         <div className="editorial-product-grid">
@@ -220,27 +220,27 @@ function ProductTour({
             </p>
             <h3>
               {active === "sme"
-                ? "Your work, with the record to back it."
-                : "Your clients. A clearer view of the work."}
+                ? "Manage your invoices and supporting records"
+                : "Review work across your clients"}
             </h3>
             <p>
               {active === "sme"
-                ? "Prepare invoices, keep supporting records together and see what needs attention. A clearer working day, in one place."
-                : "Move between clients without losing context. Review invoice work, manage access and retrieve the records behind each decision."}
+                ? "Create invoices, check missing details and keep supporting documents with each invoice. See which items still need action."
+                : "Open each client's records to review invoices, manage team access and find the documents behind a decision."}
             </p>
             <ul className="editorial-feature-list">
               {(active === "sme"
                 ? [
                     "Create and check invoices",
-                    "Keep supporting records connected",
-                    "Review outstanding invoice work",
+                    "Keep documents with each invoice",
+                    "See invoices that need action",
                     "Work with your accounting firm",
                   ]
                 : [
                     "Review work across clients",
-                    "Keep each client's records in context",
+                    "Keep each client's records together",
                     "Give your team appropriate access",
-                    "Export connected invoice records",
+                    "Export invoices and supporting records",
                   ]
               ).map((item) => (
                 <li key={item}>
@@ -263,8 +263,8 @@ function ProductTour({
                 onClick={trackCta}
               >
                 {active === "sme"
-                  ? "Sign in to your workspace"
-                  : "Sign in to the console"}
+                  ? "Open business workspace"
+                  : "Open accountant workspace"}
                 <ArrowUpRight size={16} aria-hidden="true" />
               </a>
             </div>
@@ -283,9 +283,11 @@ function ProductTour({
             <figure className="editorial-demo">
               <figcaption className="editorial-demo-caption">
                 <span>
-                  {active === "sme" ? "Business workspace" : "Firm workspace"}
+                  {active === "sme"
+                    ? "Business workspace"
+                    : "Accountant workspace"}
                 </span>
-                <span>Illustrative example</span>
+                <span>Sample data</span>
               </figcaption>
               <div className="editorial-demo-examples">
                 <div aria-hidden={active !== "sme"}>
@@ -302,18 +304,20 @@ function ProductTour({
           <Sparkles size={24} strokeWidth={1.5} aria-hidden="true" />
           <div>
             <div className="editorial-clerk-title">
-              <h3>Meet Clerk</h3>
+              <h3>Clerk, Valo's AI assistant</h3>
               <span className="editorial-status is-progress">Rolling out</span>
             </div>
             <p>
-              Turn supported photos, messages and voice notes into proposed
-              drafts. A person reviews the extracted details before a draft is
-              created. Availability depends on your firm's activation.
+              Clerk suggests invoice details from supported photos, messages and
+              voice notes. A person reviews and approves the details to create a
+              draft. Clerk does not submit it. Your firm must have Clerk
+              enabled.
             </p>
           </div>
           <p className="editorial-clerk-aside">
-            A helpful assistant.
-            <br />A person in control.
+            AI suggestions.
+            <br />
+            Human approval.
           </p>
         </div>
       </div>
@@ -325,23 +329,23 @@ function Benefits() {
   return (
     <section id="platform" tabIndex={-1} className="editorial-outcomes">
       <div className="editorial-container">
-        <h2>Less chasing. A clearer record.</h2>
+        <h2>Prepare, check and track invoices</h2>
         <div className="editorial-outcome-grid">
           {[
             {
               Icon: FileCheck2,
-              title: "Prepare invoices with care.",
-              body: "Create and check invoices. Resolve validation feedback before submission.",
+              title: "Check invoices before submission",
+              body: "Create invoices and fix missing or incorrect details before submitting.",
             },
             {
               Icon: Paperclip,
-              title: "Keep supporting records connected.",
-              body: "Invoice information and evidence stay together, so the context is easy to find.",
+              title: "Keep supporting documents together",
+              body: "Find invoice details and the documents that support them in one place.",
             },
             {
               Icon: ListTodo,
-              title: "See what needs attention.",
-              body: "Drafts, review work and submission outcomes, with a clearer next step.",
+              title: "See what needs action",
+              body: "Track drafts, reviews and submission results to see what to do next.",
             },
           ].map(({ Icon, title, body }) => (
             <article key={title}>
@@ -398,18 +402,18 @@ export default function LandingPage() {
               For Nigerian businesses
             </p>
             <h1>
-              Invoices in order.
+              Valo e-invoicing.
               <br />
-              Evidence at hand.
+              Records together.
             </h1>
             <p className="editorial-hero-description">
-              Valo brings invoicing, compliance tasks and supporting records
-              together.
+              Create and check invoices, track compliance tasks and keep
+              supporting documents with your records.
             </p>
             <div className="editorial-hero-actions">
               <EnquiryLink testId="link-hero-contact" />
               <a className="editorial-text-link" href="#product-tour">
-                Explore the platform <ArrowRight size={18} aria-hidden="true" />
+                See the workspaces <ArrowRight size={18} aria-hidden="true" />
               </a>
             </div>
             <a
@@ -422,7 +426,7 @@ export default function LandingPage() {
               <ArrowUpRight size={15} aria-hidden="true" />
             </a>
             <p className="editorial-hero-signoff">
-              Good business keeps records.
+              For businesses and their accountants.
             </p>
           </div>
           <span className="editorial-photo-caption">
@@ -438,23 +442,20 @@ export default function LandingPage() {
         >
           <div className="editorial-container">
             <div className="editorial-section-heading">
-              <h2>One invoice. A traceable record.</h2>
-              <p>From invoice to evidence. In four steps.</p>
+              <h2>From draft to submission record</h2>
+              <p>Prepare an invoice and keep a record of what happens next.</p>
             </div>
             <ol className="editorial-workflow">
               {[
                 ["Create invoice", "Add customer details, items and amounts."],
+                ["Review", "Check for errors and add any missing details."],
                 [
-                  "Review",
-                  "Check validation feedback and resolve missing details.",
+                  "Submit invoice",
+                  "Use your configured submission service and keep any tax-authority response returned.",
                 ],
                 [
-                  "Supported submission",
-                  "Use the configured route and retain the authority response.",
-                ],
-                [
-                  "Retain evidence",
-                  "Keep invoice details, supporting records and recorded payment information together.",
+                  "Keep records",
+                  "Keep invoice details, supporting documents and payment records together.",
                 ],
               ].map(([title, body], index) => (
                 <li key={title}>
@@ -474,9 +475,10 @@ export default function LandingPage() {
               ))}
             </ol>
             <p className="editorial-workflow-note">
-              Submission depends on the configured integration and authority
-              response. Recording a payment does not mean Valo receives, holds
-              or guarantees the funds.
+              Submission and stamping depend on your configured service and the
+              tax authority's response. Recording a payment does not confirm
+              that money was received. Valo does not receive, hold or guarantee
+              the funds.
             </p>
           </div>
         </section>
@@ -487,28 +489,28 @@ export default function LandingPage() {
         >
           <div className="editorial-container editorial-trust-grid">
             <div className="editorial-trust-copy">
-              <p className="editorial-label">Trust through transparency</p>
+              <p className="editorial-label">Access and records</p>
               <h2>
                 Keep the record.
                 <br />
                 Understand what happened.
               </h2>
               <p>
-                The context matters: what was checked, what changed and which
-                document supports it. Keep a connected history of the work,
-                ready to review and export.
+                See what was checked, what changed and which documents support
+                each invoice. Review or export the recorded history.
               </p>
               <ul className="editorial-trust-list">
-                <li>Access shaped by roles and client scope</li>
-                <li>Internal review distinct from authority approval</li>
-                <li>Recorded history and evidence exports</li>
+                <li>Access limited by your role and assigned clients</li>
+                <li>
+                  Internal review kept separate from tax-authority approval
+                </li>
+                <li>Invoice history and supporting records you can export</li>
               </ul>
               <a
                 className="editorial-button editorial-button-light"
                 href="#product-tour"
               >
-                Explore the workspace{" "}
-                <ArrowUpRight size={17} aria-hidden="true" />
+                See the workspaces <ArrowUpRight size={17} aria-hidden="true" />
               </a>
               <LandingReadiness />
             </div>
@@ -580,8 +582,8 @@ export default function LandingPage() {
                 </div>
               </div>
               <p className="editorial-history-note">
-                Sample activity only. No official stamp or approval is
-                represented.
+                Sample activity only. This example shows no official stamp or
+                tax-authority approval.
               </p>
             </figure>
           </div>
@@ -593,8 +595,10 @@ export default function LandingPage() {
         >
           <div className="editorial-container">
             <div className="editorial-section-heading">
-              <h2>Available now. Thoughtfully expanding.</h2>
-              <p>More support for the work ahead.</p>
+              <h2>What is available</h2>
+              <p>
+                Check what is included, needs activation or is still planned.
+              </p>
             </div>
             <dl className="editorial-availability">
               <div>
@@ -604,11 +608,11 @@ export default function LandingPage() {
                   </span>
                 </dt>
                 <dd>
-                  <h3>The invoice core</h3>
+                  <h3>Invoices and client records</h3>
                   <p>
-                    Invoice preparation, validation and supported submission.
-                    Client engagements, consent controls and retained records.
-                    Access is invite-led.
+                    Create and check invoices, and submit through a supported
+                    service. Manage client work, consent and saved records.
+                    Access is by invitation.
                   </p>
                 </dd>
               </div>
@@ -621,9 +625,8 @@ export default function LandingPage() {
                 <dd>
                   <h3>More support for your firm</h3>
                   <p>
-                    Statutory desks, client report packs, supplier bills and
-                    Clerk. These require activation and are not enabled for
-                    every firm.
+                    Tax filing tools, client reports, supplier bills and Clerk.
+                    These need activation and are not enabled for every firm.
                   </p>
                 </dd>
               </div>
@@ -632,10 +635,11 @@ export default function LandingPage() {
                   <span className="editorial-status is-progress">Planned</span>
                 </dt>
                 <dd>
-                  <h3>More connected workflows</h3>
+                  <h3>Buyer and accounting connections</h3>
                   <p>
-                    Buyer Rails, bank reconciliation and accounting-software
-                    connections. Not part of the standard launch offer.
+                    Buyer workspace, bank reconciliation and connections to
+                    accounting software. Not included in the standard launch
+                    offer.
                   </p>
                 </dd>
               </div>
@@ -646,10 +650,10 @@ export default function LandingPage() {
             >
               <Calculator size={28} strokeWidth={1.5} aria-hidden="true" />
               <div>
-                <h3>Understand potential e-invoicing penalties.</h3>
+                <h3>Estimate possible e-invoicing penalties</h3>
                 <p>
-                  An indicative estimate, not tax or legal advice. No account
-                  needed.
+                  Based on planning assumptions, not official penalty amounts or
+                  tax or legal advice. No account needed.
                 </p>
               </div>
               <a
@@ -670,15 +674,15 @@ export default function LandingPage() {
         >
           <div className="editorial-container editorial-contact-grid">
             <div>
-              <p className="editorial-label">A conversation is a good start</p>
-              <h2>Bring your records into order.</h2>
+              <p className="editorial-label">Contact Valo</p>
+              <h2>Request a demo</h2>
               <p>
-                Request a walkthrough for your business or accounting firm. We
-                will follow up about the right workspace and access.
+                Tell us about your business or accounting firm. We will contact
+                you about a demo and workspace access.
               </p>
               <p className="editorial-small">
-                Valo is invite-led. Sending an enquiry does not create an
-                account.
+                Valo is available by invitation. Sending a request does not
+                create an account.
               </p>
               <a
                 className="editorial-text-link"
@@ -708,17 +712,18 @@ export default function LandingPage() {
             <div>
               <Brand />
               <p>
-                Invoicing. Compliance work.
-                <br />A connected record.
+                Invoices and compliance tasks.
+                <br />
+                Supporting records together.
               </p>
             </div>
             <nav aria-label="Footer">
               <a href="#product-tour">Product tour</a>
               <a href="#workflow">How it works</a>
-              <a href="#roadmap">Release status</a>
+              <a href="#roadmap">Availability</a>
               <a href="/penalty-calculator/">Penalty calculator</a>
               <a href={CONTACT} onClick={trackCta}>
-                Contact &amp; support
+                Contact and support
               </a>
               <a href="/login" onClick={trackCta}>
                 Sign in
@@ -734,7 +739,7 @@ export default function LandingPage() {
           </div>
           <div className="editorial-footer-bottom">
             <span>Valo / Lagos, Nigeria</span>
-            <span>Care in the details.</span>
+            <span>For Nigerian businesses and their accountants.</span>
           </div>
         </div>
       </footer>

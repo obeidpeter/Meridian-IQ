@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { userErrorMessage } from "@/lib/errors";
 
 /**
  * Shared failed-fetch state (design language §6). Render it in place of the
@@ -34,7 +35,7 @@ export function QueryError({
               className="text-xs text-muted-foreground mt-1"
               data-testid="text-error-detail"
             >
-              {detail}
+              {userErrorMessage({ data: { error: detail } }) ?? detail}
             </p>
           ) : null}
         </div>

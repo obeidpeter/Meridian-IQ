@@ -39,7 +39,7 @@ export function OffboardClientDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Offboard {legalName}?</DialogTitle>
+          <DialogTitle>End the engagement with {legalName}?</DialogTitle>
           <DialogDescription>{OFFBOARD_EXPLANATION}</DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
@@ -83,7 +83,7 @@ export function OffboardClientDialog({
             disabled={!offboardConfirmReady(confirmText) || offboard.isPending}
             data-testid="button-confirm-offboard"
           >
-            {offboard.isPending ? "Offboarding…" : "Offboard client"}
+            {offboard.isPending ? "Ending engagement…" : "End engagement"}
           </Button>
         </DialogFooter>
       </DialogContent>

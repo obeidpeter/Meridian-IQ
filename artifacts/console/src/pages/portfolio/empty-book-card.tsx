@@ -18,7 +18,7 @@ export function EmptyBookCard({
     <Card className="shadow-sm">
       <EmptyState
         icon={Users}
-        title="Start your client book"
+        title="Add your first client"
         description={
           <span className="block max-w-md">
             Clients appear here once they're on the platform. Add your first
@@ -41,7 +41,7 @@ export function EmptyBookCard({
             </Button>
           )}
           <Button variant="outline" asChild data-testid="button-empty-pipeline">
-            <Link href="/pipeline">Open the onboarding pipeline</Link>
+            <Link href="/pipeline">Open onboarding</Link>
           </Button>
         </div>
       </EmptyState>

@@ -19,7 +19,7 @@ import { Card } from "@/components/ui/card";
 export function SessionSkeleton() {
   return (
     <Card className="auth-session-skeleton" role="status">
-      <span className="sr-only">Checking your session…</span>
+      <span className="sr-only">Checking whether you are signed in…</span>
       <div className="animate-pulse space-y-4" aria-hidden="true">
         <div className="h-6 w-24 rounded-md bg-muted" />
         <div className="h-4 w-full rounded-md bg-muted" />
@@ -40,12 +40,12 @@ export function SessionSkeleton() {
 const ACCESS_PATHS = [
   {
     title: "Business owners",
-    detail: "Create invoices, submit and get paid",
+    detail: "Create invoices, submit them and track payment records",
     icon: ReceiptText,
   },
   {
     title: "Accounting firms",
-    detail: "Manage every client's compliance",
+    detail: "Manage compliance work for your clients",
     icon: UsersRound,
   },
   {
@@ -55,7 +55,7 @@ const ACCESS_PATHS = [
   },
   {
     title: "Bank reviewers",
-    detail: "Review protected portfolio cohorts",
+    detail: "Review anonymized groups of businesses with consent",
     icon: Landmark,
   },
 ];
@@ -65,13 +65,13 @@ function AccessStory() {
     <aside aria-labelledby="access-story-title" className="auth-story">
       <div className="auth-story-inner">
         <div>
-          <p className="auth-eyebrow">One sign-in for everything</p>
+          <p className="auth-eyebrow">Your Valo account</p>
           <h2 id="access-story-title" className="auth-story-title">
-            One account. The right workspace.
+            Access your workspace
           </h2>
           <p className="auth-intro">
-            Everyone works from the same records. Each person sees only what
-            their role needs.
+            Your role and account permissions determine which workspaces and
+            records you can open.
           </p>
         </div>
 
@@ -100,7 +100,7 @@ function AccessStory() {
           </span>
           <span className="inline-flex items-center gap-2">
             <CheckCircle2 className="size-4" aria-hidden="true" />
-            Proof you can check
+            Records you can review
           </span>
         </div>
       </div>
@@ -157,7 +157,7 @@ export function AccessPortal({
                 We can&apos;t reach Valo right now.
               </span>
               <Button size="sm" variant="outline" onClick={onRetry}>
-                Retry
+                Try again
               </Button>
             </div>
           )}

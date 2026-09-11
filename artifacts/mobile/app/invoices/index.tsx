@@ -59,15 +59,15 @@ const MAX_BULK_ROWS = 20;
 function bulkRowIssue(row: BulkSubmitRowResult): string {
   const first = row.errors[0];
   if (first) return `${first.field}: ${first.message}`;
-  return row.error || "Submission failed — open the invoice for details.";
+  return row.error || "Submission failed. Open the invoice for details.";
 }
 
 const BULK_CONFIRM_TITLE = "Submit all pending drafts?";
 const BULK_CONFIRM_MESSAGE =
-  "This validates every pending draft (oldest first) and submits the valid " +
-  "ones to the FIRS stamping rail, in batches of up to 200. Submission " +
-  "cannot be undone. Drafts that fail validation stay pending, with their " +
-  "issues listed so you can fix them.";
+  "This checks pending drafts, oldest first, in batches of up to 200. " +
+  "Valid invoices are sent to the configured submission service. " +
+  "Submission cannot be undone and does not guarantee a stamp. " +
+  "Drafts that fail checks stay pending, with the issues listed for you to fix.";
 
 export default function InvoiceListScreen() {
   const colors = useColors();
@@ -225,7 +225,7 @@ export default function InvoiceListScreen() {
       setBulkError(
         apiErrorMessage(
           error,
-          "We couldn't submit your drafts. Please try again.",
+          "Could not confirm submission. Check the invoice statuses before trying again.",
         ),
       );
     }
@@ -236,7 +236,7 @@ export default function InvoiceListScreen() {
       confirmThen(
         BULK_CONFIRM_TITLE,
         BULK_CONFIRM_MESSAGE,
-        "Validate & submit",
+        "Check and submit",
         () => void runBulkSubmit(),
       ),
     [runBulkSubmit],
@@ -279,10 +279,10 @@ export default function InvoiceListScreen() {
           </View>
           <AppText variant="caption" color={colors.mutedForeground}>
             {bulkRows.length === 0
-              ? "There was nothing to validate — every invoice is already past the draft stage."
+              ? "No pending drafts were found for this run."
               : bulkNeedsAttention.length === 0
-                ? "Every pending draft in this run is now on the stamping rail."
-                : `${bulkNeedsAttention.length} draft(s) need a fix before they can be submitted.`}
+                ? "All drafts in this run were submitted. Check their statuses for stamping results."
+                : `${bulkNeedsAttention.length} draft(s) need attention. Open them to review errors before trying again.`}
           </AppText>
           {bulkNeedsAttention.length > 0 ? (
             <View style={{ gap: 8 }}>
@@ -348,8 +348,8 @@ export default function InvoiceListScreen() {
             <>
               <AppText variant="caption" color={colors.mutedForeground}>
                 {bulkReport.remaining} more pending draft
-                {bulkReport.remaining === 1 ? "" : "s"} — invalid drafts stay
-                pending until fixed, so they count toward this total.
+                {bulkReport.remaining === 1 ? "" : "s"}. This includes drafts
+                that still need corrections.
               </AppText>
               <AppButton
                 label={

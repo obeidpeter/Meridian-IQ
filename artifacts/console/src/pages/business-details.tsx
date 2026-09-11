@@ -21,7 +21,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 
 export default function BusinessDetails() {
   usePageTitle("Business details");
@@ -75,7 +75,7 @@ export default function BusinessDetails() {
       // below is the server's own.
       if (errorStatus(error) === 409) void party.refetch();
       throw new Error(
-        serverErrorMessage(error) ??
+        userErrorMessage(error) ??
           "Business details could not be saved. Please try again.",
       );
     }
@@ -139,7 +139,7 @@ export default function BusinessDetails() {
             onDirtyChange={setDirty}
             disabledReason={
               me.error
-                ? "Account permissions could not be refreshed. Retry before saving."
+                ? "Account permissions could not be refreshed. Try again before saving."
                 : party.data.mergedIntoId
                   ? "This business record has been merged and can no longer be edited here."
                   : null

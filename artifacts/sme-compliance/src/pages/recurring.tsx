@@ -408,7 +408,7 @@ export function Recurring() {
     <div className="space-y-6">
       <PageHeader
         title="Recurring invoices"
-        description="Standing templates that turn into draft invoices on schedule."
+        description="Templates that create invoice drafts on a weekly or monthly schedule."
       >
         {me?.clientPartyId && (
           <Button
@@ -483,7 +483,7 @@ export function Recurring() {
             <EmptyState
               icon={Repeat}
               title="No recurring invoices yet"
-              description="Set up a standing template and we'll draft the invoice for you every week or month."
+              description="Add a template to create invoice drafts each week or month. Review drafts before submitting them."
             >
               <Button
                 className="mt-2"

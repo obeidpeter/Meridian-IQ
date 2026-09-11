@@ -6,7 +6,7 @@ import type {
   ClerkMetricsQualityAlert,
   EvalFixtureReport,
 } from "@workspace/api-client-react";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 import { formatPct, type BadgeTone } from "@/lib/format";
 
 // Pure helpers, tone maps and the tab list for the Clerk health page (R110:
@@ -259,12 +259,12 @@ export function mintFixtureErrorCopy(err: unknown): string {
   }
   if (status === 400) {
     return (
-      serverErrorMessage(err) ??
+      userErrorMessage(err) ??
       "That case can't be promoted — check that it has been decided."
     );
   }
   return (
-    serverErrorMessage(err) ??
+    userErrorMessage(err) ??
     "Could not mint the fixture. Try again in a moment."
   );
 }

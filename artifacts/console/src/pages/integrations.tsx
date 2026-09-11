@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { userErrorMessage } from "@/lib/errors";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
 import {
@@ -129,7 +130,7 @@ export function Integrations() {
           setTested(false);
           toast({
             title: "Connection test failed",
-            description: error instanceof Error ? error.message : undefined,
+            description: userErrorMessage(error),
             variant: "destructive",
           });
         },
@@ -153,7 +154,7 @@ export function Integrations() {
         onError: (error) =>
           toast({
             title: "Could not create connection",
-            description: error instanceof Error ? error.message : undefined,
+            description: userErrorMessage(error),
             variant: "destructive",
           }),
       },

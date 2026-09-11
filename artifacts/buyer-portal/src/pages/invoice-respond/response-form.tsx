@@ -18,7 +18,6 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Spinner } from "@/components/ui/spinner";
 import { CheckCircle2, HelpCircle, XCircle } from "lucide-react";
-import { confirmationLabel } from "@/lib/format";
 import {
   RESPONSE_DESCRIPTIONS,
   SUBMIT_LABELS,
@@ -27,6 +26,7 @@ import {
   noteValidationError,
   type ResponseState,
   RESPONSE_FINALITY,
+  responseRecordedCopy,
 } from "@/lib/respond";
 import type { InvoiceRespondState } from "./use-invoice-respond";
 
@@ -45,7 +45,7 @@ const RESPONSE_OPTIONS: Array<{
   },
   {
     state: "queried",
-    label: "Query",
+    label: "Ask a question",
     icon: HelpCircle,
     activeClasses:
       "data-[state=on]:border-blue-500 data-[state=on]:bg-blue-50 data-[state=on]:text-blue-800 dark:data-[state=on]:bg-blue-950/40 dark:data-[state=on]:text-blue-300",
@@ -91,8 +91,8 @@ export function ResponseForm({
     if (!response) return;
     if (!me?.buyerPartyId) {
       toast({
-        title: "Buyer identity not resolved yet",
-        description: "Try again in a moment.",
+        title: "Your buyer details are not ready",
+        description: "Wait a moment, then try again.",
         variant: "destructive",
       });
       return;
@@ -118,7 +118,7 @@ export function ResponseForm({
         onSuccess: () => {
           setSubmitted(response);
           toast({
-            title: `Invoice ${confirmationLabel(response).toLowerCase()}`,
+            title: responseRecordedCopy(response).title,
             description: "The supplier can view your recorded response.",
           });
           queryClient.invalidateQueries({
@@ -152,7 +152,7 @@ export function ResponseForm({
             setNoteError(null);
           }}
           aria-label="Your response"
-          className="grid grid-cols-3 gap-2 w-full"
+          className="grid grid-cols-3 items-stretch gap-2 w-full"
         >
           {RESPONSE_OPTIONS.map((opt) => {
             const Icon = opt.icon;
@@ -216,7 +216,9 @@ export function ResponseForm({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground pl-6">
-              Confirming without set-off makes this invoice financeable.
+              This records that you will not reduce this payment to offset a
+              separate amount the supplier owes you. It can support a financing
+              assessment but does not guarantee financing.
             </p>
           </div>
         )}

@@ -39,7 +39,7 @@ export function RoomActions({
           <span>
             <span className="font-extrabold">Contact verified</span>
             <br />
-            Sensitive actions are unlocked for this session.
+            You can now use the invoice actions available to you.
           </span>
         </div>
       )}
@@ -74,8 +74,8 @@ export function RoomActions({
           Link security
         </h2>
         <p className="mt-2 leading-6">
-          This room expires {formatDate(detail.room.expiresAt)}. Valo never asks
-          for your banking password or one-time bank PIN.
+          Access through this link expires {formatDate(detail.room.expiresAt)}.
+          Valo never asks for your banking password or one-time bank PIN.
         </p>
       </section>
     </aside>

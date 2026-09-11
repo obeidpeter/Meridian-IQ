@@ -29,22 +29,22 @@ import {
 describe("actionConfirmDescription", () => {
   test("draft_chasers — SME audience, singular", () => {
     expect(actionConfirmDescription("draft_chasers", 1, "sme")).toBe(
-      "This drafts 1 payment reminder for you to review, copy and send yourself — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.",
+      "Create 1 payment reminder for you to review, copy and send yourself. Valo will not send them or submit any invoices. Each invoice is checked again before the draft is created. Your approval is recorded under your name.",
     );
   });
 
   test("draft_chasers — console audience, plural", () => {
     expect(actionConfirmDescription("draft_chasers", 3, "console")).toBe(
-      "This drafts 3 payment reminders for the client to review and send — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.",
+      "Create 3 payment reminders for the client to review and send. Valo will not send them or submit any invoices. Each invoice is checked again before the draft is created. Your approval is recorded under your name.",
     );
   });
 
   test("retry_failed resubmits; other submit kinds submit", () => {
     expect(actionConfirmDescription("retry_failed", 2, "sme")).toBe(
-      "This resubmits 2 invoices to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.",
+      "Resubmit 2 invoices to the e-invoicing service. Validation, consent and any required approvals still apply. Each invoice is checked again. Invoices already processed or no longer eligible are skipped. Your approval is recorded under your name.",
     );
     expect(actionConfirmDescription("submit_overdue", 1, "console")).toBe(
-      "This submits 1 invoice to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.",
+      "Submit 1 invoice to the e-invoicing service. Validation, consent and any required approvals still apply. Each invoice is checked again. Invoices already processed or no longer eligible are skipped. Your approval is recorded under your name.",
     );
   });
 });
@@ -111,7 +111,7 @@ describe("actionTargetOverflowNote", () => {
 describe("actionTruncatedNote", () => {
   test("says what is shown, of how many, and what to do next", () => {
     expect(actionTruncatedNote(20, 45)).toBe(
-      "Showing the oldest 20 of 45 — approve this batch, then come back for the rest.",
+      "Showing the oldest 20 of 45. Review and approve these items, then return for the rest.",
     );
   });
 });
@@ -127,7 +127,7 @@ describe("decisionLine", () => {
       policyId: "pol-1",
     });
     expect(auto).toMatch(
-      / · submit_overdue · 3 executed · 1 skipped · 0 failed · auto$/,
+      / · Submit overdue · 3 completed · 1 skipped · 0 failed · automatic$/,
     );
     const manual = decisionLine({
       createdAt: "2026-07-29T05:00:00Z",
@@ -138,7 +138,7 @@ describe("decisionLine", () => {
       policyId: null,
     });
     expect(manual).toMatch(
-      / · retry_failed · 2 executed · 0 skipped · 1 failed$/,
+      / · Retry failed · 2 completed · 0 skipped · 1 failed$/,
     );
     expect(manual.includes("auto")).toBe(false);
   });
@@ -162,7 +162,7 @@ describe("policyPauseReasonLabel", () => {
   test("the sweep's tripwire vocabulary, in card-sized words", () => {
     expect(policyPauseReasonLabel("manual")).toBe("paused manually");
     expect(policyPauseReasonLabel("grantor_inactive")).toBe(
-      "paused — the granter's access changed",
+      "paused — the person who approved this no longer has the required access",
     );
     expect(policyPauseReasonLabel("consent_missing")).toBe(
       "paused — compliance consent is missing",
@@ -171,7 +171,7 @@ describe("policyPauseReasonLabel", () => {
       "paused — too many failures in the last run",
     );
     expect(policyPauseReasonLabel("unknown_kind")).toBe(
-      "paused — this action kind can't run automatically",
+      "paused — this action cannot run automatically",
     );
     expect(policyPauseReasonLabel(null)).toBe("paused manually");
     expect(policyPauseReasonLabel("new_reason")).toBe("paused — new_reason");
@@ -209,19 +209,19 @@ describe("policyStatusLine", () => {
 describe("policyGrantDescription", () => {
   test("says what runs, how many at most, under whose name, and that it is revocable — per audience", () => {
     expect(policyGrantDescription("submit_overdue", "sme", 10)).toBe(
-      "Clerk will run this check every day and submit up to 10 invoices past the statutory window under your name, without asking again each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
+      "Clerk will run this check every day and submit up to 10 invoices past the legal submission deadline under your name, without asking again each day. Before each run, Valo checks consent, your access and each invoice again. You can pause or turn off this approval at any time. Every run is recorded.",
     );
     expect(policyGrantDescription("retry_failed", "console", 25)).toBe(
-      "Clerk will run this check every day and resubmit up to 25 invoices that failed on the rails under your name, without a fresh approval each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
+      "Clerk will run this check every day and resubmit up to 25 invoices whose submission failed under your name, without asking for approval again each day. Before each run, Valo checks consent, your access and each invoice again. You can pause or turn off this approval at any time. Every run is recorded.",
     );
   });
 
   test("a cap of 1 reads singular", () => {
     expect(policyGrantDescription("submit_overdue", "console", 1)).toContain(
-      "submit up to 1 invoice past the statutory window",
+      "submit up to 1 invoice past the legal submission deadline",
     );
     expect(policyGrantDescription("retry_failed", "sme", 1)).toContain(
-      "resubmit up to 1 invoice that failed on the rails",
+      "resubmit up to 1 invoice whose submission failed",
     );
   });
 });

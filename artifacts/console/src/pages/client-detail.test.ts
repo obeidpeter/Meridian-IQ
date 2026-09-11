@@ -122,8 +122,14 @@ describe("offboardErrorNote", () => {
   });
 
   test("a wordless failure falls back to the plain try-again line", () => {
-    expect(offboardErrorNote(new Error("network"))).toBe(
-      "Could not offboard the client. Try again.",
+    expect(offboardErrorNote({})).toBe(
+      "Could not end this client engagement. Try again.",
+    );
+  });
+
+  test("a lost connection does not imply the engagement is still active", () => {
+    expect(offboardErrorNote(new TypeError("Failed to fetch"))).toBe(
+      "The connection was lost before Valo could confirm the result. Check your connection and the latest status before trying again.",
     );
   });
 });
@@ -139,7 +145,7 @@ describe("offboardSummary", () => {
         lastEngagement: true,
       }),
     ).toBe(
-      "1 engagement archived · 2 sign-ins removed · 1 intake alias deleted · contact details cleared",
+      "1 engagement archived · 2 sign-ins removed · 1 document forwarding address deleted · contact details cleared",
     );
   });
 

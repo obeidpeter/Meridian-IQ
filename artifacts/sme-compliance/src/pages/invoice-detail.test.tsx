@@ -371,7 +371,7 @@ describe("submitErrorTitle", () => {
 describe("submittedToastDescription", () => {
   test("promises a notification only when the messaging rail is lit", () => {
     expect(submittedToastDescription(["messaging_notifications"])).toBe(
-      "We'll notify you once it clears the rail.",
+      "We'll notify you when the e-invoicing service returns a result.",
     );
     expect(submittedToastDescription([])).toBe(
       "Check back here — this page updates automatically once FIRS answers.",

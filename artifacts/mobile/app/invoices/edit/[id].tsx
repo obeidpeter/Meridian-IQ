@@ -302,7 +302,7 @@ export default function FixInvoiceScreen() {
             />
 
             <PartySection
-              title="Buyer"
+              title="Customer"
               subtitle="Who the invoice is billed to"
               draft={buyerDraft}
               onChange={(p) =>
@@ -310,9 +310,9 @@ export default function FixInvoiceScreen() {
               }
               highlighted={focus.includes("parties")}
               locked={buyerLocked}
-              lockedMessage="The buyer's registration details are managed by your accounting firm. If the buyer's TIN is wrong, ask your firm contact to correct it — then retry the transmission."
+              lockedMessage="Your accounting firm manages this customer's registration details. Ask the firm to correct an incorrect TIN, then submit the invoice again."
               loadFailed={buyerLoadFailed}
-              loadFailedMessage="We couldn't load the buyer's details. Check your connection and try again."
+              loadFailedMessage="Could not load the customer's details. Check your connection and try again."
               onRetry={() => void buyerQuery.refetch()}
             />
 

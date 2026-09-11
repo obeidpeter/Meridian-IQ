@@ -331,7 +331,7 @@ describe("buyer-rails confirmation", () => {
   test("labels every contract state plus the synthetic pre-request 'none'", () => {
     expect(confirmationLabel("requested")).toBe("Awaiting response");
     expect(confirmationLabel("confirmed")).toBe("Confirmed");
-    expect(confirmationLabel("queried")).toBe("Queried");
+    expect(confirmationLabel("queried")).toBe("Question sent");
     expect(confirmationLabel("rejected")).toBe("Rejected");
     expect(confirmationLabel("none")).toBe("Not requested");
     expect(confirmationLabel("weird_state")).toBe("Weird state");
@@ -350,6 +350,7 @@ describe("buyer-rails confirmation", () => {
 describe("roleLabel", () => {
   test("labels every known role and passes unknowns through readably", () => {
     expect(roleLabel("firm_admin")).toBe("Firm admin");
+    expect(roleLabel("client_user")).toBe("Business user");
     expect(roleLabel("buyer_user")).toBe("Buyer");
     expect(roleLabel("mystery_role")).toBe("mystery_role");
     expect(roleLabel(undefined)).toBe("Unknown role");
@@ -360,11 +361,11 @@ describe("roleHomeHref", () => {
   test("maps every principal role to its workspace and unknowns to null", () => {
     expect(roleHomeHref("client_user")).toEqual({
       href: "/app/",
-      label: "the Compliance App",
+      label: "the business workspace",
     });
     expect(roleHomeHref("buyer_user")).toEqual({
       href: "/buyer/",
-      label: "Buyer Rails",
+      label: "the buyer workspace",
     });
     expect(roleHomeHref("operator")?.href).toBe("/console/operator-queue");
     expect(roleHomeHref("auditor")?.href).toBe("/console/audit");

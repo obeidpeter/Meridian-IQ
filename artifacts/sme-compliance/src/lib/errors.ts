@@ -3,15 +3,12 @@
 // keeps the SME app's client-friendly fallback wording.
 export { errorStatus, isFeatureDisabled } from "@workspace/api-errors";
 
-import { serverError } from "@workspace/api-errors";
+import { userErrorMessage } from "@workspace/api-errors";
 
 /**
- * The server's own `{ error }` body message when it sent one, otherwise the
- * thrown error's message, otherwise a client-friendly nudge.
+ * Keep specific server instructions, with plain-language text for generic
+ * failures and a fallback when no message was provided.
  */
 export function serverErrorMessage(error: unknown): string {
-  return (
-    serverError(error) ??
-    (error instanceof Error ? error.message : "Please try again.")
-  );
+  return userErrorMessage(error) ?? "Something went wrong. Please try again.";
 }

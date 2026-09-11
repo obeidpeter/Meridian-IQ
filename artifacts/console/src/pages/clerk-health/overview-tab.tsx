@@ -105,16 +105,16 @@ export function OverviewTab({ withMetrics }: { withMetrics: MetricsGuard }) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Inference cohorts (model × prompt)
+                AI requests by model and prompt
               </CardTitle>
             </CardHeader>
             <CardContent>
               {metrics.inference.cohorts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No inference calls in this window.
+                  No AI requests in this period.
                 </p>
               ) : (
-                <ScrollRegion label="Inference cohorts table">
+                <ScrollRegion label="AI requests by model and prompt table">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs uppercase text-muted-foreground">

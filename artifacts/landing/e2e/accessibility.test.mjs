@@ -181,9 +181,7 @@ async function audit(page, name, screenshot = false) {
 for (const [name, viewport] of viewports) {
   test(`landing landmarks, contrast and product views (${name})`, async (t) => {
     const { page, state } = await openPage(t, viewport, "/");
-    await page
-      .getByText("Core platform is operational", { exact: true })
-      .waitFor();
+    await page.getByText("Valo is available", { exact: true }).waitFor();
     assert.equal(await page.getByRole("banner").count(), 1);
     assert.equal(await page.getByRole("contentinfo").count(), 1);
     assert.equal(
@@ -203,7 +201,7 @@ for (const [name, viewport] of viewports) {
         .getByRole("main")
         .getByRole("heading", { level: 1 })
         .textContent(),
-      "Invoices in order.Evidence at hand.",
+      "Valo e-invoicing.Records together.",
     );
     await audit(page, `landing-${name}`, true);
 
@@ -261,7 +259,7 @@ for (const [name, viewport] of viewports) {
     state.readiness = 503;
     await page.reload();
     await page
-      .getByText("Platform availability is degraded", { exact: true })
+      .getByText("We could not confirm Valo is available", { exact: true })
       .waitFor();
     await audit(page, `landing-degraded-${name}`);
   });
@@ -275,7 +273,7 @@ for (const [name, viewport] of viewports) {
       assert.equal(
         await page
           .getByRole("complementary", {
-            name: "One account. The right workspace.",
+            name: "Access your workspace",
           })
           .count(),
         1,
@@ -306,11 +304,11 @@ test("editorial navigation, meaningful audience tabs, images and destinations", 
     "true",
   );
   await page
-    .getByRole("heading", { name: "Client attention", exact: true })
+    .getByRole("heading", { name: "Clients needing action", exact: true })
     .waitFor();
   assert.equal(
     await page
-      .getByRole("link", { name: "Sign in to the console" })
+      .getByRole("link", { name: "Open accountant workspace" })
       .getAttribute("href"),
     "/login?returnTo=/console/",
   );
@@ -455,7 +453,7 @@ test("enquiry preserves values on failure, prevents concurrent submits and resto
   await send.click();
   await page
     .getByRole("alert")
-    .filter({ hasText: "Your request was not sent." })
+    .filter({ hasText: "We could not confirm your request." })
     .waitFor();
   assert.equal(submits, 1);
   assert.match(
@@ -494,9 +492,7 @@ test("enquiry preserves values on failure, prevents concurrent submits and resto
   });
   assert.equal(submits, 2);
   release();
-  await page
-    .getByRole("heading", { name: "Your request is with us." })
-    .waitFor();
+  await page.getByRole("heading", { name: "Request received" }).waitFor();
   assert.equal(
     await page
       .locator(".editorial-contact-result")

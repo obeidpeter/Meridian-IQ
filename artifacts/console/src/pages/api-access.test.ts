@@ -185,7 +185,7 @@ describe("retryDeliveryErrorNote", () => {
   });
 
   test("a wordless failure falls back to the plain try-again line", () => {
-    expect(retryDeliveryErrorNote(new Error("network"))).toBe(
+    expect(retryDeliveryErrorNote({})).toBe(
       "Could not retry the delivery. Try again.",
     );
   });

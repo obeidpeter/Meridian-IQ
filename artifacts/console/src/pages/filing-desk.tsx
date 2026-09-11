@@ -90,7 +90,7 @@ export function FilingDesk() {
       <WorkspaceHeader
         eyebrow="Compliance"
         title="Filing desk"
-        description={`${matrix.periodLabel} return status across the client book, ordered for partner action.`}
+        description={`${matrix.periodLabel} tax return status across your clients, with urgent work first.`}
         status={
           matrix.totals.overdue > 0 ? (
             <span className={pillClasses("red")}>

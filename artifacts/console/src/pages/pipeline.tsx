@@ -131,7 +131,7 @@ export function Pipeline() {
           toast({
             title: `Moved ${p.name} to ${STAGE_LABEL[newStage] ?? newStage}`,
             ...(newStage === "active"
-              ? { description: "Add them to your client book to start work." }
+              ? { description: "Create their client record to start work." }
               : {}),
           });
           invalidate();
@@ -246,7 +246,7 @@ export function Pipeline() {
                 disabled={createProspect.isPending || !name.trim()}
                 data-testid="button-save-prospect"
               >
-                {createProspect.isPending ? "Saving…" : "Save"}
+                {createProspect.isPending ? "Saving…" : "Add prospect"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -276,7 +276,7 @@ export function Pipeline() {
               <EmptyState
                 icon={UserPlus}
                 title="No prospects yet"
-                description="Add a prospect, then move it along with each card's stage picker. Reaching Active hands it to your client book."
+                description="Add a prospect and update their stage as work progresses. Once active, create their client record to start managing invoices and deadlines."
               />
             </Card>
           )}
@@ -332,7 +332,7 @@ export function Pipeline() {
                                   className="w-4 h-4 mr-1.5"
                                   aria-hidden="true"
                                 />
-                                Add to client book
+                                Create client record
                               </Button>
                             )}
                             <Select

@@ -76,7 +76,7 @@ export function Today() {
           </span>
           <Button variant="outline" onClick={() => void refetch()}>
             <RefreshCw className="size-4" aria-hidden="true" />
-            Retry
+            Try again
           </Button>
         </div>
       ) : null}
@@ -86,7 +86,7 @@ export function Today() {
       <TodayWorkspace
         eyebrow="Valo Today"
         title="Your business today"
-        description="Invoices, statutory deadlines and shared work are prioritised from live records."
+        description="See which invoices, legal deadlines and team tasks need attention first."
         summary={data.summary}
         items={data.items}
         setup={data.setup}

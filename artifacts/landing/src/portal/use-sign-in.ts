@@ -13,7 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
 import { trackUsabilityEvent, webSession } from "@workspace/web-ui";
-import { serverErrorFrom } from "@/lib/errors";
+import { serverErrorFrom, userErrorMessage } from "@/lib/errors";
 import { mfaChallengeDisposition } from "@/lib/mfa";
 import {
   defaultWorkspaceFor,
@@ -29,10 +29,10 @@ function loginErrorMessage(err: unknown): string {
   if (status === 401) {
     return serverError === "Account has no active membership"
       ? "This account isn't linked to a workspace yet. Ask your administrator to add you."
-      : "That email or password is not right. Try again.";
+      : "The email or password is incorrect. Check both and try again.";
   }
   if (status !== undefined) {
-    return serverError ?? "Sign-in failed. Please try again.";
+    return userErrorMessage(err) ?? "Could not sign in. Try again.";
   }
   return "We can't reach Valo right now. Check your internet connection and try again.";
 }
@@ -157,17 +157,17 @@ export function useSignIn() {
         setTotpCode("");
         setPassword("");
         setError(
-          "That sign-in took too long and expired. Enter your password again to get a new code.",
+          "This sign-in attempt expired. Enter your password again, then use the current code from your authenticator app.",
         );
         return;
       }
       if (disposition === "invalid-code") {
         setTotpError(
-          "That code didn't match. Check your authenticator app and try again — or use a recovery code.",
+          "That code did not match. Try the current code from your authenticator app, or use a recovery code.",
         );
       } else if (disposition === "server-error") {
         setTotpError(
-          serverErrorFrom(err) ?? "Verification failed. Please try again.",
+          userErrorMessage(err) ?? "Could not verify the code. Try again.",
         );
       } else {
         setTotpError(

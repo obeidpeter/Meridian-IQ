@@ -42,12 +42,12 @@ export const QUEUE_STATUS: Record<
   { label: string; cls: string }
 > = {
   pending: { label: "Reading…", cls: "text-muted-foreground" },
-  extracted: { label: "Extracted", cls: "text-primary" },
-  in_review: { label: "Review", cls: "text-primary" },
+  extracted: { label: "Ready for review", cls: "text-primary" },
+  in_review: { label: "In review", cls: "text-primary" },
   approved: { label: "Approved", cls: "text-muted-foreground" },
   rejected: { label: "Rejected", cls: "text-muted-foreground" },
   escalated: { label: "Escalated", cls: "text-amber-700 dark:text-amber-400" },
-  failed: { label: "Needs input", cls: "text-destructive" },
+  failed: { label: "Reading failed", cls: "text-destructive" },
 };
 
 export const OPEN_STATUSES = new Set<ClerkCase["status"]>([

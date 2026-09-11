@@ -87,7 +87,7 @@ export function Collections() {
       <WorkspaceHeader
         eyebrow="Money"
         title="Collections"
-        description="A focused receivables desk for ageing, cash timing, buyer follow-up and unmatched money."
+        description="See what customers owe, follow up on late payments and match payments to invoices."
       />
 
       <MetricStrip label="Collections summary">

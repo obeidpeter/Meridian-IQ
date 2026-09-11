@@ -25,33 +25,33 @@ export interface ComplianceWave {
 export const WAVES: ComplianceWave[] = [
   {
     band: "large",
-    name: "Wave 1 — Large taxpayers",
+    name: "Phase 1: Large taxpayers",
     audience: "Large enterprises",
     threshold: "Annual turnover above ₦100,000,000",
     onboardingBy: "2025-07-01",
     enforcementFrom: "2026-01-01",
     summary:
-      "Large taxpayers onboard first. Any gap in systems access or invoice fiscalisation creates s.103 and s.104 exposure once enforcement begins.",
+      "This model puts large taxpayers first. Check requirements for tax-authority systems access and valid invoice stamps under s.103 and s.104.",
   },
   {
     band: "medium",
-    name: "Wave 2 — Medium taxpayers",
+    name: "Phase 2: Medium taxpayers",
     audience: "Mid-sized businesses",
     threshold: "Annual turnover ₦25,000,001 – ₦100,000,000",
     onboardingBy: "2026-01-01",
     enforcementFrom: "2026-07-01",
     summary:
-      "Medium taxpayers follow wave 1. Ensure your systems grant the tax authority access and every invoice is fiscalised before enforcement starts.",
+      "This model puts medium taxpayers in the second phase. Check when systems access and valid invoice stamps are required for your business.",
   },
   {
     band: "small",
-    name: "Wave 3 — Small taxpayers",
-    audience: "Small businesses & SMEs",
+    name: "Phase 3: Small taxpayers",
+    audience: "Small businesses",
     threshold: "Annual turnover up to ₦25,000,000",
     onboardingBy: "2026-07-01",
     enforcementFrom: "2027-01-01",
     summary:
-      "Small taxpayers onboard last. Completing integration ahead of enforcement avoids s.103 and s.104 charges entirely.",
+      "This model puts small taxpayers in the final phase. Confirm your deadlines and setup requirements with the tax authority or a tax advisor.",
   },
 ];
 
@@ -107,11 +107,11 @@ export function waveStatus(
   if (sinceEnforcement >= 0) {
     return {
       status: "enforcement-active",
-      label: "Enforcement active",
+      label: "Assumed enforcement date reached",
       detail:
         sinceEnforcement === 0
-          ? "Enforcement began today"
-          : `Enforcement began ${pluralDays(sinceEnforcement)} ago`,
+          ? "Assumed enforcement date is today"
+          : `Assumed enforcement date was ${pluralDays(sinceEnforcement)} ago`,
       days: sinceEnforcement,
     };
   }
@@ -121,8 +121,8 @@ export function waveStatus(
   if (sinceOnboardingDeadline > 0) {
     return {
       status: "deadline-passed",
-      label: "Enforcement pending",
-      detail: `Onboarding deadline has passed — ${pluralDays(untilEnforcement)} until enforcement`,
+      label: "Past setup target",
+      detail: `Setup target has passed; ${pluralDays(untilEnforcement)} until the assumed enforcement date`,
       days: untilEnforcement,
     };
   }
@@ -130,11 +130,11 @@ export function waveStatus(
   const untilOnboarding = -sinceOnboardingDeadline;
   return {
     status: "onboarding",
-    label: "Onboarding open",
+    label: "Before setup target",
     detail:
       untilOnboarding === 0
-        ? "Onboarding deadline is today"
-        : `${pluralDays(untilOnboarding)} left to onboard`,
+        ? "Setup target is today"
+        : `${pluralDays(untilOnboarding)} until the setup target`,
     days: untilOnboarding,
   };
 }

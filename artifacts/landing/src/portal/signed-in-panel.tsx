@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { serverErrorFrom } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { defaultWorkspaceFor } from "@/lib/return-to";
 import { ChangePasswordForm } from "./change-password-form";
 import { roleLabel } from "./tiles";
@@ -37,8 +37,8 @@ export function SignedInPanel({ me }: { me: Me }) {
       await signOutAndRedirect(() => Promise.resolve());
     } catch (error) {
       setRevokeError(
-        serverErrorFrom(error) ??
-          "Could not sign out every device. Your current session is still active.",
+        userErrorMessage(error) ??
+          "Could not confirm sign-out on all devices. This session may still be active. Try again.",
       );
     }
   };
@@ -67,7 +67,7 @@ export function SignedInPanel({ me }: { me: Me }) {
       </div>
       <TotpSecurityCard />
       <p className="mt-3 text-sm text-muted-foreground">
-        Open your workspace below, or sign out to switch accounts.
+        Open your workspace, or sign out to use a different account.
       </p>
       <div className="mt-4 space-y-2">
         {target && (
@@ -104,17 +104,17 @@ export function SignedInPanel({ me }: { me: Me }) {
             data-testid="button-revoke-sessions"
           >
             <ShieldOff className="h-4 w-4" aria-hidden="true" />
-            Sign out every device
+            Sign out all devices
           </Button>
         ) : (
           <div
             className="rounded-md border border-red-200 bg-red-50 p-3"
             role="group"
-            aria-label="Confirm session revocation"
+            aria-label="Confirm sign-out on all devices"
           >
             <p className="text-xs font-semibold text-red-900">
-              This immediately ends every browser and mobile session, including
-              this one.
+              This signs you out of every browser and mobile app, including this
+              one, immediately.
             </p>
             {revokeError && (
               <p className="mt-2 text-xs text-red-800" role="alert">
@@ -134,7 +134,7 @@ export function SignedInPanel({ me }: { me: Me }) {
                     aria-hidden="true"
                   />
                 ) : null}
-                Sign out all
+                Sign out all devices
               </Button>
               <Button
                 size="sm"

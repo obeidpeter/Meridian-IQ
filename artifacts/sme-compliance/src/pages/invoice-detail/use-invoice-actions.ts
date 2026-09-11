@@ -117,7 +117,7 @@ export function useSubmitFlow({
       updateOperation(operationKey, operation?.id, {
         status: "succeeded",
         detail:
-          "The transmission request was accepted and is awaiting the rail result.",
+          "The submission request was accepted. The e-invoicing service has not returned a result yet.",
         savedSummary: "A submission attempt was recorded for this invoice.",
       });
       refreshInvoiceState();
@@ -357,7 +357,7 @@ export function useAdjustFlow({
         });
         toast({
           title: "Invoice cancelled",
-          description: "The cancellation is recorded on the lifecycle ledger.",
+          description: "The cancellation is saved in the invoice history.",
         });
       } else {
         const cn = await creditNote.mutateAsync({

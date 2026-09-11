@@ -317,7 +317,7 @@ describe("draft invoice", () => {
     renderWithClient(<InvoiceDetail />);
     expect(screen.queryByTestId("button-confirm-submit")).toBeNull();
     fireEvent.click(screen.getByText("Submit for stamping"));
-    expect(screen.getByText("Review stamping submission")).toBeTruthy();
+    expect(screen.getByText("Review before submitting")).toBeTruthy();
     // Nothing was sent by opening the dialog.
     expect(harness.calls).toEqual([]);
     fireEvent.click(screen.getByTestId("button-confirm-submit"));

@@ -97,7 +97,7 @@ export function VatPositionsCard() {
             className="text-sm text-muted-foreground"
             data-testid="text-vat-positions-empty"
           >
-            No VAT activity across the book in {data.monthLabel}.
+            No VAT activity across your clients in {data.monthLabel}.
           </p>
         ) : (
           <ScrollRegion label="Client VAT positions table">

@@ -15,7 +15,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { whtCardHasContent } from "@/components/wht-card";
 import { downloadBlob } from "@/lib/download";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -87,7 +87,7 @@ export function useClientDetail() {
       });
       toast({
         title: "Could not export the client's data",
-        description: serverErrorMessage(res.error),
+        description: userErrorMessage(res.error),
         variant: "destructive",
       });
       return;
@@ -157,7 +157,7 @@ export function useClientDetail() {
       {
         onSuccess: (result) => {
           toast({
-            title: "Client offboarded",
+            title: "Client engagement ended",
             description: offboardSummary(result),
           });
           // The book changed — refresh the portfolio the navigation lands on.

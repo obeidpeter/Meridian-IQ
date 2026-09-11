@@ -205,7 +205,7 @@ describe("captureStatusLabel", () => {
     expect(captureStatusLabel("in_review")).toBe("Being reviewed");
     expect(captureStatusLabel("approved")).toBe("Approved");
     expect(captureStatusLabel("rejected")).toBe("Rejected");
-    expect(captureStatusLabel("escalated")).toBe("Escalated");
+    expect(captureStatusLabel("escalated")).toBe("Needs further review");
     expect(captureStatusLabel("failed")).toBe("Could not read");
   });
 
@@ -434,9 +434,11 @@ describe("handleClerkGatewayError", () => {
 
 describe("captureStatusExplanation", () => {
   test("escalation tells the client nothing is needed yet", () => {
-    expect(captureStatusExplanation("escalated")).toContain("escalated");
     expect(captureStatusExplanation("escalated")).toContain(
-      "Nothing is needed from you",
+      "requested a closer review",
+    );
+    expect(captureStatusExplanation("escalated")).toContain(
+      "You do not need to do anything yet",
     );
   });
 
@@ -515,13 +517,13 @@ describe("dockErrorMessage", () => {
         status,
         response: { status },
       });
-    expect(dockErrorMessage(err(503))).toContain("switched off");
+    expect(dockErrorMessage(err(503))).toContain("temporarily unavailable");
     expect(dockErrorMessage(err(429))).toContain("allowance");
   });
 
   test("anything else relays the server's words and says nothing changed", () => {
     expect(dockErrorMessage(new Error("boom"))).toContain(
-      "Nothing was changed.",
+      "No invoice action was approved.",
     );
   });
 });

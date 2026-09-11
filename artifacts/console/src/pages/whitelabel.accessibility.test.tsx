@@ -195,7 +195,7 @@ test("loading retains a visible page heading without an enabled publish action",
   harness.isLoading = true;
   renderPage();
   expect(
-    screen.getByRole("heading", { level: 1, name: "Brand studio" }),
+    screen.getByRole("heading", { level: 1, name: "Branding" }),
   ).toBeTruthy();
   expect(screen.queryByTestId("button-save-branding")).toBeNull();
 });

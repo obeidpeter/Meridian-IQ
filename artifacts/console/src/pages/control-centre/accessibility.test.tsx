@@ -107,7 +107,12 @@ test("Clerk results retain a named complementary landmark distinct from the shel
   const results = screen.getByRole("complementary", {
     name: "Clerk assurance results",
   });
-  for (const text of ["Assurance posture", "Watch", "Healthy", "Latest eval"]) {
+  for (const text of [
+    "Safety check results",
+    "Watch",
+    "Healthy",
+    "Latest eval",
+  ]) {
     expect(
       within(results).getByText(text).classList.contains("text-slate-600"),
     ).toBe(true);

@@ -15,8 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const KIND_LABELS: Record<AutomationEvidenceKind["kind"], string> = {
   reconcile_matches: "Settle receipts",
   submit_overdue: "Submit overdue",
-  retry_failed: "Retry failed",
-  draft_recurring: "Draft recurring paper",
+  retry_failed: "Retry failed submissions",
+  draft_recurring: "Create recurring draft invoices",
 };
 
 // "8 of 9 hand decisions agreed (89%) · median 6 days earlier" — null when

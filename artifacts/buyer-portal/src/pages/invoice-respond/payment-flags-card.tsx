@@ -60,12 +60,12 @@ export function PaymentFlagsCard({
                 ? "Payment marked as scheduled"
                 : "Payment marked as paid",
             description:
-              "The supplier sees this flag in their reconciliation view.",
+              "The supplier can see this payment status in their records. Valo has not moved any money.",
           });
         },
         onError: (err) =>
           toast({
-            title: "Could not flag the payment",
+            title: "Could not update the payment status",
             description: errorDescription(err),
             variant: "destructive",
           }),
@@ -76,13 +76,13 @@ export function PaymentFlagsCard({
   return (
     <Card data-testid="card-payment-flags">
       <CardHeader>
-        <CardTitle>Payment flags</CardTitle>
+        <CardTitle>Payment status</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Let the supplier know where this invoice sits in your payment run.
-          Flags feed the supplier's settlement reconciliation — the history is
-          kept on their side.
+          Tell the supplier whether payment is scheduled or already made. This
+          updates their records; it does not schedule a bank transfer or move
+          money.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -125,9 +125,9 @@ export function PaymentFlagsCard({
               <AlertDialogHeader>
                 <AlertDialogTitle>Mark this invoice as paid?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This records a settlement event on the supplier's compliance
-                  record and can't be undone. Mark{" "}
-                  {formatNaira(invoice.grandTotal)} as paid?
+                  This permanently records the invoice as settled in the
+                  supplier&apos;s records and cannot be undone here. It does not
+                  move money. Mark {formatNaira(invoice.grandTotal)} as paid?
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

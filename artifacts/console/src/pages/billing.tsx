@@ -263,8 +263,9 @@ export function Billing() {
           Plans & billing
         </h1>
         <p className="text-muted-foreground mt-1">
-          Four configurable tiers with revenue share and invoice-volume
-          overages. Price changes are recorded as audited semi-annual reviews.
+          Compare plans, revenue share and charges for invoices above your
+          allowance. Price changes are recorded in an audit trail during
+          six-monthly reviews.
         </p>
       </div>
 

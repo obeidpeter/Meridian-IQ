@@ -27,7 +27,7 @@ export const CLERK_STATUS_META: Record<ClerkCaseStatus, ClerkStatusMeta> = {
   in_review: { tone: "info", label: "In review" },
   approved: { tone: "success", label: "Approved" },
   rejected: { tone: "critical", label: "Rejected" },
-  escalated: { tone: "warning", label: "Escalated" },
+  escalated: { tone: "warning", label: "Needs further review" },
   failed: { tone: "critical", label: "Needs input" },
 };
 
@@ -147,7 +147,7 @@ export function buildCameraCaseInput(
 // drift between them (the reconciliation screen's CSV guard follows the same
 // pattern).
 export const DOCUMENT_TOO_LARGE_MESSAGE =
-  "That file is too large to send. Keep it under 5 MB — a phone photo of the document works well.";
+  "That file is too large to upload. Choose a file under 5 MB, or take a photo of the document.";
 
 export const DOCUMENT_UNREADABLE_MESSAGE =
   "We couldn't read that file. Pick a PDF or a photo of the document, or paste its text below.";

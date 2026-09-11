@@ -156,7 +156,7 @@ export function Portfolio() {
     return (
       <div className="space-y-6">
         <PortfolioHeader
-          description="Penalty exposure, filing deadlines and receivables across your client book."
+          description="Review penalty risks, filing deadlines and unpaid invoices across your clients."
           canImport={canImport}
           onAddClient={openAddClient}
         />
@@ -235,7 +235,7 @@ export function Portfolio() {
     return (
       <div className="space-y-6">
         <PortfolioHeader
-          description="Set up the client book to start tracking risk, deadlines and receivables."
+          description="Add clients to start tracking risks, deadlines and unpaid invoices."
           canImport={canImport}
           onAddClient={openAddClient}
         />

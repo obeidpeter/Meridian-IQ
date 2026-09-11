@@ -44,7 +44,7 @@ export function TransmissionFailedCard({
           color={colors.destructiveText}
         />
         <AppText variant="heading" color={colors.destructiveText}>
-          Transmission failed
+          Submission failed
         </AppText>
       </View>
       {catalogue ? (
@@ -76,9 +76,9 @@ export function TransmissionFailedCard({
           color={colors.mutedForeground}
           style={{ marginTop: 10 }}
         >
-          This invoice was rejected by the rail
-          {errorCode ? ` (code ${errorCode})` : ""}. You can retry the
-          transmission below.
+          The submission service could not process this invoice
+          {errorCode ? ` (code ${errorCode})` : ""}. Review the invoice details
+          before trying again.
         </AppText>
       )}
       {errorCode ? (
@@ -90,8 +90,8 @@ export function TransmissionFailedCard({
           Reference code: {errorCode}
           {catalogue
             ? catalogue.retriable
-              ? " · retriable"
-              : " · not retriable"
+              ? " · can be tried again"
+              : " · correct the invoice first"
             : ""}
         </AppText>
       ) : null}
@@ -101,7 +101,7 @@ export function TransmissionFailedCard({
         {retriableKnown ? (
           <>
             <AppButton
-              label={busy ? "Retrying…" : "Retry transmission"}
+              label={busy ? "Submitting…" : "Try again"}
               icon="refresh-cw"
               onPress={onRetry}
               loading={busy}
@@ -127,7 +127,7 @@ export function TransmissionFailedCard({
               testID="button-fix-invoice"
             />
             <AppButton
-              label={busy ? "Retrying…" : "Retry anyway"}
+              label={busy ? "Submitting…" : "Try again anyway"}
               icon="refresh-cw"
               variant="secondary"
               onPress={onRetry}
@@ -140,8 +140,8 @@ export function TransmissionFailedCard({
               color={colors.mutedForeground}
               style={{ textAlign: "center" }}
             >
-              This error needs the invoice fixed first — a plain retry will fail
-              again.
+              Correct the invoice first. Submitting it again without changes
+              will fail.
             </AppText>
           </>
         )}

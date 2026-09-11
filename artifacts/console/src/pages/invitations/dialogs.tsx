@@ -59,8 +59,8 @@ export function RevokeDialog({ state }: { state: InvitationsState }) {
           </AlertDialogTitle>
           <AlertDialogDescription>
             {revokeTarget?.replace
-              ? "This revokes the current invitation first — its accept link stops working immediately. The invite form is then prefilled so you can create the fresh link."
-              : "The accept link stops working immediately; to invite them again you'll need to create a new invitation."}
+              ? "This revokes the current invitation first. Its link stops working immediately. The invitation form is then filled in so you can create a new link."
+              : "The invitation link stops working immediately. To invite them again, create a new invitation."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

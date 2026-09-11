@@ -17,6 +17,6 @@ export function submittedToastDescription(
   features: string[] | undefined,
 ): string {
   return (features ?? []).includes("messaging_notifications")
-    ? "We'll notify you once it clears the rail."
+    ? "We'll notify you when the e-invoicing service returns a result."
     : "Check back here — this page updates automatically once FIRS answers.";
 }

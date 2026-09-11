@@ -57,7 +57,7 @@ export function MatchProposalCard({
         </Pressable>
         <View style={{ flexDirection: "row", gap: 6 }}>
           <Badge
-            label={`${percent(p.confidence)} match`}
+            label={`${percent(p.confidence)} confidence`}
             tone={confidenceTone(p.confidence)}
           />
           <Badge
@@ -99,7 +99,7 @@ export function MatchProposalCard({
           <View style={{ flexDirection: "row", gap: 10 }}>
             <View style={{ flex: 1 }}>
               <AppButton
-                label="Accept"
+                label="Accept match"
                 icon="check"
                 onPress={() => void onDecide(p, "accept")}
                 disabled={deciding}
@@ -109,7 +109,7 @@ export function MatchProposalCard({
             </View>
             <View style={{ flex: 1 }}>
               <AppButton
-                label="Reject"
+                label="Reject match"
                 icon="x"
                 variant="secondary"
                 onPress={() => void onDecide(p, "reject")}

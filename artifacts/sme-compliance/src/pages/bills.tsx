@@ -488,7 +488,7 @@ export function Bills() {
     <div className="space-y-6">
       <PageHeader
         title="Supplier bills"
-        description="Documents you captured where your business is the buyer — money going out."
+        description="Invoices from your suppliers, with payment records and supporting documents."
       />
 
       <RequireClientScope thing="supplier bills list">

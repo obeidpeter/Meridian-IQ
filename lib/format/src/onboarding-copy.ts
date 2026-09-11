@@ -8,11 +8,11 @@
 // construction (the action-copy precedent).
 
 export const ONBOARDING_STEP_LABELS: Record<string, string> = {
-  consent_captured: "Consent captured",
+  consent_captured: "Consent recorded",
   history_imported: "Invoice history imported",
-  statements_backfilled: "Bank statements backfilled",
-  duplicates_reviewed: "Duplicate check clean",
-  filings_synced: "Filings register backfilled",
+  statements_backfilled: "Past bank statements added",
+  duplicates_reviewed: "No duplicates left to review",
+  filings_synced: "Past filing records added",
 };
 
 // An off-catalogue key from a newer server degrades to itself, never a

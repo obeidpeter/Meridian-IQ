@@ -21,10 +21,10 @@ export function InvoiceDocument({ detail }: { detail: InvoiceRoomDetail }) {
           <FileText className="size-5 text-teal-700" aria-hidden="true" />
           <div>
             <h2 id="invoice-document-heading" className="font-extrabold">
-              Invoice document
+              Invoice details
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Verified source details
+              Details from the supplier's invoice
             </p>
           </div>
         </div>
@@ -68,7 +68,7 @@ export function InvoiceDocument({ detail }: { detail: InvoiceRoomDetail }) {
                 Description
               </th>
               <th scope="col" className="px-4 py-3 text-right">
-                Qty
+                Quantity
               </th>
               <th scope="col" className="px-4 py-3 text-right">
                 Unit price

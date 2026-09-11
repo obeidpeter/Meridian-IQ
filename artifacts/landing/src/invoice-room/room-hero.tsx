@@ -21,7 +21,7 @@ export function RoomHero({ detail }: { detail: InvoiceRoomDetail }) {
           </p>
         </div>
         <div className="lg:text-right">
-          <p className="text-sm font-semibold text-teal-100">Amount due</p>
+          <p className="text-sm font-semibold text-teal-100">Invoice total</p>
           <p className="mt-1 text-3xl font-black tabular-nums sm:text-4xl">
             {formatAmount(detail.invoice.grandTotal, detail.invoice.currency)}
           </p>

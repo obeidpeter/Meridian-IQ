@@ -98,7 +98,7 @@ export function ActivationWorkspace() {
         data.buyerResponseRate30d === null
           ? null
           : data.buyerResponseRate30d >= 0.6,
-      detail: `${data.confirmationResponses30d} of ${data.confirmationRequests30d} request cohorts responded`,
+      detail: `${data.confirmationResponses30d} of ${data.confirmationRequests30d} request groups received a response`,
     },
     {
       key: "credit",

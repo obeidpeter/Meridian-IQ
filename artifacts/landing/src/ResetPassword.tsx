@@ -79,7 +79,7 @@ export function ResetPassword() {
     } catch {
       // Uniform server response: never a reason a specific token is unusable.
       setError(
-        "This reset link is invalid or has expired. Request a fresh link from this page.",
+        "Could not reset your password. The link may be invalid or expired. Open Forgot your password? on the sign-in page to request a new link.",
       );
       document.getElementById("reset-password")?.focus();
     }
@@ -97,7 +97,7 @@ export function ResetPassword() {
       setRequestError(
         status === 429
           ? "Too many reset requests were made. Wait a few minutes, then try again."
-          : "We could not submit the request. Try again or use the support email below.",
+          : "Could not send your reset request. Try again or contact Valo support below.",
       );
     }
   };
@@ -125,9 +125,9 @@ export function ResetPassword() {
                 Check your email
               </p>
               <p className="mt-1 text-xs leading-5">
-                If an account exists for that address and email delivery is
-                available, a one-time reset link is on its way. It expires in 24
-                hours. Check spam or junk before requesting another link.
+                If this address has an account and email delivery is available,
+                we will email a link you can use once. It expires in 24 hours.
+                Check your spam or junk folder before requesting another link.
               </p>
             </div>
           ) : (
@@ -136,8 +136,8 @@ export function ResetPassword() {
                 className="mt-2 text-sm text-muted-foreground"
                 data-testid="text-reset-guidance"
               >
-                Enter the email address on your Valo account. We will send a
-                one-time link if the account exists.
+                Enter your Valo account email. If the account exists and email
+                delivery is available, we will send a password reset link.
               </p>
               <form onSubmit={onRequestReset} className="mt-4 space-y-3">
                 <div className="space-y-1.5">
@@ -223,15 +223,15 @@ export function ResetPassword() {
               className="h-5 w-5 text-emerald-600 dark:text-emerald-400"
               aria-hidden="true"
             />
-            <h1 className="text-lg font-semibold">Password updated</h1>
+            <h1 className="text-lg font-semibold">Password changed</h1>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your new password is set and any previous sessions have been signed
-            out. Sign in to continue.
+            Your new password is saved. You have been signed out of all browsers
+            and mobile apps. Sign in with your new password.
           </p>
           <Button asChild className="auth-submit mt-4">
             <a href="/login" data-testid="link-reset-continue-sign-in">
-              Continue to sign in
+              Sign in
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
           </Button>
@@ -245,7 +245,8 @@ export function ResetPassword() {
       <Card className="auth-flow-panel">
         <h1 className="text-lg font-semibold">Choose a new password</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This one-time link sets a new password for your Valo account.
+          Save a new password for your Valo account. This signs you out of all
+          browsers and mobile apps.
         </p>
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <div className="space-y-1.5">

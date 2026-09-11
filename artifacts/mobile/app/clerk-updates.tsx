@@ -88,7 +88,7 @@ export default function ClerkUpdatesScreen() {
   return (
     <>
       <Stack.Screen
-        options={stackHeaderOptions(colors, "Digests & statements")}
+        options={stackHeaderOptions(colors, "Updates and statements")}
       />
       <ScreenScroll
         contentContainerStyle={[
@@ -120,12 +120,12 @@ export default function ClerkUpdatesScreen() {
               // feature is opt-in per deployment).
               <EmptyState
                 icon="inbox"
-                title="No digest yet"
-                message="Your firm's weekly digest appears here once the weekly summary has been generated."
+                title="No weekly summary yet"
+                message="Your firm's weekly summary will appear here once it has been prepared."
               />
             ) : (
               <ErrorState
-                message="We couldn't load your firm's digest."
+                message="Could not load your firm's weekly summary. Try again."
                 onRetry={() => void digestQuery.refetch()}
               />
             )
@@ -166,11 +166,11 @@ function DigestCard({ digest }: { digest: ClerkDigest }) {
     <View style={{ gap: 20 }}>
       <Banner
         tone="info"
-        message="Every fact is computed from your firm's records — Clerk only phrases them."
+        message="Figures are calculated from your firm's records. Clerk writes the summary."
       />
       <Card style={{ gap: 12 }}>
         <AppText variant="overline" color={colors.mutedForeground}>
-          Weekly digest
+          Weekly summary
         </AppText>
         <AppText variant="heading">{digest.headline}</AppText>
         {digest.bullets.length > 0 ? (

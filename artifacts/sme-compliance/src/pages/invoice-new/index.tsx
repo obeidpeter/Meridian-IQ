@@ -54,7 +54,7 @@ export function InvoiceNew() {
     <div className="space-y-6">
       <PageHeader
         title="New invoice"
-        description="We check it against FIRS rules as you type."
+        description="Prepare the invoice details, then validate them before submitting."
       />
       <InvoiceDraftControls
         controller={drafts}

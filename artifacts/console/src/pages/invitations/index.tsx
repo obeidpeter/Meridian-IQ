@@ -23,7 +23,7 @@ export function Invitations() {
         titleTestId="text-page-title"
         description={
           isOperator
-            ? "Onboard a firm: provision it, then invite its first firm admin — every invite issues a one-time link you share yourself (nothing is emailed). The admin self-serves teammates and clients from there."
+            ? "Create a firm, then invite its first firm admin. Share the one-time link yourself; nothing is emailed. The admin can then invite teammates and business users."
             : "Invite a teammate or client into your firm. Each invite issues a one-time link to set a password and join — you share the link yourself; pending invites can be revoked before they are accepted."
         }
       />

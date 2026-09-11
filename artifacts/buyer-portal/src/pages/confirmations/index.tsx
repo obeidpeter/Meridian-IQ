@@ -40,7 +40,7 @@ export function Confirmations() {
       <div className="space-y-6">
         <PageHeader />
         {isFeatureDisabled(error) ? (
-          <FeatureUnavailable feature="Buyer Rails" />
+          <FeatureUnavailable feature="Buyer workspace" />
         ) : (
           <QueryError thing="your invoices" onRetry={() => refetch()} />
         )}

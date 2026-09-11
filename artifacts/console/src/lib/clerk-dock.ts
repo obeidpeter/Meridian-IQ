@@ -1,7 +1,7 @@
 // The console dock's pure kernels: the failure line and the compact answer
 // view. Kept DOM-free so they are unit-tested under the node environment.
 import { clerkBudgetExhausted } from "@workspace/api-errors";
-import { killSwitchTripped, serverErrorMessage } from "@/lib/errors";
+import { killSwitchTripped, userErrorMessage } from "@/lib/errors";
 
 /** The dock's failure line: the same split the full Ask page makes, in one string. */
 export function dockErrorMessage(err: unknown): string {
@@ -11,7 +11,7 @@ export function dockErrorMessage(err: unknown): string {
   if (clerkBudgetExhausted(err)) {
     return "This month's Clerk allowance is used up — questions resume next month. Nothing was changed.";
   }
-  return `${serverErrorMessage(err) ?? "Clerk could not answer that question."} Nothing was changed.`;
+  return `${userErrorMessage(err) ?? "Clerk could not answer that question."} Nothing was changed.`;
 }
 
 const DOCK_FACT_CAP = 6;

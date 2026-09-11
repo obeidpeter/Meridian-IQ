@@ -382,7 +382,7 @@ for (const app of applications.slice(0, 2)) {
           assert.equal(
             await page
               .getByText(
-                "No comments yet. Add the first decision or handoff note.",
+                "No comments yet. Add a question, decision or update for your team.",
                 { exact: true },
               )
               .count(),
@@ -394,7 +394,7 @@ for (const app of applications.slice(0, 2)) {
           await retry.waitFor({ state: "hidden" });
           await page
             .getByText(
-              "No comments yet. Add the first decision or handoff note.",
+              "No comments yet. Add a question, decision or update for your team.",
               { exact: true },
             )
             .waitFor();
@@ -653,7 +653,7 @@ for (const app of applications) {
       state.todayError = false;
       await activate(
         page,
-        alert.getByRole("button", { name: "Retry", exact: true }),
+        alert.getByRole("button", { name: "Try again", exact: true }),
       );
       await alert.waitFor({ state: "hidden" });
       assert.equal(

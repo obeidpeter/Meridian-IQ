@@ -183,8 +183,9 @@ export function B2cReports() {
         queryKey: getListB2cReportsQueryKey({ clientPartyId }),
       });
       toast({
-        title: "Batch reported",
-        description: "This B2C window is now filed with the rail.",
+        title: "Batch marked as reported",
+        description:
+          "Saved in Valo. This does not send the report to the e-invoicing service or confirm that it was received.",
       });
     } catch (e) {
       toast({
@@ -202,7 +203,7 @@ export function B2cReports() {
       <div className="space-y-6">
         <PageHeader
           title="B2C reports"
-          description="Consumer sales are batched into 24-hour windows — report each batch before its deadline."
+          description="Consumer sales are grouped into 24-hour reporting periods. Record when each batch has been reported."
         />
         <FeatureUnavailable feature="B2C reporting" />
       </div>
@@ -217,7 +218,7 @@ export function B2cReports() {
     <div className="space-y-6">
       <PageHeader
         title="B2C reports"
-        description="Consumer sales are batched into 24-hour windows — report each batch before its deadline."
+        description="Consumer sales are grouped into 24-hour reporting periods. Record when each batch has been reported."
       />
 
       <RequireClientScope thing="B2C reporting batches">
@@ -287,7 +288,7 @@ export function B2cReports() {
                             disabled={reportingId === batch.id}
                           >
                             {reportingId === batch.id
-                              ? "Reporting…"
+                              ? "Saving…"
                               : "Mark reported"}
                           </Button>
                         )}

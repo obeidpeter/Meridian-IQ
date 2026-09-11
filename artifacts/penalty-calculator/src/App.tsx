@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { requestAdvisoryReview } from "@workspace/api-client-react";
-import { serverError } from "@workspace/api-errors";
+import { userErrorMessage } from "@workspace/api-errors";
 import { ADVISORY_EMAIL } from "@workspace/format";
 import { trackUsabilityEvent } from "@workspace/web-ui";
 import {
@@ -232,7 +232,7 @@ export default function App() {
 
   const turnoverError = turnoverParsed.isValid
     ? undefined
-    : "Enter a number, like 850,000,000 — digits only.";
+    : "Enter a number, such as 850,000,000.";
   const daysError = daysParsed.isValid
     ? undefined
     : "Enter a whole number of days, like 3.";
@@ -241,7 +241,7 @@ export default function App() {
     : "Enter a whole number of invoices, like 12.";
 
   const turnoverEcho = hasTurnover
-    ? `= ${formatNaira(turnoverParsed.value)} — ${BAND_LABELS[result.band]} band`
+    ? `${formatNaira(turnoverParsed.value)}: ${BAND_LABELS[result.band]} turnover band`
     : undefined;
   const daysEcho =
     daysParsed.isValid &&
@@ -300,22 +300,23 @@ export default function App() {
       hasTurnover
         ? `Annual turnover: ${formatNaira(turnoverParsed.value)} (${BAND_LABELS[result.band]} band)`
         : "Annual turnover: not provided",
-      `Days a systems audit was blocked (s.103): ${dayCount} — ${formatNaira(result.section103)}`,
-      `Invoices without a valid e-invoice stamp (s.104): ${invoiceCount} — ${formatNaira(result.section104)}`,
+      `Days a systems audit was blocked (s.103): ${dayCount}; estimate: ${formatNaira(result.section103)}`,
+      `Invoices without a valid e-invoice stamp (s.104): ${invoiceCount}; estimate: ${formatNaira(result.section104)}`,
       `Total estimate: ${formatNaira(result.total)}`,
       "",
-      "Estimate only — not legal or tax advice. Actual penalties are determined by the tax authority.",
+      "Based on Valo's planning assumptions, not official penalty amounts. Estimate only, not legal or tax advice. The tax authority determines actual penalties.",
     ].join("\n");
   }, [hasTurnover, turnoverParsed.value, result, dayCount, invoiceCount]);
 
   const handleCopySummary = async () => {
     try {
       await navigator.clipboard.writeText(summaryText);
-      toast({ title: "Estimate summary copied to clipboard" });
+      toast({ title: "Estimate copied" });
     } catch {
       toast({
-        title: "Couldn't copy",
-        description: "Your browser blocked clipboard access.",
+        title: "Could not copy the estimate",
+        description:
+          "Your browser blocked copying. Check clipboard permissions and try again.",
         variant: "destructive",
       });
     }
@@ -363,8 +364,8 @@ export default function App() {
     } catch (error) {
       setAdvisoryStatus("error");
       setAdvisoryError(
-        serverError(error) ??
-          "Online requests are temporarily unavailable. Use the email option below.",
+        userErrorMessage(error) ??
+          "Could not confirm your review request. Contact us by email below if you are unsure whether it arrived.",
       );
     }
   };
@@ -377,7 +378,7 @@ export default function App() {
         <div className="max-w-3xl border-b border-slate-200 pb-6">
           <p className="mb-2 inline-flex items-center gap-2 text-xs font-bold text-teal-700">
             <ShieldCheck className="size-4" aria-hidden="true" />
-            Compliance planning tool
+            Valo planning estimate
           </p>
           <h1
             className="text-2xl font-extrabold text-slate-950 md:text-3xl"
@@ -386,10 +387,11 @@ export default function App() {
             E-invoicing penalty estimator
           </h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Estimate your potential exposure under s.103 (blocking a
-            tax-authority systems audit) and s.104 (invoices issued without a
-            valid e-invoice stamp). The calculator runs in your browser. Nothing
-            is sent unless you submit the optional advisor request.
+            Estimate possible penalties under s.103 (blocking a tax-authority
+            systems audit) and s.104 (invoices issued without a valid e-invoice
+            stamp), using Valo's planning assumptions. Your entries are
+            calculated in your browser and are sent only if you submit a review
+            request or send them by email.
           </p>
         </div>
 
@@ -399,8 +401,9 @@ export default function App() {
             <div className="rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
               <h2 className="text-base font-semibold">Your details</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Enter figures for the affected period. Leave a field blank if it
-                does not apply.
+                Enter annual turnover and counts for the affected period. Blank
+                day or invoice counts are treated as zero. Without turnover, the
+                estimate assumes the small band.
               </p>
 
               <div className="mt-5 space-y-5">
@@ -409,9 +412,9 @@ export default function App() {
                   label="Annual turnover"
                   prefix="₦"
                   inputMode="decimal"
-                  hint={`Determines your band — Small ≤ ${formatNaira(
+                  hint={`Sets your turnover band: small up to ${formatNaira(
                     SMALL_TURNOVER_CEILING,
-                  )}, Medium ≤ ${formatNaira(MEDIUM_TURNOVER_CEILING)}, Large above.`}
+                  )}, medium above that up to ${formatNaira(MEDIUM_TURNOVER_CEILING)}, large above that.`}
                   value={turnover}
                   onChange={(value) => {
                     markStarted();
@@ -423,7 +426,7 @@ export default function App() {
                 />
                 <NumberField
                   id="days"
-                  label="Days you blocked a tax-authority systems audit (s.103)"
+                  label="Days a tax-authority systems audit was blocked (s.103)"
                   inputMode="numeric"
                   hint={`${formatNaira(S103_FIRST_DAY)} for the first day, then ${formatNaira(
                     S103_PER_ADDITIONAL_DAY,
@@ -445,10 +448,10 @@ export default function App() {
                   inputMode="numeric"
                   hint={
                     hasTurnover
-                      ? `${formatNaira(perInvoice)} per invoice at your ${
+                      ? `Estimate uses ${formatNaira(perInvoice)} per invoice in your ${
                           BAND_LABELS[result.band]
                         } band.`
-                      : `Charged per invoice by band — ${formatNaira(
+                      : `Planning amount per invoice: ${formatNaira(
                           S104_PER_INVOICE.small,
                         )} (Small), ${formatNaira(S104_PER_INVOICE.medium)} (Medium), ${formatNaira(
                           S104_PER_INVOICE.large,
@@ -471,12 +474,12 @@ export default function App() {
 
           {/* Results */}
           <section
-            aria-label="Estimated exposure"
+            aria-label="Estimated penalties"
             className="order-2 lg:order-none lg:col-span-2 lg:col-start-4 lg:row-span-2 lg:row-start-1"
           >
             <div className="sticky top-6 rounded-lg border border-teal-800/25 bg-card p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-base font-semibold">Estimated exposure</h2>
+                <h2 className="text-base font-semibold">Estimated penalties</h2>
                 <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
                   {hasTurnover
                     ? `${BAND_LABELS[result.band]} band`
@@ -501,7 +504,7 @@ export default function App() {
 
               <div className="mt-2 divide-y divide-border">
                 <ResultRow
-                  label="s.103 — Systems access"
+                  label="s.103: Systems access"
                   detail={
                     dayCount > 0
                       ? `${dayCount} day${dayCount === 1 ? "" : "s"} audit was blocked`
@@ -510,18 +513,18 @@ export default function App() {
                   amount={result.section103}
                 />
                 <ResultRow
-                  label="s.104 — Invoice compliance"
+                  label="s.104: Invoice compliance"
                   detail={
                     invoiceCount > 0
                       ? hasTurnover
                         ? `${invoiceCount} × ${formatNaira(perInvoice)}`
-                        : `${invoiceCount} × ${formatNaira(perInvoice)} (assumes Small band — enter turnover)`
+                        : `${invoiceCount} × ${formatNaira(perInvoice)} (assumes small band; enter turnover)`
                       : "No invoices entered"
                   }
                   amount={result.section104}
                 />
                 <ResultRow
-                  label="Combined total"
+                  label="Total estimate"
                   detail="s.103 + s.104"
                   amount={result.total}
                   strong
@@ -532,13 +535,15 @@ export default function App() {
                 className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
                 data-testid="notice-model-basis"
               >
-                <p className="font-semibold">Valo planning model</p>
+                <p className="font-semibold">
+                  Estimate, not an official penalty
+                </p>
                 <p className="mt-1">
-                  These amounts are planning assumptions, not an official
-                  statutory tariff, legal advice, tax advice, or an authority
-                  demand. Model basis last reviewed {MODEL_BASIS_REVIEWED};
-                  confirm your position against current FIRS notices or with an
-                  advisor.
+                  These amounts use Valo's planning assumptions. They are not
+                  official penalty amounts, a tax demand, or legal or tax
+                  advice. Assumptions last reviewed {MODEL_BASIS_REVIEWED}.
+                  Check current FIRS notices or speak to a tax advisor before
+                  relying on this estimate.
                 </p>
               </div>
 
@@ -547,7 +552,7 @@ export default function App() {
                 data-testid="link-product-cta"
                 className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 ${FOCUS_RING}`}
               >
-                See how Valo keeps you compliant
+                See Valo's invoice tools
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
               <p className="mt-3 text-center text-xs text-muted-foreground">
@@ -573,9 +578,10 @@ export default function App() {
                 Talk to an advisor (optional)
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Calculator entries stay on your device unless you press Request
-                review. That sends your email, optional business name, and the
-                estimate summary to the Valo advisory team.
+                Request review sends your email, optional business name and
+                estimate summary to the Valo advisory team. You can also send
+                these details by email. Otherwise, your entries stay on your
+                device.
               </p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -686,7 +692,7 @@ export default function App() {
                   className={`inline-flex items-center justify-center gap-2 rounded-md border border-input bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-muted ${FOCUS_RING}`}
                 >
                   <Copy className="h-4 w-4" aria-hidden="true" />
-                  Copy estimate summary
+                  Copy estimate
                 </button>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
@@ -696,7 +702,7 @@ export default function App() {
                   data-testid="link-request-review-email"
                   className={`font-medium text-foreground underline underline-offset-2 rounded ${FOCUS_RING}`}
                 >
-                  Open a pre-filled email
+                  Open email draft
                 </a>{" "}
                 or write to{" "}
                 <a
@@ -713,12 +719,14 @@ export default function App() {
 
         {/* Deadlines */}
         <section className="mt-12">
-          <h2 className="text-xl font-bold">Onboarding & enforcement waves</h2>
+          <h2 className="text-xl font-bold">
+            Setup and enforcement planning dates
+          </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            The e-invoicing mandate is rolling out in waves by taxpayer size.
-            Indicative planning dates — always confirm against the tax
-            authority's official notices. Planning basis last reviewed{" "}
-            {MODEL_BASIS_REVIEWED}.
+            Valo's planning model groups taxpayers by size. These dates and
+            countdowns are assumptions, not confirmation of current deadlines or
+            enforcement. Check the tax authority's official notices. Assumptions
+            last reviewed {MODEL_BASIS_REVIEWED}.
           </p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
@@ -758,13 +766,15 @@ export default function App() {
                   </div>
                   <dl className="mt-3 space-y-1.5 text-xs">
                     <div className="flex justify-between gap-2">
-                      <dt className="text-muted-foreground">Onboard by</dt>
+                      <dt className="text-muted-foreground">Setup target</dt>
                       <dd className="font-medium">
                         {formatWaveDate(wave.onboardingBy)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-muted-foreground">Enforcement</dt>
+                      <dt className="text-muted-foreground">
+                        Assumed enforcement
+                      </dt>
                       <dd className="font-medium">
                         {formatWaveDate(wave.enforcementFrom)}
                       </dd>
@@ -797,25 +807,28 @@ export default function App() {
         <section className="mt-12 rounded-lg border border-card-border bg-card p-5 shadow-sm sm:p-6">
           <h2 className="text-base font-semibold">How this is calculated</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            The monetary constants below are Valo planning assumptions, not an
-            official tariff. They are deliberately shown so an advisor can
-            replace them with the current authoritative amounts when reviewing
-            your circumstances. Basis last reviewed {MODEL_BASIS_REVIEWED}.
+            The amounts below are Valo's planning assumptions, not official
+            penalties. Ask a tax advisor to check the current official amounts
+            and how they apply to your business. Assumptions last reviewed{" "}
+            {MODEL_BASIS_REVIEWED}.
           </p>
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             <li>
-              <span className="font-medium text-foreground">Band</span> — set by
-              annual turnover: Small ≤ {formatNaira(SMALL_TURNOVER_CEILING)},
-              Medium ≤ {formatNaira(MEDIUM_TURNOVER_CEILING)}, Large above.
+              <span className="font-medium text-foreground">
+                Turnover band:
+              </span>{" "}
+              small up to {formatNaira(SMALL_TURNOVER_CEILING)}, medium above
+              that up to {formatNaira(MEDIUM_TURNOVER_CEILING)}, large above
+              that.
             </li>
             <li>
-              <span className="font-medium text-foreground">s.103</span> —{" "}
+              <span className="font-medium text-foreground">s.103:</span>{" "}
               {formatNaira(S103_FIRST_DAY)} for the first day a systems audit is
               blocked, plus {formatNaira(S103_PER_ADDITIONAL_DAY)} for every
               additional day.
             </li>
             <li>
-              <span className="font-medium text-foreground">s.104</span> — per
+              <span className="font-medium text-foreground">s.104:</span> per
               invoice issued without a valid e-invoice stamp:{" "}
               {formatNaira(S104_PER_INVOICE.small)} (Small),{" "}
               {formatNaira(S104_PER_INVOICE.medium)} (Medium),{" "}

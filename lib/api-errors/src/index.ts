@@ -57,6 +57,33 @@ export function serverError(err: unknown): string | undefined {
   return typeof data?.error === "string" ? data.error : undefined;
 }
 
+// Presentation only: keep serverError unchanged for callers that classify
+// exact server messages. Never imply that a failed response means no write.
+const FRIENDLY_ERRORS: Readonly<Record<string, string>> = {
+  "Internal server error":
+    "Valo could not finish this request. Check the latest status before trying again.",
+  Unauthorized: "Please sign in again to continue.",
+  Forbidden: "Your account does not have permission to do this.",
+  "Failed to fetch":
+    "The connection was lost before Valo could confirm the result. Check your connection and the latest status before trying again.",
+  "Network Error":
+    "The connection was lost before Valo could confirm the result. Check your connection and the latest status before trying again.",
+  "Network request failed":
+    "The connection was lost before Valo could confirm the result. Check your connection and the latest status before trying again.",
+  "Request timed out":
+    "This request took too long. Its result is not confirmed. Check the latest status before trying again.",
+};
+
+/** Plain-language display text without changing error codes or classification. */
+export function userErrorMessage(err: unknown): string | undefined {
+  const message =
+    serverError(err) ?? (err instanceof Error ? err.message : undefined);
+  if (!message) return undefined;
+  return Object.hasOwn(FRIENDLY_ERRORS, message)
+    ? FRIENDLY_ERRORS[message]
+    : message;
+}
+
 /** Opaque support reference returned in the API response header. */
 export function requestReference(err: unknown): string | undefined {
   const value = (err as { requestId?: unknown } | null)?.requestId;

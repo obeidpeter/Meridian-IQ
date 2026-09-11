@@ -16,10 +16,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "getting-started",
     title: "Set up your first client",
     summary:
-      "Add the client, invite their owner, and their workspace is live once they accept.",
+      "Add the client and invite a business user to access their workspace.",
     steps: [
       'From the Portfolio, select "Add client" and enter the business\'s details.',
-      "Go to Invitations and create a client login for the owner — you share the one-time link yourself.",
+      "Go to Invitations and invite a business user for that client. Share the one-time link yourself.",
       "Once they accept and grant consent, their invoices and compliance work appear in your portfolio.",
       "The getting-started checklist on the Portfolio tracks exactly where you are.",
     ],
@@ -53,8 +53,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "The Team card on a client page says who looks after it — it shapes each person's My clients view, never who may open the client.",
     steps: [
-      'Open the client and find the "Team" card. Firm admins tick the members who look after this client and select "Save assignments".',
-      'On the Portfolio, "My clients" shows what is assigned to you plus every unassigned client; "All clients" is the whole book.',
+      'Open the client and find the "Team" card. Firm admins select the members who look after this client, then select "Save changes".',
+      'On the Portfolio, "My clients" shows your assigned clients plus every unassigned client. "All clients" shows every client your firm manages.',
       "Staff with at least one assignment land on My clients; admins and unassigned staff land on All clients.",
       "Every add and removal is recorded on the audit trail. Unassigned clients stay visible to everyone.",
     ],
@@ -63,12 +63,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "access-review",
     title: "Run an access review",
     summary:
-      "Access review lists everyone who can open your firm's workspaces; attest it once you have checked it.",
+      "Check who can open your firm's workspaces, then record that you reviewed their access.",
     steps: [
-      "Open Access review from the Practice menu (firm admins only).",
-      "Check each member's role, when their access started, their last sign-in, two-factor status and assigned clients. Firm roles without 2FA and never-used accounts are flagged.",
+      "Open Access review from Client services and setup (firm admins only).",
+      "Check each member's role, access start date, last sign-in, two-factor authentication (2FA) and assigned clients. Accounts without 2FA or a previous sign-in are flagged.",
       '"Download CSV" gives you the same register as a spreadsheet.',
-      'Select "Attest as reviewed" — it is recorded on the audit chain against a fingerprint of the register, and re-arms only when the register changes.',
+      'Select "Attest as reviewed" to record your confirmation against this version of the access register. You can confirm again after the register changes.',
     ],
   },
   {
@@ -84,13 +84,13 @@ export const HELP_TOPICS: HelpTopic[] = [
   },
   {
     id: "onboarding-runs",
-    title: "Onboarding runs",
+    title: "Onboarding checklists",
     summary:
-      "A per-client checklist that proves the setup is complete — re-checkable at any time.",
+      "A checklist for each client showing completed steps, pending work and recorded gaps.",
     steps: [
-      "Start a run from the client's Setup tab; each step verifies itself against the client's real records.",
-      '"Re-check" any step after fixing something — the run updates in place.',
-      '"Close without completing" ends a run (with a confirmation); you can start a fresh one later.',
+      "Start a checklist from the client's Setup tab. Steps are checked against saved records; skipped steps remain recorded gaps.",
+      'Select "Check again" after fixing a step to update the active checklist.',
+      '"Close without completing" ends the checklist after confirmation. A closed checklist no longer updates; you can start a new one later.',
     ],
   },
   {
@@ -99,7 +99,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "Everything material is recorded permanently and can be exported and verified outside Valo.",
     steps: [
-      "Audit & evidence lists the recorded events; nothing there can be edited or deleted.",
+      "Audit and evidence lists the recorded events; nothing there can be edited or deleted.",
       "Export bundles are hash-chained — an auditor can verify them without a Valo account.",
       'A client\'s own data exports live on their client page ("Export data").',
     ],

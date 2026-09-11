@@ -161,7 +161,7 @@ export async function firstInvoiceSetup(
       : "/portfolio?action=add-client";
   const supplierDescription = supplier
     ? `For ${supplier.legalName}. `
-    : "For the first engaged client. ";
+    : "For your first active client. ";
 
   return [
     ...(!clientId
@@ -169,7 +169,7 @@ export async function firstInvoiceSetup(
           {
             id: "first_client",
             label: "Add the first client",
-            description: "Create a client record and establish its engagement.",
+            description: "Add a client and link them to your firm.",
             complete: Boolean(supplier),
             href: "/portfolio?action=add-client",
           },
@@ -178,7 +178,7 @@ export async function firstInvoiceSetup(
     {
       id: "business_identity",
       label: "Complete the business details",
-      description: `${supplierDescription}Record the legal name, TIN and postal address. This is not a live TIN verification.`,
+      description: `${supplierDescription}Add the registered name, Tax Identification Number (TIN) and postal address. This does not verify the TIN with the tax authority.`,
       complete: businessDetailsComplete(supplier),
       href: businessHref,
     },
@@ -186,10 +186,10 @@ export async function firstInvoiceSetup(
       id: "first_customer",
       label: clientId
         ? "Choose the first customer"
-        : "Coordinate the first customer record",
+        : "Arrange the first customer record",
       description: invoice
-        ? "The invoice's customer record is available and has not been merged away."
-        : "Capture the customer details for the first invoice.",
+        ? "This invoice's customer record is available."
+        : "Add the customer details needed for the first invoice.",
       complete: Boolean(customer),
       href: invoice ? invoiceHref : createHref,
     },
@@ -197,8 +197,8 @@ export async function firstInvoiceSetup(
       id: "first_invoice",
       label: clientId
         ? "Create the first invoice"
-        : "Coordinate the first invoice",
-      description: `${supplierDescription}Save an invoice record; a saved draft is not yet validated.`,
+        : "Arrange the first invoice",
+      description: `${supplierDescription}Save an invoice draft. It still needs to pass validation before submission.`,
       complete: Boolean(invoice),
       href: invoice ? invoiceHref : createHref,
     },
@@ -206,15 +206,15 @@ export async function firstInvoiceSetup(
       id: "invoice_validation",
       label: "Validate the invoice details",
       description:
-        "Resolve the invoice's validation errors. Editing a validated draft requires validation again.",
+        "Fix any errors found by validation. If you edit the invoice, validate it again.",
       complete: invoiceValidationComplete(invoice?.status),
       href: invoiceHref,
     },
     {
       id: "invoice_evidence",
-      label: "Keep the invoice history connected",
+      label: "Review the invoice history",
       description:
-        "Recorded lifecycle history is available for this invoice. This does not imply a fiscal stamp or evidence download.",
+        "Check the actions recorded for this invoice. A history entry does not mean the invoice is stamped or that supporting files have been downloaded.",
       complete: Boolean(history),
       href: invoiceHref,
     },

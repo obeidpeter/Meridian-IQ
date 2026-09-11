@@ -58,11 +58,11 @@ import {
 // the audit ledger. A MIRROR of the known alert actions server-side — an
 // action from a newer build degrades to humanize(), never to a blank row.
 export const HEALTH_ALERT_ACTION_LABELS: Record<string, string> = {
-  "ops.rail.circuit_open": "Rail circuit open",
-  "ops.outbox.dead": "Dead-lettered event",
-  "ops.sweep.pass_abandoned": "Sweep pass abandoned",
-  "ops.webhook.delivery_dead": "Webhook delivery dead",
-  "clerk.spend.anomaly": "Firm spend anomaly",
+  "ops.rail.circuit_open": "Submission service paused after failures",
+  "ops.outbox.dead": "Event stopped after repeated failures",
+  "ops.sweep.pass_abandoned": "Background check stopped before completion",
+  "ops.webhook.delivery_dead": "Webhook delivery stopped after failures",
+  "clerk.spend.anomaly": "Unusual firm spending",
   "clerk.quality.drop": "Extraction quality drop",
   "clerk.injection_resistance.dropped": "Injection resistance drop",
   "clerk.reconcile_agreement.drop": "Reconciliation agreement drop",
@@ -79,16 +79,16 @@ export function healthAlertEntityRef(
   return `${alert.entityType} · ${alert.entityId}`;
 }
 
-export const HEALTH_ALERTS_EMPTY = "No health alerts — the platform is quiet.";
+export const HEALTH_ALERTS_EMPTY = "No platform health alerts are recorded.";
 
 // ---- Rail configuration (presence only) --------------------------------------
 // The endpoint answers booleans only — never values — so the card can say
 // which rails are lit without ever holding a secret client-side.
 export const RAIL_CONFIG_INTRO =
-  "Which environment-lit rails this deployment has configured. Values are never shown.";
+  "Services with configuration present in this deployment. Credentials are never shown. Configuration alone does not prove a service is working.";
 
 export function railConfiguredLabel(configured: boolean): string {
-  return configured ? "Configured" : "Dark";
+  return configured ? "Configured" : "Not configured";
 }
 
 export function railConfiguredBadgeClasses(configured: boolean): string {
@@ -165,7 +165,7 @@ export function retryingLine(
   const tries = `${event.attempts}/${event.maxAttempts} attempts`;
   if (isParked(event, now)) {
     const parks = event.parkCount ?? 0;
-    return `${tries} · parked behind the rail breaker (${parks} park${parks === 1 ? "" : "s"}) · wakes ${formatDateTime(event.parkedUntil as string)}`;
+    return `${tries} · paused while the submission service recovers (${parks} pause${parks === 1 ? "" : "s"}) · resumes ${formatDateTime(event.parkedUntil as string)}`;
   }
   return event.nextAttemptAt
     ? `${tries} · next try ${formatDateTime(event.nextAttemptAt)}`
@@ -193,13 +193,13 @@ export function operationalEvidenceBadge(check: OperationalReadinessCheck) {
   const state = check.detail?.evidenceState;
   const labels: Record<string, string> = {
     missing: "Evidence missing",
-    stale: "Evidence stale",
+    stale: "Evidence out of date",
     failed: "Run failed",
     invalid: "Invalid evidence",
     unverified: "Unverified evidence",
     current:
       check.detail?.evidenceSource === "operator_attestation"
-        ? "Attested"
+        ? "Operator attestation"
         : "Current evidence",
     configuration_only:
       check.status === "pass" ? "Configured only" : "Configuration incomplete",
@@ -510,20 +510,24 @@ function RailsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Activity className="w-5 h-5 text-primary" aria-hidden="true" />{" "}
-          Submission rails
+          Submission services
         </CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-16" />
         ) : error ? (
-          <QueryError thing="rail states" onRetry={() => refetch()} />
+          <QueryError
+            thing="submission service status"
+            onRetry={() => refetch()}
+          />
         ) : (data ?? []).length === 0 ? (
           <p
             className="text-sm text-muted-foreground"
             data-testid="text-rails-empty"
           >
-            No rail activity yet — states appear after the first submission.
+            No submission service activity yet. Status appears after the first
+            submission.
           </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -664,13 +668,13 @@ function RailConfigSection() {
         {isLoading ? (
           <Skeleton className="h-16" />
         ) : error ? (
-          <QueryError thing="rail configuration" onRetry={() => refetch()} />
+          <QueryError thing="service configuration" onRetry={() => refetch()} />
         ) : (data ?? []).length === 0 ? (
           <p
             className="text-sm text-muted-foreground"
             data-testid="text-rail-config-empty"
           >
-            No rails registered on this build.
+            No services are registered in this build.
           </p>
         ) : (
           <div className="divide-y">

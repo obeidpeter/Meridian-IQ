@@ -39,7 +39,7 @@ import {
 import { QueryError } from "@/components/query-error";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { formatDateTime, pillClasses, type BadgeTone } from "@/lib/format";
 import {
   CheckCircle2,
@@ -198,7 +198,8 @@ function StatementConnectionsBody({
         toast({
           title: "Could not create the connection",
           description:
-            serverErrorMessage(e) ?? "Check the config and try again.",
+            userErrorMessage(e) ??
+            "Check the connection settings and try again.",
           variant: "destructive",
         }),
     },
@@ -214,8 +215,7 @@ function StatementConnectionsBody({
         toast({
           title: "Connection test failed",
           description:
-            serverErrorMessage(e) ??
-            "Check the provider details and try again.",
+            userErrorMessage(e) ?? "Check the provider details and try again.",
           variant: "destructive",
         });
       },
@@ -246,7 +246,7 @@ function StatementConnectionsBody({
         toast({
           title: "Could not start the sync",
           description:
-            serverErrorMessage(e) ??
+            userErrorMessage(e) ??
             "A sync may already be running for this connection.",
           variant: "destructive",
         }),

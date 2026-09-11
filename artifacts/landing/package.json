@@ -24,6 +24,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/api-errors": "workspace:*",
     "@workspace/format": "workspace:*",
     "@workspace/web-config": "workspace:*",
     "@workspace/web-ui": "workspace:*",

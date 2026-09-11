@@ -44,7 +44,7 @@ export function NoticeDecisionForm({
   return (
     <div className="border-t pt-4 space-y-3">
       <p className="text-sm font-medium">
-        Review and approve — records a response obligation only
+        Review and approve to record a response obligation. No response is sent.
       </p>
       {claimControls}
       <div className="grid sm:grid-cols-2 gap-3">
@@ -55,7 +55,7 @@ export function NoticeDecisionForm({
           testId="select-notice-firm"
         />
         <PartySelect
-          label="Client party"
+          label="Client"
           placeholder="Choose client"
           parties={parties}
           value={noticeForm.clientPartyId}
@@ -242,7 +242,7 @@ export function NoticeDecisionForm({
           disabled={noticeApproveDisabled(noticeForm) || decideNotice.isPending}
           data-testid="button-approve-notice"
         >
-          Approve — record obligation
+          Approve and record obligation
         </Button>
         <Button
           variant="destructive"

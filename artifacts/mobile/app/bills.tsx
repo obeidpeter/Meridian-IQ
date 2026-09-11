@@ -51,10 +51,12 @@ import { useSession } from "@/lib/session";
 // The confirm copy is the page's load-bearing promise: a payment flag records
 // settlement evidence on the bill, it never mutates the captured document.
 const FLAG_CONFIRM_MESSAGE =
-  "This records payment evidence on the bill — it never edits the document.";
+  "This saves a payment record on the bill without changing the document. It does not send, schedule or confirm a bank payment.";
 
 function flagConfirmTitle(target: BillFlagTarget): string {
-  return target === "paid" ? "Mark this bill paid?" : "Mark payment scheduled?";
+  return target === "paid"
+    ? "Record this bill as paid?"
+    : "Record a planned payment?";
 }
 
 function billAmount(bill: BillSummary): string {
@@ -96,7 +98,7 @@ function VerifyStampForm({
     <View style={{ gap: 10 }}>
       <AppText variant="label">Verify stamp</AppText>
       <TextField
-        label="IRN"
+        label="Invoice reference number (IRN)"
         value={irn}
         onChangeText={setIrn}
         autoCapitalize="none"
@@ -105,7 +107,7 @@ function VerifyStampForm({
         testID={`input-verify-irn-${bill.invoiceId}`}
       />
       <TextField
-        label="CSID"
+        label="Cryptographic stamp ID (CSID)"
         value={csid}
         onChangeText={setCsid}
         autoCapitalize="none"
@@ -127,7 +129,9 @@ function VerifyStampForm({
         <Banner
           tone={result.valid ? "success" : "error"}
           message={
-            result.valid ? "Valid stamp" : "Not found on the national record"
+            result.valid
+              ? "Stamp check passed"
+              : "Stamp not found by the verification service"
           }
         />
       ) : null}
@@ -223,7 +227,7 @@ function BillCard({
             <View style={{ flexDirection: "row", gap: 10 }}>
               <View style={{ flex: 1 }}>
                 <AppButton
-                  label="Mark scheduled"
+                  label="Record as planned"
                   icon="clock"
                   variant="secondary"
                   onPress={() => onFlag("scheduled")}
@@ -235,7 +239,7 @@ function BillCard({
               </View>
               <View style={{ flex: 1 }}>
                 <AppButton
-                  label="Mark paid"
+                  label="Record as paid"
                   icon="check"
                   onPress={() => onFlag("paid")}
                   disabled={!canFlag(bill.payStatus, "paid") || flagPending}
@@ -332,7 +336,9 @@ export default function BillsScreen() {
         setBanner({
           tone: "success",
           message: `Payment evidence recorded — ${bill.invoiceNumber} is ${
-            target === "paid" ? "marked paid" : "scheduled for payment"
+            target === "paid"
+              ? "recorded as paid"
+              : "recorded as planned for payment"
           }.`,
         });
       } catch (error) {
@@ -353,7 +359,7 @@ export default function BillsScreen() {
       confirmThen(
         flagConfirmTitle(target),
         FLAG_CONFIRM_MESSAGE,
-        target === "paid" ? "Mark paid" : "Mark scheduled",
+        target === "paid" ? "Record as paid" : "Record as planned",
         () => void runFlag(bill, target),
       ),
     [runFlag],

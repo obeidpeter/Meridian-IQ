@@ -30,7 +30,7 @@ export function firmPriorities(
       id: "high-risk-clients",
       title: `${data.highRiskCount} high-risk client${data.highRiskCount === 1 ? "" : "s"}`,
       description:
-        "Overdue paper or repeated failures require partner attention.",
+        "Overdue invoices or repeated submission failures need a partner's review.",
       tone: "critical",
       icon: <AlertTriangle className="size-4" aria-hidden="true" />,
       action: (
@@ -50,7 +50,7 @@ export function firmPriorities(
       icon: <FileWarning className="size-4" aria-hidden="true" />,
       action: (
         <Button size="sm" variant="outline" onClick={actions.openClients}>
-          Open client book
+          Open clients
         </Button>
       ),
     });
@@ -59,8 +59,7 @@ export function firmPriorities(
     workItems.push({
       id: "overdue-deadlines",
       title: `${data.totalOverdueCount} overdue deadline${data.totalOverdueCount === 1 ? "" : "s"}`,
-      description:
-        "Prioritize the statutory work that has already crossed its due date.",
+      description: "Review statutory tasks that are past their due dates.",
       tone: "warning",
       icon: <Clock className="size-4" aria-hidden="true" />,
       action: (
@@ -74,12 +73,12 @@ export function firmPriorities(
     workItems.push({
       id: "unsubmitted-value",
       title: `${formatNaira(data.totalUnsubmittedValue)} awaiting submission`,
-      description: `${data.totalUnsubmittedCount} invoice${data.totalUnsubmittedCount === 1 ? "" : "s"} remain outside the stamping rails.`,
+      description: `${data.totalUnsubmittedCount} invoice${data.totalUnsubmittedCount === 1 ? "" : "s"} awaiting submission for stamping.`,
       tone: "warning",
       icon: <ListChecks className="size-4" aria-hidden="true" />,
       action: (
         <Button size="sm" variant="outline" onClick={actions.openMoney}>
-          Review value
+          Review invoices
         </Button>
       ),
     });

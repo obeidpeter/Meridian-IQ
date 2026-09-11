@@ -106,15 +106,15 @@ export function useInvoiceDetail(id: string) {
         tone: "success",
         message:
           invoice.status === "failed"
-            ? "Retry accepted — the invoice is back on the rail. We'll notify you once it clears."
-            : "Submitted for stamping. We'll notify you once it clears the rail.",
+            ? "Invoice submitted again. Check submission history for the stamping result."
+            : "Invoice submitted. Check submission history for the stamping result.",
       });
     } catch (e) {
       setBanner({
         tone: "error",
         message: apiErrorMessage(
           e,
-          "We couldn't submit this invoice. Please try again.",
+          "Could not confirm submission. Check the invoice status before trying again.",
         ),
       });
     }

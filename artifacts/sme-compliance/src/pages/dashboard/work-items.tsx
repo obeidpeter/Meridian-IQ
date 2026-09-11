@@ -53,7 +53,7 @@ export function dashboardWorkItems(
     workItems.push({
       id: "draft-invoices",
       title: `${summary.draftCount} draft invoice${summary.draftCount === 1 ? " needs" : "s need"} completion`,
-      description: "Finish, validate and submit the paper already in progress.",
+      description: "Finish, validate and submit your existing invoice drafts.",
       tone: "warning",
       icon: <FileText className="size-4" aria-hidden="true" />,
       action: (

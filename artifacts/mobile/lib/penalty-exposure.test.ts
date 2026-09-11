@@ -7,8 +7,8 @@ import {
 } from "./penalty-exposure.ts";
 
 // The honesty rules are the load-bearing piece: the headline is always the
-// SMALL-band floor ("at least", "lowest turnover band"), and the note says
-// estimate, not advice.
+// SMALL-band estimate ("lowest turnover band"), not an official penalty or
+// advice. Completing submission work must not promise a penalty waiver.
 
 test("penaltyExposureLine: plural counts, the floor, per-invoice, and the top band", () => {
   assert.equal(
@@ -17,7 +17,7 @@ test("penaltyExposureLine: plural counts, the floor, per-invoice, and the top ba
       exposure: { small: "75000", large: "300000" },
       perInvoice: { small: "25000" },
     }),
-    "3 invoices are past the statutory submission window — at least ₦75,000 of potential s.104 exposure at the lowest turnover band (₦25,000 per invoice; higher bands reach ₦300,000).",
+    "3 invoices are past the statutory submission window. Valo's s.104 planning estimate is ₦75,000 at the lowest turnover band (₦25,000 per invoice), rising to ₦300,000 at the highest band. These are not official penalty amounts.",
   );
 });
 
@@ -28,20 +28,24 @@ test("penaltyExposureLine: the singular reads as one invoice", () => {
     perInvoice: { small: "25000" },
   });
   assert.match(line, /^1 invoice is past the statutory submission window/);
-  assert.match(line, /at least ₦25,000/);
+  assert.match(line, /planning estimate is ₦25,000/);
   assert.match(line, /lowest turnover band/);
 });
 
-test("the fix line states the exposure is removable", () => {
+test("the fix line asks for submission without promising a penalty waiver", () => {
   assert.match(
     PENALTY_EXPOSURE_FIX_LINE,
-    /Submitting .* removes this exposure/,
+    /Submit overdue invoices to resolve the outstanding submission work/,
+  );
+  assert.match(
+    PENALTY_EXPOSURE_FIX_LINE,
+    /does not guarantee that any penalty will be waived/,
   );
 });
 
 test("penaltyExposureNote: estimate-not-advice, with the as-of date", () => {
   assert.equal(
     penaltyExposureNote("29 Jul 2026"),
-    "An estimate under Valo's published penalty model — not legal or tax advice. As of 29 Jul 2026.",
+    "Based on Valo's planning assumptions, not legal or tax advice. Check current official notices or speak to a tax advisor. As of 29 Jul 2026.",
   );
 });

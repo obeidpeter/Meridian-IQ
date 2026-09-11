@@ -9,7 +9,7 @@ import {
   LockKeyhole,
   XCircle,
 } from "lucide-react";
-import { serverErrorFrom } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 
 export type RoomAction =
   | "exchange"
@@ -25,22 +25,22 @@ export type ResponseState = "confirmed" | "queried" | "rejected";
 export const RESPONSE_LABEL: Record<InvoiceRoomConfirmationState, string> = {
   requested: "Response requested",
   confirmed: "Confirmed",
-  queried: "Query raised",
+  queried: "Question sent",
   rejected: "Rejected",
 };
 
 export const EVENT_LABEL: Record<string, string> = {
-  created: "Secure room created",
+  created: "Invoice room created",
   opened: "Invoice opened",
-  delivery_sent: "Secure link delivered",
+  delivery_sent: "Invoice link sent",
   identity_verified: "Buyer contact verified",
   confirmed: "Invoice confirmed",
-  queried: "Query raised",
+  queried: "Question sent",
   rejected: "Invoice rejected",
   payment_reported: "Payment reported",
-  payment_link_created: "Secure payment link created",
+  payment_link_created: "Payment link created",
   payment_confirmed: "Payment confirmed",
-  claimed: "Added to Buyer Rails",
+  claimed: "Added to buyer workspace",
   reminder_sent: "Payment reminder sent",
 };
 
@@ -108,9 +108,8 @@ export function formatDateTime(value: string): string {
 
 export function errorMessage(error: unknown): string {
   return (
-    serverErrorFrom(error) ??
-    (error instanceof Error ? error.message : null) ??
-    "That action could not be completed. Check your connection and try again."
+    userErrorMessage(error) ??
+    "Could not confirm the result. Check your connection and the invoice history before trying again."
   );
 }
 
@@ -121,7 +120,7 @@ export function statusTone(detail: InvoiceRoomDetail): {
 } {
   if (detail.payment.settled) {
     return {
-      label: "Payment confirmed",
+      label: "Payment recorded",
       className: "border-emerald-300 bg-emerald-50 text-emerald-800",
       Icon: CheckCircle2,
     };
@@ -135,7 +134,7 @@ export function statusTone(detail: InvoiceRoomDetail): {
   }
   if (detail.confirmation?.state === "queried") {
     return {
-      label: "Query raised",
+      label: "Question sent",
       className: "border-amber-300 bg-amber-50 text-amber-900",
       Icon: AlertCircle,
     };
@@ -149,8 +148,8 @@ export function statusTone(detail: InvoiceRoomDetail): {
   }
   return {
     label: detail.room.identityVerified
-      ? "Awaiting your response"
-      : "Verification required",
+      ? "Waiting for your response"
+      : "Verify your contact details",
     className: "border-slate-300 bg-white text-slate-700",
     Icon: detail.room.identityVerified ? Clock3 : LockKeyhole,
   };

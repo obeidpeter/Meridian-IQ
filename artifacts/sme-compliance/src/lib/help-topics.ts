@@ -16,13 +16,13 @@ export interface HelpTopic {
 export const HELP_TOPICS: HelpTopic[] = [
   {
     id: "create-invoice",
-    title: "Create and send an invoice",
+    title: "Create and submit an invoice",
     summary:
       "An invoice starts as a draft, gets checked, then goes for stamping.",
     steps: [
       'Go to Invoices and select "New invoice".',
       "Pick the customer, add your line items and check the totals in the sidebar.",
-      'Select "Create invoice" — it is saved as a draft in your vault.',
+      'Select "Create invoice". It is saved as a draft in Invoices.',
       'On the invoice page, select "Submit for stamping" when you are ready. We check it first and show anything that needs fixing.',
     ],
   },
@@ -30,21 +30,21 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "stamping",
     title: 'What "stamping" means',
     summary:
-      "Stamping is FIRS officially registering your invoice. The stamp is your proof.",
+      "In live mode, stamping means the e-invoicing service has registered your invoice and returned its stamp identifiers. Demo results are not official stamps.",
     steps: [
-      "When you submit an invoice, we send it to FIRS (the tax authority).",
-      "FIRS returns an official stamp: the Invoice Reference Number (IRN) and a stamp certificate (CSID).",
-      "We save the stamp with the invoice — you never need to keep copies yourself.",
-      "A stamped invoice cannot be edited. If something is wrong, cancel it with a credit note and issue a new one.",
+      "Submission sends the invoice to the e-invoicing service configured for your workspace. Check whether the workspace uses live or demo mode.",
+      "A successful stamping response includes an Invoice Reference Number (IRN) and Cryptographic Stamp ID (CSID).",
+      "Valo keeps the returned stamp details with the invoice. Follow your business's record-keeping requirements for copies and exports.",
+      "A stamped invoice cannot be edited. Ask your accountant whether it needs cancellation or a credit note before issuing a replacement.",
     ],
   },
   {
     id: "failed-submission",
     title: "Fix a failed submission",
     summary:
-      "A rejected invoice shows the reason and a form to fix it — nothing is lost.",
+      "A rejected invoice stays in your records, with the reason and the details that need fixing.",
     steps: [
-      "Open the invoice. The red card explains what FIRS rejected and why.",
+      "Open the invoice. The failure message explains why submission failed and what to check.",
       'Select "Fix & resubmit", correct the highlighted details and send it again.',
       "If the same rejection keeps coming back, ask your accountant — the reason text tells them exactly what to check.",
     ],
@@ -69,7 +69,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       "Go to Import and download the CSV or Excel template.",
       'Fill it in (or paste rows directly), then select "Validate rows".',
       "Fix anything marked invalid — you can download the failed rows, correct them and try again.",
-      'Select "Import valid rows". Imported invoices are drafts: submit them from the vault when ready.',
+      'Select "Import valid rows". Imported invoices are drafts. Open Invoices to review and submit them.',
     ],
   },
   {
@@ -116,7 +116,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     steps: [
       "Month-end lists anything unfinished: unsubmitted invoices, missing records, unmatched payments.",
       "Each item has a Review button that takes you to the page where you fix it.",
-      "When every check clears, the month is ready — nothing is locked, it is a readiness check, not a padlock.",
+      "When every check is complete, the month is ready for review. This checklist does not lock records or file a tax return.",
     ],
   },
   {
@@ -125,7 +125,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary:
       "Three switches you control. Your accountant's firm can only use your data where you have said yes.",
     steps: [
-      "Layer 1 covers the core compliance work — submitting invoices and keeping your vault.",
+      "Layer 1 allows core compliance work, including invoice submission and record storage.",
       "Layers 2 and 3 cover optional extras, explained on the Consent page.",
       "You can revoke any layer at any time; dependent features stop within a minute. Every grant and revoke is recorded permanently.",
     ],
@@ -146,7 +146,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: "deadlines",
     title: "Deadlines and reminders",
     summary:
-      "The calendar computes your statutory deadlines from your own invoice book — Lagos time.",
+      "The calendar calculates legal deadlines from your invoice records, using Lagos time.",
     steps: [
       "The Calendar page lists what is due, with plain labels: Due today, Overdue, In N days.",
       'The dashboard\'s "Next deadline" card always shows the closest one.',

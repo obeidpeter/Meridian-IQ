@@ -79,7 +79,7 @@ export function Calendar() {
     <div className="space-y-6">
       <PageHeader
         title="Compliance calendar"
-        description="Filing deadlines and penalty watch, computed from your invoice book. Deadlines run on the Lagos (WAT) statutory calendar."
+        description="Tax filing deadlines and estimated penalties based on your invoice records. Dates use Lagos time (WAT)."
       />
 
       <RequireClientScope thing="compliance calendar">

@@ -1,5 +1,8 @@
 # Development
 
+For user-facing wording, follow [Product language](product-language.md). Keep
+labels consistent across apps without changing API values or persisted identifiers.
+
 ## Prerequisites
 
 - Node.js 22 or 24

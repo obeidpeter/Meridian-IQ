@@ -115,7 +115,7 @@ export function useBulkConfirm({
             description:
               res.skipped > 0
                 ? `${res.skipped} skipped — the results below say why.`
-                : "The suppliers have been notified of your response.",
+                : "The suppliers can view your recorded responses.",
           });
         },
         onError: (err) =>

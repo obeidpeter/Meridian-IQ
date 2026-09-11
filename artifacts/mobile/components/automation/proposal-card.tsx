@@ -44,7 +44,7 @@ export function ProposalCard({
           <View style={styles.buttonRow}>
             <View style={{ flex: 1 }}>
               <AppButton
-                label="Review & approve"
+                label="Review and approve"
                 icon="send"
                 onPress={onApprove}
                 disabled={busy}

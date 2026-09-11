@@ -83,7 +83,7 @@ const cases = [
     ...preview,
     name: `whitelabel-${preview.name}`,
     path: "/console/whitelabel",
-    ready: "Brand studio",
+    ready: "Branding",
   })),
   ...["loading", "error", "empty"].map((state) => ({
     name: `filing-desk-${state}`,
@@ -96,7 +96,7 @@ const cases = [
   ...["loading", "error", "disabled"].map((state) => ({
     name: `whitelabel-${state}`,
     path: "/console/whitelabel",
-    ready: state === "loading" ? "Brand studio" : "White-label branding",
+    ready: state === "loading" ? "Branding" : "White-label branding",
     endpoint: `/api/firms/${firmId}`,
     state,
     width: 390,
@@ -104,7 +104,7 @@ const cases = [
   ...["withheld", "loading", "error"].map((state) => ({
     name: `data-room-${state}`,
     path: "/console/data-room",
-    ready: "Credit Data Room",
+    ready: "Credit data room",
     endpoint: "/api/credit/data-room",
     bank: true,
     state,
@@ -258,7 +258,9 @@ test(
             await page.getByTestId("card-feature-unavailable").waitFor();
           if (scenario.state === "withheld")
             await page
-              .getByRole("heading", { name: "Cohort withheld for privacy" })
+              .getByRole("heading", {
+                name: "Business group hidden for privacy",
+              })
               .waitFor();
           if (scenario.state === "empty")
             await page

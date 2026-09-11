@@ -21,7 +21,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { errorStatus, serverErrorToast } from "@/lib/errors";
+import { errorStatus, serverErrorToast, userErrorMessage } from "@/lib/errors";
 import {
   acceptInviteLink,
   resetPasswordLink,
@@ -171,10 +171,11 @@ export function useInvitations() {
       invalidate();
       toast({
         title: `Invitation created for ${result.invitation.email}`,
-        description: "Copy the one-time accept link below — it is shown once.",
+        description:
+          "Copy the one-time invitation link below. It is shown once.",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Please try again.";
+      const message = userErrorMessage(err) ?? "Try again.";
       setFormError(message);
       toast({
         title: "Could not create invitation",
@@ -240,14 +241,14 @@ export function useInvitations() {
       setFirmId(firm.id);
       setNewFirmName("");
       toast({
-        title: `Firm "${firm.name}" provisioned`,
+        title: `Firm "${firm.name}" created`,
         description: "Now invite its first firm admin below.",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Please try again.";
+      const message = userErrorMessage(err) ?? "Try again.";
       setFormError(message);
       toast({
-        title: "Could not provision the firm",
+        title: "Could not create the firm",
         description: message,
         variant: "destructive",
       });
@@ -281,9 +282,7 @@ export function useInvitations() {
       const message =
         errorStatus(err) === 404
           ? "No account with that email."
-          : err instanceof Error
-            ? err.message
-            : "Please try again.";
+          : (userErrorMessage(err) ?? "Try again.");
       setResetError(message);
       toast({
         title: "Could not issue the reset link",
@@ -314,7 +313,7 @@ export function useInvitations() {
       await navigator.clipboard.writeText(acceptLink);
       setCopied(true);
       setLinkCopied(true);
-      toast({ title: "Accept link copied" });
+      toast({ title: "Invitation link copied" });
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       toast({

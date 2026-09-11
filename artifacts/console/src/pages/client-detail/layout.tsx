@@ -80,7 +80,7 @@ export function ClientDetailErrorState({ onRetry }: { onRetry: () => void }) {
         className="text-2xl md:text-3xl font-bold"
         data-testid="text-page-title"
       >
-        Client detail
+        Client details
       </h1>
       <QueryError thing="this client" onRetry={onRetry} />
     </div>
@@ -112,14 +112,14 @@ export function ClientSummaryStrip({
       <Metric
         label="Deadlines"
         value={String(deadlines.length)}
-        detail="Current statutory calendar"
+        detail="Upcoming and overdue statutory tasks"
         icon={<CalendarClock className="size-4" aria-hidden="true" />}
         tone={deadlines.length > 0 ? "warning" : "default"}
       />
       <Metric
         label="Penalty risk"
         value={humanize(client.penaltyRisk)}
-        detail="Current client exposure"
+        detail="Risk based on this client's records"
         icon={<ShieldCheck className="size-4" aria-hidden="true" />}
         tone={client.penaltyRisk === "high" ? "critical" : "default"}
         action={<PenaltyRiskInfo />}
@@ -190,7 +190,7 @@ export function ClientHeaderActions({
           data-testid="button-offboard-client"
         >
           <Archive className="w-4 h-4 mr-1" aria-hidden="true" />
-          Offboard client
+          End client engagement
         </Button>
       )}
     </>

@@ -92,28 +92,29 @@ export function GettingStartedCard({
                     className="ml-2 text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     data-testid="link-checklist-invitations"
                   >
-                    Send an invite
+                    Create an invitation
                   </Link>
                 )}
                 {step.id === "consent" && (
                   <span className="text-xs text-muted-foreground">
                     {" "}
-                    — the client signs in to their own workspace and grants
-                    data-sharing consent themselves; this checklist can't see or
-                    do it for them.
+                    — the client must sign in and give data-sharing consent
+                    themselves. This checklist cannot verify consent or give it
+                    on their behalf.
                   </span>
                 )}
                 {step.id === "first-invoice" && !step.done && (
                   <span className="text-xs text-muted-foreground">
                     {" "}
-                    — raised by the client, or drafted by Clerk from their
-                    documents.
+                    — created by the client, or saved as a draft after a person
+                    approves Clerk's suggestion from their documents.
                   </span>
                 )}
                 {step.id === "stamping" && !step.done && (
                   <span className="text-xs text-muted-foreground">
                     {" "}
-                    — done once any invoice is pending or stamped on the rails.
+                    — done when an invoice has been submitted or stamped.
+                    Submitted invoices may still be awaiting acceptance.
                   </span>
                 )}
               </div>
