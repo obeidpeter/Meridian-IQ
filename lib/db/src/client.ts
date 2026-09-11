@@ -93,12 +93,30 @@ export const pool = new MeasuredPool(connectionConfig());
 export const workerLockPool = new MeasuredPool(workerConnectionConfig());
 
 const idleErrors = { application: 0, worker: 0 };
+const connectionState = {
+  application: {
+    consecutiveErrors: 0,
+    lastErrorAt: null as number | null,
+    lastConnectedAt: null as number | null,
+  },
+  worker: {
+    consecutiveErrors: 0,
+    lastErrorAt: null as number | null,
+    lastConnectedAt: null as number | null,
+  },
+};
 for (const [name, target] of [
   ["application", pool],
   ["worker", workerLockPool],
 ] as const) {
+  target.on("connect", () => {
+    connectionState[name].consecutiveErrors = 0;
+    connectionState[name].lastConnectedAt = Date.now() / 1_000;
+  });
   target.on("error", (error: Error & { code?: string }) => {
     idleErrors[name] += 1;
+    connectionState[name].consecutiveErrors += 1;
+    connectionState[name].lastErrorAt = Date.now() / 1_000;
     // Never log connection strings, SQL, or server-provided detail fields.
     console.error(
       JSON.stringify({
@@ -124,6 +142,9 @@ export function databasePoolMetrics() {
     waiting: target.waitingCount,
     max: target.options.max ?? 0,
     idleErrors: idleErrors[name],
+    consecutiveConnectionErrors: connectionState[name].consecutiveErrors,
+    lastConnectionErrorAt: connectionState[name].lastErrorAt,
+    lastConnectedAt: connectionState[name].lastConnectedAt,
     oldestAcquisitionSeconds: target.oldestAcquisitionSeconds,
     acquisitionCount: target.acquisitionCount,
     acquisitionFailures: target.acquisitionFailures,

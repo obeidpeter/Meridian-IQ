@@ -348,7 +348,7 @@ function fixture(t) {
     env.RELEASE_TRAFFIC_DRAINED = "1";
     env.RELEASE_RUNTIME_STATE = "RUN";
     const held = {
-      format: 1,
+      format: 2,
       kind: "held-verification",
       revision: manifest.source.revision,
       manifestSha256: env.RELEASE_MANIFEST_SHA256,
@@ -360,6 +360,7 @@ function fixture(t) {
       backupSha256: env.RELEASE_BACKUP_SHA256,
       verifiedAt: at(-5),
       apiReadinessVerified: false,
+      catalogSource: { kind: "direct-database" },
       checks: {
         maintenanceHealth: true,
         businessRejected: true,
@@ -381,6 +382,7 @@ function fixture(t) {
       recoveryPlanSha256: env.RELEASE_RECOVERY_PLAN_SHA256,
       backupSha256: env.RELEASE_BACKUP_SHA256,
       heldEvidenceSha256: env.RELEASE_HELD_EVIDENCE_SHA256,
+      catalogSource: structuredClone(held.catalogSource),
       approved: true,
       approvedBy: "synthetic-approver",
       approvedAt: at(-1),
@@ -474,7 +476,16 @@ test("missing manifest, trusted checksum and CI provenance refuse", (t) => {
         { ...f.env, RELEASE_MANIFEST_SHA256: "0".repeat(64) },
         f.root,
       ),
-    /checksum mismatch/,
+    (error) => {
+      assert.match(error.message, /checksum mismatch/);
+      assert.match(error.message, /stale in Replit Publishing settings/);
+      assert.match(
+        error.message,
+        /duplicated across Publishing secrets and environment variables/,
+      );
+      assert.match(error.message, /Publishing secret takes precedence/);
+      return true;
+    },
   );
   const withoutProvenance = structuredClone(f.manifest);
   delete withoutProvenance.ci;
@@ -639,6 +650,21 @@ test("runtime fails closed before executing API on missing checksum, missing man
   rejected();
   rmSync(path.join(f.root, "release/build-manifest.json"));
   rejected();
+});
+
+test("runtime checksum mismatch identifies Publishing scope drift and refuses before API evaluation", (t) => {
+  const f = fixture(t);
+  f.env.RELEASE_MANIFEST_SHA256 = "0".repeat(64);
+  const result = f.cli("start", "api-server", "--run");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /REFUSED: manifest checksum mismatch/);
+  assert.match(result.stderr, /stale in Replit Publishing settings/);
+  assert.match(
+    result.stderr,
+    /duplicated across Publishing secrets and environment variables/,
+  );
+  assert.match(result.stderr, /Publishing secret takes precedence/);
+  assert.doesNotMatch(result.stdout, /executed/);
 });
 
 test("native API promotion cannot bypass missing recovery, drift or rollback configuration", (t) => {
@@ -1182,6 +1208,45 @@ test("activation binds actual backup heartbeat, plan, verified held evidence and
   assert.throws(
     () => promoteReplit("api-server", f.env, f.root, deps),
     /held evidence checksum mismatch/,
+  );
+});
+
+test("activation audit retains validated direct and credentialless catalog provenance", (t) => {
+  const f = fixture(t);
+  const direct = f.authorize();
+  const deps = {
+    query: () => recovery(direct.plan.backup.completedAt),
+    catalog: () => catalog,
+  };
+  assert.doesNotThrow(() => promoteReplit("api-server", f.env, f.root, deps));
+
+  const captureSha256 = "9".repeat(64);
+  const credentiallessSource = {
+    kind: "credentialless-capture",
+    captureSha256,
+  };
+  const held = structuredClone(direct.held);
+  held.catalogSource = credentiallessSource;
+  direct.record("held-evidence", "RELEASE_HELD_EVIDENCE", held);
+  const permit = {
+    ...direct.permit,
+    heldEvidenceSha256: f.env.RELEASE_HELD_EVIDENCE_SHA256,
+    catalogSource: structuredClone(credentiallessSource),
+  };
+  direct.record("activation-permit", "RELEASE_ACTIVATION_PERMIT", permit);
+  assert.doesNotThrow(() => promoteReplit("api-server", f.env, f.root, deps));
+  assert.deepEqual(permit.catalogSource, {
+    kind: "credentialless-capture",
+    captureSha256,
+  });
+
+  direct.record("activation-permit", "RELEASE_ACTIVATION_PERMIT", {
+    ...permit,
+    catalogSource: { kind: "direct-database" },
+  });
+  assert.throws(
+    () => promoteReplit("api-server", f.env, f.root, deps),
+    /catalog source differs from verified held evidence/,
   );
 });
 

@@ -35,6 +35,65 @@ const EVIDENCE_FILES = [
   "original.zip",
   "provenance.json",
 ];
+const MANIFEST_CHECKSUM_KEY = "RELEASE_MANIFEST_SHA256";
+
+export function publishingConfigurationMetadataReader(file) {
+  if (file === undefined) return undefined;
+  const metadataFile = realPath(file, false);
+  assert.ok(
+    lstatSync(metadataFile).size <= 64 * 1024,
+    "Publishing configuration metadata exceeds size limit",
+  );
+  return async () => JSON.parse(readFileSync(metadataFile, "utf8"));
+}
+
+export async function checkPublishingChecksumConfiguration(readMetadata) {
+  if (readMetadata === undefined)
+    return {
+      status: "UNAVAILABLE",
+      manualReviewRequired: true,
+    };
+  assert.equal(
+    typeof readMetadata,
+    "function",
+    "Publishing configuration metadata reader must be a function",
+  );
+  const metadata = await readMetadata();
+  if (metadata === undefined || metadata === null)
+    return {
+      status: "UNAVAILABLE",
+      manualReviewRequired: true,
+    };
+  assert.deepEqual(
+    Object.keys(metadata).sort(),
+    ["environmentVariableKeys", "secretKeys"],
+    "Publishing configuration metadata must contain key names only",
+  );
+  for (const [source, keys] of Object.entries(metadata)) {
+    assert.ok(Array.isArray(keys), `Publishing ${source} must be an array`);
+    assert.ok(
+      keys.every((key) => typeof key === "string"),
+      `Publishing ${source} must contain key names only`,
+    );
+  }
+  const inSecrets = metadata.secretKeys.includes(MANIFEST_CHECKSUM_KEY);
+  const inEnvironmentVariables = metadata.environmentVariableKeys.includes(
+    MANIFEST_CHECKSUM_KEY,
+  );
+  assert.ok(
+    !(inSecrets && inEnvironmentVariables),
+    `${MANIFEST_CHECKSUM_KEY} is duplicated across Publishing secrets and environment variables. Remove the Publishing environment variable and keep the Publishing-scoped secret as the sole source of truth before preparing this release.`,
+  );
+  return {
+    status: "CHECKED",
+    manualReviewRequired: false,
+    checksumSources: inSecrets
+      ? ["secret"]
+      : inEnvironmentVariables
+        ? ["environment-variable"]
+        : [],
+  };
+}
 
 export function realPath(file, directory = true) {
   const absolute = path.resolve(file);
@@ -303,6 +362,14 @@ function runArtifactGates(staging, manifestHash) {
 
 export function checklist(candidate) {
   const { selection: chosen, artifact, manifest, files } = candidate;
+  const publishingConfiguration = candidate.gates?.publishingConfiguration ?? {
+    status: "UNAVAILABLE",
+    manualReviewRequired: true,
+  };
+  const publishingReview =
+    publishingConfiguration.status === "CHECKED"
+      ? `Read-only Publishing key-name metadata was checked during preparation (checksum source: ${publishingConfiguration.checksumSources[0]}), but it is not platform attestation. The protected reviewer must manually verify the displayed production Publishing secret equals this checksum and that no environment-variable duplicate exists.`
+      : "Publishing key metadata was unavailable during preparation; the protected reviewer must manually verify the displayed production Publishing secret and absence of an environment-variable duplicate.";
   return (
     `# Release Candidate Checklist\n\nStatus: PREPARED, NOT APPROVED. Production deployment is NOT authorized.\n\n` +
     `- Source: ${chosen.revision}\n- CI: https://github.com/${chosen.repository}/actions/runs/${chosen.runId}/attempts/${chosen.attempt}\n` +
@@ -312,7 +379,7 @@ export function checklist(candidate) {
     `## Settings To Review\n\n` +
     `- [ ] All seven apps use the same original archive and matching-source isolated checkout. No development watcher, install, rebuild, or old dist merge.\n` +
     `- [ ] RELEASE_PROFILE=pilot and RELEASE_RUNTIME_STATE=RUN are explicitly approved for the intended target. This is not a governed RUN permit.\n` +
-    `- [ ] RELEASE_MANIFEST_SHA256=${manifest.sha256}\n` +
+    `- [ ] Rotate the sole production Publishing RELEASE_MANIFEST_SHA256 secret to ${manifest.sha256}; verify the displayed Publishing value matches and remove any environment-variable duplicate before Publish (the secret takes precedence). ${publishingReview}\n` +
     `- [ ] BUILD_REVISION and EXPECTED_BUILD_REVISION resolve to ${chosen.revision} at startup.\n` +
     `- [ ] Review source .replit, each service's .replit, and production target against mobile identity: ${JSON.stringify(manifest.mobile)}. Provider REPL_ID is not target attestation.\n` +
     `- [ ] Production secrets and database are isolated from development/staging. No secret values or business data enter this evidence or CI. Review one-time bootstrap settings in the secret store.\n` +
@@ -320,13 +387,16 @@ export function checklist(candidate) {
     `- [ ] PUBLIC_APP_URL is the correct live HTTPS origin for the operator-approved production target, not a development preview, localhost, or staging origin. Verify it in production settings; this tool does not configure it.\n` +
     `- [ ] Native Replit Publish schema diff and rename/destructive decisions receive separate explicit operator confirmation. No schema push or migrations from this preparation tool.\n` +
     `- [ ] Backups and qualified fallback are reviewed under docs/operations.md. Governed releases retain every existing backup, catalog, HOLD, evidence, and activation-permit requirement.\n` +
-    `- [ ] Protected-environment reviewer approves this candidate/checklist checksum for handoff. Authenticated production Publish requires a separate explicit approval.\n` +
+    `- [ ] Protected-environment reviewer approves this exact candidate/checklist and explicitly attests to the production Publishing secret verification above. Authenticated production Publish requires a separate explicit approval.\n` +
     `- [ ] After that separate deployment: verify /api/readyz, source/contract health, and existing ops:postdeploy with authorized target credentials outside CI.\n`
   );
 }
 
 export async function prepareCandidate(options, dependencies = {}) {
   const chosen = selection(options);
+  const publishingConfiguration = await checkPublishingChecksumConfiguration(
+    dependencies.readPublishingConfigurationMetadata,
+  );
   const client = dependencies.client ?? githubClient(process.env.GITHUB_TOKEN);
   const producer = await client.producer(chosen);
   const artifact = validateProducer(chosen, producer);
@@ -337,6 +407,7 @@ export async function prepareCandidate(options, dependencies = {}) {
       artifactId: artifact.id,
       archiveSha256: artifact.digest.slice(7),
       gatesRun: false,
+      publishingConfiguration,
       approved: false,
     };
   const reservation = reserveOutput(options.source, options.output);
@@ -447,6 +518,7 @@ export async function prepareCandidate(options, dependencies = {}) {
         artifactOnly: true,
         serviceStarted: false,
         databaseAccess: false,
+        publishingConfiguration,
       },
       files,
     };
@@ -535,6 +607,7 @@ async function main() {
       python: { type: "string" },
       "dry-run": { type: "boolean" },
       "check-protection": { type: "boolean" },
+      "publishing-configuration-metadata": { type: "string" },
     },
   });
   const client = githubClient(process.env.GITHUB_TOKEN);
@@ -549,7 +622,13 @@ async function main() {
   }
   const result = await prepareCandidate(
     { ...values, runId: values["run-id"], dryRun: values["dry-run"] },
-    { client },
+    {
+      client,
+      readPublishingConfigurationMetadata:
+        publishingConfigurationMetadataReader(
+          values["publishing-configuration-metadata"],
+        ),
+    },
   );
   console.log(JSON.stringify(result));
   if (process.env.GITHUB_OUTPUT && result.candidateSha256) {

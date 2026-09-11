@@ -4,6 +4,7 @@ import { test, type TestContext } from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryConfig } from "pg";
 import { firmsTable } from "./schema/organizations.ts";
+import { DatabaseConnectionError } from "./retry.ts";
 
 process.env.DATABASE_URL ??= "postgresql://test:test@127.0.0.1:1/test";
 const { db, pool } = await import("./client.ts");
@@ -514,7 +515,11 @@ test("failed BEGIN, failed rollback, and connection errors destroy rather than r
       client.emit("error", new Error("connection failed"));
       await getDb().execute(sql`select 'forbidden after connection error'`);
     }),
-    expired,
+    (error: unknown) => {
+      assert.ok(error instanceof DatabaseConnectionError);
+      assert.equal(error.cause instanceof Error, true);
+      return true;
+    },
   );
   assert.deepEqual(client.releases, [true, true, true]);
   assert.equal(client.listenerCount("error"), 0);

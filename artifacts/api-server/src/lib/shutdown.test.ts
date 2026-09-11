@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createGracefulShutdown, type ShutdownDeps } from "./shutdown.ts";
 
 // Graceful shutdown (R101): the sequence, its order, its one-shot guard and
-// its deadline — driven with fakes, no sockets or signals involved.
+// its deadline — driven with fakes, plus a real child-process signal check.
 
 function fakeDeps(over: Partial<ShutdownDeps> = {}) {
   const order: string[] = [];
@@ -35,6 +38,45 @@ function fakeDeps(over: Partial<ShutdownDeps> = {}) {
     ...over,
   };
   return { deps, order, exits };
+}
+
+function runSignalShutdownChild(
+  fatal: boolean,
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  const script = `
+    import { installGracefulShutdown } from "./src/lib/shutdown.ts";
+    if (${String(fatal)}) {
+      process.env.PIPELINE_HARD_STOP_ON_LOCK_LOSS = "0";
+      process.exitCode = 1;
+    }
+    const server = {
+      close(callback) { callback?.(); },
+      closeIdleConnections() {},
+    };
+    installGracefulShutdown({
+      server,
+      markUnready() {},
+      stopWorker() {},
+      awaitWorkerIdle: async () => true,
+      closePool: async () => {},
+      exit: (code) => process.exit(code),
+      log: { info() {}, warn() {}, error() {} },
+      timeoutMs: 1_000,
+    });
+    setTimeout(() => process.kill(process.pid, "SIGTERM"), 20);
+  `;
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx/esm", "--input-type=module", "-e", script],
+    {
+      cwd: fileURLToPath(new URL("../../", import.meta.url)),
+      stdio: ["ignore", "ignore", "pipe"],
+    },
+  );
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+  });
 }
 
 test("readiness flips first, then the worker stops, the server drains, the pass settles, the pool closes, exit 0", async () => {
@@ -74,4 +116,24 @@ test("the deadline forces exit 1 when a step hangs", async () => {
   void shutdown("SIGTERM");
   await new Promise((resolve) => setTimeout(resolve, 120));
   assert.deepEqual(exits, [1], "the deadline fired");
+});
+
+test("a fatal SIGTERM keeps its nonzero exit, ordinary SIGTERM stays zero, and the old opt-out is gone", async () => {
+  const pipelineSource = readFileSync(
+    new URL("../modules/pipeline/pipeline.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    pipelineSource,
+    /PIPELINE_HARD_STOP_ON_LOCK_LOSS/,
+    "lock-loss termination cannot be disabled by the former environment flag",
+  );
+  assert.deepEqual(await runSignalShutdownChild(true), {
+    code: 1,
+    signal: null,
+  });
+  assert.deepEqual(await runSignalShutdownChild(false), {
+    code: 0,
+    signal: null,
+  });
 });

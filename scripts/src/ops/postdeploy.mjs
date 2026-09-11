@@ -28,6 +28,8 @@ import {
 
 const HELD_EVIDENCE_MAX_AGE_MS = 3600_000;
 const HELD_EVIDENCE_MAX_BYTES = 16 * 1024;
+const SECURITY_CATALOG_CAPTURE_MAX_AGE_MS = 3600_000;
+const SECURITY_CATALOG_CAPTURE_MAX_BYTES = 16 * 1024 * 1024;
 const HELD_CHECKS = [
   "maintenanceHealth",
   "businessRejected",
@@ -151,11 +153,169 @@ function fields(value, keys, label) {
   );
 }
 
+function readBoundedJsonFile(file, expectedSha256, label, maxBytes) {
+  assert.match(
+    expectedSha256 ?? "",
+    /^[a-f0-9]{64}$/,
+    `independently trusted ${label} SHA256 required`,
+  );
+  assert.ok(
+    typeof file === "string" && file.length > 0 && file.length <= 4096,
+    `${label} file required`,
+  );
+  const entry = lstatSync(file);
+  assert.ok(
+    entry.isFile() && !entry.isSymbolicLink(),
+    `${label} must be a regular non-symlink file`,
+  );
+  const fd = openSync(
+    file,
+    constants.O_RDONLY |
+      (constants.O_NOFOLLOW ?? 0) |
+      (constants.O_NONBLOCK ?? 0),
+  );
+  let bytes;
+  try {
+    const stat = fstatSync(fd);
+    assert.ok(
+      stat.isFile() && stat.size > 0 && stat.size <= maxBytes,
+      `${label} size invalid`,
+    );
+    const buffer = Buffer.alloc(maxBytes + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      const count = readSync(fd, buffer, size, buffer.length - size, null);
+      if (!count) break;
+      size += count;
+    }
+    assert.ok(size > 0 && size <= maxBytes, `${label} exceeds bounded size`);
+    bytes = buffer.subarray(0, size);
+  } finally {
+    closeSync(fd);
+  }
+  assert.equal(digest(bytes), expectedSha256, `${label} checksum mismatch`);
+  try {
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
+    );
+  } catch {
+    throw new Error(`${label} must contain valid UTF-8 JSON`);
+  }
+}
+
+export function loadSecurityCatalogCapture(
+  file,
+  env,
+  manifest,
+  { now = Date.now() } = {},
+) {
+  const capture = readBoundedJsonFile(
+    file,
+    env.RELEASE_SECURITY_CATALOG_SHA256,
+    "security catalog capture",
+    SECURITY_CATALOG_CAPTURE_MAX_BYTES,
+  );
+  fields(
+    capture,
+    [
+      "format",
+      "kind",
+      "capturedAt",
+      "manifestSha256",
+      "targetOrigin",
+      "catalog",
+    ],
+    "security catalog capture",
+  );
+  assert.equal(
+    capture.format,
+    1,
+    "unsupported security catalog capture format",
+  );
+  assert.equal(
+    capture.kind,
+    "security-catalog-capture",
+    "not a security catalog capture",
+  );
+  assert.equal(
+    capture.manifestSha256,
+    env.RELEASE_MANIFEST_SHA256,
+    "security catalog capture manifest mismatch",
+  );
+  assert.equal(
+    capture.targetOrigin,
+    deploymentOrigin(env.RELEASE_BASE_URL),
+    "security catalog capture target mismatch",
+  );
+  const capturedAt = Date.parse(capture.capturedAt);
+  assert.ok(
+    Number.isSafeInteger(now) &&
+      typeof capture.capturedAt === "string" &&
+      Number.isFinite(capturedAt) &&
+      new Date(capturedAt).toISOString() === capture.capturedAt &&
+      capturedAt <= now &&
+      now - capturedAt <= SECURITY_CATALOG_CAPTURE_MAX_AGE_MS,
+    "security catalog capture is stale or future-dated",
+  );
+  fields(
+    capture.catalog,
+    Object.keys(manifest.database),
+    "captured security catalog",
+  );
+  fields(
+    capture.catalog.role,
+    Object.keys(manifest.database.role),
+    "captured security catalog role",
+  );
+  compareSecurityCatalog(manifest.database, capture.catalog);
+  return {
+    catalog: capture.catalog,
+    sha256: env.RELEASE_SECURITY_CATALOG_SHA256,
+  };
+}
+
+function validateCatalogSource(catalogSource) {
+  assert.ok(
+    catalogSource &&
+      typeof catalogSource === "object" &&
+      !Array.isArray(catalogSource),
+    "held catalogSource must be an object",
+  );
+  if (catalogSource.kind === "direct-database") {
+    fields(catalogSource, ["kind"], "held catalogSource");
+    return catalogSource;
+  }
+  fields(catalogSource, ["kind", "captureSha256"], "held catalogSource");
+  assert.equal(
+    catalogSource.kind,
+    "credentialless-capture",
+    "unsupported held catalog source",
+  );
+  assert.match(
+    catalogSource.captureSha256 ?? "",
+    /^[a-f0-9]{64}$/,
+    "credentialless held evidence requires approved capture SHA256",
+  );
+  return catalogSource;
+}
+
+export function catalogSourceReview(catalogSource) {
+  validateCatalogSource(catalogSource);
+  if (catalogSource.kind === "direct-database")
+    return "catalog source: direct database";
+  return `catalog source: credentialless capture; approved capture SHA-256: ${catalogSource.captureSha256}`;
+}
+
 export function validateHeldEvidence(
   evidence,
   identity,
   { now = Date.now(), notBefore = 0 } = {},
 ) {
+  assert.equal(
+    evidence?.format,
+    2,
+    "unsupported held evidence format; format 1 lacks catalog provenance",
+  );
   fields(
     evidence,
     [
@@ -169,10 +329,10 @@ export function validateHeldEvidence(
       "verifiedAt",
       "checks",
       "apiReadinessVerified",
+      "catalogSource",
     ],
     "held evidence",
   );
-  assert.equal(evidence.format, 1, "unsupported held evidence format");
   assert.equal(
     evidence.kind,
     "held-verification",
@@ -190,6 +350,7 @@ export function validateHeldEvidence(
       "held " + field + " mismatch",
     );
   assert.deepEqual(evidence.target, identity.target, "held target mismatch");
+  validateCatalogSource(evidence.catalogSource);
   fields(evidence.checks, HELD_CHECKS, "held checks");
   for (const check of HELD_CHECKS)
     assert.equal(
@@ -221,62 +382,13 @@ export function validateHeldEvidence(
 }
 
 export function loadHeldEvidence(env, manifest, options) {
-  assert.match(
-    env.RELEASE_HELD_EVIDENCE_SHA256 ?? "",
-    /^[a-f0-9]{64}$/,
-    "independently trusted RELEASE_HELD_EVIDENCE_SHA256 required",
-  );
   const file = env.RELEASE_HELD_EVIDENCE;
-  assert.ok(
-    typeof file === "string" && file.length > 0 && file.length <= 4096,
-    "RELEASE_HELD_EVIDENCE required",
-  );
-  const entry = lstatSync(file);
-  assert.ok(
-    entry.isFile() && !entry.isSymbolicLink(),
-    "held evidence must be a regular non-symlink file",
-  );
-  const fd = openSync(
+  const evidence = readBoundedJsonFile(
     file,
-    constants.O_RDONLY |
-      (constants.O_NOFOLLOW ?? 0) |
-      (constants.O_NONBLOCK ?? 0),
-  );
-  let bytes;
-  try {
-    const stat = fstatSync(fd);
-    assert.ok(
-      stat.isFile() && stat.size > 0 && stat.size <= HELD_EVIDENCE_MAX_BYTES,
-      "held evidence size invalid",
-    );
-    const buffer = Buffer.alloc(HELD_EVIDENCE_MAX_BYTES + 1);
-    let size = 0;
-    while (size < buffer.length) {
-      const count = readSync(fd, buffer, size, buffer.length - size, null);
-      if (!count) break;
-      size += count;
-    }
-    assert.ok(
-      size > 0 && size <= HELD_EVIDENCE_MAX_BYTES,
-      "held evidence exceeds bounded size",
-    );
-    bytes = buffer.subarray(0, size);
-  } finally {
-    closeSync(fd);
-  }
-  assert.equal(
-    digest(bytes),
     env.RELEASE_HELD_EVIDENCE_SHA256,
-    "held evidence checksum mismatch",
+    "held evidence",
+    HELD_EVIDENCE_MAX_BYTES,
   );
-  let evidence;
-  try {
-    evidence = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
-    );
-  } catch {
-    throw new Error("held evidence must contain valid UTF-8 JSON");
-  }
   return validateHeldEvidence(
     evidence,
     maintenanceIdentity(manifest, env),
@@ -290,18 +402,29 @@ export async function postdeploy(
   dependencies = {},
 ) {
   const held = args[0] === "--held";
+  const catalogFile =
+    held && args.length === 5 && args[3] === "--catalog-file"
+      ? args[4]
+      : !held && args.length === 2 && args[0] === "--catalog-file"
+        ? args[1]
+        : undefined;
   assert.ok(
     args.length === 0 ||
-      (held && args.length === 3 && args[1] === "--evidence-out" && args[2]),
-    "use postdeploy [--held --evidence-out <new-file>]",
+      (!held && args.length === 2 && args[0] === "--catalog-file" && args[1]) ||
+      (held &&
+        (args.length === 3 || args.length === 5) &&
+        args[1] === "--evidence-out" &&
+        args[2] &&
+        (args.length === 3 || (args[3] === "--catalog-file" && args[4]))),
+    "use postdeploy [--catalog-file <capture>] or postdeploy --held --evidence-out <new-file> [--catalog-file <capture>]",
   );
   const manifest = loadManifest(
     env.RELEASE_MANIFEST,
     env.RELEASE_MANIFEST_SHA256,
   );
   assert.ok(
-    env.DATABASE_URL && env.RELEASE_BASE_URL,
-    "DATABASE_URL and RELEASE_BASE_URL required",
+    (env.DATABASE_URL || catalogFile) && env.RELEASE_BASE_URL,
+    "DATABASE_URL or --catalog-file, and RELEASE_BASE_URL required",
   );
   let identity;
   let plan;
@@ -332,10 +455,25 @@ export async function postdeploy(
       phase: "runtime",
     });
   }
-  compareSecurityCatalog(
-    manifest.database,
-    (dependencies.catalog ?? readSecurityCatalog)(env.DATABASE_URL),
-  );
+  let catalogSource;
+  if (catalogFile) {
+    const capture = loadSecurityCatalogCapture(
+      catalogFile,
+      env,
+      manifest,
+      dependencies,
+    );
+    catalogSource = {
+      kind: "credentialless-capture",
+      captureSha256: capture.sha256,
+    };
+  } else {
+    compareSecurityCatalog(
+      manifest.database,
+      (dependencies.catalog ?? readSecurityCatalog)(env.DATABASE_URL),
+    );
+    catalogSource = { kind: "direct-database" };
+  }
   if (!held) {
     await verifyDeployment(
       env.RELEASE_BASE_URL,
@@ -357,7 +495,7 @@ export async function postdeploy(
   );
   const evidence = validateHeldEvidence(
     {
-      format: 1,
+      format: 2,
       kind: "held-verification",
       revision: identity.buildRevision,
       manifestSha256: identity.manifestSha256,
@@ -367,6 +505,7 @@ export async function postdeploy(
       verifiedAt: new Date().toISOString(),
       checks: Object.fromEntries(HELD_CHECKS.map((check) => [check, true])),
       apiReadinessVerified: false,
+      catalogSource,
     },
     identity,
     { notBefore: Date.parse(plan.approvedAt) },

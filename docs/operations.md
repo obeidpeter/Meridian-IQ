@@ -20,23 +20,117 @@ Publish trusts is the immutable artifact CI produced for that exact commit.
 2. Stage that artifact into the clean Replit checkout of the same commit:
    `release/build-manifest.json`, `release/build-manifest.json.sha256` and the
    seven `dist` trees. Do not rebuild, rename or merge older output into it.
-3. Publish. Every service's production build runs
+3. Before Publish, rotate the single Publishing-scoped
+   `RELEASE_MANIFEST_SHA256` value to the checksum printed by the selected CI
+   artifact. In Replit Publishing settings, verify the displayed value matches
+   the staged `release/build-manifest.json.sha256`, and verify there is no
+   duplicate key across Publishing secrets and environment variables. Use the
+   Publishing secret entry as the sole source of truth; a secret takes
+   precedence over an environment variable with the same name.
+   Release preparation checks secret and environment-variable key names first
+   when a read-only metadata reader is available, and refuses before artifact
+   download if both sources contain `RELEASE_MANIFEST_SHA256`. It never
+   requests, records, or prints secret values. Replit currently exposes no
+   documented authenticated metadata-only API for this configuration. The
+   optional key-name snapshot (`{"secretKeys":[...],"environmentVariableKeys":[...]}`)
+   can therefore catch duplicate settings before preparation, but is not an
+   attestation. Do not pass arbitrary JSON or a workflow-dispatch value as
+   Publishing provenance.
+   The protected release handoff uses its existing trusted reviewer and
+   `release-production-handoff` environment for explicit manual verification:
+   the reviewer must bind the exact candidate/checklist and manifest checksum
+   to the displayed production Publishing secret and confirm no
+   environment-variable duplicate. If metadata is unavailable, this manual
+   review is mandatory; a checked key-name snapshot does not replace it. The
+   handoff receipt records this as manual verification, not authenticated
+   platform provenance, and still refuses ordinary environment variables or
+   workspace secrets as the checksum source. The reviewer must still verify
+   the value in the production Publishing UI.
+4. Publish. Every service's production build runs
    `node scripts/src/ops/replit-promote.mjs build <app>`, which refuses unless
    the checkout is clean, the local source tree, tracked-source hash and
    schema hash equal the manifest, and the packaged assets match the inventory
    byte for byte. These artifact builds perform no database mutation. Replit's
    native Publish flow compares development and production, surfaces any schema
    changes or rename decisions, and applies only the confirmed diff.
-4. The API runs `replit-promote.mjs start api-server`: it re-verifies the
+5. The API runs `replit-promote.mjs start api-server`: it re-verifies the
    packaged bytes without Git, sets `BUILD_REVISION` and
    `EXPECTED_BUILD_REVISION` to the tested revision, and imports the unchanged
    `artifacts/api-server/dist/index.mjs`. Boot re-asserts the guardrail
    migrations under an advisory lock and holds readiness until they verify.
-5. Verify: `/api/healthz` reports the manifest's revision and contract version
+6. Verify: `/api/healthz` reports the manifest's revision and contract version
    (the web apps' stale-build banner clears), `/api/readyz` answers `ready`,
    and `DATABASE_URL=… RELEASE_BASE_URL=https://… pnpm --filter
    @workspace/scripts run ops:postdeploy` confirms source, contract, public
-   asset bytes and database catalog parity after the fact.
+   asset bytes and database catalog parity after the fact. When production
+   database credentials are intentionally unavailable, use the credentialless
+   catalog procedure below instead.
+
+### Credentialless production catalog verification
+
+Replit's read-only production database channel can capture the same complete
+catalog without exposing `DATABASE_URL` to the verifier. Run the exact
+`CATALOG_SQL` exported by `scripts/src/ops/security-catalog.mjs` through that
+channel in one read-only, repeatable-read transaction with the documented
+30-second statement timeout. Do not edit the query or copy individual sections.
+
+Save the single complete JSON object returned by `CATALOG_SQL` as a private raw
+input file; do not copy individual sections or encode the object as a string.
+Create the checksum-bound envelope in one command:
+
+```bash
+RELEASE_MANIFEST=release/build-manifest.json \
+RELEASE_MANIFEST_SHA256="<trusted manifest digest>" \
+RELEASE_BASE_URL="https://<production-origin>" \
+  pnpm --filter @workspace/scripts run ops:capture-security-catalog -- \
+  --input /private/path/raw-production-security-catalog.json \
+  --output /private/path/production-security-catalog.json
+```
+
+The command validates the complete raw catalog against the trusted manifest and
+security invariants before exclusively creating a `0600` output file. It refuses
+malformed UTF-8/JSON, partial or unknown fields, unsafe state, non-regular or
+symlink input, oversized input/output, an invalid origin, and an existing output
+rather than overwriting evidence. It writes a format-1 envelope with the current
+UTC capture time and prints the SHA-256 of the exact canonical bytes. Obtain or
+approve that printed digest through the independent approved channel, then run:
+
+```bash
+RELEASE_MANIFEST=release/build-manifest.json \
+RELEASE_MANIFEST_SHA256="<trusted manifest digest>" \
+RELEASE_BASE_URL="https://<production-origin>" \
+RELEASE_SECURITY_CATALOG_SHA256="<independently captured envelope digest>" \
+  pnpm --filter @workspace/scripts run ops:postdeploy -- \
+  --catalog-file /private/path/production-security-catalog.json
+```
+
+Keep all other release-profile variables required by the selected HOLD/RUN flow.
+For governed HOLD, append `--catalog-file <path>` after
+`--held --evidence-out <new-file>`. The capture expires after one hour. Missing
+or mismatched digests, stale or future timestamps, malformed UTF-8/JSON,
+symlinks, oversized files, wrong manifest/origin bindings, incomplete catalogs,
+unknown sections, unsafe catalog state, or any difference from the immutable CI
+manifest fails closed. Omitting `--catalog-file` retains the direct
+`DATABASE_URL` path.
+
+Governed held evidence uses format 2. Its strict `catalogSource` field is
+`{"kind":"direct-database"}` for the `DATABASE_URL` path, or
+`{"kind":"credentialless-capture","captureSha256":"<approved digest>"}` for the
+credentialless path. The latter digest is the independently approved SHA-256 of
+the exact capture envelope bytes. It is retained inside the independently
+hashed held-evidence record, so later review can identify and verify the catalog
+provenance without external inference. Validation rejects missing or unknown
+source fields, omitted or malformed capture digests, source tampering, and
+format-1 held evidence. Format 1 is intentionally not accepted because it cannot
+prove which catalog path supplied the successful check; regenerate held
+evidence under format 2 rather than converting an old record.
+
+The activation permit is the permanent activation audit record. When approving
+RUN, copy the validated held evidence `catalogSource` into the permit exactly.
+For a direct database check this remains only `{"kind":"direct-database"}`. For
+a credentialless check retain only `kind` and the approved `captureSha256`;
+never copy database credentials or catalog contents into the permit. Promotion
+rejects any source that differs from the checksum-verified held evidence.
 
 `RELEASE_RUNTIME_STATE=HOLD` is the maintenance switch in this profile: the API
 serves `/api/healthz` only and answers 503 to everything else without

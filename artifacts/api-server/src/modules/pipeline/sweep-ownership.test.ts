@@ -88,3 +88,86 @@ test("a timed-out scheduled sweep keeps its distributed lock until underlying se
     competing.release(true);
   }
 });
+
+test("a lost lock session aborts and requires process restart", async (t) => {
+  for (const sweep of listSweeps()) unregisterSweep(sweep.name);
+  resumeWorker();
+  const previousExitCode = process.exitCode;
+  const kill = t.mock.method(process, "kill", () => undefined as never);
+  let calls = 0;
+  let aborted = false;
+  let started!: () => void;
+  let releaseSettlement!: () => void;
+  const firstStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const settlement = new Promise<void>((resolve) => {
+    releaseSettlement = resolve;
+  });
+  registerSweep(
+    "test.lock-loss-recovery",
+    async (signal) => {
+      calls += 1;
+      if (calls > 1) return;
+      started();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          "abort",
+          () => {
+            aborted = true;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+      await settlement;
+    },
+    { acceptsSignal: true, timeoutMs: 2_000 },
+  );
+
+  const admin = await pool.connect();
+  try {
+    const pass = runSweepPassOnce();
+    await firstStarted;
+    const sessions = await admin.query<{ pid: number }>(
+      `SELECT pid
+       FROM pg_stat_activity
+       WHERE application_name = 'meridian-worker-locks'
+       ORDER BY backend_start DESC
+       LIMIT 1`,
+    );
+    assert.ok(sessions.rows[0]?.pid, "the pass owns a worker-lock session");
+    assert.equal(
+      (
+        await admin.query<{ terminated: boolean }>(
+          "SELECT pg_terminate_backend($1) AS terminated",
+          [sessions.rows[0]!.pid],
+        )
+      ).rows[0]?.terminated,
+      true,
+    );
+    for (let i = 0; i < 50 && !aborted; i += 1)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(aborted, true, "lock loss reaches cooperative pass work");
+    assert.equal(kill.mock.callCount(), 1);
+    assert.deepEqual(kill.mock.calls[0]?.arguments, [process.pid, "SIGTERM"]);
+    assert.equal(
+      await runSweepPassOnce(),
+      false,
+      "no local pass or retry overlaps unsettled aborted work",
+    );
+    releaseSettlement();
+    assert.equal(
+      await pass,
+      false,
+      "the failed pass does not report success after lock loss",
+    );
+    assert.equal(await awaitWorkerIdle(2_000), true);
+    assert.equal(calls, 1, "a replacement pass requires a new process");
+  } finally {
+    releaseSettlement();
+    unregisterSweep("test.lock-loss-recovery");
+    admin.release();
+    process.exitCode = previousExitCode;
+  }
+});

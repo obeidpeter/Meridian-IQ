@@ -1,5 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseConnectionError } from "@workspace/db";
 import {
   registerSweep,
   unregisterSweep,
@@ -103,6 +104,41 @@ test("a throwing sweep and a hung sweep are counted under their names and kinds;
   assert.equal(await awaitWorkerIdle(100), true);
 });
 
+test("a database disconnect retries before continuing to later registry entries", async () => {
+  let reachedAfterDisconnect = false;
+  const report = { failed: [], critical: 0 } as {
+    failed: string[];
+    critical: number;
+    databaseFailure?: unknown;
+  };
+  const failures = await runSweepsOnce(
+    [
+      {
+        name: `test.db-disconnect.${SALT}`,
+        run: async () => {
+          throw new DatabaseConnectionError(
+            new Error("server closed the connection unexpectedly"),
+          );
+        },
+        timeoutMs: 1_000,
+      },
+      {
+        name: `test.after-db-disconnect.${SALT}`,
+        run: async () => {
+          reachedAfterDisconnect = true;
+        },
+        timeoutMs: 1_000,
+      },
+    ],
+    [],
+    report,
+    { random: () => 0, sleep: async () => {} },
+  );
+  assert.equal(failures, 1);
+  assert.equal(reachedAfterDisconnect, true);
+  assert.ok(report.databaseFailure instanceof DatabaseConnectionError);
+});
+
 test("timeout keeps per-sweep ownership until late rejection while healthy siblings continue", async () => {
   let reject!: (error: Error) => void;
   let signal!: AbortSignal;
@@ -155,6 +191,80 @@ test("timeout keeps per-sweep ownership until late rejection while healthy sibli
     0,
   );
   assert.equal(calls, 2);
+});
+
+test("transient database retry retains sweep ownership and records recovery", async () => {
+  const name = `test.database_retry_${SALT}`;
+  let calls = 0;
+  let releaseBackoff!: () => void;
+  let backoffStarted!: () => void;
+  const backoff = new Promise<void>((resolve) => {
+    releaseBackoff = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    backoffStarted = resolve;
+  });
+  const sweep: RegisteredSweep = {
+    name,
+    timeoutMs: 1_000,
+    run: async () => {
+      calls += 1;
+      if (calls === 1) throw { code: "08006" };
+    },
+  };
+  const first = runSweepsOnce([sweep], [], undefined, {
+    random: () => 0,
+    sleep: async () => {
+      backoffStarted();
+      await backoff;
+    },
+  });
+  await started;
+  assert.equal(
+    await runSweepsOnce([sweep]),
+    1,
+    "a timer or manual trigger cannot overlap a retrying sweep",
+  );
+  releaseBackoff();
+  assert.equal(await first, 0);
+  assert.equal(calls, 2);
+  const text = await registry.metrics();
+  assert.match(
+    text,
+    /valo_worker_database_recovery_total\{worker="compliance",outcome="retry"\} [1-9]\d*/,
+  );
+  assert.match(
+    text,
+    /valo_worker_database_recovery_total\{worker="compliance",outcome="recovered"\} [1-9]\d*/,
+  );
+});
+
+test("persistent database failure exhausts bounded compliance retries visibly", async () => {
+  const name = `test.database_exhausted_${SALT}`;
+  let calls = 0;
+  assert.equal(
+    await runSweepsOnce(
+      [
+        {
+          name,
+          timeoutMs: 1_000,
+          run: async () => {
+            calls += 1;
+            throw { code: "57P03" };
+          },
+        },
+      ],
+      [],
+      undefined,
+      { random: () => 0, sleep: async () => {} },
+    ),
+    1,
+  );
+  assert.equal(calls, 3);
+  assert.match(
+    await registry.metrics(),
+    /valo_worker_database_recovery_total\{worker="compliance",outcome="exhausted"\} [1-9]\d*/,
+  );
 });
 
 test("shutdown aborts cooperatively but waits for actual settlement and refuses new work", async () => {

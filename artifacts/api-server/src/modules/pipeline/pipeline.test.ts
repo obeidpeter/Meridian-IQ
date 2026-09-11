@@ -17,9 +17,14 @@ import {
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { clearRailEnv } from "../../test-helpers/rail-env.ts";
-import { setRailTransport, type StampResult } from "../rails/adapter.ts";
+import {
+  setRailTransport,
+  type RailTransport,
+  type StampResult,
+} from "../rails/adapter.ts";
 import { scriptedRail } from "../rails/transports/scripted.ts";
-import { drain, reconcile } from "./pipeline.ts";
+import { drain, reconcile, runReconcilePassOnce } from "./pipeline.ts";
+import { registry } from "../../lib/metrics.ts";
 
 // Resubmission safety (R97). Pinned against a real Postgres:
 //  - a submission the rail answers MBS_DUPLICATE is recovered: the stamp the
@@ -306,6 +311,48 @@ test("reconcile() persists a stamp the rail already holds instead of re-queuing"
   // This run's own stuck invoice was recovered, not re-queued (other rows in
   // the shared scratch DB may be re-queued by the same pass).
   assert.equal(typeof requeued, "number");
+});
+
+test("reconcile retries a nested database disconnect without re-queuing early", async () => {
+  const id = await seedInvoice(30);
+  const healthy = fakeRail();
+  let lookups = 0;
+  const transport: RailTransport = {
+    ...healthy,
+    async lookup(...args) {
+      lookups += 1;
+      if (lookups === 1) {
+        throw new Error("query failed", {
+          cause: { code: "08006" },
+        });
+      }
+      return healthy.lookup(...args);
+    },
+  };
+  setRailTransport(transport);
+  try {
+    const result = await runReconcilePassOnce({
+      random: () => 0,
+      sleep: async () => {},
+    });
+    assert.equal(result.failed, false);
+  } finally {
+    setRailTransport(null);
+  }
+  assert.ok(lookups >= 2);
+  const rows = await getDb()
+    .select()
+    .from(outboxTable)
+    .where(eq(outboxTable.aggregateId, id));
+  assert.equal(
+    rows.length,
+    1,
+    "only the recovered retry re-queues the invoice",
+  );
+  assert.match(
+    await registry.metrics(),
+    /meridian_worker_database_recovery_total\{worker="reconcile",outcome="recovered"\} 1/,
+  );
 });
 
 test("reconcile() re-queues a stuck invoice the simulator does not remember", async () => {

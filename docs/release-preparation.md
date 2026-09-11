@@ -183,19 +183,41 @@ Required operator settings include Replit Publish development-data copying
 **OFF** and `PUBLIC_APP_URL` set to the correct live HTTPS origin for the approved
 production target, never a preview, localhost, or staging origin. The sidecar
 only records these unchecked obligations; it does not configure production.
+The handoff has no authenticated Replit metadata channel and does not pretend
+that one exists. The optional local key-name snapshot is useful for duplicate
+detection only; it never proves a secret value or a setting scope. Instead, the
+existing protected `release-production-handoff` environment supplies an
+explicit manual verification step. Before approving that environment, the
+trusted reviewer must inspect this exact candidate/checklist, open the
+production **Publishing** setting, verify that the displayed
+`RELEASE_MANIFEST_SHA256` secret equals the candidate's manifest checksum, and
+verify that no Publishing environment variable has the same key. If the
+metadata snapshot is unavailable, this manual review is mandatory rather than
+silently treated as an automatic pass. A checked snapshot still requires the
+same manual value and scope review.
+
+Only the production Publishing secret is accepted: an ordinary production
+environment variable, workspace secret, or self-asserted workflow value cannot
+satisfy the check. The receipt records `MANUALLY_VERIFIED`, the exact candidate
+and expected manifest checksums, exact checklist checksum,
+`production Publishing` scope, sole-secret assertion, the protected
+environment, reviewer identity, and `platformAttestation: false`; it never
+contains the secret. This uses the existing trusted reviewer/environment
+boundary and does not authorize Publish or change any Replit setting.
 The job downloads the exact preparation artifact ID and verifies every retained
 file against the candidate checksum passed by the producing job, not by filename
 selection or a self-supplied sidecar.
 
-The handoff job requires one explicit approved environment review by a human
+The handoff still requires one explicit approved environment review by a human
 other than the initiator, checked against GitHub's review-history API; an admin
 bypass without that review cannot issue a receipt. Preparation workflow reruns
 are deliberately prohibited because review history is not attempt-bound:
-dispatch a fresh workflow instead. The approval record binds candidate/checklist,
-original archive, manifest, producer run/attempt, reviewer, environment, and
-preparation run. It is an audit receipt, not a credential or portable deployment
-authorization. The approved checklist keeps its original unchecked obligations;
-automation does not claim the operator completed them.
+dispatch a fresh workflow instead. The approval record binds
+candidate/checklist, original archive, manifest, producer run/attempt, manual
+Publishing verification, reviewer, environment, and preparation run. It is an
+audit receipt, not a credential or portable deployment authorization. The
+approved checklist keeps its original unchecked obligations; automation does
+not claim the operator completed them.
 
 The documented review-history response exposes `state`, `environments`, and
 `user`, not an attempt binding or bypass discriminator. The code does not invent

@@ -17,7 +17,9 @@ import {
   startMaintenanceServer,
 } from "./maintenance-server.mjs";
 import {
+  catalogSourceReview,
   loadHeldEvidence,
+  loadSecurityCatalogCapture,
   postdeploy,
   validateHeldEvidence,
   verifyDeployment,
@@ -36,6 +38,7 @@ const catalog = {
     rolcreaterole: false,
     rolreplication: false,
     rolcanlogin: false,
+    rolinherit: true,
     schema_create: false,
   },
   memberships: [],
@@ -50,6 +53,7 @@ const catalog = {
     },
   ],
   columns: [{ table_name: "invoices", column_name: "firm_id" }],
+  enums: [],
   policies: [
     {
       tablename: "invoices",
@@ -281,6 +285,8 @@ test("held verification emits honest independently hashable evidence only after 
   );
   assert.equal(evidence.apiReadinessVerified, false);
   assert.equal(evidence.kind, "held-verification");
+  assert.equal(evidence.format, 2);
+  assert.deepEqual(evidence.catalogSource, { kind: "direct-database" });
   assert.deepEqual(evidence.target, {
     origin: f.env.RELEASE_BASE_URL,
     replId: targetReplId,
@@ -519,6 +525,7 @@ test("ordinary postdeploy is real API readiness only after explicit RUN and keep
     recoveryPlanSha256: runEnv.RELEASE_RECOVERY_PLAN_SHA256,
     backupSha256: runEnv.RELEASE_BACKUP_SHA256,
     heldEvidenceSha256: runEnv.RELEASE_HELD_EVIDENCE_SHA256,
+    catalogSource: { kind: "direct-database" },
     approved: true,
     approvedBy: "synthetic-approver",
     approvedAt: new Date(Date.now() - 7 * 86400_000).toISOString(),
@@ -607,6 +614,177 @@ test("ordinary postdeploy is real API readiness only after explicit RUN and keep
   );
 });
 
+test("credentialless postdeploy accepts only a fresh checksum-bound complete catalog capture", async (t) => {
+  const f = fixture(t);
+  const runEnv = {
+    ...f.env,
+    DATABASE_URL: undefined,
+    RELEASE_RUNTIME_STATE: "RUN",
+    RELEASE_ACTIVATION_ID: "22222222-2222-4222-8222-222222222222",
+    RELEASE_HELD_EVIDENCE_SHA256: "c".repeat(64),
+    RELEASE_ACTIVATION_PERMIT: path.join(f.root, "activation-permit.json"),
+  };
+  const permit = {
+    format: 1,
+    mode: "maintenance-forward",
+    activationId: runEnv.RELEASE_ACTIVATION_ID,
+    revision,
+    manifestSha256: runEnv.RELEASE_MANIFEST_SHA256,
+    target: f.identity.target,
+    recoveryPlanSha256: runEnv.RELEASE_RECOVERY_PLAN_SHA256,
+    backupSha256: runEnv.RELEASE_BACKUP_SHA256,
+    heldEvidenceSha256: runEnv.RELEASE_HELD_EVIDENCE_SHA256,
+    approved: true,
+    approvedBy: "synthetic-approver",
+    approvedAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt: new Date(Date.now() + 9 * 60_000).toISOString(),
+    authorizeStartupWrites: true,
+    externalIngressAndSchedulesRemainHeld: true,
+    requirePostRunReadiness: true,
+  };
+  const captureFile = path.join(f.root, "security-catalog.json");
+  const capture = {
+    format: 1,
+    kind: "security-catalog-capture",
+    capturedAt: new Date().toISOString(),
+    manifestSha256: runEnv.RELEASE_MANIFEST_SHA256,
+    targetOrigin: runEnv.RELEASE_BASE_URL,
+    catalog: structuredClone(catalog),
+  };
+  const writeCapture = (value) => {
+    const bytes = JSON.stringify(value);
+    writeFileSync(captureFile, bytes);
+    runEnv.RELEASE_SECURITY_CATALOG_SHA256 = digest(bytes);
+  };
+  writeCapture(capture);
+  permit.catalogSource = {
+    kind: "credentialless-capture",
+    captureSha256: runEnv.RELEASE_SECURITY_CATALOG_SHA256,
+  };
+  const permitBytes = JSON.stringify(permit);
+  writeFileSync(runEnv.RELEASE_ACTIVATION_PERMIT, permitBytes);
+  runEnv.RELEASE_ACTIVATION_PERMIT_SHA256 = digest(permitBytes);
+  const fetcher = async (url) => {
+    if (url.pathname === "/api/healthz")
+      return Response.json({
+        status: "ok",
+        buildRevision: revision,
+        contractVersion: f.manifest.contractVersion,
+      });
+    if (url.pathname === "/api/readyz")
+      return Response.json({ status: "ready" });
+    return new Response("immutable page");
+  };
+  await postdeploy(["--catalog-file", captureFile], runEnv, {
+    fetcher,
+    catalog: () => assert.fail("DATABASE_URL path must not run"),
+  });
+  assert.deepEqual(
+    loadSecurityCatalogCapture(captureFile, runEnv, f.manifest),
+    {
+      catalog,
+      sha256: runEnv.RELEASE_SECURITY_CATALOG_SHA256,
+    },
+  );
+
+  for (const mutate of [
+    (value) => {
+      value.capturedAt = new Date(Date.now() - 61 * 60_000).toISOString();
+    },
+    (value) => {
+      value.capturedAt = new Date(Date.now() + 60_000).toISOString();
+    },
+    (value) => {
+      value.manifestSha256 = "f".repeat(64);
+    },
+    (value) => {
+      value.targetOrigin = "https://elsewhere.invalid";
+    },
+    (value) => {
+      delete value.catalog.policies;
+    },
+    (value) => {
+      value.catalog.unknown = [];
+    },
+    (value) => {
+      value.extra = true;
+    },
+  ]) {
+    const bad = structuredClone(capture);
+    mutate(bad);
+    writeCapture(bad);
+    assert.throws(() =>
+      loadSecurityCatalogCapture(captureFile, runEnv, f.manifest),
+    );
+  }
+  writeCapture(capture);
+  assert.throws(
+    () =>
+      loadSecurityCatalogCapture(
+        captureFile,
+        { ...runEnv, RELEASE_SECURITY_CATALOG_SHA256: undefined },
+        f.manifest,
+      ),
+    /independently trusted/,
+  );
+  assert.throws(
+    () =>
+      loadSecurityCatalogCapture(
+        captureFile,
+        { ...runEnv, RELEASE_SECURITY_CATALOG_SHA256: "0".repeat(64) },
+        f.manifest,
+      ),
+    /checksum mismatch/,
+  );
+});
+
+test("held credentialless evidence retains the independently approved capture digest", async (t) => {
+  const f = fixture(t);
+  const captureFile = path.join(f.root, "security-catalog.json");
+  const capture = {
+    format: 1,
+    kind: "security-catalog-capture",
+    capturedAt: new Date().toISOString(),
+    manifestSha256: f.env.RELEASE_MANIFEST_SHA256,
+    targetOrigin: f.env.RELEASE_BASE_URL,
+    catalog: structuredClone(catalog),
+  };
+  const captureBytes = JSON.stringify(capture);
+  writeFileSync(captureFile, captureBytes);
+  const captureSha256 = digest(captureBytes);
+  const evidence = await postdeploy(
+    ["--held", "--evidence-out", f.output, "--catalog-file", captureFile],
+    {
+      ...f.env,
+      DATABASE_URL: undefined,
+      RELEASE_SECURITY_CATALOG_SHA256: captureSha256,
+    },
+    {
+      fetcher: f.fetcher,
+      catalog: () => assert.fail("DATABASE_URL path must not run"),
+    },
+  );
+  assert.deepEqual(evidence.catalogSource, {
+    kind: "credentialless-capture",
+    captureSha256,
+  });
+});
+
+test("governed release review labels direct and credentialless catalog sources", () => {
+  assert.equal(
+    catalogSourceReview({ kind: "direct-database" }),
+    "catalog source: direct database",
+  );
+  const captureSha256 = "c".repeat(64);
+  assert.equal(
+    catalogSourceReview({
+      kind: "credentialless-capture",
+      captureSha256,
+    }),
+    `catalog source: credentialless capture; approved capture SHA-256: ${captureSha256}`,
+  );
+});
+
 test("invalid postdeploy actions fail before any IO", async () => {
   for (const args of [
     ["--resume"],
@@ -616,6 +794,9 @@ test("invalid postdeploy actions fail before any IO", async () => {
     ["--held", "--evidence-out", "file", "--skip-ready"],
     ["--evidence-out", "file"],
     ["--held", "--output", "file"],
+    ["--catalog-file"],
+    ["--catalog-file", "file", "--skip-ready"],
+    ["--held", "--evidence-out", "file", "--catalog-file"],
   ])
     await assert.rejects(
       postdeploy(
@@ -672,6 +853,12 @@ test("held evidence rejects stale/future time, all scope changes, omitted checks
       value.apiReadinessVerified = true;
     },
     (value) => {
+      value.catalogSource.kind = "credentialless-capture";
+    },
+    (value) => {
+      delete value.catalogSource;
+    },
+    (value) => {
       value.extra = true;
     },
   ]) {
@@ -679,6 +866,28 @@ test("held evidence rejects stale/future time, all scope changes, omitted checks
     mutate(copy);
     assert.throws(() => validateHeldEvidence(copy, f.identity));
   }
+  const credentialless = structuredClone(evidence);
+  credentialless.catalogSource = {
+    kind: "credentialless-capture",
+    captureSha256: "c".repeat(64),
+  };
+  assert.deepEqual(
+    validateHeldEvidence(credentialless, f.identity).catalogSource,
+    credentialless.catalogSource,
+  );
+  for (const captureSha256 of [undefined, "", "C".repeat(64), "c".repeat(63)]) {
+    const bad = structuredClone(credentialless);
+    if (captureSha256 === undefined) delete bad.catalogSource.captureSha256;
+    else bad.catalogSource.captureSha256 = captureSha256;
+    assert.throws(() => validateHeldEvidence(bad, f.identity));
+  }
+  const legacy = structuredClone(evidence);
+  legacy.format = 1;
+  delete legacy.catalogSource;
+  assert.throws(
+    () => validateHeldEvidence(legacy, f.identity),
+    /format 1 lacks catalog provenance/,
+  );
   const env = { ...f.env, RELEASE_HELD_EVIDENCE: f.output };
   for (const bytes of [
     Buffer.from("{}"),

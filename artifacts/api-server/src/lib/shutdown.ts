@@ -58,6 +58,11 @@ export function createGracefulShutdown(
       return;
     }
     started = true;
+    // A fatal worker invariant may have set process.exitCode before sending
+    // SIGTERM. Preserve it through the graceful drain instead of turning the
+    // failed process into a successful one.
+    const requestedExitCode =
+      typeof process.exitCode === "number" ? process.exitCode : 0;
     const timeoutMs = deps.timeoutMs ?? shutdownTimeoutMs();
     const startedAt = Date.now();
     deps.log.info(
@@ -92,7 +97,7 @@ export function createGracefulShutdown(
     }
     clearTimeout(deadline);
     deps.log.info({ tookMs: Date.now() - startedAt }, "Shutdown complete");
-    deps.exit(0);
+    deps.exit(requestedExitCode);
   };
 }
 

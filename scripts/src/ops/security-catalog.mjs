@@ -154,6 +154,98 @@ export function compareSecurityCatalog(expected, actual) {
   }
 }
 
+export function assertCompleteSecurityCatalog(expected, actual) {
+  const catalogFields = [
+    "postgresMajor",
+    "role",
+    "memberships",
+    "tables",
+    "columns",
+    "enums",
+    "policies",
+    "triggers",
+    "functions",
+    "constraints",
+    "indexes",
+    "migrations",
+  ];
+  const roleFields = [
+    "rolsuper",
+    "rolbypassrls",
+    "rolcreatedb",
+    "rolcreaterole",
+    "rolreplication",
+    "rolcanlogin",
+    "rolinherit",
+    "schema_create",
+  ];
+  const rowFields = {
+    tables: ["name", "rls", "forced", "app_owner", "columns", "grants"],
+    columns: [
+      "table_name",
+      "column_name",
+      "ordinal_position",
+      "column_default",
+      "is_nullable",
+      "data_type",
+      "udt_name",
+      "character_maximum_length",
+      "numeric_precision",
+      "numeric_scale",
+      "is_identity",
+      "identity_generation",
+      "is_generated",
+      "generation_expression",
+    ],
+    enums: ["name", "enumsortorder", "enumlabel"],
+    policies: [
+      "tablename",
+      "policyname",
+      "permissive",
+      "roles",
+      "cmd",
+      "qual",
+      "with_check",
+    ],
+    triggers: ["table_name", "name", "enabled", "definition"],
+    functions: [
+      "name",
+      "args",
+      "definition",
+      "security_definer",
+      "config",
+      "executable",
+    ],
+    constraints: ["table_name", "name", "validated", "definition"],
+    indexes: ["table_name", "name", "valid", "ready", "definition"],
+    migrations: ["version", "name"],
+  };
+  const fields = (value, keys, label) => {
+    assert.ok(
+      value && typeof value === "object" && !Array.isArray(value),
+      `${label} must be an object`,
+    );
+    assert.deepEqual(
+      Object.keys(value).sort(),
+      [...keys].sort(),
+      `${label} has missing or unknown fields`,
+    );
+  };
+  fields(expected, catalogFields, "expected security catalog");
+  fields(actual, catalogFields, "security catalog");
+  fields(expected.role, roleFields, "expected security catalog role");
+  fields(actual.role, roleFields, "security catalog role");
+  for (const [section, keys] of Object.entries(rowFields)) {
+    assert.ok(
+      Array.isArray(actual[section]),
+      `security catalog ${section} must be an array`,
+    );
+    for (const row of actual[section])
+      fields(row, keys, `security catalog ${section} row`);
+  }
+  compareSecurityCatalog(expected, actual);
+}
+
 function canonicalSecurityCatalog(catalog) {
   const result = structuredClone(catalog);
   // Physical column placement and generated object names differ between a

@@ -213,11 +213,11 @@ export const outboxClaimFailuresTotal = new Counter(
   "valo_outbox_claim_failures_total",
   "Errors thrown while claiming the next outbox event.",
 );
-// Outbox depth and age (R96), set by the pipeline.gauges sweep: `pending` is
-// ready to run, `parked` is waiting for a rail breaker, `dead` awaits an
-// operator replay. A growing oldest-pending age with a flat dead count is
-// the "rail outage in progress" shape; a growing dead count is the "operator
-// needed" shape.
+
+export const workerDatabaseRecoveryTotal = new Counter(
+  "valo_worker_database_recovery_total",
+  "Background database recovery events by worker and outcome (retry|exhausted|recovered).",
+);
 export const outboxEvents = new LabeledGauge(
   "valo_outbox_events",
   "Outbox events by state (pending, parked, processing, dead).",
@@ -239,6 +239,7 @@ const METRICS: Metric[] = [
   sweepLastSuccessBySweep,
   sweepDurationSeconds,
   outboxClaimFailuresTotal,
+  workerDatabaseRecoveryTotal,
   outboxEvents,
   outboxOldestPendingAgeSeconds,
   usabilityEventsTotal,
@@ -277,6 +278,9 @@ function poolMetrics(): string {
     ["waiting", "waiting_requests", "gauge"],
     ["max", "max_connections", "gauge"],
     ["idleErrors", "idle_errors_total", "counter"],
+    ["consecutiveConnectionErrors", "connection_errors_consecutive", "gauge"],
+    ["lastConnectionErrorAt", "last_connection_error_timestamp", "gauge"],
+    ["lastConnectedAt", "last_connected_timestamp", "gauge"],
     ["oldestAcquisitionSeconds", "oldest_acquisition_seconds", "gauge"],
     ["acquisitionCount", "acquisitions_total", "counter"],
     ["acquisitionFailures", "acquisition_failures_total", "counter"],
@@ -289,7 +293,7 @@ function poolMetrics(): string {
         `# HELP ${metric} PostgreSQL pool ${suffix}.`,
         `# TYPE ${metric} ${type}`,
         ...pools.map(
-          (entry) => `${metric}{pool="${entry.name}"} ${entry[key]}`,
+          (entry) => `${metric}{pool="${entry.name}"} ${entry[key] ?? 0}`,
         ),
       ].join("\n");
     })

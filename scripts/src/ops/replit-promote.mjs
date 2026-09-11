@@ -20,7 +20,7 @@ import {
   recoveryMode,
 } from "./recovery-plan.mjs";
 import { loadActivationPermit } from "./activation-permit.mjs";
-import { loadHeldEvidence } from "./postdeploy.mjs";
+import { catalogSourceReview, loadHeldEvidence } from "./postdeploy.mjs";
 import {
   activationBindings,
   maintenanceIdentity,
@@ -79,10 +79,16 @@ function logExecutionContext(identity, env) {
 
 function stagedManifest(app, env, root) {
   assertPublishable(app);
-  const manifest = loadManifest(
-    manifestPath(root),
-    env.RELEASE_MANIFEST_SHA256,
-  );
+  let manifest;
+  try {
+    manifest = loadManifest(manifestPath(root), env.RELEASE_MANIFEST_SHA256);
+  } catch (error) {
+    if (error?.message?.startsWith("manifest checksum mismatch"))
+      assert.fail(
+        "manifest checksum mismatch; RELEASE_MANIFEST_SHA256 may be stale in Replit Publishing settings or duplicated across Publishing secrets and environment variables (the Publishing secret takes precedence). Rotate the single Publishing-scoped value to the staged CI manifest checksum and verify the duplicate key is absent",
+      );
+    throw error;
+  }
   assert.match(
     manifest.source.tree ?? "",
     /^[a-f0-9]{40}$/,
@@ -222,10 +228,18 @@ export function promoteReplit(
         const evidence = loadHeldEvidence(env, manifest, {
           notBefore: Date.parse(plan.approvedAt),
         });
+        console.log(
+          `replit: governed release review; ${catalogSourceReview(evidence.catalogSource)}`,
+        );
         const permit = loadActivationPermit(
           env,
           activationBindings(manifest, env),
           { phase: "promotion" },
+        );
+        assert.deepEqual(
+          permit.catalogSource,
+          evidence.catalogSource,
+          "activation catalog source differs from verified held evidence",
         );
         assert.ok(
           Date.parse(evidence.verifiedAt) <= Date.parse(permit.approvedAt),
