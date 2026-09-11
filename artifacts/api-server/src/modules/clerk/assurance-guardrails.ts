@@ -18,39 +18,39 @@ function reliabilityGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
   return [
     {
       key: "human_review",
-      label: "Human decision boundary",
+      label: "Human approval required",
       status: "healthy" as const,
-      detail: `${s.pendingReview} cases await review; approvals and rejections require a recorded human actor.`,
+      detail: `${s.pendingReview} cases await review. Each approval or rejection records who made the decision.`,
       actionHref: "/clerk",
     },
     {
       key: "schema_validity",
-      label: "Typed-output validity",
+      label: "AI response format checks",
       status: s.invalidStatus,
       detail:
         s.calls30d === 0
-          ? "No model calls are available to establish output validity."
-          : `${Math.round(s.invalidRate30d * 1000) / 10}% of model calls were discarded as schema-invalid in 30 days.`,
+          ? "No AI responses are available to check yet."
+          : `${Math.round(s.invalidRate30d * 1000) / 10}% of AI responses were discarded because they did not match the required format in the last 30 days.`,
       actionHref: "/clerk/health",
     },
     {
       key: "runtime_errors",
-      label: "Inference runtime reliability",
+      label: "AI request reliability",
       status: s.errorStatus,
       detail:
         s.calls30d === 0
-          ? "No model calls are available to establish runtime reliability."
-          : `${Math.round(s.errorRate30d * 1000) / 10}% of model calls ended in provider or gateway errors.`,
+          ? "No AI requests are available to assess reliability yet."
+          : `${Math.round(s.errorRate30d * 1000) / 10}% of AI requests failed at the provider or Valo gateway.`,
       actionHref: "/clerk/health",
     },
     {
       key: "latency",
-      label: "Inference latency envelope",
+      label: "AI response time",
       status: s.latencyStatus,
       detail:
         s.latencyP95Ms === null
-          ? "No measured inference latency is available in the 30-day window."
-          : `Provider latency p95 is ${s.latencyP95Ms}ms over the 30-day window.`,
+          ? "No AI response times were measured in the last 30 days."
+          : `95% of measured provider responses took ${s.latencyP95Ms}ms or less in the last 30 days (p95).`,
       actionHref: "/clerk/health",
     },
   ];
@@ -60,7 +60,7 @@ function evaluationGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
   return [
     {
       key: "eval_accuracy",
-      label: "Extraction regression gate",
+      label: "Document-reading accuracy tests",
       status: s.evalIsFresh
         ? qualityStatus(s.latestEvalAccuracy, 0.95, 0.8)
         : ("watch" as const),
@@ -69,7 +69,7 @@ function evaluationGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
           ? "No completed extraction evaluation run is available."
           : !s.evalIsFresh
             ? `Latest extraction evaluation is older than 30 days (${s.evalCreatedAt?.toISOString().slice(0, 10)}).`
-            : `Latest fixed-corpus field accuracy is ${Math.round(s.latestEvalAccuracy * 1000) / 10}%.`,
+            : `The latest test read ${Math.round(s.latestEvalAccuracy * 1000) / 10}% of fields correctly from the fixed document sample.`,
       actionHref: "/clerk/health",
     },
     {
@@ -80,10 +80,10 @@ function evaluationGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
         : ("watch" as const),
       detail:
         s.latestInjectionResistance === null
-          ? "No measured injection fixture run is available."
+          ? "No prompt-injection test results are available."
           : !s.evalIsFresh
             ? `Latest injection-resistance evaluation is older than 30 days (${s.evalCreatedAt?.toISOString().slice(0, 10)}).`
-            : `Latest fixture resistance is ${Math.round(s.latestInjectionResistance * 1000) / 10}%.`,
+            : `Clerk resisted ${Math.round(s.latestInjectionResistance * 1000) / 10}% of prompt-injection attempts in the latest test sample.`,
       actionHref: "/clerk/health",
     },
   ];
@@ -93,7 +93,7 @@ function postureGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
   return [
     {
       key: "number_grounding",
-      label: "Deterministic number grounding",
+      label: "AI number checks",
       status:
         s.calls30d === 0
           ? ("watch" as const)
@@ -102,21 +102,21 @@ function postureGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
             : ("critical" as const),
       detail:
         s.calls30d === 0
-          ? "No model calls are available to establish number-grounding performance."
+          ? "No AI requests are available to assess number checks yet."
           : s.groundingViolations30d === 0
-            ? "No ungrounded numeral reached a phrasing surface in 30 days."
-            : `${s.groundingViolations30d} outputs were replaced by deterministic templates.`,
+            ? "No number-check fallbacks were recorded in the last 30 days."
+            : `${s.groundingViolations30d} number-check fallbacks were recorded in the last 30 days.`,
       actionHref: "/clerk/health",
     },
     {
       key: "standing_automation",
-      label: "Standing automation posture",
+      label: "Automatic actions",
       status: s.standingAutomationEnabled
         ? ("watch" as const)
         : ("healthy" as const),
       detail: s.standingAutomationEnabled
-        ? "A standing-action or auto-reconciliation flag is enabled; review policy scope and caps."
-        : "Standing automation is dark; Clerk proposals remain on explicit human approval paths.",
+        ? "Automatic actions or payment matching are enabled. Review which records they can affect and the limits for each run."
+        : "Automatic actions are off. Each Clerk proposal needs human approval.",
       actionHref: "/feature-flags",
     },
     {
@@ -130,13 +130,13 @@ function postureGuardrails(s: AssuranceSignals): AssuranceGuardrail[] {
     },
     {
       key: "governance_alerts",
-      label: "Quality, resistance and spend watches",
+      label: "AI quality, safety and spending alerts",
       status:
         s.governanceAlerts > 0 ? ("watch" as const) : ("healthy" as const),
       detail:
         s.governanceAlerts > 0
-          ? `${s.governanceAlerts} durable governance alerts were raised in 30 days.`
-          : "No quality-drop, resistance-drop or spend-anomaly alert was raised in 30 days.",
+          ? `${s.governanceAlerts} AI quality, safety or spending alerts were recorded in the last 30 days.`
+          : "No alerts for lower accuracy, weaker prompt-injection resistance or unusual spending were recorded in the last 30 days.",
       actionHref: "/platform-ops",
     },
   ];

@@ -37,7 +37,7 @@ afterEach(() => {
 afterAll(() => stylesheet.remove());
 
 test.each([
-  ["/clerk", "Intake queue"],
+  ["/clerk", "Review queue"],
   ["/clerk/ask", "Ask Clerk"],
   ["/clerk/claims", "Claims"],
   ["/clerk/health", "Health"],
@@ -85,7 +85,7 @@ test.each(["light", "dark"])(
         <ClerkShell>
           <ClerkPageHeader
             eyebrow="Clerk operations"
-            title="Intake queue"
+            title="Review queue"
             titleTestId="text-clerk-title"
             description="Pending items for review."
             right={
@@ -101,10 +101,12 @@ test.each(["light", "dark"])(
     expect(container.querySelector("aside")?.className).toContain(
       "bg-[var(--mi-sidebar)]",
     );
-    const desktopHeader = screen.getByText("Human reviewed").closest("header")!;
+    const desktopHeader = screen
+      .getByText("Approval required")
+      .closest("header")!;
     expect(desktopHeader.className).toContain("bg-[var(--mi-paper)]");
     expect(desktopHeader.className).toContain("border-[var(--mi-line)]");
-    expect(screen.getByText("Human reviewed").className).toContain(
+    expect(screen.getByText("Approval required").className).toContain(
       "text-[var(--mi-positive)]",
     );
     const mobileBack = screen
@@ -128,7 +130,7 @@ test.each(["light", "dark"])(
       }
     }
     const heading = screen.getByRole("heading", {
-      name: "Intake queue",
+      name: "Review queue",
       level: 1,
     });
     expect(heading.getAttribute("data-testid")).toBe("text-clerk-title");
@@ -163,7 +165,8 @@ test("mobile navigation retains base routes and active-page state", () => {
     expect(link.getAttribute("href")).toBe("/console/clerk/claims");
     expect(link.getAttribute("aria-current")).toBe("page");
   }
-  for (const link of screen.getAllByRole("link", { name: "Intake queue" })) {
+  for (const link of screen.getAllByRole("link", { name: "Review queue" })) {
+    expect(link.getAttribute("data-testid")).toBe("clerk-nav-intake-queue");
     expect(link.hasAttribute("aria-current")).toBe(false);
   }
 });

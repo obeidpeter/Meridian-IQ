@@ -19,7 +19,7 @@ const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mi-sidebar-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mi-sidebar)]";
 
 const NAV = [
-  { href: "/clerk", label: "Intake queue", icon: ListChecks },
+  { href: "/clerk", label: "Review queue", icon: ListChecks },
   { href: "/clerk/claims", label: "Claims", icon: FileStack },
   { href: "/clerk/ask", label: "Ask Clerk", icon: MessageCircleQuestion },
   { href: "/clerk/health", label: "Health", icon: Activity },
@@ -43,7 +43,11 @@ function NavLinks({ orientation }: { orientation: "column" | "row" }) {
           key={href}
           href={href}
           aria-current={isActive(href) ? "page" : undefined}
-          data-testid={`clerk-nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          data-testid={
+            href === "/clerk"
+              ? "clerk-nav-intake-queue"
+              : `clerk-nav-${label.toLowerCase().replace(/\s+/g, "-")}`
+          }
           className="mi-nav__link snap-start whitespace-nowrap"
           style={
             orientation === "row" ? { width: "auto", flexShrink: 0 } : undefined
@@ -65,7 +69,7 @@ function Brand() {
       </span>
       <span>
         <span className="mi-brand__name block">Clerk AI</span>
-        <span className="mi-brand__caption">Governed operations</span>
+        <span className="mi-brand__caption">Suggestions for your review</span>
       </span>
     </div>
   );
@@ -105,10 +109,10 @@ export function ClerkShell({ children }: { children: ReactNode }) {
           <Brand />
           <div className="mt-5 border-l-2 border-[var(--mi-sidebar-accent)] pl-3">
             <p className="text-xs font-semibold text-[var(--mi-sidebar-accent)]">
-              AI operations workspace
+              Document review
             </p>
             <p className="mt-1 text-xs leading-5 text-[var(--mi-sidebar-ink)]">
-              Intake, evidence and governed review
+              Upload documents, check sources and review suggestions
             </p>
           </div>
         </div>
@@ -118,7 +122,7 @@ export function ClerkShell({ children }: { children: ReactNode }) {
         <div className="mt-auto space-y-2 border-t border-[var(--mi-sidebar-line)] pt-4">
           <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--mi-sidebar-accent)]">
             <ShieldCheck className="size-4" aria-hidden="true" />
-            Human review on
+            Human approval required
           </div>
           <Link
             href="/"
@@ -136,12 +140,12 @@ export function ClerkShell({ children }: { children: ReactNode }) {
           <div>
             <p className="mi-eyebrow">Clerk AI</p>
             <p className="mt-0.5 text-sm font-semibold text-[var(--mi-ink)]">
-              Governed operations
+              Review and approval
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--mi-positive)] bg-[var(--mi-positive-soft)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--mi-positive)]">
             <ShieldCheck className="size-3.5" aria-hidden="true" />
-            Human reviewed
+            Approval required
           </span>
         </header>
         <main

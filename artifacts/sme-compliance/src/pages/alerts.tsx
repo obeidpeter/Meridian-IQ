@@ -253,7 +253,7 @@ export function Alerts() {
     {
       key: "failureAlerts",
       label: "Submission failures",
-      desc: "When an invoice is rejected by the rail.",
+      desc: "When the e-invoicing service rejects an invoice.",
     },
     {
       key: "penaltyAlerts",

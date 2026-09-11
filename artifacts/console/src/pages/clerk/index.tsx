@@ -48,8 +48,8 @@ export function ClerkWorkspace() {
   return (
     <div className="space-y-6">
       <ClerkPageHeader
-        eyebrow="Intake and review"
-        title={firstName ? `${greeting()}, ${firstName}` : "Intake queue"}
+        eyebrow="Upload and review"
+        title={firstName ? `${greeting()}, ${firstName}` : "Review queue"}
         description="Clerk reads documents and voice notes — it never files anything. Every case below needs your review before a record changes."
         right={
           clerkFlag ? (
@@ -62,7 +62,7 @@ export function ClerkWorkspace() {
                   className="h-2 w-2 rounded-full bg-teal-500"
                   aria-hidden="true"
                 />
-                Guardrails on
+                Approval controls on
               </span>
             ) : (
               <span
@@ -79,8 +79,8 @@ export function ClerkWorkspace() {
 
       {disabledBanner && (
         <ClerkDisabledBanner>
-          No AI calls are made while it is off — re-enable it under Feature
-          flags.
+          Clerk does not contact the AI provider while switched off. Ask an
+          operator to check Feature flags.
         </ClerkDisabledBanner>
       )}
 

@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { QueryError } from "@/components/query-error";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 
 // Firm governance policies (contract 0.45.0): today a single switch — the
 // maker-checker submission rule. The PUT is firm-admin only, so the card
@@ -67,7 +67,7 @@ export function GovernanceCard() {
       },
       onError: (e) =>
         setError(
-          serverErrorMessage(e) ?? "Could not update the policy. Try again.",
+          userErrorMessage(e) ?? "Could not update the policy. Try again.",
         ),
     },
   });

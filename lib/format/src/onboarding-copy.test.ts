@@ -3,9 +3,9 @@ import { ONBOARDING_STEP_LABELS, onboardingStepLabel } from "./onboarding-copy";
 
 describe("onboardingStepLabel", () => {
   test("the closed catalogue's labels; unknown keys degrade to themselves", () => {
-    expect(onboardingStepLabel("consent_captured")).toBe("Consent captured");
+    expect(onboardingStepLabel("consent_captured")).toBe("Consent recorded");
     expect(onboardingStepLabel("filings_synced")).toBe(
-      "Filings register backfilled",
+      "Past filing records added",
     );
     expect(onboardingStepLabel("future_step")).toBe("future_step");
     // Exactly the five Phase-1 steps — growing the catalogue is a contract

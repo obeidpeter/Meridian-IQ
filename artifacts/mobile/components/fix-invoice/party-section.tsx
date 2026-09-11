@@ -105,7 +105,7 @@ export function PartySection({
             autoCapitalize="characters"
             hint={
               highlighted
-                ? "The rail rejected a TIN on this invoice — double-check this number."
+                ? "The submission service rejected a TIN on this invoice. Check this number before trying again."
                 : undefined
             }
           />

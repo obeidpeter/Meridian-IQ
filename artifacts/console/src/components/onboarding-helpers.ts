@@ -32,7 +32,7 @@ export function onboardingStepPill(step: Pick<OnboardingStep, "status">): {
 /** "3 of 5 settled" — done and skipped both settle a step. */
 export function onboardingProgress(run: Pick<OnboardingRun, "steps">): string {
   const settled = run.steps.filter((s) => s.status !== "pending").length;
-  return `${settled} of ${run.steps.length} settled`;
+  return `${settled} of ${run.steps.length} done or skipped`;
 }
 
 /** The run the card shows: the active one if any, else the newest. */

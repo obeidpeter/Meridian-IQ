@@ -146,7 +146,7 @@ function BulkSubmitDialog({
               <DialogTitle>Submit all pending drafts?</DialogTitle>
               <DialogDescription>
                 This validates every pending draft (draft or validated, oldest
-                first) and submits the valid ones to the FIRS stamping rail, in
+                first) and submits the valid ones to the e-invoicing service, in
                 batches of up to 200. Submission cannot be undone. Drafts that
                 fail validation stay pending, with their issues listed so you
                 can fix them.
@@ -177,7 +177,7 @@ function BulkSubmitDialog({
                 {bulkRows.length === 0
                   ? "There was nothing to validate — every invoice is already past the draft stage."
                   : bulkNeedsAttention.length === 0
-                    ? "Every pending draft in this run is now on the stamping rail."
+                    ? "Every pending draft in this run has been submitted. Check each invoice for its stamping result."
                     : `${bulkNeedsAttention.length} draft(s) need a fix before they can be submitted.`}
               </DialogDescription>
             </DialogHeader>
@@ -472,7 +472,7 @@ export function Invoices() {
     <div className="space-y-6">
       <PageHeader
         title="Invoice vault"
-        description="Every invoice, write-once and searchable."
+        description="Find invoices and track drafts, submissions, stamps and payments."
       >
         <div className="flex flex-wrap gap-2">
           <Button
@@ -598,8 +598,7 @@ export function Invoices() {
               title="No invoices yet"
               description={
                 <>
-                  Create your first invoice, or bring your whole book across in
-                  one go with{" "}
+                  Create your first invoice, or add existing invoices with{" "}
                   <Link
                     href="/import"
                     className="rounded-sm text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

@@ -51,7 +51,7 @@ export function AdjustDialog({
           </Label>
           <Textarea
             id="adjust-reason"
-            placeholder="Reason (required — it is recorded on the ledger)"
+            placeholder="Enter a reason. It will be saved in the invoice history."
             value={reason}
             onChange={(e) => onReasonChange(e.target.value)}
             data-testid="input-adjust-reason"

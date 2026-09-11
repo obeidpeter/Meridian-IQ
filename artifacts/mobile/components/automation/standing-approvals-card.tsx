@@ -25,7 +25,7 @@ export function StandingApprovalsCard({
   if (policies.length === 0) return null;
   return (
     <View style={{ gap: 10 }}>
-      <AppText variant="heading">Standing approvals</AppText>
+      <AppText variant="heading">Approved automations</AppText>
       <Card style={{ gap: 4 }}>
         {policies.map((policy, index) => (
           <View key={policy.id}>

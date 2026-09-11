@@ -118,7 +118,7 @@ export function IntegrationReliabilityWorkspace() {
         <Metric
           label="Platform delivery"
           value={String(data.deadLetters + data.openRails)}
-          detail={`${data.deadLetters} dead events / ${data.openRails} degraded rails`}
+          detail={`${data.deadLetters} events stopped after failures / ${data.openRails} degraded submission services`}
           icon={<ServerCog className="size-4" aria-hidden="true" />}
           tone={data.deadLetters + data.openRails > 0 ? "critical" : "positive"}
         />
@@ -267,11 +267,11 @@ export function IntegrationReliabilityWorkspace() {
       </section>
 
       <WorkQueue
-        title="Data-quality and delivery signals"
+        title="Data and delivery issues"
         description="Only active exceptions are shown. A clear list means every monitored count is zero."
         items={qualityItems}
         emptyTitle="Reliability signals are clear"
-        emptyDescription="No failed runs, invalid rows, dead deliveries or degraded rails are recorded."
+        emptyDescription="No failed runs, invalid rows, stopped deliveries or degraded submission services are recorded."
       />
     </div>
   );

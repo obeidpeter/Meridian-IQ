@@ -201,13 +201,13 @@ export function useReconciliation() {
         if (res.statementId) setSelectedId(res.statementId);
         setBanner({
           tone: "success",
-          message: `Statement committed — ${res.parsedCount} of ${res.lineCount} line(s) recorded. Matching runs in the background.`,
+          message: `Statement saved. ${res.parsedCount} of ${res.lineCount} line(s) recorded. Valo is checking for possible invoice matches.`,
         });
       } else if (res.parsedCount === 0) {
         setBanner({
           tone: "error",
           message:
-            "None of the rows parsed. Check that the CSV starts with your bank's column headers.",
+            "No rows could be read. Check that the CSV starts with your bank's column headings.",
         });
       }
     } catch (error) {
@@ -216,8 +216,8 @@ export function useReconciliation() {
         message: apiErrorMessage(
           error,
           commit
-            ? "We couldn't commit this statement. Please try again."
-            : "We couldn't check this statement. Please try again.",
+            ? "Could not confirm the save. Refresh the statement list before trying again."
+            : "Could not check this statement. Try again.",
         ),
       });
     }
@@ -262,7 +262,7 @@ export function useReconciliation() {
         tone: "success",
         message:
           action === "accept"
-            ? `${proposal.invoiceNumber} is now marked settled.`
+            ? `Payment match recorded for ${proposal.invoiceNumber}. This is not a new bank confirmation.`
             : `${proposal.invoiceNumber} stays outstanding.`,
       });
     } catch (error) {
@@ -270,7 +270,7 @@ export function useReconciliation() {
         tone: "error",
         message: apiErrorMessage(
           error,
-          "We couldn't save that decision. Please try again.",
+          "Could not confirm the decision was saved. Refresh the matches before trying again.",
         ),
       });
     } finally {

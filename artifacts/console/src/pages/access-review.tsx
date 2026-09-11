@@ -14,7 +14,7 @@ import { roleLabel } from "@/components/capability-gate";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/format";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { Metric, MetricStrip, WorkspaceHeader } from "@workspace/web-ui";
 
 /**
@@ -56,7 +56,7 @@ export function AccessReview() {
         onError: (e) => {
           toast({
             title: "Could not attest",
-            description: serverErrorMessage(e),
+            description: userErrorMessage(e),
             variant: "destructive",
           });
           // A stale hash means the register moved: show the current one.

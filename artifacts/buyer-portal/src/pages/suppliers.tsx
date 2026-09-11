@@ -86,7 +86,7 @@ function PageHeader({ computedAt }: { computedAt?: string }) {
         Supplier verification
       </h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-        Input-VAT exposure across your suppliers
+        Review the VAT on supplier invoices that may need attention
         {computedAt !== undefined && (
           <>
             {" "}
@@ -186,7 +186,7 @@ export function Suppliers() {
       <Card>
         <CardHeader>
           <CardTitle id="suppliers-breakdown-heading">
-            Per-supplier breakdown
+            Supplier summary
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -197,10 +197,10 @@ export function Suppliers() {
                 aria-hidden="true"
               />
               <p className="font-semibold" data-testid="text-empty">
-                No suppliers in the exposure snapshot yet
+                No supplier invoices yet
               </p>
               <p className="text-sm text-muted-foreground">
-                Suppliers appear here once they address invoices to your
+                Suppliers appear here once they issue invoices to your
                 organization on Valo.
               </p>
             </div>
@@ -261,7 +261,7 @@ export function Suppliers() {
                               className={pillClasses("slate")}
                               data-testid={`badge-tin-${s.supplierPartyId}`}
                             >
-                              Unvalidated
+                              Not validated
                             </span>
                           )}
                         </span>

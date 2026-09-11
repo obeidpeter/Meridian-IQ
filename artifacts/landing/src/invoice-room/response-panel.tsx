@@ -98,7 +98,8 @@ export function ResponsePanel({
             Respond to this invoice
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Your response is time-stamped in the shared activity record.
+            Your response and its date and time are saved in the invoice
+            history. Confirming an invoice does not confirm payment.
           </p>
         </div>
       </div>
@@ -117,7 +118,11 @@ export function ResponsePanel({
               aria-pressed={choice === state}
               className={`min-h-11 rounded-md border px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 ${choice === state ? (state === "rejected" ? "border-red-600 bg-red-50 text-red-800" : state === "queried" ? "border-amber-600 bg-amber-50 text-amber-900" : "border-teal-700 bg-teal-50 text-teal-900") : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
             >
-              {RESPONSE_LABEL[state]}
+              {state === "confirmed"
+                ? "Confirm"
+                : state === "queried"
+                  ? "Question"
+                  : "Reject"}
             </button>
           ))}
         </div>
@@ -144,8 +149,8 @@ export function ResponsePanel({
               className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
               placeholder={
                 noteRequired
-                  ? "Explain what needs attention so the supplier can respond"
-                  : "Add a purchase order or receiving note"
+                  ? "Tell the supplier what needs checking or correcting"
+                  : "Add a purchase order reference or delivery note details"
               }
             />
           </div>
@@ -185,7 +190,7 @@ export function ResponsePanel({
             {choice === "confirmed"
               ? "confirmation"
               : choice === "queried"
-                ? "query"
+                ? "question"
                 : "rejection"}
           </Button>
         </div>

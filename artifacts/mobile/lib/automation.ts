@@ -80,9 +80,9 @@ export function automatableActionKind(
 export function proposalMobileGateNote(kind: string): string | null {
   if (automatableActionKind(kind)) return null;
   if (kind === "draft_chasers") {
-    return "Reminder drafts are shown once for you to read and copy, which needs the web app — approve this batch there so the drafts aren't lost.";
+    return "Approve this batch in the web app. Reminder drafts are shown only once, and you need the web app to read and copy them before they are lost.";
   }
-  return "This action can't be approved from the mobile app yet — use the web app.";
+  return "This action cannot be approved in the mobile app yet. Use the web app.";
 }
 
 // ---- Proposal display ------------------------------------------------------
@@ -98,7 +98,7 @@ export function proposalCountLine(action: {
   truncated: boolean;
 }): string {
   if (action.truncated) {
-    return `Showing the oldest ${action.targets.length} of ${action.targetCount} — approve this batch, then come back for the rest.`;
+    return `Showing the oldest ${action.targets.length} of ${action.targetCount}. Approve this batch, then return for the rest.`;
   }
   const n = action.targets.length;
   return `${n} invoice${n === 1 ? "" : "s"} in this batch.`;
@@ -151,7 +151,7 @@ export function pausedPolicyCount(
 // The Home banner shown while any grant is paused (render-on-success from
 // the policies query — a failed or dark query must add no dashboard noise).
 export const AUTOMATION_PAUSED_HOME_MESSAGE =
-  "Automation is paused — open Automation to review.";
+  "Automation is paused. Open Automation to review it.";
 
 /**
  * The consent-grade description in the "Automate daily" confirm: what a
@@ -201,22 +201,22 @@ export function policyGrantAlertMessage(
 export const POLICY_PAUSE_CONFIRM = {
   title: "Pause this automation?",
   message:
-    "The daily sweep will skip it until someone resumes it — the grant itself survives.",
+    "This action will not run automatically until someone resumes it. Your approval remains saved.",
   confirmLabel: "Pause",
 } as const;
 
 export const POLICY_RESUME_CONFIRM = {
   title: "Resume this automation?",
   message:
-    "The daily sweep will pick it up again from its next run. Every run still re-checks consent, your access and each invoice.",
+    "This action will run again at the next daily check. Each run still checks consent, your access and each invoice.",
   confirmLabel: "Resume",
 } as const;
 
 export const POLICY_REVOKE_CONFIRM = {
-  title: "Revoke this automation?",
+  title: "Remove this automation?",
   message:
-    "This permanently removes the standing approval — Clerk stops running this action for you. You can grant it again later.",
-  confirmLabel: "Revoke",
+    "This permanently removes your saved approval. Clerk stops running this action automatically. You can approve a new automation later.",
+  confirmLabel: "Remove automation",
 } as const;
 
 // ---- The screen's three lists ----------------------------------------------

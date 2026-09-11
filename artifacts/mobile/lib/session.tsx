@@ -194,7 +194,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         await signOut();
       } else {
         setSessionError(
-          "Your session could not be verified. Connect and retry before making changes.",
+          "Could not verify your sign-in. Connect to the internet and try again before making changes.",
         );
         // Only retain read views that were actually validated during this run.
         setStatus(validatedThisRun.current ? "authenticated" : "loading");
@@ -396,7 +396,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           </Text>
           {sessionError && (
             <Button
-              title="Retry session"
+              title="Try again"
               onPress={() => void revalidate()}
               color={palette.primary}
             />

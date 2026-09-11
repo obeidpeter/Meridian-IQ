@@ -15,7 +15,7 @@ const CAPTURE_STATUS_LABELS: Record<string, string> = {
   in_review: "Being reviewed",
   approved: "Approved",
   rejected: "Rejected",
-  escalated: "Escalated",
+  escalated: "Needs further review",
   failed: "Could not read",
 };
 
@@ -310,7 +310,7 @@ export function captureStatusExplanation(
   decisionReason?: string | null,
 ): string | null {
   if (status === "escalated") {
-    return "Your accountant has escalated this for a closer look. Nothing is needed from you yet; they may contact you.";
+    return "Your accountant has requested a closer review. You do not need to do anything yet; they may contact you.";
   }
   if (status === "rejected" && !decisionReason) {
     return "Your accountant decided not to create an invoice from this submission. Send a corrected copy or ask them why.";
@@ -323,12 +323,12 @@ export function captureStatusExplanation(
 /** The dock's failure line: the same split the full pages make, in one string. */
 export function dockErrorMessage(err: unknown): string {
   if (killSwitchTripped(err)) {
-    return "Clerk is switched off right now — an operator can restore it. Nothing was changed.";
+    return "Clerk is temporarily unavailable. Contact your accountant or support for help. No invoice action was approved.";
   }
   if (clerkBudgetExhausted(err)) {
-    return "This month's Clerk allowance is used up — questions resume next month. Nothing was changed.";
+    return "This month's Clerk allowance is used up. You can ask questions again next month. No invoice action was approved.";
   }
-  return `${serverErrorMessage(err)} Nothing was changed.`;
+  return `${serverErrorMessage(err)} No invoice action was approved.`;
 }
 
 const DOCK_FACT_CAP = 6;

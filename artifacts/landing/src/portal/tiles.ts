@@ -29,9 +29,9 @@ export interface AppTile {
 export const APPS: AppTile[] = [
   {
     key: "bank-data-room",
-    name: "Bank Data Room",
+    name: "Bank data room",
     tagline:
-      "Review consented, anonymized credit-readiness cohorts under your institution's governed access profile.",
+      "Review anonymized groups of businesses that have consented to credit-readiness review, within your institution's access limits.",
     href: "/console/data-room",
     icon: Landmark,
     allowedRoles: ["bank_user"],
@@ -39,9 +39,9 @@ export const APPS: AppTile[] = [
   },
   {
     key: "sme",
-    name: "Compliance Workspace",
+    name: "Business workspace",
     tagline:
-      "Create and submit invoices, keep the stamped copies, and stay ahead of deadlines.",
+      "Create and submit invoices, keep returned stamps and track deadlines.",
     href: "/app/",
     icon: FileCheck2,
     allowedRoles: ["firm_admin", "firm_staff", "client_user"],
@@ -49,9 +49,9 @@ export const APPS: AppTile[] = [
   },
   {
     key: "console",
-    name: "Accountant Console",
+    name: "Accountant workspace",
     tagline:
-      "Manage all your clients' compliance in one place — onboarding, daily work and billing.",
+      "Set up clients, manage their compliance tasks and handle billing.",
     href: "/console/",
     icon: Building2,
     allowedRoles: ["firm_admin", "firm_staff", "operator", "auditor"],
@@ -59,9 +59,9 @@ export const APPS: AppTile[] = [
   },
   {
     key: "buyer",
-    name: "Buyer Rails",
+    name: "Buyer workspace",
     tagline:
-      "Check and confirm supplier invoices before paying, and protect your VAT claims.",
+      "Check supplier invoices, record your response and keep evidence for VAT claims.",
     href: "/buyer/",
     icon: Store,
     allowedRoles: ["buyer_user"],
@@ -69,9 +69,9 @@ export const APPS: AppTile[] = [
   },
   {
     key: "calc",
-    name: "Penalty Calculator",
+    name: "Penalty calculator",
     tagline:
-      "See what late or missing e-invoicing could cost in fines, based on your turnover. Free — no account needed.",
+      "Estimate possible e-invoicing penalties using Valo's planning assumptions. Free, with no account needed.",
     href: "/penalty-calculator/",
     icon: Calculator,
     allowedRoles: null,

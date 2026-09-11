@@ -59,10 +59,10 @@ const TABS: TabDef[] = [
     sf: "calendar",
     feather: "calendar",
   },
-  { name: "b2c", title: "B2C Reports", sf: "bag", feather: "shopping-bag" },
+  { name: "b2c", title: "B2C reports", sf: "bag", feather: "shopping-bag" },
   {
     name: "invoice",
-    title: "New Invoice",
+    title: "New invoice",
     sf: "doc.badge.plus",
     feather: "file-plus",
   },

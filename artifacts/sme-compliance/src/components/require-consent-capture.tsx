@@ -109,9 +109,9 @@ function ConsentCapture({
           Choose what Valo may do for your business
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          These are your permissions, recorded in a ledger you can read and
-          change at any time from Consent. Nothing is switched on quietly: each
-          choice below is written down, including &ldquo;not now&rdquo;.
+          Choose what you allow Valo to do. You can review your choices and
+          change your consent at any time from Consent. Each choice is recorded,
+          including &ldquo;not now&rdquo;.
         </p>
 
         <div className="mt-8 space-y-4">

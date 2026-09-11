@@ -27,7 +27,7 @@ export function WorkspacePreviewCard({
   return (
     <Card data-testid="card-preview">
       <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Client workspace preview</CardTitle>
+        <CardTitle className="text-base">Business workspace preview</CardTitle>
         <SegmentedControl<PreviewMode>
           items={[
             { value: "desktop", label: "Desktop" },
@@ -195,7 +195,8 @@ export function PublicUrlCard({ subdomain }: { subdomain: string }) {
               https://{subdomain || "your-firm"}.valo.example
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              The public shell resolves your branding before login via{" "}
+              Your branding appears before users sign in. Theme settings come
+              from{" "}
               <span className="font-mono">
                 /api/public/theme?subdomain={subdomain || "your-firm"}
               </span>

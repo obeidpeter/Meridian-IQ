@@ -165,9 +165,9 @@ function WholePlanApproval({ caseId }: { caseId: string }) {
                         "A plan run for this answer is already queued or running.",
                     }
                   : {
-                      title: "Couldn't start the plan",
+                      title: "Could not confirm the plan started",
                       description:
-                        "Nothing was changed. You can still approve each part individually below.",
+                        "Check the plan's latest status before trying again or approving its actions separately. The first request may have been received.",
                     },
               ),
           },
@@ -220,9 +220,9 @@ function SectionActionApproval({
         onSuccess: (result) => setOutcome(result),
         onError: () =>
           toast({
-            title: "Couldn't run this action",
+            title: "Action result not confirmed",
             description:
-              "Nothing was changed. Review it on the dashboard's actions card, or try again.",
+              "Check the action history on your dashboard before trying again. Some invoices may already have been processed.",
           }),
       },
     );
@@ -680,7 +680,7 @@ export function AskContent() {
     <div className="space-y-6">
       <PageHeader
         title="Ask Clerk"
-        description="Answers come from the approved compliance register or live lookups over your own records — nothing is improvised."
+        description="Answers use approved compliance information or your business records. Check the sources before making a decision."
       />
 
       {disabledBanner && (

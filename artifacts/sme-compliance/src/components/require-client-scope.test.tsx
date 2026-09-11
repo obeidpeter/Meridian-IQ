@@ -19,7 +19,7 @@ describe("RequireClientScope", () => {
     );
     const card = screen.getByTestId("text-no-client-scope");
     expect(card.textContent).toContain(
-      "Open a client from the Accountant Console",
+      "Open a client from the accountant workspace",
     );
     expect(card.textContent).not.toContain("Sign in with a client account");
     expect(screen.getByTestId("link-open-console").getAttribute("href")).toBe(

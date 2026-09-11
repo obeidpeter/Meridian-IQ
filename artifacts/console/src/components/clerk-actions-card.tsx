@@ -42,7 +42,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 import {
   ACTION_OUTCOME_LABELS,
   ACTION_TARGET_DISPLAY_CAP,
@@ -151,7 +151,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const policyError = (e: unknown) =>
     toast({
       title: "Automation change failed",
-      description: serverErrorMessage(e),
+      description: userErrorMessage(e),
       variant: "destructive",
     });
   const grant = useGrantActionPolicy({
@@ -270,7 +270,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
     onError: (e) =>
       toast({
         title: "Action failed",
-        description: serverErrorMessage(e),
+        description: userErrorMessage(e),
         variant: "destructive",
       }),
   });
@@ -311,7 +311,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
         {proposals.actions.length === 0 && (
           <p className="text-sm text-muted-foreground">
             Nothing to batch right now — the checks behind the dashboards found
-            no overdue, failed or chase-worthy paper for this client.
+            no overdue invoices, failed submissions or payment follow-ups for
+            this client.
           </p>
         )}
         {proposals.actions.map((action) => (

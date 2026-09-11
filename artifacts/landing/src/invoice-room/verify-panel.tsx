@@ -74,11 +74,11 @@ export function VerifyPanel({
         </span>
         <div>
           <h2 id="verify-heading" className="text-lg font-extrabold">
-            Verify before you respond
+            Verify your contact details
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            We will send a one-time code to the contact address chosen by the
-            supplier.
+            Request a one-time code at the email address or WhatsApp number
+            chosen by the supplier before responding to this invoice.
           </p>
         </div>
       </div>
@@ -142,7 +142,7 @@ export function VerifyPanel({
             ) : (
               <LockKeyhole aria-hidden="true" />
             )}
-            Send verification code
+            Send code
           </Button>
         </div>
       ) : (
@@ -187,7 +187,7 @@ export function VerifyPanel({
               ) : (
                 <ShieldCheck aria-hidden="true" />
               )}
-              Verify and continue
+              Verify code
             </Button>
             <Button
               type="button"
@@ -199,7 +199,7 @@ export function VerifyPanel({
               }}
               disabled={pending !== null}
             >
-              Use another method
+              Choose delivery method
             </Button>
           </div>
         </form>

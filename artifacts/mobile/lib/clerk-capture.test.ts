@@ -44,7 +44,7 @@ test("every case status maps to a badge, with review-flow wording", () => {
   });
   assert.deepEqual(CLERK_STATUS_META.escalated, {
     tone: "warning",
-    label: "Escalated",
+    label: "Needs further review",
   });
   assert.deepEqual(CLERK_STATUS_META.failed, {
     tone: "critical",

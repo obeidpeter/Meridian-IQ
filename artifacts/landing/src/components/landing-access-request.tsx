@@ -5,7 +5,7 @@ import {
   type PlatformAccessRequestInput,
 } from "@workspace/api-client-react";
 import { trackUsabilityEvent } from "@workspace/web-ui";
-import { serverErrorFrom } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 
 const INITIAL: PlatformAccessRequestInput = {
   name: "",
@@ -64,8 +64,8 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
     } catch (requestError) {
       setStatus("error");
       setError(
-        serverErrorFrom(requestError) ??
-          "We could not send your request. Try again or use the email option.",
+        userErrorMessage(requestError) ??
+          "We could not confirm your request. Contact us by email if you are unsure whether it arrived.",
       );
     } finally {
       pending.current = false;
@@ -80,7 +80,7 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
         role="status"
       >
         <Check size={28} aria-hidden="true" />
-        <h3>Your request is with us.</h3>
+        <h3>Request received</h3>
         <p>
           Thanks, {form.name}. We will review what you need and reply to{" "}
           <strong>{form.email}</strong>.
@@ -111,7 +111,7 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
         All fields required unless marked optional.
       </p>
       <fieldset disabled={status === "sending"}>
-        <legend className="sr-only">Your enquiry</legend>
+        <legend className="sr-only">Your demo request</legend>
         <div className="editorial-form-grid">
           <div>
             <label htmlFor="access-name">Your name</label>
@@ -151,7 +151,7 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
             />
           </div>
           <div>
-            <label htmlFor="access-interest">I am interested as</label>
+            <label htmlFor="access-interest">I represent</label>
             <select
               id="access-interest"
               value={form.interest}
@@ -188,7 +188,7 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
           </div>
           <div className="editorial-field-wide">
             <label htmlFor="access-message">
-              What would you like to solve? <span>(optional)</span>
+              What do you need help with? <span>(optional)</span>
             </label>
             <textarea
               id="access-message"
@@ -229,11 +229,10 @@ export function LandingAccessRequest({ contact }: { contact: string }) {
           tabIndex={-1}
           ref={result}
         >
-          <strong>Your request was not sent.</strong>
+          <strong>We could not confirm your request.</strong>
           <p>{error}</p>
           <a className="editorial-text-link" href={contact}>
-            Send it by email instead{" "}
-            <ArrowUpRight size={16} aria-hidden="true" />
+            Contact us by email <ArrowUpRight size={16} aria-hidden="true" />
           </a>
         </div>
       )}

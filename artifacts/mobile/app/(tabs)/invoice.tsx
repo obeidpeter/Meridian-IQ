@@ -274,7 +274,7 @@ function InvoiceForm() {
         await invalidateInvoiceQueries();
         setBanner({
           tone: "success",
-          message: `Invoice ${invoiceNumberForMessage} submitted for fiscalisation.`,
+          message: `Invoice ${invoiceNumberForMessage} submitted. Check its status for the stamping result.`,
         });
         // Only now is the draft fully consumed — safe to forget it.
         await resetForm();
@@ -317,7 +317,7 @@ function InvoiceForm() {
       ) : null}
       {!hydrated && (
         <AppButton
-          label="Retry loading draft"
+          label="Try loading draft again"
           icon="refresh-cw"
           variant="ghost"
           onPress={retryRestore}
@@ -416,7 +416,7 @@ function InvoiceForm() {
         <FieldErrorList errors={fieldErrors} />
 
         <AppButton
-          label={busy ? "Submitting…" : "Create & submit invoice"}
+          label={busy ? "Submitting…" : "Create and submit invoice"}
           icon="send"
           onPress={handleSubmit}
           loading={busy}

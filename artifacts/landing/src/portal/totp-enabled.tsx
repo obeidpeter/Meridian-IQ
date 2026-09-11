@@ -18,10 +18,10 @@ function TotpDisableForm({ totp }: { totp: TotpSecurity }) {
 
   return (
     <form onSubmit={onDisable} className="space-y-3 rounded-lg border p-3">
-      <p className="text-xs font-medium">Turn off two-factor</p>
+      <p className="text-xs font-medium">Turn off two-step verification</p>
       <p className="text-xs text-muted-foreground">
-        Confirm with your password and a current code (or a recovery code). This
-        signs out every other session.
+        Enter your password and a current authenticator code or recovery code.
+        This signs you out of all other browsers and mobile apps.
       </p>
       <div className="space-y-1.5">
         <Label htmlFor="totp-disable-password" className="text-xs">
@@ -41,7 +41,7 @@ function TotpDisableForm({ totp }: { totp: TotpSecurity }) {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="totp-disable-code" className="text-xs">
-          Authentication code
+          Verification or recovery code
         </Label>
         <Input
           id="totp-disable-code"
@@ -121,9 +121,9 @@ export function TotpEnabled({
         className="text-xs text-muted-foreground"
         data-testid="text-totp-enabled"
       >
-        A code from your authenticator app is required at sign-in
+        Sign-in requires your password and an authenticator or recovery code
         {info.enabledAt
-          ? ` — on since ${new Date(info.enabledAt).toLocaleDateString(
+          ? `. On since ${new Date(info.enabledAt).toLocaleDateString(
               undefined,
               { year: "numeric", month: "short", day: "numeric" },
             )}`
@@ -135,7 +135,7 @@ export function TotpEnabled({
         data-testid="text-recovery-remaining"
       >
         {info.recoveryCodesRemaining ?? 0} recovery code
-        {(info.recoveryCodesRemaining ?? 0) === 1 ? "" : "s"} left.
+        {(info.recoveryCodesRemaining ?? 0) === 1 ? "" : "s"} remaining.
       </p>
       {justActivated && (
         <p
@@ -144,7 +144,8 @@ export function TotpEnabled({
           data-testid="text-totp-activated"
         >
           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-          Two-factor is on. Other signed-in sessions were signed out.
+          Two-step verification is on. You have been signed out of all other
+          browsers and mobile apps.
         </p>
       )}
       {!disableOpen ? (
@@ -157,7 +158,7 @@ export function TotpEnabled({
           data-testid="button-totp-disable-show"
         >
           <ShieldOff className="h-3.5 w-3.5" aria-hidden="true" /> Turn off
-          two-factor
+          two-step verification
         </Button>
       ) : (
         <TotpDisableForm totp={totp} />

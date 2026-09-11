@@ -114,8 +114,9 @@ export function BulkActionBar({ state }: { state: ConfirmationsPageState }) {
                 {selected.size === 1 ? "invoice" : "invoices"}?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Review the value, response method and supplier impact before
-                creating a permanent confirmation record.
+                Check the total and response method before confirming. These
+                responses will be recorded permanently and cannot be changed
+                here.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="grid gap-3 rounded-md border bg-muted/30 p-4 sm:grid-cols-3">
@@ -149,8 +150,8 @@ export function BulkActionBar({ state }: { state: ConfirmationsPageState }) {
             </div>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
-                Each supplier will be notified of the recorded response. The
-                confirmation stores who responded, when, and by which method.
+                Each supplier can view the recorded response. The confirmation
+                stores who responded, when, and by which method.
               </p>
               {bulkNoSetOff && (
                 <p
@@ -158,9 +159,9 @@ export function BulkActionBar({ state }: { state: ConfirmationsPageState }) {
                   data-testid="text-bulk-dialog-no-set-off"
                 >
                   You are also recording that no set-off will be applied. This
-                  strengthens the supplier&apos;s financeability evidence by
-                  documenting the receivable without a declared offset; it does
-                  not guarantee financing.
+                  means you will not reduce these payments to offset separate
+                  amounts the suppliers owe you. It can support a financing
+                  assessment but does not guarantee financing.
                 </p>
               )}
             </div>
@@ -181,8 +182,8 @@ export function BulkActionBar({ state }: { state: ConfirmationsPageState }) {
       </div>
       {overLimit && (
         <p className="text-xs text-destructive" data-testid="text-bulk-limit">
-          Bulk confirm handles up to {BULK_LIMIT} invoices at a time — narrow
-          your selection.
+          You can confirm up to {BULK_LIMIT} invoices at a time. Select fewer
+          invoices to continue.
         </p>
       )}
     </div>

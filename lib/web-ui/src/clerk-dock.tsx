@@ -211,7 +211,7 @@ export function ClerkDock({
                   data-testid="text-dock-error"
                 >
                   {errorMessage ??
-                    "Clerk could not answer that question. Nothing was changed."}
+                    "Clerk could not answer that question. No invoice action was approved."}
                 </p>
               )}
             </div>

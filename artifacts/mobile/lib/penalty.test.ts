@@ -1,12 +1,28 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  FILING_TYPE_OPTIONS,
   S103_FIRST_DAY,
   S103_PER_ADDITIONAL_DAY,
   S104_PER_INVOICE,
   section103Penalty,
   section104Penalty,
 } from "./penalty.ts";
+
+test("the invoice category describes required invoices that were not issued", () => {
+  assert.deepEqual(
+    FILING_TYPE_OPTIONS.find((option) => option.value === "invoice"),
+    {
+      value: "invoice",
+      label: "Missing required e-invoices (s.104)",
+      description: "Required electronic invoices were not issued.",
+    },
+  );
+  assert.equal(
+    FILING_TYPE_OPTIONS.find((option) => option.value === "both")?.description,
+    "Systems access was blocked and required electronic invoices were not issued.",
+  );
+});
 
 // PARITY PIN — this module is a port of the public penalty calculator's
 // statutory model (`artifacts/penalty-calculator/src/lib/penalty.ts`, tested

@@ -537,7 +537,7 @@ export function ClerkAskPage() {
       <ClerkPageHeader
         eyebrow="Claims register"
         title="Ask Clerk"
-        description="Answers come from the approved claims register or live lookups over the firm's own records — nothing is improvised. Follow-ups like “and for June?” carry the previous question's scope."
+        description="Answers use approved guidance or your firm's records. Check the sources before acting. Follow-up questions keep the previous question's client and period unless you change them."
       />
       {disabledBanner && (
         <ClerkDisabledBanner>

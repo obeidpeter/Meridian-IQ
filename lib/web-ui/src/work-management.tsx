@@ -138,7 +138,7 @@ export function WorkManagement({
       <WorkspaceHeader
         eyebrow="Shared workspace"
         title="Team work"
-        description="Assign owners, due dates and decisions alongside the client records they affect."
+        description="Assign tasks, set due dates and keep team updates with the relevant client records."
         actions={
           <button
             type="button"

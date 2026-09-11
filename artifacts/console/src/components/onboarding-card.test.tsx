@@ -63,9 +63,9 @@ function run(over: Partial<OnboardingRun> = {}): OnboardingRun {
 
 describe("onboardingStepLabel", () => {
   test("closed vocabulary; an unknown key degrades to itself", () => {
-    expect(onboardingStepLabel("consent_captured")).toBe("Consent captured");
+    expect(onboardingStepLabel("consent_captured")).toBe("Consent recorded");
     expect(onboardingStepLabel("filings_synced")).toBe(
-      "Filings register backfilled",
+      "Past filing records added",
     );
     expect(
       onboardingStepLabel(
@@ -94,7 +94,7 @@ describe("onboardingStepPill", () => {
 
 describe("onboardingProgress", () => {
   test("done and skipped both settle; pending does not", () => {
-    expect(onboardingProgress(run())).toBe("2 of 3 settled");
+    expect(onboardingProgress(run())).toBe("2 of 3 done or skipped");
   });
 });
 

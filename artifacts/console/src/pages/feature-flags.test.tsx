@@ -178,7 +178,7 @@ describe("pilot cohort", () => {
 
     expect(
       screen.getByTestId("button-cohort-reconciliation").textContent,
-    ).toMatch(/Pilot cohort \(1\)/);
+    ).toMatch(/Pilot firms \(1\)/);
     expect(screen.queryByTestId("cohort-reconciliation")).toBeNull();
     fireEvent.click(screen.getByTestId("button-cohort-reconciliation"));
     const row = screen.getByTestId("override-reconciliation-firm-a");

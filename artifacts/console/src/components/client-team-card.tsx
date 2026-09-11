@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { roleLabel } from "@/components/capability-gate";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { inviteClientLoginHref } from "@/lib/invitations";
 
 /**
@@ -87,7 +87,7 @@ export function ClientTeamCard({
           setSelected(null);
           toast({
             title: "Could not save assignments",
-            description: serverErrorMessage(e),
+            description: userErrorMessage(e),
             variant: "destructive",
           });
         },
@@ -112,7 +112,7 @@ export function ClientTeamCard({
               data-testid="link-invite-client-login"
             >
               <UserPlus className="h-4 w-4" aria-hidden="true" />
-              Invite a client login
+              Invite a client user
             </Link>
           )}
         </div>
@@ -172,7 +172,7 @@ export function ClientTeamCard({
                 disabled={!dirty || replace.isPending}
                 data-testid="button-save-assignments"
               >
-                {replace.isPending ? "Saving…" : "Save assignments"}
+                {replace.isPending ? "Saving…" : "Save changes"}
               </Button>
             </div>
           </>

@@ -78,7 +78,8 @@ function PageHeader({ actions }: { actions?: ReactNode }) {
           Supplier scoreboard
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-          Suppliers ranked by stamping and confirmation compliance.
+          Compare how many of each supplier&apos;s invoices are stamped and
+          confirmed.
         </p>
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
@@ -175,8 +176,8 @@ export function Scoreboard() {
                 No suppliers to rank yet
               </p>
               <p className="text-sm text-muted-foreground">
-                Rankings build up as your suppliers stamp invoices and respond
-                to confirmations on Valo.
+                Rankings appear as suppliers stamp invoices and buyers confirm
+                them on Valo.
               </p>
             </div>
           ) : (
@@ -199,7 +200,9 @@ export function Scoreboard() {
                       <TableHead className="text-right">Confirmed</TableHead>
                       <TableHead className="text-right">Invoices</TableHead>
                       <TableHead className="text-right">Outstanding</TableHead>
-                      <TableHead className="text-right">Queried</TableHead>
+                      <TableHead className="text-right">
+                        Questions sent
+                      </TableHead>
                       <TableHead className="text-right">VAT at risk</TableHead>
                     </TableRow>
                   </TableHeader>

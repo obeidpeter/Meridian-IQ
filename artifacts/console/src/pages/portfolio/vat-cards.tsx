@@ -110,7 +110,8 @@ export function VatPackCard() {
             className="text-sm text-muted-foreground"
             data-testid="text-vat-pack-empty"
           >
-            No invoices were accepted by the rails in {pack.monthLabel}.
+            No invoices were accepted by the submission service in{" "}
+            {pack.monthLabel}.
           </p>
         ) : (
           <ScrollRegion label="VAT filing pack table">
@@ -337,7 +338,8 @@ export function VatSettlementCard() {
             className="text-sm text-muted-foreground"
             data-testid="text-vat-settlement-empty"
           >
-            No invoices were accepted by the rails in {check.monthLabel}.
+            No invoices were accepted by the submission service in{" "}
+            {check.monthLabel}.
           </p>
         ) : (
           <>

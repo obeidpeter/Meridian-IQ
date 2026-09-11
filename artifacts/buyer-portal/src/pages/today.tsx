@@ -59,7 +59,7 @@ export function Today() {
             onClick={() => void refetch()}
           >
             <RefreshCw aria-hidden="true" />
-            Retry
+            Try again
           </button>
         </div>
       ) : null}

@@ -5,7 +5,7 @@ export const FILTERS = [
   { key: "none", label: "Not requested" },
   { key: "requested", label: confirmationLabel("requested") },
   { key: "confirmed", label: "Confirmed" },
-  { key: "queried", label: "Queried" },
+  { key: "queried", label: confirmationLabel("queried") },
   { key: "rejected", label: "Rejected" },
 ] as const;
 

@@ -119,7 +119,7 @@ export function PortfolioSummaryStrip({ data }: { data: PortfolioSummary }) {
       <Metric
         label="Clients"
         value={String(data.clientCount)}
-        detail="Active client book"
+        detail="Active clients"
         icon={<Users className="size-4" aria-hidden="true" />}
         testId="stat-clients"
       />

@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { QueryError } from "@/components/query-error";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 import { pillClasses } from "@/lib/format";
 
 // Staff notification preferences — how (and whether) the weekly Clerk digest
@@ -205,7 +205,7 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
       },
       onError: (e) => {
         setSaved(false);
-        setError(serverErrorMessage(e) ?? "Could not save your preferences.");
+        setError(userErrorMessage(e) ?? "Could not save your preferences.");
       },
     },
   });
@@ -225,7 +225,7 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
       },
       onError: (e) =>
         setVerifyError(
-          serverErrorMessage(e) ?? "Could not send the verification code.",
+          userErrorMessage(e) ?? "Could not send the verification code.",
         ),
     },
   });
@@ -244,7 +244,7 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
       },
       onError: (e) =>
         setVerifyError(
-          serverErrorMessage(e) ??
+          userErrorMessage(e) ??
             "That code didn't match — check the newest email and try again.",
         ),
     },
@@ -436,7 +436,7 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
             disabled={update.isPending}
             data-testid="button-save-prefs"
           >
-            {update.isPending ? "Saving…" : "Save preferences"}
+            {update.isPending ? "Saving…" : "Save changes"}
           </Button>
           {saved && (
             <p

@@ -31,7 +31,7 @@ export function InvoiceRoomShell({ children }: { children: React.ReactNode }) {
                 Valo
               </span>
               <span className="mt-1 block text-[11px] font-semibold text-teal-100">
-                Secure Invoice Room
+                Invoice room
               </span>
             </span>
           </a>
@@ -44,10 +44,7 @@ export function InvoiceRoomShell({ children }: { children: React.ReactNode }) {
       {children}
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-slate-500 sm:px-8">
-          <p>
-            Valo · Invoice evidence, confirmation and payment in one secure
-            record.
-          </p>
+          <p>Valo · Invoice details, buyer responses and payment records.</p>
           <a
             href="/login"
             className="font-bold text-[#0f5c52] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
@@ -73,10 +70,10 @@ export function LoadingRoom() {
             <Loader2 className="size-6 animate-spin" aria-hidden="true" />
           </span>
           <h1 className="landing-display mt-6 text-3xl font-bold">
-            Opening your secure invoice
+            Opening your invoice
           </h1>
           <p className="mt-3 text-slate-600">
-            Checking the link and preparing the verified document.
+            Checking the link and loading the invoice details.
           </p>
         </div>
       </main>
@@ -116,13 +113,13 @@ export function UnavailableRoom({
             className="landing-display mt-6 text-3xl font-bold"
           >
             {gone
-              ? "This secure link is no longer active"
+              ? "This invoice link is no longer active"
               : "We could not open this invoice"}
           </h1>
           <p className="mt-3 leading-7 text-slate-600">{errorMessage(error)}</p>
           <p className="mt-3 text-sm text-slate-500">
-            Ask the supplier to send a new Invoice Room link. For your security,
-            links can expire or be revoked.
+            Ask the supplier for a new invoice link. Links can expire or be
+            cancelled by the supplier.
           </p>
           <Button
             type="button"

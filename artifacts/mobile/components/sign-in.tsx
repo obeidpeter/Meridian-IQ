@@ -19,10 +19,12 @@ import { useSession } from "@/lib/session";
 
 function errorMessage(error: unknown): string {
   return (
-    serverMessage(error) ??
+    (serverMessage(error)
+      ? apiErrorMessage(error, "Could not sign in. Try again.")
+      : null) ??
     (hasStatus(error, 401)
-      ? "Incorrect email or password."
-      : "We couldn't sign you in. Please try again.")
+      ? "The email or password is incorrect. Check both and try again."
+      : apiErrorMessage(error, "Could not sign in. Try again."))
   );
 }
 
@@ -59,7 +61,7 @@ export function SignIn() {
     } catch {
       // Only a genuinely tokenless success response lands here — the
       // mfa-required login shape is intercepted before signIn is called.
-      return "Signed in, but no session token was returned. Contact support.";
+      return "Your account was verified, but the app could not finish signing in. Contact Valo support.";
     }
   };
 
@@ -125,13 +127,13 @@ export function SignIn() {
           }
           if (disposition === "invalid-code") {
             setTotpError(
-              "That code didn't match. Check your authenticator app and try again — or use a recovery code.",
+              "That code did not match. Try the current code from your authenticator app, or use a recovery code.",
             );
           } else if (disposition === "server-error") {
             // Includes the 429 guess throttle: the server's own words ("Too
             // many attempts. Try again in N minute(s).") are surfaced.
             setTotpError(
-              apiErrorMessage(error, "Verification failed. Please try again."),
+              apiErrorMessage(error, "Could not verify the code. Try again."),
             );
           } else {
             setTotpError(
@@ -174,7 +176,7 @@ export function SignIn() {
             color={colors.mutedForeground}
             style={{ marginTop: 6, textAlign: "center" }}
           >
-            Your Nigerian invoicing and compliance workspace.
+            Invoices and compliance tasks for your business.
           </AppText>
         </View>
 
@@ -192,13 +194,12 @@ export function SignIn() {
                 >
                   {email.trim()}
                 </AppText>{" "}
-                is protected by two-factor authentication. Enter the 6-digit
-                code from your authenticator app — or one of your saved recovery
-                codes.
+                uses two-step verification. Enter the 6-digit code from your
+                authenticator app, or one of your saved recovery codes.
               </AppText>
             </View>
             <TextField
-              label="Authentication code"
+              label="Verification or recovery code"
               value={totpCode}
               onChangeText={setTotpCode}
               placeholder="123456"
@@ -215,10 +216,10 @@ export function SignIn() {
               returnKeyType="go"
               onSubmitEditing={onVerifyCode}
               error={totpError}
-              hint="Codes rotate every 30 seconds. A recovery code works here too."
+              hint="Your app shows a new code every 30 seconds. This sign-in step expires after five minutes."
             />
             <AppButton
-              label="Verify"
+              label="Sign in"
               icon="check-circle"
               onPress={onVerifyCode}
               loading={totpChallenge.isPending}
@@ -275,7 +276,8 @@ export function SignIn() {
           color={colors.mutedForeground}
           style={{ marginTop: 24, textAlign: "center" }}
         >
-          Penalty figures shown in this app are estimates, not tax advice.
+          Penalty figures use Valo's planning assumptions. They are not official
+          penalty amounts or legal or tax advice.
         </AppText>
       </KeyboardAwareScrollViewCompat>
     </SafeAreaView>

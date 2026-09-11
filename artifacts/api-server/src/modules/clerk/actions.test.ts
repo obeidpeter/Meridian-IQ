@@ -207,7 +207,9 @@ test("proposals are live: overdue drafts only, oldest first, honest count", asyn
   );
   assert.ok(action.targets.every((t) => t.daysOverdue > 0));
   assert.equal(action.evidence.overdueCount, 3);
-  assert.match(action.why, /7-day statutory submission window/);
+  assert.match(action.why, /7-day legal submission deadline/);
+  assert.match(action.why, /estimate, not tax advice/);
+  assert.doesNotMatch(action.why, /Submitting them removes it/);
   assert.match(action.why, /estimate not advice/);
 });
 

@@ -50,15 +50,15 @@ import {
 import { useSession } from "@/lib/session";
 
 const RISK_COPY: Record<DashboardSummaryPenaltyRisk, string> = {
-  low: "You're on track. Keep issuing compliant invoices.",
-  medium: "Some invoices need attention to avoid penalty exposure.",
-  high: "Urgent: unresolved items may trigger significant penalties.",
+  low: "Your recorded invoice risk is low. Keep checking submission deadlines.",
+  medium: "Some invoices need attention. Review them for possible penalties.",
+  high: "Review unresolved invoices now. They may lead to penalties.",
 };
 
 // Fallback copy when the API returns a penaltyRisk value we don't map, so a
 // text child is never `undefined`.
 const RISK_COPY_FALLBACK =
-  "Review your compliance status to stay ahead of penalties.";
+  "Review your invoices and submission deadlines for possible penalties.";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -234,14 +234,14 @@ export default function HomeScreen() {
                 wall of chrome; icon tiles are scannable at a glance. */}
             <View style={styles.actionGrid}>
               <ActionTile
-                label="Create an invoice"
+                label="Create invoice"
                 icon="file-plus"
                 primary
                 onPress={() => router.push("/invoice")}
                 testID="action-create-invoice"
               />
               <ActionTile
-                label="Browse invoices"
+                label="View invoices"
                 icon="file-text"
                 onPress={() => router.push("/invoices")}
                 testID="action-browse-invoices"
@@ -286,7 +286,7 @@ export default function HomeScreen() {
               ) : null}
               {canClerkCapture ? (
                 <ActionTile
-                  label="Send to Clerk"
+                  label="Upload documents"
                   icon="camera"
                   onPress={() => router.push("/clerk-capture")}
                   testID="action-clerk-capture"
@@ -302,7 +302,7 @@ export default function HomeScreen() {
               ) : null}
               {updates ? (
                 <ActionTile
-                  label="Digests & statements"
+                  label="Updates and statements"
                   icon="book-open"
                   onPress={() => router.push("/clerk-updates")}
                   testID="action-clerk-updates"
@@ -414,14 +414,14 @@ function PenaltyRiskCard({
       <Pressable
         onPress={onEstimate}
         accessibilityRole="button"
-        accessibilityLabel="Estimate my penalty exposure"
+        accessibilityLabel="Estimate possible penalties"
         style={({ pressed }) => [
           styles.riskLink,
           { opacity: pressed ? 0.7 : 1 },
         ]}
       >
         <AppText variant="label" color={fg}>
-          Estimate my exposure
+          Estimate penalties
         </AppText>
         <Feather name="arrow-right" size={16} color={fg} />
       </Pressable>

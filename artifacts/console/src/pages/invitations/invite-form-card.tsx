@@ -94,7 +94,7 @@ export function InviteFormCard({ state }: { state: InvitationsState }) {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="new-firm-name">…or provision a new firm</Label>
+                <Label htmlFor="new-firm-name">Or create a new firm</Label>
                 <div className="flex gap-2">
                   <Input
                     id="new-firm-name"
@@ -114,7 +114,7 @@ export function InviteFormCard({ state }: { state: InvitationsState }) {
                     disabled={createFirm.isPending}
                     data-testid="button-provision-firm"
                   >
-                    {createFirm.isPending ? "Provisioning…" : "Provision firm"}
+                    {createFirm.isPending ? "Creating…" : "Create firm"}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -179,10 +179,10 @@ export function InviteFormCard({ state }: { state: InvitationsState }) {
                 >
                   <SelectTrigger
                     id="invite-client"
-                    aria-label="Client this login is scoped to"
+                    aria-label="Client this business user can access"
                     data-testid="select-client"
                   >
-                    <SelectValue placeholder="Pick the client this login is scoped to" />
+                    <SelectValue placeholder="Choose the client this business user can access" />
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map((c) => (
@@ -205,14 +205,14 @@ export function InviteFormCard({ state }: { state: InvitationsState }) {
                       setClientPartyId(e.target.value);
                       setFormError(null);
                     }}
-                    placeholder="Client party UUID"
+                    placeholder="Client record ID (UUID)"
                     data-testid="input-client"
                   />
                   <p
                     className="text-xs text-muted-foreground"
                     data-testid="text-client-hint"
                   >
-                    The client this login is scoped to.
+                    The client this business user can access.
                   </p>
                 </>
               )}

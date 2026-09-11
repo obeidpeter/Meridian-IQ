@@ -36,7 +36,7 @@ describe("noteValidationError", () => {
 
   test("a blank or whitespace-only note blocks a query, with copy that says why", () => {
     const err = noteValidationError("queried", "");
-    expect(err).toContain("clarifying");
+    expect(err).toContain("clarify");
     expect(err).toContain("supplier");
     expect(noteValidationError("queried", "   ")).toBe(err);
   });
@@ -61,17 +61,27 @@ describe("RESPONSE_DESCRIPTIONS and SUBMIT_LABELS", () => {
   });
 
   test("descriptions name their consequence — notified supplier, financeable confirm, reissue on reject", () => {
-    expect(RESPONSE_DESCRIPTIONS.confirmed).toContain("financeable");
+    expect(RESPONSE_DESCRIPTIONS.confirmed).toContain("financing assessment");
+    expect(RESPONSE_DESCRIPTIONS.confirmed).toContain(
+      "does not approve financing or make a payment",
+    );
     expect(RESPONSE_DESCRIPTIONS.queried).toContain(
       "cannot change this response",
     );
     expect(RESPONSE_DESCRIPTIONS.queried).toContain("new confirmation request");
-    expect(RESPONSE_DESCRIPTIONS.rejected).toContain("reissue");
+    expect(RESPONSE_DESCRIPTIONS.rejected).toContain(
+      "new confirmation request",
+    );
+    for (const text of Object.values(RESPONSE_DESCRIPTIONS)) {
+      expect(text).not.toMatch(
+        /notified|notifies|sends it to the supplier|must reissue/,
+      );
+    }
   });
 
   test("submit labels stay action-specific", () => {
     expect(SUBMIT_LABELS.confirmed).toBe("Confirm invoice");
-    expect(SUBMIT_LABELS.queried).toBe("Send query");
+    expect(SUBMIT_LABELS.queried).toBe("Send question");
     expect(SUBMIT_LABELS.rejected).toBe("Reject invoice");
   });
 });
@@ -79,7 +89,7 @@ describe("RESPONSE_DESCRIPTIONS and SUBMIT_LABELS", () => {
 describe("responseRecordedCopy", () => {
   test("each recorded response states what happened and what happens next", () => {
     expect(responseRecordedCopy("confirmed").title).toBe("Invoice confirmed");
-    expect(responseRecordedCopy("queried").title).toBe("Query sent");
+    expect(responseRecordedCopy("queried").title).toBe("Question sent");
     expect(responseRecordedCopy("rejected").title).toBe("Invoice rejected");
     expect(responseRecordedCopy("queried").description).toContain(
       "new confirmation request",
@@ -88,7 +98,12 @@ describe("responseRecordedCopy", () => {
       "cannot be changed",
     );
     for (const s of ["confirmed", "rejected"] as const) {
-      expect(responseRecordedCopy(s).description).toContain("notified");
+      expect(responseRecordedCopy(s).description).toContain(
+        "can view your recorded response",
+      );
+      expect(responseRecordedCopy(s).description).not.toMatch(
+        /notified|must reissue/,
+      );
     }
   });
 });
@@ -97,16 +112,28 @@ describe("errorDescription", () => {
   test("maps the well-known statuses to human copy", () => {
     expect(errorDescription({ status: 401 })).toContain("session has expired");
     expect(errorDescription({ status: 403 })).toContain("permission");
-    expect(errorDescription({ status: 409 })).toContain("already responded");
-    expect(errorDescription({ status: 500 })).toContain("Try again");
-    expect(errorDescription({ status: 503 })).toContain("Try again");
+    expect(errorDescription({ status: 409 })).toContain(
+      "invoice's current status",
+    );
+    expect(errorDescription({ status: 500 })).toContain(
+      "Check the latest invoice status before trying again",
+    );
+    expect(errorDescription({ status: 503 })).toContain("could not confirm");
+    expect(
+      errorDescription({
+        status: 409,
+        data: { error: "This invoice is already settled." },
+      }),
+    ).toBe("This invoice is already settled.");
   });
 
   test("falls back to the Error message, then to a generic line", () => {
     expect(errorDescription(new Error("boom"))).toBe("boom");
-    expect(errorDescription({})).toBe("Something went wrong — try again.");
+    expect(errorDescription({})).toBe(
+      "Valo could not confirm the result. Check the latest invoice status before trying again.",
+    );
     expect(errorDescription(undefined)).toBe(
-      "Something went wrong — try again.",
+      "Valo could not confirm the result. Check the latest invoice status before trying again.",
     );
   });
 });

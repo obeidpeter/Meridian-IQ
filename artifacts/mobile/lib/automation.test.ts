@@ -42,11 +42,11 @@ test("proposalMobileGateNote: runnable kinds get no note, others get an honest o
   assert.equal(proposalMobileGateNote("retry_failed"), null);
   assert.match(
     proposalMobileGateNote("draft_chasers") ?? "",
-    /shown once .* web app .* drafts aren't lost/,
+    /shown only once.*web app to read and copy them before they are lost/,
   );
   // An off-contract kind from a newer server points at the web, never a
   // button that could only fail.
-  assert.match(proposalMobileGateNote("future_kind") ?? "", /use the web app/);
+  assert.match(proposalMobileGateNote("future_kind") ?? "", /Use the web app/);
 });
 
 test("proposalCountLine states the batch size, singular and plural", () => {
@@ -67,17 +67,21 @@ test("proposalCountLine says so when the server truncated the batch", () => {
       targetCount: 45,
       truncated: true,
     }),
-    "Showing the oldest 20 of 45 — approve this batch, then come back for the rest.",
+    "Showing the oldest 20 of 45. Approve this batch, then return for the rest.",
   );
 });
 
 test("actionConfirmDescription: submit vs resubmit wording, singular count", () => {
   const submit = actionConfirmDescription("submit_overdue", 3);
-  assert.match(submit, /^This submits 3 invoices to the e-invoicing rails/);
-  assert.match(submit, /validation, consent and any approval policy all apply/);
+  assert.match(submit, /^Submit 3 invoices to the e-invoicing service/);
+  assert.match(
+    submit,
+    /Validation, consent and any required approvals still apply/,
+  );
+  assert.match(submit, /already processed or no longer eligible are skipped/);
   assert.match(submit, /recorded under your name/);
   const retry = actionConfirmDescription("retry_failed", 1);
-  assert.match(retry, /^This resubmits 1 invoice to the e-invoicing rails/);
+  assert.match(retry, /^Resubmit 1 invoice to the e-invoicing service/);
 });
 
 test("actionConfirmButtonLabel mirrors the web dialogs", () => {
@@ -137,7 +141,7 @@ test("policyPauseReasonLabel: tripwire vocabulary, manual default, unknown fallb
   );
   assert.equal(
     policyPauseReasonLabel("rail_rejections"),
-    "paused — the last run's submissions were rejected by the rails",
+    "paused — the e-invoicing service rejected the last submissions",
   );
   // A reason from a newer server still reads as a pause, never a blank.
   assert.equal(policyPauseReasonLabel("solar_flare"), "paused — solar_flare");
@@ -193,16 +197,20 @@ test("policyGrantDescription states the cap being consented to", () => {
   const grant = policyGrantDescription("submit_overdue", POLICY_CAP_DEFAULT);
   assert.match(
     grant,
-    /submit up to 10 invoices past the statutory window under your name/,
+    /submit up to 10 invoices past the legal submission deadline under your name/,
   );
-  assert.match(grant, /re-checks consent, your access and each invoice/);
-  assert.match(grant, /pause or revoke this at any time/);
+  assert.match(
+    grant,
+    /Before each run, Valo checks consent, your access and each invoice again/,
+  );
+  assert.match(grant, /without asking again each day/);
+  assert.match(grant, /pause or turn off this approval at any time/);
 });
 
 test("policyGrantDescription: retry wording and the singular cap", () => {
   assert.match(
     policyGrantDescription("retry_failed", 1),
-    /resubmit up to 1 invoice that failed on the rails/,
+    /resubmit up to 1 invoice whose submission failed/,
   );
 });
 

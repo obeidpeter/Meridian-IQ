@@ -53,15 +53,15 @@ export function BulkApproveDialog({
             {/* Once the report is in, the queue has refetched and the
                 candidate list may be empty — pin the count to the batch
                 that actually ran. */}
-            Approve the fast lane (
+            Review ready cases (
             {report ? report.results.length : candidates.length})
           </DialogTitle>
           <DialogDescription>
-            This only touches fast-lane cases — extraction succeeded, pre-flight
-            found nothing blocking and every critical field is confident. Each
-            approval creates a DRAFT invoice only; nothing is submitted. The
-            server re-checks every case and skips any that no longer qualify,
-            leaving them exactly as they were.
+            These cases were read successfully, passed approval checks and have
+            high-confidence values for every critical field. Check the details
+            before approving. Each approval creates a draft invoice only;
+            nothing is submitted. Cases are checked again before saving. Any
+            that no longer qualify are skipped and left unchanged.
           </DialogDescription>
         </DialogHeader>
         {report ? (
@@ -122,8 +122,8 @@ export function BulkApproveDialog({
               className="text-sm text-muted-foreground"
               data-testid="text-bulk-drained"
             >
-              The queue changed — nothing left to approve. The fast-lane cases
-              were decided or updated while this dialog was open.
+              Nothing is left to approve. These cases were decided or updated
+              while this dialog was open. Close it to review the current queue.
             </p>
             <DialogFooter>
               <Button
@@ -170,10 +170,10 @@ export function BulkApproveDialog({
                     {!suggestionsLoading && unresolved && (
                       <span
                         className={pillClasses("amber")}
-                        title="No firm or register match resolved — the server will skip this case; approve it from the single-case review instead."
+                        title="The firm, supplier or customer could not be matched. This case will be skipped. Open it separately to review and choose the missing records."
                         data-testid={`pill-bulk-unresolved-${c.id}`}
                       >
-                        will be skipped
+                        Will be skipped
                       </span>
                     )}
                   </div>

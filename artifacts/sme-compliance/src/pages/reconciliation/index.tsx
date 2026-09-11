@@ -80,7 +80,7 @@ export function Reconciliation() {
     <div className="space-y-6">
       <PageHeader
         title="Reconciliation"
-        description="Upload your bank statement and we match every credit to an invoice."
+        description="Upload a bank statement to find possible invoice matches for incoming payments."
       />
 
       <RequireClientScope thing="reconciliation workspace">

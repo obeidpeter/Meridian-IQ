@@ -14,16 +14,16 @@ export function ParseReportCard({ report }: { report: StatementImportResult }) {
   return (
     <Card style={{ gap: 10 }}>
       <View style={rowBetween}>
-        <AppText variant="label">Parse report</AppText>
+        <AppText variant="label">Statement preview</AppText>
         <Badge
           label={formatLabel(report.formatKey)}
           tone={report.formatKey ? "info" : "neutral"}
         />
       </View>
       <AppText variant="caption" color={colors.mutedForeground}>
-        {report.parsedCount} of {report.lineCount} row(s) parsed (
-        {percent(report.parseRate)}). Nothing is saved yet — invalid rows are
-        skipped when you commit.
+        {report.parsedCount} of {report.lineCount} row(s) read (
+        {percent(report.parseRate)}). Nothing is saved yet. Rows with errors
+        will be skipped when you save.
       </AppText>
       <View style={{ gap: 6 }}>
         {report.rows.slice(0, MAX_REPORT_ROWS).map((r) => (

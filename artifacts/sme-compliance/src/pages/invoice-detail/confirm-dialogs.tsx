@@ -29,10 +29,10 @@ export function SubmitConfirmDialog({
     <AlertDialog open={confirmSubmit} onOpenChange={setConfirmSubmit}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Review stamping submission</AlertDialogTitle>
+          <AlertDialogTitle>Review before submitting</AlertDialogTitle>
           <AlertDialogDescription>
-            Confirm the target and tax totals before this invoice is sent to the
-            configured e-invoicing rail.
+            Check the customer and tax totals before sending this invoice to
+            your configured e-invoicing service.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <dl className="divide-y rounded-md border bg-muted/25 px-3 text-sm">
@@ -60,9 +60,9 @@ export function SubmitConfirmDialog({
           </div>
         </dl>
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-          Once the rail accepts and stamps this invoice, corrections require the
-          cancellation or credit-note workflow. Do not submit while the
-          customer, amount, currency, or VAT is still being checked.
+          Once the e-invoicing service accepts and stamps this invoice, you must
+          use a cancellation or credit note to correct it. Do not submit while
+          the customer, amount, currency, or VAT is still being checked.
         </p>
         <AlertDialogFooter>
           <AlertDialogCancel>Go back and review</AlertDialogCancel>

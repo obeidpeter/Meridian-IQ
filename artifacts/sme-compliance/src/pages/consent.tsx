@@ -72,7 +72,7 @@ const LAYERS = [
     scope: "credit_scoring",
     icon: Landmark,
     description:
-      "Allows Valo to evaluate your verified invoice history for credit readiness and include it only in privacy-protected bank cohorts. It does not apply for finance, share your identity, or move money.",
+      "Allows Valo to assess your verified invoice history for credit readiness and include it in privacy-protected group reports for banks. It does not apply for finance, share your identity, or move money.",
     dormant: false,
   },
 ] as const;
@@ -88,9 +88,9 @@ function scopeTitle(scope: string): string {
 // The consequence a client accepts when revoking each layer — shown in the
 // confirm dialog before the ledger event is recorded.
 const REVOKE_CONSEQUENCES: Record<number, string> = {
-  1: "Valo stops validating, submitting and vaulting your invoices, and deadline alerts stop.",
+  1: "Valo stops validating, submitting and storing new invoices, and deadline alerts stop.",
   2: "Your data stops feeding anonymized industry benchmarks.",
-  3: "Credit-readiness assessment stops immediately and your records leave future bank Data Room cohorts.",
+  3: "Credit-readiness checks stop immediately. Your records will not be included in future group reports in the bank Data Room.",
 };
 
 // Save in-memory bytes as a named download — the console's downloadBlob idiom
@@ -223,7 +223,7 @@ export function Consent() {
         }
       />
 
-      <RequireClientScope thing="consent ledger">
+      <RequireClientScope thing="consent records">
         <div className="space-y-6">
           {!canWrite && (
             <p
@@ -243,7 +243,7 @@ export function Consent() {
               className="space-y-4"
             />
           ) : isError ? (
-            <QueryError thing="the consent ledger" onRetry={() => refetch()} />
+            <QueryError thing="the consent records" onRetry={() => refetch()} />
           ) : (
             <>
               <div className="space-y-4">

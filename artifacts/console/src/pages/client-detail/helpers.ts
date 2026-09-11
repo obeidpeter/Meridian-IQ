@@ -1,6 +1,6 @@
 import type { OffboardClientResult } from "@workspace/api-client-react";
 import { localDayIso } from "@workspace/format/notice-copy";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 
 // The client page's pure kernels (R126 split): view gating, the export and
 // offboard copy, and the compliance-pack naming. The unit suite pins them
@@ -70,7 +70,9 @@ export function offboardErrorNote(err: unknown): string {
   if (errorStatus(err) === 400) {
     return "That doesn't match this client's legal name — type it exactly as shown.";
   }
-  return serverErrorMessage(err) ?? "Could not offboard the client. Try again.";
+  return (
+    userErrorMessage(err) ?? "Could not end this client engagement. Try again."
+  );
 }
 
 /** Success-toast summary of what the offboard actually did. */
@@ -89,8 +91,8 @@ export function offboardSummary(result: OffboardClientResult): string {
     parts.push(
       n(
         result.aliasesDeleted,
-        "intake alias deleted",
-        "intake aliases deleted",
+        "document forwarding address deleted",
+        "document forwarding addresses deleted",
       ),
     );
   }

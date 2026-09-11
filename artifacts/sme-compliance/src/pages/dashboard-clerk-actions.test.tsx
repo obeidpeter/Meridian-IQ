@@ -758,7 +758,7 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     // History alone also earns the quiet explanation line.
     expect(screen.getByTestId("text-actions-empty")).toBeTruthy();
     expect(screen.getByTestId("decision-dec-1").textContent).toContain(
-      "1 executed",
+      "1 completed",
     );
     expect(screen.getByTestId("decision-dec-1").textContent).toContain(
       "· auto",

@@ -71,7 +71,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
       <View style={styles.content}>
         <AppText variant="title" style={{ textAlign: "center" }}>
-          Something went wrong
+          This screen could not load
         </AppText>
 
         <AppText
@@ -79,11 +79,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           color={colors.mutedForeground}
           style={{ textAlign: "center" }}
         >
-          Please reload the app to continue.
+          Try again to reload the app. Check any recent changes after it opens.
         </AppText>
 
         <AppButton
-          label="Try Again"
+          label="Try again"
           icon="refresh-cw"
           onPress={() => void handleRestart()}
           fullWidth={false}

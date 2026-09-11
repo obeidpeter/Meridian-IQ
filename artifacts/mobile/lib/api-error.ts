@@ -7,7 +7,7 @@
  */
 
 import type { FieldError } from "@workspace/api-client-react";
-import { errorStatus } from "@workspace/api-errors";
+import { errorStatus, userErrorMessage } from "@workspace/api-errors";
 
 /** The HTTP status carried by a thrown API error, if it has a numeric one. */
 export { errorStatus };
@@ -63,14 +63,8 @@ export function serverFieldErrors(error: unknown): FieldError[] | null {
  */
 export function apiErrorMessage(error: unknown, fallback: string): string {
   const fromServer = serverMessage(error);
-  if (fromServer) return fromServer;
-  const data =
-    error && typeof error === "object"
-      ? (error as { data?: unknown }).data
-      : null;
-  if (data && typeof data === "object" && "error" in data) {
-    const message = (data as { error?: unknown }).error;
-    if (typeof message === "string" && message) return message;
-  }
-  return error instanceof Error && error.message ? error.message : fallback;
+  return (
+    userErrorMessage(fromServer ? { data: { error: fromServer } } : error) ||
+    fallback
+  );
 }

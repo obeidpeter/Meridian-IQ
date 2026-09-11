@@ -24,7 +24,7 @@ export function TodayQueue({
         <EmptyState
           icon={FileText}
           title="Set up your compliance workspace"
-          description="You haven't raised any invoices yet. Create your first invoice, or import the ones you've already issued, and the dashboard starts tracking stamping, deadlines and receivables for you."
+          description="No invoices yet. Create your first invoice or import existing ones to track submissions, deadlines and customer payments."
           testId="text-first-run"
         >
           <div className="mt-2 flex flex-wrap justify-center gap-2">
@@ -45,7 +45,7 @@ export function TodayQueue({
   ) : (
     <WorkQueue
       title="What needs attention"
-      description="Ordered by statutory risk, failed work and cash collection age."
+      description="Prioritised by legal deadlines, failed actions and overdue customer payments."
       items={workItems}
       emptyTitle="Today is clear"
       emptyDescription="There are no urgent submissions, failures or aged receivables."

@@ -70,7 +70,7 @@ function BrandMark() {
       </span>
       <span>
         <span className="mi-brand__name">Valo</span>
-        <span className="mi-brand__caption">Buyer Rails</span>
+        <span className="mi-brand__caption">Buyer workspace</span>
       </span>
     </span>
   );
@@ -100,11 +100,9 @@ function NavLinks({
       <div className="mb-6">
         <BrandMark />
         <div className="mx-2 mt-5 border-t border-[var(--mi-sidebar-line)] pt-4">
-          <p className="text-xs font-bold text-white">
-            Buyer finance workspace
-          </p>
+          <p className="text-xs font-bold text-white">Buyer workspace</p>
           <p className="mt-1 text-xs leading-4 text-[var(--mi-sidebar-ink)]">
-            Supplier verification and VAT protection
+            Review supplier records and confirm invoices
           </p>
         </div>
       </div>
@@ -146,8 +144,8 @@ function NavLinks({
               >
                 {me.fullName ?? me.email ?? "Signed in"}
               </p>
-              <p className="mi-nav__account-role" title="Buyer finance">
-                Buyer finance
+              <p className="mi-nav__account-role" title="Buyer">
+                Buyer
               </p>
             </div>
           </div>
@@ -201,13 +199,13 @@ export function Layout({ children }: { children: ReactNode }) {
   const activeLink = [...LINKS]
     .sort((a, b) => b.href.length - a.href.length)
     .find((link) => isLinkActive(location, link.href));
-  const pageTitle = activeLink?.label ?? "Buyer Rails";
+  const pageTitle = activeLink?.label ?? "Buyer workspace";
   const commandItems: CommandItem[] = LINKS.map((link) => {
     const Icon = link.icon;
     return {
       id: `buyer-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
       label: link.label,
-      description: `Open ${link.label.toLowerCase()} in Buyer Rails.`,
+      description: `Open ${link.label.toLowerCase()} in the buyer workspace.`,
       group: "Verification",
       icon: <Icon className="size-4" aria-hidden="true" />,
       keywords: ["supplier", "invoice", "buyer", "VAT"],
@@ -299,9 +297,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <section className="mi-mobilebar__context" aria-label="Current workspace">
-        <p className="text-xs font-semibold text-primary">
-          Buyer finance workspace
-        </p>
+        <p className="text-xs font-semibold text-primary">Buyer workspace</p>
         <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
           {pageTitle}
         </p>
@@ -315,7 +311,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <header className="mi-topbar">
           <div className="min-w-0">
             <p className="text-xs font-semibold text-primary">
-              Buyer finance workspace
+              Buyer workspace
             </p>
             <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
               {pageTitle}
@@ -331,7 +327,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <span className="flex min-w-0 items-center gap-2">
                 <Search className="size-4" aria-hidden="true" />
                 <span className="truncate text-xs font-semibold">
-                  Search Buyer Rails
+                  Search buyer workspace
                 </span>
               </span>
               <kbd>Ctrl K</kbd>
@@ -347,7 +343,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 className="size-3.5 text-primary"
                 aria-hidden="true"
               />
-              Buyer finance
+              Buyer
             </span>
             <div className="flex items-center gap-2.5">
               <span className="mi-avatar">

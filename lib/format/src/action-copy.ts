@@ -27,9 +27,9 @@ export function actionConfirmDescription(
       audience === "sme"
         ? "for you to review, copy and send yourself"
         : "for the client to review and send";
-    return `This drafts ${count} payment reminder${s} ${reviewer} — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.`;
+    return `Create ${count} payment reminder${s} ${reviewer}. Valo will not send them or submit any invoices. Each invoice is checked again before the draft is created. Your approval is recorded under your name.`;
   }
-  return `This ${kind === "retry_failed" ? "resubmits" : "submits"} ${count} invoice${s} to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`;
+  return `${kind === "retry_failed" ? "Resubmit" : "Submit"} ${count} invoice${s} to the e-invoicing service. Validation, consent and any required approvals still apply. Each invoice is checked again. Invoices already processed or no longer eligible are skipped. Your approval is recorded under your name.`;
 }
 
 export function actionConfirmButtonLabel(kind: string, count: number): string {
@@ -68,7 +68,7 @@ export function actionTruncatedNote(
   shown: number,
   targetCount: number,
 ): string {
-  return `Showing the oldest ${shown} of ${targetCount} — approve this batch, then come back for the rest.`;
+  return `Showing the oldest ${shown} of ${targetCount}. Review and approve these items, then return for the rest.`;
 }
 
 // The pinned clipboard contract for a transient chaser draft.
@@ -116,14 +116,15 @@ export function policyKindLabel(kind: string): string {
 // is a human pause.
 export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
   manual: "paused manually",
-  grantor_inactive: "paused — the granter's access changed",
+  grantor_inactive:
+    "paused — the person who approved this no longer has the required access",
   consent_missing: "paused — compliance consent is missing",
   failed_targets: "paused — too many failures in the last run",
-  unknown_kind: "paused — this action kind can't run automatically",
+  unknown_kind: "paused — this action cannot run automatically",
   rail_rejections:
-    "paused — the last run's submissions were rejected by the rails",
+    "paused — the e-invoicing service rejected the last submissions",
   engagement_closed: "paused — the engagement with this client has ended",
-  run_error: "paused — the last run hit an unexpected error",
+  run_error: "paused — the last run could not finish because of an error",
 };
 
 export function policyPauseReasonLabel(reason: string | null): string {
@@ -161,15 +162,15 @@ export function policyGrantDescription(
   const s = maxTargetsPerRun === 1 ? "" : "s";
   const what =
     kind === "retry_failed"
-      ? `resubmit up to ${maxTargetsPerRun} invoice${s} that failed on the rails`
-      : `submit up to ${maxTargetsPerRun} invoice${s} past the statutory window`;
+      ? `resubmit up to ${maxTargetsPerRun} invoice${s} whose submission failed`
+      : `submit up to ${maxTargetsPerRun} invoice${s} past the legal submission deadline`;
   const who =
     audience === "sme"
       ? "under your name, without asking again each day"
-      : "under your name, without a fresh approval each day";
+      : "under your name, without asking for approval again each day";
   return (
     `Clerk will run this check every day and ${what} ${who}. ` +
-    `Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.`
+    `Before each run, Valo checks consent, your access and each invoice again. You can pause or turn off this approval at any time. Every run is recorded.`
   );
 }
 

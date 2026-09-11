@@ -89,6 +89,8 @@ import { HELP_TOPICS } from "@/lib/help-topics";
 type NavLink = {
   href: string;
   label: string;
+  // Keep existing navigation and command IDs when display wording changes.
+  testId?: string;
   icon: typeof Users;
   /** RBAC capability the page's API surface requires. */
   capability?: string;
@@ -117,7 +119,7 @@ const NAV_GROUPS: NavGroup[] = [
     links: [
       {
         href: "/data-room",
-        label: "Credit Data Room",
+        label: "Credit data room",
         icon: Landmark,
         capability: "credit.data_room.read",
         feature: "bank_data_room",
@@ -158,7 +160,8 @@ const NAV_GROUPS: NavGroup[] = [
     links: [
       {
         href: "/clients/import",
-        label: "Client import",
+        label: "Import clients",
+        testId: "client-import",
         icon: Upload,
         capability: "clients.import",
         feature: "white_label",
@@ -209,7 +212,8 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/api-access",
-        label: "API & webhooks",
+        label: "API and webhooks",
+        testId: "api-&-webhooks",
         icon: KeyRound,
         role: "firm_admin",
       },
@@ -228,11 +232,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "Growth & revenue",
+    title: "Growth and revenue",
     links: [
       {
         href: "/billing",
-        label: "Plans & billing",
+        label: "Plans and billing",
+        testId: "plans-&-billing",
         icon: CreditCard,
         capability: "billing.read",
       },
@@ -245,13 +250,15 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/unearned-income",
-        label: "Unearned income",
+        label: "Potential revenue",
+        testId: "unearned-income",
         icon: TrendingUp,
         capability: "console.portfolio.read",
       },
       {
         href: "/whitelabel",
-        label: "White-label",
+        label: "Branding",
+        testId: "white-label",
         icon: Palette,
         capability: "theme.write",
         feature: "white_label",
@@ -276,7 +283,8 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/parties",
-        label: "Party integrity",
+        label: "Business records",
+        testId: "party-integrity",
         icon: GitMerge,
         capability: "party.merge",
       },
@@ -288,7 +296,8 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/platform-ops",
-        label: "Platform ops",
+        label: "Platform operations",
+        testId: "platform-ops",
         icon: Activity,
         capability: "operator.queue.read",
       },
@@ -309,7 +318,8 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/audit",
-        label: "Audit & evidence",
+        label: "Audit and evidence",
+        testId: "audit-&-evidence",
         icon: ShieldCheck,
         capability: "audit.read",
       },
@@ -338,18 +348,18 @@ type RoleContext = { title: string; description: string; badge: string };
 
 const ROLE_CONTEXT: Record<string, RoleContext> = {
   firm_admin: {
-    title: "Practice command centre",
+    title: "Firm workspace",
     description: "Portfolio, revenue and firm controls",
     badge: "Firm admin",
   },
   firm_staff: {
-    title: "Client delivery console",
-    description: "Portfolio and compliance operations",
+    title: "Client workspace",
+    description: "Clients, invoices and compliance tasks",
     badge: "Firm staff",
   },
   operator: {
-    title: "Compliance Desk",
-    description: "Cross-tenant exceptions and governed review",
+    title: "Compliance desk",
+    description: "Review issues across firms with approval controls",
     badge: "Operator",
   },
   auditor: {
@@ -358,8 +368,8 @@ const ROLE_CONTEXT: Record<string, RoleContext> = {
     badge: "Read-only auditor",
   },
   bank_user: {
-    title: "Bank Data Room",
-    description: "Anonymized credit-readiness evidence",
+    title: "Bank data room",
+    description: "Credit-readiness summaries without business identities",
     badge: "Bank reviewer",
   },
 };
@@ -378,7 +388,7 @@ function accountInitials(
 
 function BrandMark({
   onNavigate,
-  caption = "Accountant Console",
+  caption = "Accountant workspace",
 }: {
   onNavigate?: () => void;
   caption?: string;
@@ -388,7 +398,7 @@ function BrandMark({
       href="/"
       onClick={onNavigate}
       className="mi-brand"
-      aria-label="Valo — go to the console home"
+      aria-label="Valo — go to your workspace home"
     >
       <span className="mi-brand__mark">
         <ValoMark aria-hidden="true" />
@@ -440,7 +450,7 @@ function NavLinks({
       <BrandMark
         onNavigate={onNavigate}
         caption={
-          me?.role === "bank_user" ? "Bank Data Room" : "Accountant Console"
+          me?.role === "bank_user" ? "Bank data room" : "Accountant workspace"
         }
       />
       <div className="mi-nav">
@@ -465,7 +475,7 @@ function NavLinks({
                     key={link.href}
                     href={link.href}
                     onClick={onNavigate}
-                    data-testid={`nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    data-testid={`nav-${link.testId ?? link.label.toLowerCase().replace(/\s+/g, "-")}`}
                     className="mi-nav__link"
                     aria-current={isActive ? "page" : undefined}
                   >
@@ -683,8 +693,8 @@ export function Layout({ children }: { children: ReactNode }) {
     ),
   })).filter((g) => g.links.length > 0);
   const roleContext: RoleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
-    title: "Accountant Console",
-    description: "Role-scoped workspace",
+    title: "Accountant workspace",
+    description: "Tools available to your account",
     badge: me ? roleLabel(me.role) : "Loading",
   };
   // The workspace chip names the firm this session belongs to; platform
@@ -746,7 +756,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {
             id: "console-action-add-client",
             label: "Add client",
-            description: "Open the client intake form.",
+            description: "Create a client record.",
             group: "Actions",
             icon: <Users className="size-4" aria-hidden="true" />,
             keywords: ["new", "client", "intake"],
@@ -776,7 +786,7 @@ export function Layout({ children }: { children: ReactNode }) {
       group.links.map((link) => {
         const Icon = link.icon;
         return {
-          id: `console-command-${link.label.toLowerCase().replace(/\s+/g, "-")}`,
+          id: `console-command-${link.testId ?? link.label.toLowerCase().replace(/\s+/g, "-")}`,
           label: link.label,
           description: `Open ${link.label.toLowerCase()} in the ${roleContext.title.toLowerCase()}.`,
           group: group.title,
@@ -866,7 +876,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <header className="mi-mobilebar">
         <BrandMark
-          caption={bankWorkspace ? "Bank Data Room" : "Accountant Console"}
+          caption={bankWorkspace ? "Bank data room" : "Accountant workspace"}
         />
         <div className="mi-mobilebar__actions">
           {!bankWorkspace && (

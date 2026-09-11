@@ -43,7 +43,7 @@ test("Data Room loading has a named status and keeps its H1 without enabling acc
   harness.room.isLoading = true;
   render(<BankDataRoomPage />);
   expect(
-    screen.getByRole("heading", { level: 1, name: "Credit Data Room" }),
+    screen.getByRole("heading", { level: 1, name: "Credit data room" }),
   ).toBeTruthy();
   expect(
     screen.getByRole("status", { name: "Loading bank Data Room" }),
@@ -60,7 +60,7 @@ test("endpoint failure retains the heading and retry without showing cohort data
   harness.room.isError = true;
   render(<BankDataRoomPage />);
   expect(
-    screen.getByRole("heading", { level: 1, name: "Credit Data Room" }),
+    screen.getByRole("heading", { level: 1, name: "Credit data room" }),
   ).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(harness.room.refetch).toHaveBeenCalledTimes(1);
@@ -75,12 +75,12 @@ test("withheld cohort keeps its privacy boundary and does not expose financial m
   } as BankDataRoom;
   render(<BankDataRoomPage />);
   expect(
-    screen.getByRole("heading", { level: 1, name: "Credit Data Room" }),
+    screen.getByRole("heading", { level: 1, name: "Credit data room" }),
   ).toBeTruthy();
   expect(
     screen.getByRole("heading", {
       level: 2,
-      name: "Cohort withheld for privacy",
+      name: "Business group hidden for privacy",
     }),
   ).toBeTruthy();
   expect(

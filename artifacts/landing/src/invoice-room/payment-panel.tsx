@@ -67,8 +67,9 @@ function PaymentReportForm({
       className="mt-5 space-y-4 border-t border-slate-200 pt-5"
     >
       <p className="text-sm leading-6 text-slate-600">
-        Report the transfer reference so the supplier can reconcile it against
-        this invoice.
+        Add your transfer reference so the supplier can match it to this
+        invoice. This records your report, not confirmation that the supplier
+        received the money.
       </p>
       <div>
         <Label htmlFor="payment-reference" className="font-bold text-slate-800">
@@ -130,7 +131,7 @@ function PaymentReportForm({
         ) : (
           <Check aria-hidden="true" />
         )}{" "}
-        Record payment report
+        Save payment report
       </Button>
     </form>
   );
@@ -218,7 +219,7 @@ export function PaymentPanel({
           </h2>
           <p className="mt-1 text-sm text-slate-600">
             {detail.payment.settled
-              ? `Evidence recorded ${detail.payment.latestEvidenceAt ? formatDateTime(detail.payment.latestEvidenceAt) : ""}`
+              ? `Payment evidence recorded ${detail.payment.latestEvidenceAt ? formatDateTime(detail.payment.latestEvidenceAt) : ""}`
               : `${formatAmount(detail.invoice.grandTotal, detail.invoice.currency)} due ${formatDate(detail.invoice.dueDate)}`}
           </p>
         </div>
@@ -227,7 +228,7 @@ export function PaymentPanel({
       {!detail.payment.settled && detail.payment.instructions && (
         <dl className="mt-5 divide-y divide-slate-200 border-y border-slate-200 text-sm">
           <div className="flex justify-between gap-4 py-3">
-            <dt className="text-slate-500">Payment route</dt>
+            <dt className="text-slate-500">Payment service</dt>
             <dd className="text-right font-bold">
               {detail.payment.instructions.label ??
                 detail.payment.instructions.provider}
@@ -250,7 +251,7 @@ export function PaymentPanel({
               className="min-h-11 bg-[#0f5c52] hover:bg-[#0c4a43]"
             >
               <a href={activeCheckout.checkoutUrl}>
-                <ExternalLink aria-hidden="true" /> Continue secure payment
+                <ExternalLink aria-hidden="true" /> Continue to payment
               </a>
             </Button>
           ) : detail.permissions.canCreatePaymentLink ? (
@@ -265,7 +266,7 @@ export function PaymentPanel({
               ) : (
                 <Landmark aria-hidden="true" />
               )}{" "}
-              Pay securely
+              Open payment link
             </Button>
           ) : null}
           {detail.permissions.canReportPayment && (

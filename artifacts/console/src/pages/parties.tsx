@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorToast } from "@/lib/errors";
+import { serverErrorToast, userErrorMessage } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
   GitMerge,
@@ -175,7 +175,7 @@ function PartyCarryCounts({ partyId }: { partyId: string }) {
 }
 
 export function Parties() {
-  usePageTitle("Party integrity");
+  usePageTitle("Business records");
   // Server-side search: `q` matches the legal name or TIN. The input is
   // debounced so the parties query re-runs once typing settles, not on
   // every keystroke; everything below (stats, duplicate groups, TIN status,
@@ -262,7 +262,7 @@ export function Parties() {
           mergedCount > 0
             ? `Merged ${mergedCount}, then stopped`
             : "Merge failed",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: userErrorMessage(e) ?? "Try again.",
         variant: "destructive",
       });
     } finally {
@@ -300,7 +300,7 @@ export function Parties() {
           className="text-2xl md:text-3xl font-bold"
           data-testid="text-page-title"
         >
-          Party integrity
+          Business records
         </h1>
         <p className="text-muted-foreground mt-1">
           Duplicate resolution with preserved lineage, and TIN-validation status
@@ -309,7 +309,7 @@ export function Parties() {
       </div>
 
       <div className="max-w-sm space-y-1">
-        <Label htmlFor="party-search">Search parties</Label>
+        <Label htmlFor="party-search">Search business records</Label>
         <div className="relative">
           <Input
             id="party-search"

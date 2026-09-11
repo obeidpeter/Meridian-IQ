@@ -60,7 +60,7 @@ describe("createClientErrorNote", () => {
   });
 
   test("a wordless failure falls back to the plain try-again line", () => {
-    expect(createClientErrorNote(new Error("network"))).toBe(
+    expect(createClientErrorNote({})).toBe(
       "Could not add the client. Try again.",
     );
   });

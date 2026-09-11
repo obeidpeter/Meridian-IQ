@@ -528,7 +528,7 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
             data-testid="text-obligations-empty"
           >
             No open notices for this client. Approving a Clerk notice case or
-            recording a paper notice tracks its response deadline here.
+            recording a notice tracks its response deadline here.
           </p>
         ) : (
           <div className="space-y-2">

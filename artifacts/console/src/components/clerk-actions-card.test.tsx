@@ -512,7 +512,7 @@ describe("ClerkActionsCard (console)", () => {
     renderCard();
     expect(screen.getByTestId("card-clerk-actions")).toBeTruthy();
     expect(screen.getByTestId("decision-dec-1").textContent).toContain(
-      "1 executed",
+      "1 completed",
     );
   });
 
@@ -832,7 +832,7 @@ describe("ClerkActionsCard (console)", () => {
       "1 paused",
     );
     expect(screen.getByTestId("decision-dec-1").textContent).toContain(
-      "1 executed",
+      "1 completed",
     );
 
     // No write affordances of any kind.

@@ -33,7 +33,7 @@ export function WhiteLabel() {
   if (isLoading || !me) {
     return (
       <div className="space-y-4">
-        <WorkspaceHeader eyebrow="Firm experience" title="Brand studio" />
+        <WorkspaceHeader eyebrow="Firm settings" title="Branding" />
         <div className="grid gap-4 lg:grid-cols-2">
           <Skeleton className="h-96" />
           <Skeleton className="h-96" />
@@ -73,9 +73,9 @@ export function WhiteLabel() {
   return (
     <div className="space-y-6">
       <WorkspaceHeader
-        eyebrow="Firm experience"
-        title="Brand studio"
-        description="Shape the client-facing identity, verify legibility and preview the workspace before publishing."
+        eyebrow="Firm settings"
+        title="Branding"
+        description="Set the name, colours and logo clients see. Preview your changes before publishing."
         actions={
           <Button
             onClick={save}

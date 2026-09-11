@@ -39,7 +39,7 @@ export function ClerkAssuranceWorkspace() {
     <div className="space-y-6">
       <MetricStrip label="Clerk assurance summary">
         <Metric
-          label="Model calls (30d)"
+          label="AI requests (30 days)"
           value={compactNumber(data.calls30d)}
           detail={`${compactNumber(data.tokens30d)} measured tokens`}
           icon={<Bot className="size-4" aria-hidden="true" />}
@@ -68,11 +68,11 @@ export function ClerkAssuranceWorkspace() {
           }
         />
         <Metric
-          label="Inference p95"
+          label="Response time (95th percentile)"
           value={
             data.latencyP95Ms === null ? "No data" : `${data.latencyP95Ms}ms`
           }
-          detail="30-day provider latency"
+          detail="95% of provider responses took this long or less over 30 days"
           icon={<Timer className="size-4" aria-hidden="true" />}
         />
       </MetricStrip>
@@ -83,11 +83,11 @@ export function ClerkAssuranceWorkspace() {
         </span>
         <div>
           <p className="text-base font-extrabold">
-            Human authority remains the control boundary
+            People remain responsible for approval
           </p>
           <p className="mt-1 text-sm leading-6 text-white/70">
-            Clerk extracts, retrieves and proposes. Filing, sending, approval
-            and rejection remain attributable human acts.
+            Clerk reads documents, finds records and makes suggestions. People
+            remain accountable for filing, sending, approving and rejecting.
           </p>
         </div>
         <Button
@@ -103,11 +103,11 @@ export function ClerkAssuranceWorkspace() {
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-extrabold text-slate-950">
-                Operational guardrails
+                Safety checks
               </h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                Deterministic checks over the inference ledger, eval corpus and
-                release flags.
+                Rule-based checks of AI request records, test examples and
+                release settings.
               </p>
             </div>
             <Button asChild size="sm" variant="outline">
@@ -140,7 +140,7 @@ export function ClerkAssuranceWorkspace() {
         <aside className="space-y-4" aria-label="Clerk assurance results">
           <section className="rounded-lg border border-slate-200 bg-white p-5">
             <p className="text-xs font-bold uppercase text-slate-600">
-              Assurance posture
+              Safety check results
             </p>
             <div className="mt-4 flex items-end gap-2">
               <p className="text-4xl font-extrabold tabular-nums text-slate-950">
