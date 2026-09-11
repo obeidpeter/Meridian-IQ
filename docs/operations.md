@@ -68,11 +68,22 @@ Publish trusts is the immutable artifact CI produced for that exact commit.
 
 ### Credentialless production catalog verification
 
-Replit's read-only production database channel can capture the same complete
-catalog without exposing `DATABASE_URL` to the verifier. Run the exact
-`CATALOG_SQL` exported by `scripts/src/ops/security-catalog.mjs` through that
-channel in one read-only, repeatable-read transaction with the documented
-30-second statement timeout. Do not edit the query or copy individual sections.
+A separately approved capture channel can supply the complete catalog without
+exposing `DATABASE_URL` to the verifier, but its transaction guarantees must
+first be verified. Run the exact `CATALOG_SQL` exported by
+`scripts/src/ops/security-catalog.mjs` in one read-only, repeatable-read
+transaction with the documented 30-second statement timeout. Do not edit the
+query or copy individual sections.
+
+The Replit production `executeSql` channel inspected on 2026-09-11 does not
+currently meet these requirements: its wrapper uses read-committed isolation
+with no statement timeout, rejects explicit transaction-control statements,
+and exposes no options to request the required settings. Do not use that
+channel to claim verification under this procedure. Use the direct
+`DATABASE_URL` procedure with separately authorized connection access, or
+another approved capture channel whose transaction guarantees can be verified.
+The capture CLI validates catalog content and checksum bindings; it cannot
+attest the transaction settings used by the external capture channel.
 
 Save the single complete JSON object returned by `CATALOG_SQL` as a private raw
 input file; do not copy individual sections or encode the object as a string.
