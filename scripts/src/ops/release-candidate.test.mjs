@@ -22,10 +22,12 @@ import {
   sourceIdentity,
 } from "./build-manifest.mjs";
 import {
+  checkPublishingChecksumConfiguration,
   inspectArchive,
   checklist,
   prepareCandidate,
   processEnvironment,
+  publishingConfigurationMetadataReader,
   realPath,
   reserveOutput,
   safeRelative,
@@ -36,6 +38,7 @@ import {
 import {
   validateApproval,
   approveHandoff,
+  validatePublishingChecksumProvenance,
 } from "./release-candidate-handoff.mjs";
 import {
   ENVIRONMENT,
@@ -610,7 +613,7 @@ test("subprocess environment strips secrets, database configuration, preloads an
   assert.equal(env.PATH, "bins");
 });
 
-test("operator checklist explicitly requires development-data copying OFF and the live HTTPS PUBLIC_APP_URL without configuring production", () => {
+test("operator checklist explicitly requires manual Publishing verification, development-data copying OFF and the live HTTPS PUBLIC_APP_URL without configuring production", () => {
   const text = checklist({
     selection: selectionBase,
     artifact: { id: 40, sha256: "b".repeat(64) },
@@ -628,6 +631,13 @@ test("operator checklist explicitly requires development-data copying OFF and th
   });
   assert.match(
     text,
+    new RegExp(
+      `^- \\[ \\] Rotate the sole production Publishing RELEASE_MANIFEST_SHA256 secret to ${"c".repeat(64)}; verify the displayed Publishing value matches and remove any environment-variable duplicate before Publish \\(the secret takes precedence\\)\\. Publishing key metadata was unavailable during preparation; the protected reviewer must manually verify the displayed production Publishing secret and absence of an environment-variable duplicate\\.$`,
+      "m",
+    ),
+  );
+  assert.match(
+    text,
     /^- \[ \] Replit Publish development-data copying is OFF\..*never copy development data into production\.$/m,
   );
   assert.match(
@@ -639,6 +649,223 @@ test("operator checklist explicitly requires development-data copying OFF and th
     processEnvironment({ PUBLIC_APP_URL: "https://production.invalid" })
       .PUBLIC_APP_URL,
     undefined,
+  );
+});
+
+test("Publishing metadata blocks a duplicate checksum key without reading values", async () => {
+  await assert.rejects(
+    checkPublishingChecksumConfiguration(async () => ({
+      secretKeys: ["OTHER_SECRET", "RELEASE_MANIFEST_SHA256"],
+      environmentVariableKeys: ["RELEASE_MANIFEST_SHA256", "PUBLIC_APP_URL"],
+    })),
+    /Remove the Publishing environment variable.*sole source of truth/,
+  );
+  await assert.rejects(
+    checkPublishingChecksumConfiguration(async () => ({
+      secretKeys: [{ key: "RELEASE_MANIFEST_SHA256", value: "must-not-read" }],
+      environmentVariableKeys: [],
+    })),
+    /key names only/,
+  );
+});
+
+test("Publishing metadata accepts a single checksum source and records names-free status", async () => {
+  assert.deepEqual(
+    await checkPublishingChecksumConfiguration(async () => ({
+      secretKeys: ["RELEASE_MANIFEST_SHA256"],
+      environmentVariableKeys: ["PUBLIC_APP_URL"],
+    })),
+    {
+      status: "CHECKED",
+      manualReviewRequired: false,
+      checksumSources: ["secret"],
+    },
+  );
+});
+
+test("unavailable Publishing metadata preserves the manual release review", async () => {
+  assert.deepEqual(await checkPublishingChecksumConfiguration(), {
+    status: "UNAVAILABLE",
+    manualReviewRequired: true,
+  });
+  assert.deepEqual(
+    await checkPublishingChecksumConfiguration(async () => null),
+    {
+      status: "UNAVAILABLE",
+      manualReviewRequired: true,
+    },
+  );
+});
+
+test("handoff uses protected review for Publishing verification without claiming platform attestation", () => {
+  const options = {
+    candidateSha256: "a".repeat(64),
+    checklistSha256: "c".repeat(64),
+    reviewer: { id: 2, login: "reviewer" },
+    environment: { id: 77, name: ENVIRONMENT },
+  };
+  const candidate = {
+    manifest: { sha256: "b".repeat(64) },
+    gates: {
+      publishingConfiguration: {
+        status: "UNAVAILABLE",
+        manualReviewRequired: true,
+      },
+    },
+  };
+  assert.deepEqual(validatePublishingChecksumProvenance(candidate, options), {
+    status: "MANUALLY_VERIFIED",
+    method: "protected-environment-review",
+    platformAttestation: false,
+    scope: "production Publishing",
+    key: "RELEASE_MANIFEST_SHA256",
+    secretOnly: true,
+    candidateSha256: "a".repeat(64),
+    checklistSha256: "c".repeat(64),
+    expectedSecretSha256: "b".repeat(64),
+    metadataStatus: "UNAVAILABLE",
+    environment: { id: 77, name: ENVIRONMENT },
+    reviewer: { id: 2, login: "reviewer" },
+  });
+  candidate.gates.publishingConfiguration = {
+    status: "CHECKED",
+    manualReviewRequired: false,
+    checksumSources: ["secret"],
+  };
+  assert.equal(
+    validatePublishingChecksumProvenance(candidate, options).metadataStatus,
+    "CHECKED",
+  );
+  for (const publishingConfiguration of [
+    undefined,
+    { status: "UNAVAILABLE", manualReviewRequired: true },
+    {
+      status: "CHECKED",
+      manualReviewRequired: false,
+      checksumSources: ["environment-variable"],
+    },
+    {
+      status: "CHECKED",
+      manualReviewRequired: false,
+      checksumSources: ["workspace-secret"],
+    },
+    {
+      status: "CHECKED",
+      manualReviewRequired: false,
+      checksumSources: [],
+    },
+  ]) {
+    assert.throws(
+      () =>
+        validatePublishingChecksumProvenance({
+          gates: publishingConfiguration
+            ? { publishingConfiguration }
+            : undefined,
+        }),
+      /Publishing checksum|exact candidate checksum/,
+    );
+  }
+  assert.throws(
+    () =>
+      validatePublishingChecksumProvenance(
+        {
+          gates: {
+            publishingConfiguration: {
+              status: "CHECKED",
+              manualReviewRequired: false,
+              checksumSources: ["secret"],
+              secretValue: "must-not-enter-receipt",
+            },
+          },
+        },
+        options,
+      ),
+    /unknown fields/,
+  );
+});
+
+test("duplicate Publishing metadata refuses before producer access or filesystem writes", async (t) => {
+  const directory = temporary(t);
+  const output = path.join(directory, "candidate");
+  await assert.rejects(
+    prepareCandidate(
+      { ...selectionBase, source: directory, output },
+      {
+        client: {
+          producer: () => assert.fail("producer accessed after duplicate"),
+        },
+        readPublishingConfigurationMetadata: async () => ({
+          secretKeys: ["RELEASE_MANIFEST_SHA256"],
+          environmentVariableKeys: ["RELEASE_MANIFEST_SHA256"],
+        }),
+      },
+    ),
+    /duplicated across Publishing secrets and environment variables/,
+  );
+  assert.equal(existsSync(output), false);
+});
+
+test("release CLI metadata snapshot blocks a duplicate before GitHub or filesystem access", (t) => {
+  const directory = temporary(t);
+  const metadata = path.join(directory, "publishing-configuration.json");
+  const output = path.join(directory, "candidate");
+  writeFileSync(
+    metadata,
+    JSON.stringify({
+      secretKeys: ["RELEASE_MANIFEST_SHA256"],
+      environmentVariableKeys: ["RELEASE_MANIFEST_SHA256"],
+    }),
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join(ROOT, "scripts/src/ops/release-candidate.mjs"),
+      "--repository",
+      selectionBase.repository,
+      "--run-id",
+      selectionBase.runId,
+      "--attempt",
+      selectionBase.attempt,
+      "--revision",
+      selectionBase.revision,
+      "--source",
+      directory,
+      "--output",
+      output,
+      "--publishing-configuration-metadata",
+      metadata,
+    ],
+    {
+      cwd: ROOT,
+      env: processEnvironment(),
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /release-candidate: REFUSED/);
+  assert.equal(result.stdout, "");
+  assert.equal(existsSync(output), false);
+});
+
+test("Publishing metadata snapshot reader accepts only a small regular file", async (t) => {
+  const directory = temporary(t);
+  const metadata = path.join(directory, "publishing-configuration.json");
+  writeFileSync(
+    metadata,
+    JSON.stringify({
+      secretKeys: ["RELEASE_MANIFEST_SHA256"],
+      environmentVariableKeys: [],
+    }),
+  );
+  assert.deepEqual(
+    await checkPublishingChecksumConfiguration(
+      publishingConfigurationMetadataReader(metadata),
+    ),
+    {
+      status: "CHECKED",
+      manualReviewRequired: false,
+      checksumSources: ["secret"],
+    },
   );
 });
 
@@ -656,6 +883,10 @@ test("dry run selects provenance without download, filesystem writes or gates", 
   );
   assert.equal(result.status, "DRY_RUN");
   assert.equal(result.gatesRun, false);
+  assert.deepEqual(result.publishingConfiguration, {
+    status: "UNAVAILABLE",
+    manualReviewRequired: true,
+  });
   assert.equal(result.approved, false);
   assert.equal(existsSync(output), false);
 });
@@ -690,6 +921,7 @@ test("end-to-end preparation reuses all seven real pilot/RUN gates without bundl
   );
   assert.equal(candidate.gates.applications.length, 7);
   assert.equal(candidate.gates.databaseAccess, false);
+  assert.equal(candidate.gates.publishingConfiguration.status, "UNAVAILABLE");
   const log = readFileSync(path.join(result.evidence, "gates.log"), "utf8");
   assert.equal((log.match(/all seven CI artifacts/g) ?? []).length, 7);
   // The retained provenance is the consumed-field snapshot, not the raw
@@ -986,61 +1218,103 @@ test("protected environment requires reviewers, anti-self-review, main-only poli
   }
 });
 
-test("handoff receipt binds all retained bytes and never authorizes production", async (t) => {
+test("handoff records explicit manual Publishing verification for unavailable metadata", async (t) => {
   const f = fixture(t);
   const result = await prepareCandidate(f.options, { client: f.client });
-  const a = approvalFixture();
+  const approval = approvalFixture();
   const client = {
-    producer: f.client.producer,
-    json: async (endpoint) =>
-      endpoint.endsWith("/approvals")
-        ? a.reviews
-        : endpoint.includes("/environments/")
-          ? a.environment
-          : a.run,
-    list: async () => a.policies,
+    producer: async () => structuredClone(f.evidence),
+    json: async (endpoint) => {
+      if (endpoint.includes(`/environments/${ENVIRONMENT}`))
+        return approval.environment;
+      if (endpoint.endsWith(`/actions/runs/${approval.context.GITHUB_RUN_ID}`))
+        return approval.run;
+      if (endpoint.endsWith("/approvals")) return approval.reviews;
+      throw new Error(`unexpected JSON endpoint: ${endpoint}`);
+    },
+    list: async (endpoint) => {
+      assert.match(endpoint, /deployment-branch-policies$/);
+      return approval.policies;
+    },
   };
   const output = path.join(f.directory, "approved");
-  const { receipt } = await approveHandoff(
+  const handoff = await approveHandoff(
     {
       evidence: result.evidence,
       candidateSha256: result.candidateSha256,
       output,
     },
     client,
-    a.context,
+    approval.context,
   );
-  assert.equal(receipt.productionDeploymentAuthorized, false);
-  assert.equal(receipt.status, "APPROVED_FOR_HANDOFF_ONLY");
-  assert.equal(receipt.candidateSha256, result.candidateSha256);
-  assert.match(
-    readFileSync(path.join(output, "approved-checklist.md"), "utf8"),
-    /does not authorize/,
+  assert.equal(
+    handoff.receipt.publishingVerification.status,
+    "MANUALLY_VERIFIED",
   );
+  assert.equal(
+    handoff.receipt.publishingVerification.platformAttestation,
+    false,
+  );
+  assert.equal(handoff.receipt.publishingVerification.secretOnly, true);
+  assert.equal(
+    handoff.receipt.publishingVerification.candidateSha256,
+    result.candidateSha256,
+  );
+  const receipt = JSON.parse(
+    readFileSync(path.join(output, "approved-handoff.json"), "utf8"),
+  );
+  assert.equal(
+    receipt.publishingVerification.expectedSecretSha256,
+    receipt.manifestSha256,
+  );
+  assert.equal(
+    receipt.publishingVerification.checklistSha256,
+    receipt.checklistSha256,
+  );
+  assert.equal(receipt.publishingVerification.scope, "production Publishing");
+  assert.deepEqual(receipt.publishingVerification.environment, {
+    id: approval.environment.id,
+    name: ENVIRONMENT,
+  });
+  assert.equal(receipt.publishingVerification.reviewer.id, 2);
+  assert.equal(receipt.publishingVerification.reviewer.login, "reviewer");
+  assert.doesNotMatch(
+    readFileSync(path.join(output, "approved-handoff.json"), "utf8"),
+    /secretValue|must-not-enter-receipt/,
+  );
+  assert.equal(existsSync(path.join(output, "approved-checklist.md")), true);
+});
+
+test("handoff refuses when unavailable metadata lacks the protected manual review", async (t) => {
+  const f = fixture(t);
+  const result = await prepareCandidate(f.options, { client: f.client });
+  const approval = approvalFixture();
+  approval.reviews = [];
+  const client = {
+    producer: async () => structuredClone(f.evidence),
+    json: async (endpoint) => {
+      if (endpoint.includes(`/environments/${ENVIRONMENT}`))
+        return approval.environment;
+      if (endpoint.endsWith(`/actions/runs/${approval.context.GITHUB_RUN_ID}`))
+        return approval.run;
+      if (endpoint.endsWith("/approvals")) return approval.reviews;
+      throw new Error(`unexpected JSON endpoint: ${endpoint}`);
+    },
+    list: async () => approval.policies,
+  };
   await assert.rejects(
     approveHandoff(
       {
         evidence: result.evidence,
         candidateSha256: result.candidateSha256,
-        output: path.join(f.directory, "stale-approval"),
+        output: path.join(f.directory, "refused-approval"),
       },
-      {
-        ...client,
-        producer: async () => {
-          const changed = structuredClone(f.evidence);
-          changed.run.run_attempt++;
-          return changed;
-        },
-      },
-      a.context,
+      client,
+      approval.context,
     ),
-    /attempt/,
+    /one explicit protected-environment approval required/,
   );
-  writeFileSync(path.join(result.evidence, "unexpected.json"), "{}");
-  await assert.rejects(
-    verifyEvidence(result.evidence, result.candidateSha256),
-    /missing or extra/,
-  );
+  assert.equal(existsSync(path.join(f.directory, "refused-approval")), false);
 });
 
 test("workflow stays manual, main-only, read-only, protected and distinct from production deployment", () => {
@@ -1058,6 +1332,11 @@ test("workflow stays manual, main-only, read-only, protected and distinct from p
   assert.doesNotMatch(
     workflow,
     /pull_request_target|workflow_run:|secrets\.|permissions:[\s\S]*?\bwrite\b|pnpm install|replit.*deploy|db.*push/,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /publishing_configuration_metadata|CANDIDATE_PUBLISHING_METADATA|publishing-configuration-metadata/,
+    "workflow must not accept self-asserted Publishing provenance",
   );
   const reviewedPins = new Set([
     "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",

@@ -112,6 +112,16 @@ Quality and regression alerts:
 `ADVISORY_INBOX_MAX_AGE_MS`, `USABILITY_VALIDATED_AT`,
 `USABILITY_MAX_AGE_MS`, `USABILITY_EVIDENCE_REF`.
 
+`PIPELINE_DB_RETRY_BASE_MS` sets the initial delay after a background pass
+fails because PostgreSQL is unavailable. It defaults to 1000 milliseconds;
+successive failures use exponential backoff capped at 30000 milliseconds.
+This delays the next pass; it does not retry a handler or an external payment,
+message, or invoice submission.
+
+`PIPELINE_HARD_STOP_ON_LOCK_LOSS` is not a supported runtime setting. Tests
+set it only to verify that it cannot disable the mandatory shutdown after
+distributed-lock ownership is lost.
+
 Timestamp evidence uses ISO 8601. Future, malformed, missing, or stale
 evidence warns in non-production and blocks where production policy requires.
 
@@ -218,6 +228,10 @@ Release verification uses `RELEASE_MANIFEST` (local CI manifest path),
 `RELEASE_MANIFEST_SHA256` (checksum obtained from the trusted CI artifact record),
 `RELEASE_ROLLBACK_REVISION` (full SHA of a reviewed compatible rollback build),
 and `RELEASE_BASE_URL` (deployment origin for read-only postdeploy checks).
+`RELEASE_SECURITY_CATALOG_SHA256` is required only for credentialless catalog
+verification. It must be the independently approved SHA-256 of the exact
+production capture envelope, bound to the selected manifest and live origin;
+it is not the manifest checksum. Captures expire after one hour.
 `RELEASE_TRAFFIC_DRAINED=1` is an operator assertion, not a traffic-control
 mechanism: it is required for maintenance-forward/RUN and for the separate
 explicit `--offline-bootstrap` path (which maintenance-forward refuses).
@@ -228,7 +242,15 @@ longer bypasses backup requirements; durable backup/restore evidence is mandator
 Native Replit production descriptors read `release/build-manifest.json` from the
 checkout and require `RELEASE_MANIFEST_SHA256` during every build verification
 and API startup. Provide the checksum independently through trusted Publish
-configuration; it is not a download credential and must not be client-bundled.
+configuration; it is non-sensitive release metadata, not a download credential,
+and must not be client-bundled. Its sole production source of truth is the
+Publishing-scoped secret entry. Before every Publish, replace that value with
+the selected CI artifact's checksum, verify it against the staged
+`release/build-manifest.json.sha256`, and confirm that no Publishing environment
+variable has the same key. Replit gives a Publishing secret precedence over an
+environment variable with the same name, so a retained secret can otherwise
+silently override a newer-looking environment value. A mismatch still fails
+closed and reports this likely scope/precedence drift.
 Under the governed profile, the API build additionally requires the existing
 production `DATABASE_URL` and selected recovery-mode configuration for mandatory
 read-only preflight. The pilot build performs no database mutation; Replit's
@@ -282,7 +304,14 @@ permit and digest bindings, not the plan/held-evidence files. Every Publish
 checks approval TTL; later cold starts retain admission for the same bound
 release. Repeat use of the active permit is one logical activation, not
 single-use consumption. External ingress/schedules remain held until real API
-readiness and operator signoff. Local evidence may only use fixed
+readiness and operator signoff.
+
+The activation permit must copy the validated held evidence `catalogSource`
+exactly: direct database records retain only the source kind, while
+credentialless records retain only the source kind and approved capture
+SHA-256. Credentials and catalog contents must never be included.
+
+Local evidence may only use fixed
 `release/recovery-plan.json`, `release/held-evidence.json` and
 `release/activation-permit.json`, or paths outside the checkout. These are not
 client assets. See [HOLD/RUN operations](operations.md#hold-and-run).

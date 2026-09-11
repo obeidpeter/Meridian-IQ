@@ -1,5 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseConnectionError } from "@workspace/db";
 import {
   registerSweep,
   unregisterSweep,
@@ -13,6 +14,7 @@ import { awaitWorkerIdle, inFlightPasses } from "./in-flight.ts";
 import { stopWorker, resumeWorker } from "./pipeline.ts";
 import { registry } from "../../lib/metrics.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { atMostHourly } from "../clerk/watch-shared.ts";
 
 // Sweep hygiene (R101): every sweep is named, runs under a timeout, and
 // reports under its own label. runSweepsOnce is driven over an explicit list
@@ -103,6 +105,47 @@ test("a throwing sweep and a hung sweep are counted under their names and kinds;
   assert.equal(await awaitWorkerIdle(100), true);
 });
 
+test("a database disconnect is surfaced without replaying effects before later registry entries", async () => {
+  let reachedAfterDisconnect = false;
+  let externalEffects = 0;
+  const report = { failed: [], critical: 0 } as {
+    failed: string[];
+    critical: number;
+    databaseFailure?: unknown;
+  };
+  const failures = await runSweepsOnce(
+    [
+      {
+        name: `test.db-disconnect.${SALT}`,
+        run: async () => {
+          externalEffects += 1;
+          throw new DatabaseConnectionError(
+            new Error("server closed the connection unexpectedly"),
+          );
+        },
+        timeoutMs: 1_000,
+      },
+      {
+        name: `test.after-db-disconnect.${SALT}`,
+        run: async () => {
+          reachedAfterDisconnect = true;
+        },
+        timeoutMs: 1_000,
+      },
+    ],
+    [],
+    report,
+  );
+  assert.equal(failures, 1);
+  assert.equal(
+    externalEffects,
+    1,
+    "a failed sweep must not replay its effects",
+  );
+  assert.equal(reachedAfterDisconnect, true);
+  assert.ok(report.databaseFailure instanceof DatabaseConnectionError);
+});
+
 test("timeout keeps per-sweep ownership until late rejection while healthy siblings continue", async () => {
   let reject!: (error: Error) => void;
   let signal!: AbortSignal;
@@ -155,6 +198,98 @@ test("timeout keeps per-sweep ownership until late rejection while healthy sibli
     0,
   );
   assert.equal(calls, 2);
+});
+
+test("a later scheduled pass can recover without retrying the failed sweep in place", async () => {
+  const name = `test.database_next_pass_${SALT}`;
+  let calls = 0;
+  const sweep: RegisteredSweep = {
+    name,
+    timeoutMs: 1_000,
+    run: async () => {
+      calls += 1;
+      if (calls === 1) throw { code: "08006" };
+    },
+  };
+  assert.equal(await runSweepsOnce([sweep]), 1);
+  assert.equal(calls, 1);
+  assert.doesNotMatch(
+    await registry.metrics(),
+    new RegExp(
+      `valo_sweep_last_success_by_sweep_timestamp_seconds\\{sweep="${name}"\\}`,
+    ),
+  );
+  assert.equal(await runSweepsOnce([sweep]), 0);
+  assert.equal(calls, 2);
+  assert.match(
+    await registry.metrics(),
+    new RegExp(
+      `valo_sweep_last_success_by_sweep_timestamp_seconds\\{sweep="${name}"\\} \\d`,
+    ),
+  );
+});
+
+test("persistent database failure is counted after one attempt", async () => {
+  const name = `test.database_failed_${SALT}`;
+  let calls = 0;
+  assert.equal(
+    await runSweepsOnce([
+      {
+        name,
+        timeoutMs: 1_000,
+        run: async () => {
+          calls += 1;
+          throw { code: "57P03" };
+        },
+      },
+    ]),
+    1,
+  );
+  assert.equal(calls, 1);
+  assert.match(
+    await registry.metrics(),
+    new RegExp(`valo_sweep_errors_total\\{sweep="${name}",kind="error"\\} 1`),
+  );
+});
+
+test("an hourly cadence gate cannot turn a failed sweep into a successful recovery", async () => {
+  const name = `test.hourly_failure_${SALT}`;
+  const error = new DatabaseConnectionError(new Error("connection terminated"));
+  let calls = 0;
+  const run = atMostHourly(async () => {
+    calls += 1;
+    throw error;
+  });
+  const report = {
+    failed: [] as string[],
+    critical: 0,
+    databaseFailure: undefined as unknown,
+  };
+  const before = await registry.metrics();
+  assert.equal(
+    await runSweepsOnce([{ name, run, timeoutMs: 1_000 }], [], report),
+    1,
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(report.failed, [name]);
+  assert.equal(report.critical, 1);
+  assert.equal(report.databaseFailure, error);
+  const after = await registry.metrics();
+  assert.doesNotMatch(
+    after,
+    new RegExp(
+      `valo_sweep_last_success_by_sweep_timestamp_seconds\\{sweep="${name}"\\}`,
+    ),
+  );
+  const recovery = (text: string) =>
+    text
+      .split("\n")
+      .filter((line) =>
+        line.startsWith(
+          'valo_worker_database_recovery_total{worker="compliance"',
+        ),
+      );
+  assert.deepEqual(recovery(after), recovery(before));
 });
 
 test("shutdown aborts cooperatively but waits for actual settlement and refuses new work", async () => {

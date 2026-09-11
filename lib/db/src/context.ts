@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { PoolClient } from "pg";
 import { sql } from "drizzle-orm";
 import { db, pool, type Database } from "./client.ts";
 import {
@@ -7,6 +8,10 @@ import {
   transactionLifetime,
   type DatabaseLifetime,
 } from "./scoped-transaction.ts";
+import {
+  asDatabaseConnectionError,
+  isDatabaseConnectionError,
+} from "./retry.ts";
 
 // Request/worker DB context (CON-01, SEC-02/03).
 //
@@ -158,15 +163,27 @@ export async function runRequestContext<T>(
 ): Promise<T> {
   hasDatabaseContext(); // Reject a stale async continuation before it can reopen a context.
   const parent = storage.getStore();
-  const client = await pool.connect();
+  let client: PoolClient;
+  try {
+    client = await pool.connect();
+  } catch (error) {
+    // Pool acquisition happens before a request context exists, so there is no
+    // client to release or transaction to roll back. Preserve permanent
+    // authentication/configuration failures instead of making them transient.
+    throw isDatabaseConnectionError(error)
+      ? asDatabaseConnectionError(error)
+      : error;
+  }
   const lifetime: DatabaseLifetime = { active: true, parent };
   const scoped = new ScopedTransaction(client, lifetime) as unknown as Database;
   const context = Object.assign(lifetime, { db: scoped });
   let began = false;
   let reusable = false;
   let connectionFailed = false;
-  const onError = () => {
+  let connectionError: unknown;
+  const onError = (error: unknown) => {
     connectionFailed = true;
+    connectionError ??= error;
     context.active = false;
   };
   client.on("error", onError);
@@ -190,6 +207,10 @@ export async function runRequestContext<T>(
     return result;
   } catch (error) {
     context.active = false;
+    if (isDatabaseConnectionError(error)) {
+      connectionFailed = true;
+      connectionError ??= error;
+    }
     if (began && !connectionFailed) {
       try {
         await client.query("ROLLBACK");
@@ -198,7 +219,12 @@ export async function runRequestContext<T>(
         // An uncertain transaction is never returned to the shared pool.
       }
     }
-    throw error;
+    // A driver can report the session error through the query promise without
+    // first emitting PoolClient#error. Keep the client-destruction decision
+    // above and normalize the signal for background workers below.
+    throw connectionFailed
+      ? asDatabaseConnectionError(connectionError ?? error)
+      : error;
   } finally {
     context.active = false;
     client.removeListener("error", onError);

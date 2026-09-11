@@ -11,6 +11,7 @@
     "ops:restore-drill": "node src/ops/restore-drill.mjs",
     "ops:release": "node src/ops/release.mjs",
     "ops:manifest": "node src/ops/build-manifest.mjs",
+    "ops:capture-security-catalog": "node src/ops/capture-security-catalog.mjs",
     "ops:postdeploy": "node src/ops/postdeploy.mjs",
     "test:reliability": "node --test src/ops/*.test.mjs src/quality/*.test.mjs src/load-smoke.test.mjs src/e2e/service-worker.test.mjs src/e2e/journeys/*.test.mjs",
     "test:accessibility": "node --test src/e2e/accessibility.test.mjs",

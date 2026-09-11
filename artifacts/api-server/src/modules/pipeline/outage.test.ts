@@ -12,6 +12,7 @@ import {
   railStatesTable,
   submissionAttemptsTable,
   type Rail,
+  type OutboxEvent,
 } from "@workspace/db";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { clearRailEnv } from "../../test-helpers/rail-env.ts";
@@ -19,11 +20,14 @@ import { setRailTransport } from "../rails/adapter.ts";
 import { scriptedRail } from "../rails/transports/scripted.ts";
 import {
   backoffMs,
+  databaseRetryBackoffMs,
   drain,
   reconcile,
   replayDead,
   retryDisposition,
   registerHandler,
+  runDrainPassOnce,
+  startLeaseHeartbeat,
   sweepOutboxGauges,
 } from "./pipeline.ts";
 import { registry } from "../../lib/metrics.ts";
@@ -200,13 +204,69 @@ test("backoff is capped and jittered; the disposition needs both the minimum tri
   assert.ok(fresh.nextAttemptAt.getTime() > now.getTime());
 });
 
+test("database disconnect backoff grows without wrapping a job or replaying its side effect", () => {
+  const previous = process.env.PIPELINE_DB_RETRY_BASE_MS;
+  process.env.PIPELINE_DB_RETRY_BASE_MS = "250";
+  try {
+    assert.deepEqual(
+      [1, 2, 3, 4, 20].map(databaseRetryBackoffMs),
+      [250, 500, 1_000, 2_000, 30_000],
+    );
+    assert.equal(
+      databaseRetryBackoffMs(99),
+      30_000,
+      "a persistent outage has a bounded recovery probe interval",
+    );
+  } finally {
+    if (previous === undefined) delete process.env.PIPELINE_DB_RETRY_BASE_MS;
+    else process.env.PIPELINE_DB_RETRY_BASE_MS = previous;
+  }
+});
+
+test("a transient database failure after claim retains the lease without replaying the handler", async () => {
+  const type = `test.database-recovery.${SALT}`;
+  const aggregateId = randomUUID();
+  let calls = 0;
+  registerHandler(type, async () => {
+    calls += 1;
+    throw { code: "08006" };
+  });
+  const [event] = await getDb()
+    .insert(outboxTable)
+    .values({
+      aggregateType: "test",
+      aggregateId,
+      type,
+      payload: {},
+      createdAt: new Date("2000-01-01T00:00:00.000Z"),
+      nextAttemptAt: new Date("2000-01-01T00:00:00.000Z"),
+    })
+    .returning({ id: outboxTable.id });
+
+  const result = await runDrainPassOnce({
+    random: () => 0,
+    sleep: async () => {},
+  });
+  assert.equal(result.failed, false);
+  assert.equal(calls, 1, "a lost database session must not replay the handler");
+  const row = await outboxRow(event!.id);
+  assert.equal(row.status, "processing");
+  assert.equal(
+    row.attempts,
+    0,
+    "the infrastructure failure is not a delivery attempt",
+  );
+  assert.equal(row.lastError, null, "database details are not persisted");
+  assert.ok(row.lockToken, "the lease remains the recovery fence");
+});
+
 test("every breaker open: the submission parks — nothing sent, no attempt burned, wake at retry-at", async () => {
   const retryAt = new Date(Date.now() + 60_000);
   await setBreakers("open", retryAt);
   const mustNotBeCalled = scriptedRail({ name: "must-not-be-called" });
   mustNotBeCalled.script("*", { outcome: "timeout" });
   setRailTransport(mustNotBeCalled);
-  const invoiceId = await seedInvoice(1);
+  const invoiceId = await seedInvoice(4);
   const id = await enqueue(invoiceId);
   try {
     await drainUntilScheduled(id);
@@ -333,7 +393,7 @@ test("the gauges sweep exposes outbox depth by state and the oldest pending age"
 });
 
 test("an expired processing lease is reclaimed once while an active lease stays owned", async () => {
-  const eventType = `test.lease.${SALT}`;
+  const eventType = `test.lease-loss.${SALT}`;
   let handled = 0;
   registerHandler(eventType, async () => {
     handled += 1;
@@ -383,5 +443,81 @@ test("an expired processing lease is reclaimed once while an active lease stays 
   } finally {
     await getDb().delete(outboxTable).where(eq(outboxTable.id, staleId));
     await getDb().delete(outboxTable).where(eq(outboxTable.id, activeId));
+  }
+});
+
+test("lease loss after an external action does not immediately replay that action", async () => {
+  const eventType = `test.lease-loss.${SALT}`;
+  let externalActions = 0;
+  const eventId = randomUUID();
+  registerHandler(eventType, async (event) => {
+    // Model the durable lease being taken by another worker after the
+    // external action has happened but before this worker can finalize.
+    externalActions += 1;
+    await getDb()
+      .update(outboxTable)
+      .set({ lockToken: randomUUID() })
+      .where(eq(outboxTable.id, event.id));
+    return { kind: "done" };
+  });
+  await getDb()
+    .insert(outboxTable)
+    .values({
+      id: eventId,
+      aggregateType: "test",
+      aggregateId: `lease-loss-${SALT}`,
+      type: eventType,
+      payload: {},
+      status: "pending",
+      nextAttemptAt: new Date(Date.now() - 1_000),
+    });
+  try {
+    assert.equal(await drain(1), 1);
+    const afterLoss = await outboxRow(eventId);
+    assert.equal(afterLoss.status, "processing");
+    assert.equal(externalActions, 1);
+
+    // The still-live lease is the recovery fence. A later drain must not
+    // invoke the handler again merely because finalization lost its lease.
+    assert.equal(await drain(1), 0);
+    assert.equal(externalActions, 1);
+  } finally {
+    await getDb().delete(outboxTable).where(eq(outboxTable.id, eventId));
+  }
+});
+
+test("claimed lease heartbeat renews until the handler settles", async (t) => {
+  const previousRailTimeout = process.env.RAIL_TIMEOUT_MS;
+  const previousLease = process.env.OUTBOX_LEASE_MS;
+  process.env.RAIL_TIMEOUT_MS = "1";
+  process.env.OUTBOX_LEASE_MS = "30004";
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let renewals = 0;
+  const stop = startLeaseHeartbeat(
+    {
+      id: randomUUID(),
+      correlationId: null,
+    } as Pick<OutboxEvent, "id" | "correlationId"> as OutboxEvent,
+    async () => {
+      renewals += 1;
+    },
+  );
+  try {
+    t.mock.timers.tick(10_001);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(renewals, 1);
+    t.mock.timers.tick(10_001);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(renewals, 2);
+    await stop();
+    t.mock.timers.tick(10_001);
+    assert.equal(renewals, 2, "cleanup must stop all future renewals");
+  } finally {
+    await stop();
+    t.mock.timers.reset();
+    if (previousRailTimeout === undefined) delete process.env.RAIL_TIMEOUT_MS;
+    else process.env.RAIL_TIMEOUT_MS = previousRailTimeout;
+    if (previousLease === undefined) delete process.env.OUTBOX_LEASE_MS;
+    else process.env.OUTBOX_LEASE_MS = previousLease;
   }
 });

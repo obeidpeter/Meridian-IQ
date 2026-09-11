@@ -1,5 +1,6 @@
 export * from "./client.ts";
 export * from "./context.ts";
+export * from "./retry.ts";
 export {
   migrations,
   applyMigrations,

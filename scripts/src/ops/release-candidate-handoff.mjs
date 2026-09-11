@@ -19,6 +19,104 @@ import {
 } from "./release-candidate-github.mjs";
 import { realPath, verifyEvidence } from "./release-candidate.mjs";
 
+const SHA256 = /^[a-f0-9]{64}$/;
+
+function publishingChecksumPolicy(candidate) {
+  const configuration = candidate.gates?.publishingConfiguration;
+  assert.ok(configuration, "Publishing checksum configuration status required");
+  assert.ok(
+    ["CHECKED", "UNAVAILABLE"].includes(configuration.status),
+    "unsupported Publishing checksum configuration status",
+  );
+  if (configuration.status === "UNAVAILABLE") {
+    assert.deepEqual(
+      Object.keys(configuration).sort(),
+      ["manualReviewRequired", "status"],
+      "Publishing checksum configuration has unknown fields",
+    );
+    assert.equal(
+      configuration.manualReviewRequired,
+      true,
+      "unavailable Publishing metadata requires explicit manual review",
+    );
+    return configuration;
+  }
+  assert.deepEqual(
+    Object.keys(configuration).sort(),
+    ["checksumSources", "manualReviewRequired", "status"],
+    "Publishing checksum configuration has unknown fields",
+  );
+  assert.equal(
+    configuration.manualReviewRequired,
+    false,
+    "checked Publishing metadata must not claim manual metadata review",
+  );
+  assert.deepEqual(
+    configuration.checksumSources,
+    ["secret"],
+    "the Publishing checksum must have exactly one secret source; environment variables and workspace secrets are not accepted",
+  );
+  return configuration;
+}
+
+/**
+ * The optional preparation snapshot contains key names only. It can detect a
+ * duplicate before download, but cannot authenticate a Replit Publishing
+ * setting. The protected GitHub environment review is therefore an explicit
+ * manual attestation by a trusted reviewer. Keep the expected value (the
+ * manifest checksum), candidate checksum, scope, and reviewer together in the
+ * receipt, but never read or retain the secret itself.
+ */
+export function validatePublishingChecksumProvenance(
+  candidate,
+  { candidateSha256, checklistSha256, reviewer, environment } = {},
+) {
+  const configuration = publishingChecksumPolicy(candidate);
+  assert.match(
+    candidateSha256 ?? "",
+    SHA256,
+    "manual Publishing verification requires the exact candidate checksum",
+  );
+  assert.match(
+    checklistSha256 ?? "",
+    SHA256,
+    "manual Publishing verification requires the exact checklist checksum",
+  );
+  assert.match(
+    candidate.manifest?.sha256 ?? "",
+    SHA256,
+    "manual Publishing verification requires the exact manifest checksum",
+  );
+  assert.ok(
+    environment &&
+      positiveId(environment.id) &&
+      environment.name === ENVIRONMENT,
+    "manual Publishing verification requires the protected production handoff environment",
+  );
+  assert.ok(
+    reviewer && positiveId(reviewer.id),
+    "manual Publishing verification requires a trusted human reviewer",
+  );
+  assert.ok(
+    typeof reviewer.login === "string" && reviewer.login.length > 0,
+    "manual Publishing verification requires reviewer identity",
+  );
+  return {
+    status: "MANUALLY_VERIFIED",
+    method: "protected-environment-review",
+    platformAttestation: false,
+    scope: "production Publishing",
+    key: "RELEASE_MANIFEST_SHA256",
+    secretOnly: true,
+    candidateSha256,
+    checklistSha256,
+    expectedSecretSha256: candidate.manifest.sha256,
+    metadataStatus: configuration.status,
+    environment: { id: environment.id, name: environment.name },
+    reviewer: { id: reviewer.id, login: reviewer.login },
+  };
+}
+
 export function validateApproval(run, reviews, environment, context) {
   assert.equal(
     context.GITHUB_ACTIONS,
@@ -83,6 +181,9 @@ export async function approveHandoff(
     options.evidence,
     options.candidateSha256,
   );
+  // Reject unsupported or ambiguous metadata before producer/approval API
+  // access. A valid status still requires the protected reviewer below.
+  publishingChecksumPolicy(candidate);
   selection(candidate.selection);
   assert.equal(
     candidate.selection.repository,
@@ -105,6 +206,15 @@ export async function approveHandoff(
   const run = await client.json(endpoint);
   const reviews = await client.json(`${endpoint}/approvals`);
   const reviewer = validateApproval(run, reviews, environment, context);
+  const publishingVerification = validatePublishingChecksumProvenance(
+    candidate,
+    {
+      candidateSha256: options.candidateSha256,
+      checklistSha256: candidate.files["checklist.md"],
+      reviewer,
+      environment,
+    },
+  );
   const receipt = {
     format: 1,
     status: "APPROVED_FOR_HANDOFF_ONLY",
@@ -116,6 +226,7 @@ export async function approveHandoff(
     manifestSha256: candidate.manifest.sha256,
     environment: { id: environment.id, name: ENVIRONMENT },
     reviewer,
+    publishingVerification,
     preparation: { runId: String(run.id), attempt: 1, revision: run.head_sha },
   };
   const output = path.resolve(options.output);
@@ -130,7 +241,7 @@ export async function approveHandoff(
     path.join(realPath(options.evidence), "checklist.md"),
     "utf8",
   );
-  const approved = `# Approved For Handoff Only\n\nCandidate SHA-256: ${options.candidateSha256}\n\nChecklist SHA-256: ${candidate.files["checklist.md"]}\n\nReviewer: ${reviewer.login} (${reviewer.id}) through ${ENVIRONMENT}.\n\nApproval is recorded at https://github.com/${context.GITHUB_REPOSITORY}/actions/runs/${run.id}.\n\nThe unchanged checklist below remains a set of operator obligations. This receipt does not assert that its boxes were completed and does not authorize authenticated production Publish, schema changes, service startup, or governed RUN.\n\n---\n\n${checklist}`;
+  const approved = `# Approved For Handoff Only\n\nCandidate SHA-256: ${options.candidateSha256}\n\nChecklist SHA-256: ${candidate.files["checklist.md"]}\n\nReviewer: ${reviewer.login} (${reviewer.id}) through ${ENVIRONMENT}.\n\nPublishing checksum verification: MANUALLY_VERIFIED for production Publishing, sole secret key RELEASE_MANIFEST_SHA256, expected value ${candidate.manifest.sha256}. This is a protected-reviewer attestation, not authenticated platform metadata; the secret value is not retained.\n\nApproval is recorded at https://github.com/${context.GITHUB_REPOSITORY}/actions/runs/${run.id}.\n\nThe unchanged checklist below remains a set of operator obligations. This receipt does not assert that its boxes were completed and does not authorize authenticated production Publish, schema changes, service startup, or governed RUN.\n\n---\n\n${checklist}`;
   writeFileSync(path.join(output, "approved-checklist.md"), approved, {
     flag: "wx",
     mode: 0o600,

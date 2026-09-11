@@ -4,6 +4,7 @@ import { test, type TestContext } from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryConfig } from "pg";
 import { firmsTable } from "./schema/organizations.ts";
+import { DatabaseConnectionError, isDatabaseConnectionError } from "./retry.ts";
 
 process.env.DATABASE_URL ??= "postgresql://test:test@127.0.0.1:1/test";
 const { db, pool } = await import("./client.ts");
@@ -37,6 +38,34 @@ function expired(error: unknown): boolean {
 }
 
 const siblingOverlap = /Concurrent sibling transactions are not supported/;
+
+test("pool acquisition preserves permanent failures and classifies availability errors", async (t) => {
+  for (const code of ["28P01", "3D000", "CERT_HAS_EXPIRED", "ECONNREFUSED"]) {
+    const original = Object.assign(new Error("Acquisition refused"), { code });
+    const connect = t.mock.method(pool, "connect", async () => {
+      throw original;
+    });
+    let invoked = false;
+    await assert.rejects(
+      runInBypassContext(async () => {
+        invoked = true;
+      }),
+      (error: unknown) => {
+        if (code === "ECONNREFUSED") {
+          assert.ok(error instanceof DatabaseConnectionError);
+          assert.equal(error.cause, original);
+          assert.equal(isDatabaseConnectionError(error), true);
+        } else {
+          assert.equal(error, original);
+          assert.equal(isDatabaseConnectionError(error), false);
+        }
+        return true;
+      },
+    );
+    assert.equal(invoked, false);
+    connect.mock.restore();
+  }
+});
 
 // Only the wire transport is fake: all sessions, lazy builders, relational
 // queries, prepared execution and savepoint orchestration are the real code.
@@ -509,12 +538,20 @@ test("failed BEGIN, failed rollback, and connection errors destroy rather than r
     /body failed/,
   );
   client.beforeQuery = async () => {};
+  const disconnect = Object.assign(new Error("connection failed"), {
+    code: "08006",
+  });
   await assert.rejects(
     runInBypassContext(async () => {
-      client.emit("error", new Error("connection failed"));
+      client.emit("error", disconnect);
       await getDb().execute(sql`select 'forbidden after connection error'`);
     }),
-    expired,
+    (error: unknown) => {
+      assert.ok(error instanceof DatabaseConnectionError);
+      assert.equal(error.cause, disconnect);
+      assert.equal(isDatabaseConnectionError(error), true);
+      return true;
+    },
   );
   assert.deepEqual(client.releases, [true, true, true]);
   assert.equal(client.listenerCount("error"), 0);

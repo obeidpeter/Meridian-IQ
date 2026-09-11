@@ -24,6 +24,28 @@ const HASH_BINDINGS = [
   "heldEvidenceSha256",
 ];
 
+function validateCatalogSource(value) {
+  assert.ok(
+    value !== null && typeof value === "object" && !Array.isArray(value),
+    "activation catalogSource must be an object",
+  );
+  if (value.kind === "direct-database") {
+    fields(value, ["kind"], "activation catalogSource");
+    return;
+  }
+  fields(value, ["kind", "captureSha256"], "activation catalogSource");
+  assert.equal(
+    value.kind,
+    "credentialless-capture",
+    "unsupported activation catalog source",
+  );
+  assert.match(
+    value.captureSha256 ?? "",
+    SHA256,
+    "credentialless activation record requires approved capture SHA-256",
+  );
+}
+
 function fields(value, keys, label) {
   assert.ok(
     value !== null && typeof value === "object" && !Array.isArray(value),
@@ -121,6 +143,7 @@ export function validateActivationPermit(
       "activationId",
       "revision",
       ...HASH_BINDINGS,
+      "catalogSource",
       "target",
       "approved",
       "approvedBy",
@@ -150,6 +173,7 @@ export function validateActivationPermit(
   );
   for (const name of HASH_BINDINGS)
     assert.equal(permit[name], expected[name], `activation ${name} mismatch`);
+  validateCatalogSource(permit.catalogSource);
   fields(permit.target, ["origin", "replId"], "activation target");
   assert.equal(
     permit.target.origin,

@@ -38,6 +38,7 @@ function fixture() {
     recoveryPlanSha256: bindings.recoveryPlanSha256,
     backupSha256: bindings.backupSha256,
     heldEvidenceSha256: bindings.heldEvidenceSha256,
+    catalogSource: { kind: "direct-database" },
     target: { origin: bindings.targetOrigin, replId: bindings.replId },
     approved: true,
     approvedBy: "synthetic-approver",
@@ -70,6 +71,40 @@ test("valid permit passes pure and trusted-file checks for both phases", (t) => 
   for (const options of [promotion, runtime]) {
     assert.equal(validateActivationPermit(permit, bindings, options), permit);
     assert.deepEqual(loadActivationPermit(env, bindings, options), permit);
+  }
+});
+
+test("catalog source records direct database or only an approved credentialless capture hash", () => {
+  assert.equal(
+    validateActivationPermit(fixture(), bindings, promotion).catalogSource.kind,
+    "direct-database",
+  );
+  const credentialless = fixture();
+  credentialless.catalogSource = {
+    kind: "credentialless-capture",
+    captureSha256: "9".repeat(64),
+  };
+  assert.deepEqual(
+    validateActivationPermit(credentialless, bindings, promotion).catalogSource,
+    credentialless.catalogSource,
+  );
+  for (const mutate of [
+    (source) => {
+      source.credentials = "must-not-be-retained";
+    },
+    (source) => {
+      source.catalog = {};
+    },
+    (source) => {
+      source.captureSha256 = "9".repeat(63);
+    },
+  ]) {
+    const permit = structuredClone(credentialless);
+    mutate(permit.catalogSource);
+    assert.throws(
+      () => validateActivationPermit(permit, bindings, promotion),
+      /missing or unknown|approved capture SHA-256/,
+    );
   }
 });
 
@@ -365,6 +400,13 @@ const invalidPermits = [
     "unknown target field",
     (p) => {
       p.target.deploymentId = "invented-id";
+    },
+    /missing or unknown/,
+  ],
+  [
+    "missing catalog source",
+    (p) => {
+      delete p.catalogSource;
     },
     /missing or unknown/,
   ],

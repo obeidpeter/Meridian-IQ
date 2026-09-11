@@ -1,4 +1,9 @@
-import { workerLockPool } from "@workspace/db";
+import {
+  asDatabaseConnectionError,
+  isDatabaseConnectionError,
+  type PoolClient,
+  workerLockPool,
+} from "@workspace/db";
 import { logger } from "../../lib/logger";
 
 // The worker's distributed pass lock (R107: extracted from pipeline.ts). A
@@ -9,22 +14,42 @@ import { logger } from "../../lib/logger";
 /** Run `task` under a session-level advisory lock on the worker pool; the
  *  pass is skipped (acquired: false) when another instance holds it.
  *  `onConnectionLost` is the ownership-failure policy: losing the session
- *  means the lock is gone, so the caller stops scheduling. */
+ *  means the lock is gone, so the caller pauses scheduling. If a task is
+ *  already running, it is passed to that policy as an unsettled fence: the
+ *  caller must not resume this process while that task can still side-effect. */
 export async function withDistributedLock<T>(
   lockId: number,
   task: () => Promise<T>,
-  onConnectionLost: () => void,
+  onConnectionLost: (activeWork?: PromiseLike<unknown>) => void,
 ): Promise<{ acquired: boolean; value?: T }> {
-  const client = await workerLockPool.connect();
+  let client: PoolClient;
+  try {
+    client = await workerLockPool.connect();
+  } catch (error) {
+    // No advisory lock can exist without a session. Treat a connection failure
+    // during pool acquisition as ownership loss too, so callers enter the same
+    // bounded recovery window.
+    if (isDatabaseConnectionError(error)) {
+      onConnectionLost();
+      throw asDatabaseConnectionError(error);
+    }
+    throw error;
+  }
   let acquired = false;
   let taskError: unknown;
   let releaseError: Error | undefined;
+  let taskPromise: Promise<T> | undefined;
+  let taskSettled = false;
   const onConnectionError = (error: Error) => {
     releaseError = error;
-    // Losing a session lock is an ownership failure. Stop scheduling and ask
-    // cooperative work to stop; already-issued effects still require idempotency.
-    onConnectionLost();
-    logger.error({ lockId }, "worker lock connection lost; worker stopped");
+    // Losing a session lock is an ownership failure. Pause scheduling and ask
+    // cooperative work to stop. An unsettled task is not safe to resume over:
+    // it may still perform a side effect after another worker acquires the lock.
+    onConnectionLost(taskSettled ? undefined : taskPromise);
+    logger.error(
+      { lockId },
+      "worker lock connection lost; worker scheduling paused",
+    );
   };
   client.on("error", onConnectionError);
   try {
@@ -34,10 +59,21 @@ export async function withDistributedLock<T>(
     );
     acquired = result.rows[0]?.acquired === true;
     if (!acquired) return { acquired: false };
-    return { acquired: true, value: await task() };
+    taskPromise = Promise.resolve().then(task);
+    taskPromise.then(
+      () => {
+        taskSettled = true;
+      },
+      () => {
+        taskSettled = true;
+      },
+    );
+    return { acquired: true, value: await taskPromise };
   } catch (error) {
     taskError = error;
-    throw error;
+    throw taskPromise === undefined && isDatabaseConnectionError(error)
+      ? asDatabaseConnectionError(error)
+      : error;
   } finally {
     if (acquired) {
       try {
@@ -58,6 +94,10 @@ export async function withDistributedLock<T>(
     // returned to the pool and strand all future sweep attempts.
     client.removeListener("error", onConnectionError);
     client.release(releaseError);
-    if (!taskError && releaseError) throw releaseError;
+    if (!taskError && releaseError) {
+      throw isDatabaseConnectionError(releaseError)
+        ? asDatabaseConnectionError(releaseError)
+        : releaseError;
+    }
   }
 }

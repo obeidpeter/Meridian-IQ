@@ -13,7 +13,7 @@
     "test:coverage:check": "node ../../scripts/src/quality/coverage.mjs check",
     "test:coverage:write": "node ../../scripts/src/quality/coverage.mjs write",
     "test:pure": "tsx --test src/middleware/request-policy.test.ts src/middleware/rate-limit-lockstep.test.ts src/architecture-conformance.test.ts src/modules/clerk/eval-scoring.test.ts src/modules/clerk/assurance-guardrails.test.ts src/modules/desk/release-readiness-checks.test.ts src/modules/invoice/input-validation.test.ts src/modules/invoice/cursor.test.ts src/modules/invoice-drafts/contract.test.ts src/modules/operations/command.test.ts src/modules/import-runs/manifest.test.ts src/modules/rails/adapter-http-context.test.ts src/modules/messaging/reminder-http-context.test.ts src/modules/clerk/sweep-budget.test.ts src/routes/sweep.test.ts src/lib/brand-headers.test.ts src/lib/public-app-url.test.ts src/modules/work/cursor.test.ts src/modules/workspace/today.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc --build tsconfig.json",
     "benchmark": "tsx ./src/bench/pipeline-benchmark.ts",
     "fake-rail": "tsx ./src/fake-rail-main.ts",
     "soak": "tsx ./src/bench/rail-soak.ts"

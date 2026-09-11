@@ -9,6 +9,7 @@ import {
   sweepDurationSeconds,
 } from "../../lib/metrics";
 import { track } from "./in-flight";
+import { classifyPostgresFailure } from "./db-retry";
 
 // The compliance sweep registry and pass runner (R107: extracted from
 // pipeline.ts, which keeps the outbox drain, the reconciliation loops and the
@@ -38,7 +39,9 @@ export interface RegisteredSweep {
 export interface SweepFailureReport {
   failed: string[];
   critical: number;
+  databaseFailure?: unknown;
 }
+
 const SWEEPS: RegisteredSweep[] = [];
 const activeSweeps = new Map<
   string,
@@ -233,12 +236,16 @@ export function resumeSweeps(): void {
 // Run sweeps sequentially so one guard covers the whole pass and they don't
 // contend for pool connections; a failing or timed-out sweep is counted under
 // its NAME and logged, not silently dropped, and does not abort its siblings.
+// A sweep may cross external boundaries or have a cadence gate that skips a
+// repeated call. Surface database failures without replaying the whole sweep;
+// the normal schedule owns its next attempt.
 // Exported over an explicit list so a test can drive it without touching the
 // registry.
 export async function runSweepsOnce(
   sweeps: RegisteredSweep[],
   owned: Promise<unknown>[] = [],
   report?: SweepFailureReport,
+  passSignal?: AbortSignal,
 ): Promise<number> {
   let failures = 0;
   const note = (sweep: RegisteredSweep) => {
@@ -247,7 +254,7 @@ export async function runSweepsOnce(
     if (sweep.critical !== false) report.critical += 1;
   };
   for (const sweep of sweeps) {
-    if (stopping) {
+    if (stopping || passSignal?.aborted) {
       failures += 1;
       if (report) report.critical += 1;
       break;
@@ -261,11 +268,22 @@ export async function runSweepsOnce(
     const timeoutMs = sweep.timeoutMs || defaultSweepTimeoutMs();
     const stop = sweepDurationSeconds.startTimer({ sweep: sweep.name });
     const controller = new AbortController();
-    const work = Promise.resolve().then(() => sweep.run(controller.signal));
+    const abortForPass = () => controller.abort(passSignal?.reason);
+    passSignal?.addEventListener("abort", abortForPass, { once: true });
+    if (passSignal?.aborted) abortForPass();
+    const work = Promise.resolve().then(() => {
+      controller.signal.throwIfAborted();
+      return sweep.run(controller.signal);
+    });
     activeSweeps.set(sweep.name, { work, controller, timeoutMs });
     owned.push(work);
     track(work);
-    void work.finally(() => activeSweeps.delete(sweep.name)).catch(() => {});
+    void work
+      .finally(() => {
+        activeSweeps.delete(sweep.name);
+        passSignal?.removeEventListener("abort", abortForPass);
+      })
+      .catch(() => {});
     try {
       await withSweepTimeout(sweep.name, work, timeoutMs, controller);
       sweepLastSuccessBySweep.setToCurrentTime({ sweep: sweep.name });
@@ -273,13 +291,27 @@ export async function runSweepsOnce(
     } catch (err) {
       failures += 1;
       note(sweep);
-      const kind = err instanceof SweepTimeoutError ? "timeout" : "error";
+      const kind =
+        err instanceof SweepTimeoutError
+          ? "timeout"
+          : controller.signal.aborted && err === controller.signal.reason
+            ? "stopped"
+            : "error";
       sweepErrorsTotal.inc({ sweep: sweep.name, kind });
       stop({ outcome: kind });
-      logger.error(
-        { err, sweep: sweep.name, timeoutMs },
-        "compliance sweep failed",
-      );
+      const failure = classifyPostgresFailure(err);
+      if (failure.transient && report) report.databaseFailure = err;
+      if (failure.transient) {
+        logger.warn(
+          { sweep: sweep.name, code: failure.code },
+          "database failure in compliance sweep; waiting for the next scheduled pass",
+        );
+      } else if (kind !== "stopped") {
+        logger.error(
+          { err, sweep: sweep.name, timeoutMs },
+          "compliance sweep failed",
+        );
+      }
     }
   }
   return failures;
@@ -303,8 +335,14 @@ export function orderedSweeps<T extends { critical?: boolean }>(
 export async function runRegisteredSweeps(
   owned: Promise<unknown>[],
   report: SweepFailureReport,
+  passSignal?: AbortSignal,
 ): Promise<number> {
-  const failures = await runSweepsOnce(orderedSweeps(SWEEPS), owned, report);
+  const failures = await runSweepsOnce(
+    orderedSweeps(SWEEPS),
+    owned,
+    report,
+    passSignal,
+  );
   // Record pass health for scraping: the run counter advances every pass (the
   // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
   // frozen overnight, stops it — OBS-01), while last_success only advances
