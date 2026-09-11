@@ -29,7 +29,7 @@ export function InvoiceRespond() {
       <div className="space-y-4">
         <BackLink />
         {isFeatureDisabled(error) ? (
-          <FeatureUnavailable feature="Buyer Rails" />
+          <FeatureUnavailable feature="Buyer workspace" />
         ) : (
           <QueryError thing="this invoice" onRetry={() => refetch()} />
         )}

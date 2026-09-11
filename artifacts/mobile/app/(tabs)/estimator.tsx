@@ -111,8 +111,9 @@ export default function EstimatorScreen() {
       bottomOffset={24}
     >
       <AppText variant="body" color={colors.mutedForeground}>
-        Estimate your exposure under the fiscalisation penalty regime. Works
-        fully offline — nothing you enter here is sent anywhere.
+        Estimate possible e-invoicing penalties using Valo's planning
+        assumptions. This calculator works offline. Your entries are not sent
+        anywhere.
       </AppText>
 
       {/* Caption eyebrow: keeps the tracking sectionLabel no longer carries. */}
@@ -121,7 +122,7 @@ export default function EstimatorScreen() {
         color={colors.mutedForeground}
         style={[styles.sectionLabel, { letterSpacing: 0.6 }]}
       >
-        WHAT HAPPENED?
+        What happened?
       </AppText>
       <Card padded={false}>
         {FILING_TYPE_OPTIONS.map((option, index) => (
@@ -177,7 +178,7 @@ export default function EstimatorScreen() {
       <Card style={{ gap: 16 }}>
         {showAccess ? (
           <TextField
-            label="Days access not granted (s.103)"
+            label="Days tax-authority systems access was blocked (s.103)"
             hint={`${formatNaira(S103_FIRST_DAY)} on day one, then ${formatNaira(
               S103_PER_ADDITIONAL_DAY,
             )} per additional day`}
@@ -190,8 +191,8 @@ export default function EstimatorScreen() {
         ) : null}
         {showInvoice ? (
           <TextField
-            label="Non-compliant invoices (s.104)"
-            hint={`${formatNaira(S104_PER_INVOICE[band])} per invoice at your band`}
+            label="Missing required e-invoices (s.104)"
+            hint={`Estimate uses ${formatNaira(S104_PER_INVOICE[band])} per invoice in your turnover band`}
             keyboardType="number-pad"
             inputMode="numeric"
             placeholder="0"
@@ -206,13 +207,13 @@ export default function EstimatorScreen() {
         color={colors.mutedForeground}
         style={styles.sectionLabel}
       >
-        Estimated exposure
+        Estimated penalties
       </AppText>
       <Card>
         {showAccess ? (
           <View style={styles.resultRow}>
             <AppText variant="body" color={colors.mutedForeground}>
-              s.103 — Systems access
+              s.103: Systems access
             </AppText>
             <AppText variant="label">{formatNaira(result.s103)}</AppText>
           </View>
@@ -220,14 +221,14 @@ export default function EstimatorScreen() {
         {showInvoice ? (
           <View style={styles.resultRow}>
             <AppText variant="body" color={colors.mutedForeground}>
-              s.104 — E-invoices
+              s.104: E-invoices
             </AppText>
             <AppText variant="label">{formatNaira(result.s104)}</AppText>
           </View>
         ) : null}
         <Divider />
         <View style={[styles.resultRow, { marginTop: 4 }]}>
-          <AppText variant="heading">Total</AppText>
+          <AppText variant="heading">Total estimate</AppText>
           <AppText
             variant="title"
             color={
@@ -248,8 +249,9 @@ export default function EstimatorScreen() {
           color={colors.mutedForeground}
           style={{ flex: 1 }}
         >
-          This is Valo's penalty model, provided as an estimate only — not tax
-          or legal advice. Actual assessments are made by the tax authority.
+          These are planning assumptions, not official penalty amounts or legal
+          or tax advice. The tax authority determines actual penalties. Check
+          current official notices or speak to a tax advisor.
         </AppText>
       </View>
     </KeyboardAwareScrollViewCompat>

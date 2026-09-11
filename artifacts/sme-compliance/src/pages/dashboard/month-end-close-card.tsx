@@ -153,9 +153,9 @@ export function MonthEndCloseCard({
                                   "No invoices are currently eligible for the close actions — the remaining checklist items need hands-on attention.",
                               }
                             : {
-                                title: "Couldn't start the close run",
+                                title: "Could not confirm the run started",
                                 description:
-                                  "Nothing was changed. Try again shortly.",
+                                  "Check the latest month-end run status before starting another run. The first request may have been received.",
                               },
                         ),
                     },

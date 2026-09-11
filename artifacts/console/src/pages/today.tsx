@@ -29,12 +29,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { userErrorMessage } from "@/lib/errors";
 import { Plus, RefreshCw } from "lucide-react";
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "This workspace could not be loaded.";
+  return userErrorMessage(error) ?? "This workspace could not be loaded.";
 }
 
 export function Today() {
@@ -79,7 +78,7 @@ export function Today() {
           </span>
           <Button variant="outline" onClick={() => void refetch()}>
             <RefreshCw className="size-4" aria-hidden="true" />
-            Retry
+            Try again
           </Button>
         </div>
       ) : null}

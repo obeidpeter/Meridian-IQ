@@ -18,7 +18,8 @@ export function EvidenceSection({ detail }: { detail: InvoiceRoomDetail }) {
               Supplier and stamp evidence
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Details captured from the immutable invoice record.
+              Details saved with the invoice. Any stamp shown is a saved record,
+              not a live check with the tax authority.
             </p>
           </div>
         </div>
@@ -31,11 +32,13 @@ export function EvidenceSection({ detail }: { detail: InvoiceRoomDetail }) {
       </div>
       <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-slate-500">Legal supplier</dt>
+          <dt className="text-slate-500">Supplier legal name</dt>
           <dd className="mt-1 font-bold">{detail.supplier.legalName}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Supplier TIN</dt>
+          <dt className="text-slate-500">
+            Supplier tax identification number (TIN)
+          </dt>
           <dd className="mt-1 font-mono font-bold">
             {detail.supplier.tin ?? "Not provided"}
           </dd>
@@ -55,7 +58,7 @@ export function EvidenceSection({ detail }: { detail: InvoiceRoomDetail }) {
               </dd>
             </div>
             <div>
-              <dt className="text-slate-500">Stamp rail</dt>
+              <dt className="text-slate-500">Submission service</dt>
               <dd className="mt-1 font-bold">
                 {detail.stamp.rail} · {detail.stamp.provider}
               </dd>

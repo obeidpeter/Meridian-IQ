@@ -987,10 +987,10 @@ describe("caseIntakeKind", () => {
   test("a notice case relabels its source; invoice cases pass through", () => {
     const notice = caseIntakeKind({ kind: "notice", sourceType: "image" });
     expect(notice.label).toBe("Tax notice");
-    expect(notice.eyebrow).toBe("Notice intake");
+    expect(notice.eyebrow).toBe("Notice review");
     const invoice = caseIntakeKind({ kind: "extraction", sourceType: "image" });
     expect(invoice.label).toBe("Invoice scan");
-    expect(invoice.eyebrow).toBe("Document intake");
+    expect(invoice.eyebrow).toBe("Document review");
     // The icon still follows the SOURCE — a scanned notice keeps the scan
     // icon, only the words change.
     expect(notice.icon).toBe(invoice.icon);

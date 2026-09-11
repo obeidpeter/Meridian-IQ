@@ -177,13 +177,12 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
           {metrics.correctionShapes && metrics.correctionShapes.length > 0 && (
             <Card data-testid="section-correction-shapes">
               <CardHeader>
-                <CardTitle className="text-base">Correction shapes</CardTitle>
+                <CardTitle className="text-base">Common corrections</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  What KIND of mistake each override was — recurring correction
-                  patterns from the same exhaust, with an example of the change
-                  operators made.
+                  Common mistakes corrected during review, with examples of the
+                  changes operators made.
                 </p>
                 <ScrollRegion label="Correction shapes table">
                   <table
@@ -233,10 +232,9 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Whose documents Clerk reads worst — override rates from the
-                corrections exhaust, grouped by the approved invoice&apos;s
-                register supplier. The list of clients worth nudging toward
-                cleaner invoices.
+                How often operators corrected Clerk's suggestions, grouped by
+                the supplier on the approved invoice. Use this to identify
+                documents that may need clearer scans or more careful review.
               </p>
               {metrics.supplierAccuracy.length === 0 ? (
                 <p
@@ -303,14 +301,14 @@ export function QualityTab({ withMetrics }: { withMetrics: MetricsGuard }) {
             <Card data-testid="section-kept-rate-trend">
               <CardHeader>
                 <CardTitle className="text-base">
-                  Extraction kept-rate trend
+                  Suggested values kept unchanged
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  From the corrections exhaust — the share of compared fields
-                  operators KEPT unchanged when approving, by month. Pure SQL,
-                  no model involved in the judgment.
+                  The share of compared values that operators kept unchanged
+                  when approving, by month. Calculated from saved review
+                  records, not judged by an AI model.
                 </p>
                 <ScrollRegion label="Kept-rate by month table">
                   <table

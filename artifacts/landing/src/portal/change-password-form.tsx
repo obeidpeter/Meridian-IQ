@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { serverErrorFrom } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 
 export function ChangePasswordForm() {
   const changePassword = useChangePassword();
@@ -44,10 +44,11 @@ export function ChangePasswordForm() {
       }, 2500);
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      const serverError = serverErrorFrom(err);
+      const serverError = userErrorMessage(err);
       if (status === 401) {
         setError({
-          message: "Current password is incorrect.",
+          message:
+            "Your current password is incorrect. Check it and try again.",
           field: "current",
         });
         document.getElementById("cp-current")?.focus();
@@ -59,7 +60,9 @@ export function ChangePasswordForm() {
         document.getElementById("cp-new")?.focus();
       } else {
         setError({
-          message: "Could not change the password. Try again.",
+          message:
+            serverError ??
+            "Could not confirm the password change. Try signing in with your new password before trying again.",
           field: null,
         });
       }
@@ -158,7 +161,7 @@ export function ChangePasswordForm() {
           disabled={changePassword.isPending || !current || next.length < 8}
           data-testid="button-change-password"
         >
-          {changePassword.isPending ? "Saving…" : "Save"}
+          {changePassword.isPending ? "Saving…" : "Save changes"}
         </Button>
         <Button
           type="button"

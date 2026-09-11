@@ -149,7 +149,7 @@ export function CaseDetail({ state }: { state: ClerkWorkspaceState }) {
                           {hint && (
                             <span
                               className="shrink-0 text-[10px] text-amber-700 dark:text-amber-400"
-                              title="From the corrections exhaust across recent approved cases"
+                              title="Based on corrections made in recently approved cases"
                               data-testid={`hint-${f.field}`}
                             >
                               {hint}

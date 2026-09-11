@@ -173,9 +173,9 @@ export default function MonthEndScreen() {
         ) : (
           <View style={{ gap: 12 }}>
             <AppText variant="body" color={colors.mutedForeground}>
-              The platform&apos;s advisories composed into one checklist —
-              review each item before closing the month. Advisory only; a human
-              closes the month.
+              Review these suggested checks before closing the month. This
+              checklist does not close the month for you. A person must make
+              that decision.
             </AppText>
 
             <Card style={{ gap: 4 }}>

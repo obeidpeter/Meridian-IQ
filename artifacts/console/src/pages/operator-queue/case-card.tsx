@@ -184,8 +184,8 @@ function CaseActions({
                 onClick={() => onResolve(c, "retried", note)}
                 data-testid={`button-retry-${c.id}`}
               >
-                <Zap className="w-4 h-4 mr-1" aria-hidden="true" /> Retry &
-                resolve
+                <Zap className="w-4 h-4 mr-1" aria-hidden="true" /> Try again
+                and resolve
               </Button>
             )}
             <Button

@@ -123,7 +123,7 @@ export function OnboardingStepRow({
             >
               <div className="space-y-1">
                 <Label htmlFor={`onboarding-skip-${step.key}`}>
-                  Why is this step not needed?
+                  Why are you skipping this step?
                 </Label>
                 <Input
                   id={`onboarding-skip-${step.key}`}
@@ -145,7 +145,7 @@ export function OnboardingStepRow({
                 disabled={skipReason.trim().length < 3 || skip.isPending}
                 data-testid={`button-onboarding-skip-confirm-${step.key}`}
               >
-                {skip.isPending ? "Recording…" : "Record the gap"}
+                {skip.isPending ? "Recording…" : "Skip and record reason"}
               </Button>
             </div>
           )}
@@ -166,7 +166,7 @@ export function OpeningPositionSection({
       data-testid="section-onboarding-position"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="font-medium text-sm">Day-one position</p>
+        <p className="font-medium text-sm">Starting financial position</p>
         {position.provisional && (
           <span
             className={pillClasses("slate")}
@@ -223,7 +223,7 @@ export function OnboardingRunActions({
           data-testid="button-onboarding-report"
         >
           <Download className="w-4 h-4 mr-1" aria-hidden="true" />
-          Readiness report (PDF)
+          Download readiness report (PDF)
         </Button>
       )}
       {canWrite && run.status === "active" && (
@@ -243,8 +243,8 @@ export function OnboardingRunActions({
             className="text-sm text-muted-foreground"
             data-testid="text-onboarding-closed"
           >
-            This run was closed without completing — its checklist is frozen
-            above. Start a fresh run to reopen onboarding.
+            This onboarding checklist was closed before completion and no longer
+            updates. Start a new checklist to continue onboarding.
           </p>
           <Button
             size="sm"
@@ -263,9 +263,9 @@ export function OnboardingRunActions({
               Close onboarding without completing it?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The run closes and its checklist freezes where it stands — steps
-              stop re-checking themselves. You can start a fresh onboarding run
-              for {run.clientName} afterwards.
+              This checklist will close and stop checking for progress. Its
+              current results will be kept. You can start a new checklist for
+              {run.clientName} afterwards.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -49,7 +49,7 @@ export function ClientInvoicesCard({
                   <th className="px-3 py-2 text-right">Amount</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">
-                    <span className="sr-only">Rail status</span>
+                    <span className="sr-only">Submission status</span>
                   </th>
                 </tr>
               </thead>

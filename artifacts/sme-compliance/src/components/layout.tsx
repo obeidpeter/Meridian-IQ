@@ -216,18 +216,18 @@ type RoleContext = { title: string; description: string; badge: string };
 const ROLE_CONTEXT: Record<string, RoleContext> = {
   firm_admin: {
     title: "Client compliance workspace",
-    description: "Invoicing, filings and firm-led controls",
+    description: "Manage client invoices, tax filings and approvals",
     badge: "Firm admin",
   },
   firm_staff: {
-    title: "Client delivery workspace",
-    description: "Daily invoicing and compliance operations",
+    title: "Client workspace",
+    description: "Manage daily invoicing and compliance tasks",
     badge: "Firm staff",
   },
   client_user: {
     title: "Business workspace",
-    description: "Cashflow, invoices and compliance evidence",
-    badge: "Business owner",
+    description: "Manage cash flow, invoices and supporting records",
+    badge: "Business user",
   },
 };
 
@@ -257,7 +257,7 @@ function BrandMark({ onNavigate }: { onNavigate?: () => void }) {
       </span>
       <span>
         <span className="mi-brand__name">Valo</span>
-        <span className="mi-brand__caption">Compliance Workspace</span>
+        <span className="mi-brand__caption">Business workspace</span>
       </span>
     </Link>
   );

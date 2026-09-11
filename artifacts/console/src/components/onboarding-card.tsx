@@ -77,7 +77,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               className={`w-4 h-4 mr-1 ${refresh.isPending ? "animate-spin" : ""}`}
               aria-hidden="true"
             />
-            {refresh.isPending ? "Checking…" : "Re-check"}
+            {refresh.isPending ? "Checking…" : "Check again"}
           </Button>
         )}
       </CardHeader>
@@ -96,9 +96,9 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               className="text-sm text-muted-foreground"
               data-testid="text-onboarding-empty"
             >
-              No onboarding run for this client. Starting one opens an
-              evidence-based checklist — history import, statement backfill,
-              consent, duplicates, filings — that tracks itself from the record.
+              Onboarding has not started for this client. Start a checklist for
+              past invoices, bank statements, consent, duplicate records and tax
+              filings. Progress updates from the client's saved records.
             </p>
             {canWrite && (
               <Button
@@ -152,8 +152,8 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
               downloadReadinessReport={downloadReadinessReport}
             />
             <p className="text-xs text-muted-foreground">
-              Steps settle themselves from the record — the checklist only ever
-              claims what the data shows; a skip records the gap it leaves.
+              Steps are marked done only when saved records confirm completion.
+              Skipped steps remain recorded as gaps, not completed work.
             </p>
           </div>
         )}

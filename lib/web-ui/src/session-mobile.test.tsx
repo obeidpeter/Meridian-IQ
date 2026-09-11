@@ -172,7 +172,7 @@ test("foreground and reconnect revalidate; offline reads cannot mutate", async (
   });
   expect(result.current.status).toBe("authenticated");
   expect(result.current.verified).toBe(false);
-  expect(screen.getByText(/session could not be verified/)).toBeTruthy();
+  expect(screen.getByText(/Could not verify your sign-in/)).toBeTruthy();
   await act(async () => {
     mocks.network?.({ isConnected: false });
     mocks.network?.({ isConnected: true });

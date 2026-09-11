@@ -37,37 +37,36 @@ test("guardrails: a cold deployment (no calls, no eval, nothing configured) phra
   assert.deepEqual(buildGuardrails(cold), [
     {
       key: "human_review",
-      label: "Human decision boundary",
+      label: "Human approval required",
       status: "healthy",
       detail:
-        "3 cases await review; approvals and rejections require a recorded human actor.",
+        "3 cases await review. Each approval or rejection records who made the decision.",
       actionHref: "/clerk",
     },
     {
       key: "schema_validity",
-      label: "Typed-output validity",
+      label: "AI response format checks",
       status: "watch",
-      detail: "No model calls are available to establish output validity.",
+      detail: "No AI responses are available to check yet.",
       actionHref: "/clerk/health",
     },
     {
       key: "runtime_errors",
-      label: "Inference runtime reliability",
+      label: "AI request reliability",
       status: "watch",
-      detail: "No model calls are available to establish runtime reliability.",
+      detail: "No AI requests are available to assess reliability yet.",
       actionHref: "/clerk/health",
     },
     {
       key: "latency",
-      label: "Inference latency envelope",
+      label: "AI response time",
       status: "watch",
-      detail:
-        "No measured inference latency is available in the 30-day window.",
+      detail: "No AI response times were measured in the last 30 days.",
       actionHref: "/clerk/health",
     },
     {
       key: "eval_accuracy",
-      label: "Extraction regression gate",
+      label: "Document-reading accuracy tests",
       status: "watch",
       detail: "No completed extraction evaluation run is available.",
       actionHref: "/clerk/health",
@@ -76,23 +75,22 @@ test("guardrails: a cold deployment (no calls, no eval, nothing configured) phra
       key: "injection_resistance",
       label: "Prompt-injection resistance",
       status: "watch",
-      detail: "No measured injection fixture run is available.",
+      detail: "No prompt-injection test results are available.",
       actionHref: "/clerk/health",
     },
     {
       key: "number_grounding",
-      label: "Deterministic number grounding",
+      label: "AI number checks",
       status: "watch",
-      detail:
-        "No model calls are available to establish number-grounding performance.",
+      detail: "No AI requests are available to assess number checks yet.",
       actionHref: "/clerk/health",
     },
     {
       key: "standing_automation",
-      label: "Standing automation posture",
+      label: "Automatic actions",
       status: "healthy",
       detail:
-        "Standing automation is dark; Clerk proposals remain on explicit human approval paths.",
+        "Automatic actions are off. Each Clerk proposal needs human approval.",
       actionHref: "/feature-flags",
     },
     {
@@ -105,10 +103,10 @@ test("guardrails: a cold deployment (no calls, no eval, nothing configured) phra
     },
     {
       key: "governance_alerts",
-      label: "Quality, resistance and spend watches",
+      label: "AI quality, safety and spending alerts",
       status: "healthy",
       detail:
-        "No quality-drop, resistance-drop or spend-anomaly alert was raised in 30 days.",
+        "No alerts for lower accuracy, weaker prompt-injection resistance or unusual spending were recorded in the last 30 days.",
       actionHref: "/platform-ops",
     },
   ]);
@@ -140,38 +138,42 @@ test("guardrails: a fresh, healthy deployment prices every rate to one decimal a
       [
         "human_review",
         "healthy",
-        "12 cases await review; approvals and rejections require a recorded human actor.",
+        "12 cases await review. Each approval or rejection records who made the decision.",
       ],
       [
         "schema_validity",
         "healthy",
-        "1.2% of model calls were discarded as schema-invalid in 30 days.",
+        "1.2% of AI responses were discarded because they did not match the required format in the last 30 days.",
       ],
       [
         "runtime_errors",
         "healthy",
-        "0.4% of model calls ended in provider or gateway errors.",
+        "0.4% of AI requests failed at the provider or Valo gateway.",
       ],
       [
         "latency",
         "healthy",
-        "Provider latency p95 is 2100ms over the 30-day window.",
+        "95% of measured provider responses took 2100ms or less in the last 30 days (p95).",
       ],
       [
         "eval_accuracy",
         "healthy",
-        "Latest fixed-corpus field accuracy is 97.1%.",
+        "The latest test read 97.1% of fields correctly from the fixed document sample.",
       ],
-      ["injection_resistance", "healthy", "Latest fixture resistance is 96%."],
+      [
+        "injection_resistance",
+        "healthy",
+        "Clerk resisted 96% of prompt-injection attempts in the latest test sample.",
+      ],
       [
         "number_grounding",
         "healthy",
-        "No ungrounded numeral reached a phrasing surface in 30 days.",
+        "No number-check fallbacks were recorded in the last 30 days.",
       ],
       [
         "standing_automation",
         "healthy",
-        "Standing automation is dark; Clerk proposals remain on explicit human approval paths.",
+        "Automatic actions are off. Each Clerk proposal needs human approval.",
       ],
       [
         "provider_configuration",
@@ -181,7 +183,7 @@ test("guardrails: a fresh, healthy deployment prices every rate to one decimal a
       [
         "governance_alerts",
         "healthy",
-        "No quality-drop, resistance-drop or spend-anomaly alert was raised in 30 days.",
+        "No alerts for lower accuracy, weaker prompt-injection resistance or unusual spending were recorded in the last 30 days.",
       ],
     ],
   );
@@ -230,22 +232,22 @@ test("guardrails: a stale eval, standing automation, alerts and grounding violat
       [
         "human_review",
         "healthy",
-        "0 cases await review; approvals and rejections require a recorded human actor.",
+        "0 cases await review. Each approval or rejection records who made the decision.",
       ],
       [
         "schema_validity",
         "critical",
-        "6% of model calls were discarded as schema-invalid in 30 days.",
+        "6% of AI responses were discarded because they did not match the required format in the last 30 days.",
       ],
       [
         "runtime_errors",
         "watch",
-        "3% of model calls ended in provider or gateway errors.",
+        "3% of AI requests failed at the provider or Valo gateway.",
       ],
       [
         "latency",
         "critical",
-        "Provider latency p95 is 5200ms over the 30-day window.",
+        "95% of measured provider responses took 5200ms or less in the last 30 days (p95).",
       ],
       [
         "eval_accuracy",
@@ -260,12 +262,12 @@ test("guardrails: a stale eval, standing automation, alerts and grounding violat
       [
         "number_grounding",
         "critical",
-        "4 outputs were replaced by deterministic templates.",
+        "4 number-check fallbacks were recorded in the last 30 days.",
       ],
       [
         "standing_automation",
         "watch",
-        "A standing-action or auto-reconciliation flag is enabled; review policy scope and caps.",
+        "Automatic actions or payment matching are enabled. Review which records they can affect and the limits for each run.",
       ],
       [
         "provider_configuration",
@@ -275,7 +277,7 @@ test("guardrails: a stale eval, standing automation, alerts and grounding violat
       [
         "governance_alerts",
         "watch",
-        "2 durable governance alerts were raised in 30 days.",
+        "2 AI quality, safety or spending alerts were recorded in the last 30 days.",
       ],
     ],
   );
@@ -292,13 +294,19 @@ test("guardrails: a fresh eval below the floor is critical, between the bands is
     latestEvalAccuracy: 0.79,
   }).filter((g) => g.key === "eval_accuracy");
   assert.equal(accuracy.status, "critical");
-  assert.equal(accuracy.detail, "Latest fixed-corpus field accuracy is 79%.");
+  assert.equal(
+    accuracy.detail,
+    "The latest test read 79% of fields correctly from the fixed document sample.",
+  );
   const [resistance] = buildGuardrails({
     ...fresh,
     latestInjectionResistance: 0.9,
   }).filter((g) => g.key === "injection_resistance");
   assert.equal(resistance.status, "watch");
-  assert.equal(resistance.detail, "Latest fixture resistance is 90%.");
+  assert.equal(
+    resistance.detail,
+    "Clerk resisted 90% of prompt-injection attempts in the latest test sample.",
+  );
 });
 
 test("signals: empty query results derive the cold posture; a populated row derives rates, statuses and the flag posture", () => {

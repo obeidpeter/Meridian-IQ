@@ -22,16 +22,16 @@ export function QueueMetrics({ state }: { state: ConfirmationsPageState }) {
         tone="positive"
       />
       <Metric
-        label="Queried"
+        label="Questions sent"
         value={String(counts.get("queried") ?? 0)}
-        detail="Supplier clarification needed"
+        detail="Waiting for supplier clarification"
         icon={<CircleHelp className="size-4" aria-hidden="true" />}
         tone={(counts.get("queried") ?? 0) > 0 ? "info" : "default"}
       />
       <Metric
         label="Rejected"
         value={String(counts.get("rejected") ?? 0)}
-        detail={`${summary?.total ?? invoices.length} invoices in scope`}
+        detail={`${summary?.total ?? invoices.length} invoices in this workspace`}
         icon={<ShieldAlert className="size-4" aria-hidden="true" />}
         tone={(counts.get("rejected") ?? 0) > 0 ? "critical" : "default"}
       />

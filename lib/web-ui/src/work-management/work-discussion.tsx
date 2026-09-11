@@ -54,7 +54,9 @@ export function WorkDiscussion({
       </LiveStatus>
       {commentsLoading && comments.length === 0 ? null : comments.length ===
           0 && !commentsError ? (
-        <p>No comments yet. Add the first decision or handoff note.</p>
+        <p>
+          No comments yet. Add a question, decision or update for your team.
+        </p>
       ) : comments.length > 0 ? (
         <ol>
           {comments.map((entry) => (
@@ -116,7 +118,7 @@ function CommentForm({
           aria-busy={commentSending || undefined}
           maxLength={2000}
           rows={3}
-          placeholder="Record a decision, question or handoff…"
+          placeholder="Add a question, decision or team update…"
         />
         <button
           type="submit"

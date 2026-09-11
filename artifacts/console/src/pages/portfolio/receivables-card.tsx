@@ -37,7 +37,7 @@ export function ReceivablesCard() {
             className="text-sm text-muted-foreground"
             data-testid="text-receivables-empty"
           >
-            No outstanding receivables across the book.
+            No outstanding receivables across your clients.
           </p>
         ) : (
           <>

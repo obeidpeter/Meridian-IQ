@@ -68,8 +68,8 @@ export function ClaimPanel({
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-700">
           {result.loginRequired
-            ? "Sign in with your existing account to see this invoice and future supplier documents."
-            : "Your verified invoice is ready in Buyer Rails."}
+            ? "Sign in with your existing account to see this invoice in your buyer workspace."
+            : "This invoice is now in your buyer workspace."}
         </p>
         <Button asChild className="mt-4 bg-[#0f5c52] hover:bg-[#0c4a43]">
           <a
@@ -79,9 +79,7 @@ export function ClaimPanel({
                 : result.buyerPath
             }
           >
-            {result.loginRequired
-              ? "Sign in to Buyer Rails"
-              : "Open Buyer Rails"}
+            {result.loginRequired ? "Sign in" : "Open buyer workspace"}
             <ArrowRight aria-hidden="true" />
           </a>
         </Button>
@@ -100,11 +98,11 @@ export function ClaimPanel({
         </span>
         <div>
           <h2 id="claim-heading" className="font-extrabold">
-            Keep every supplier invoice together
+            Keep this invoice in your account
           </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Add this verified invoice to Buyer Rails for a permanent history and
-            future invoice alerts.
+            Add this invoice to your buyer workspace to keep its history with
+            your other supplier invoices.
           </p>
         </div>
       </div>
@@ -115,14 +113,14 @@ export function ClaimPanel({
           className="mt-4 min-h-11 border-teal-700 bg-white text-teal-900"
           onClick={() => setOpen(true)}
         >
-          Add to Buyer Rails
+          Add to buyer workspace
           <ArrowRight aria-hidden="true" />
         </Button>
       ) : (
         <form onSubmit={claim} className="mt-5 space-y-4">
           <div>
             <Label htmlFor="claim-name" className="font-bold text-slate-800">
-              Full name
+              Full name (optional)
             </Label>
             <Input
               id="claim-name"
@@ -169,7 +167,7 @@ export function ClaimPanel({
             ) : (
               <ShieldCheck aria-hidden="true" />
             )}{" "}
-            Continue securely
+            Add invoice
           </Button>
         </form>
       )}

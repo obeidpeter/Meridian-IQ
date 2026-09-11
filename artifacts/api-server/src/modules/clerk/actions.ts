@@ -274,8 +274,8 @@ async function submitOverdueProposal(
     kind: "submit_overdue",
     title: `Submit ${targetCount} overdue invoice${targetCount === 1 ? "" : "s"}`,
     why:
-      `${targetCount} invoice${targetCount === 1 ? " is" : "s are"} past the ${SUBMISSION_WINDOW_DAYS}-day statutory submission window — ` +
-      `at least NGN ${floor} of estimated s.104 exposure (lowest band, an estimate not advice). Submitting them removes it` +
+      `${targetCount} invoice${targetCount === 1 ? " is" : "s are"} past the ${SUBMISSION_WINDOW_DAYS}-day legal submission deadline. ` +
+      `Valo estimates at least NGN ${floor} in potential s.104 penalties using the lowest band. This is an estimate, not tax advice. Review the invoices before submitting` +
       // The floor spans the FULL overdue count; a capped batch only
       // clears its own share, so say so.
       (targetCount > MAX_ACTION_TARGETS
@@ -339,9 +339,9 @@ async function retryFailedProposal(
     kind: "retry_failed",
     title: `Retry ${targetCount} failed submission${targetCount === 1 ? "" : "s"}`,
     why:
-      `${targetCount} submission${targetCount === 1 ? "" : "s"} came back failed from the rails. ` +
-      `If the cause has been fixed — a corrected TIN, a rail outage that passed — retrying sends them through the ordinary submission path again. ` +
-      `An unchanged invoice with an unfixed cause will simply fail again.`,
+      `${targetCount} invoice submission${targetCount === 1 ? "" : "s"} failed. ` +
+      `Check that the cause has been fixed, such as an incorrect Tax Identification Number (TIN) or a service outage, before submitting again. ` +
+      `The same problem can cause another failure.`,
     targets: rows.map((r) => ({
       invoiceId: r.id,
       invoiceNumber: r.invoice_number,
@@ -388,9 +388,9 @@ async function draftChasersProposal(
     kind: "draft_chasers",
     title: `Draft ${rows.length} payment reminder${rows.length === 1 ? "" : "s"}`,
     why:
-      `${rows.length} receivable${rows.length === 1 ? " is" : "s are"} late against the buyer's own payment rhythm. ` +
-      `Approving drafts a staged reminder for each — a first nudge or a follow-up, per its own ladder — for you to review and send yourself. ` +
-      `The platform sends nothing.`,
+      `${rows.length} invoice${rows.length === 1 ? " is" : "s are"} unpaid beyond the buyer's usual payment timing. ` +
+      `Approve to draft a first reminder or follow-up for each invoice, based on its reminder history. Review and send the drafts yourself. ` +
+      `Valo does not send them.`,
     targets: capped.map((r) => ({
       invoiceId: r.invoiceId,
       invoiceNumber: r.invoiceNumber,

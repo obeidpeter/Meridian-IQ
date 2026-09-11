@@ -40,11 +40,11 @@ function RedirectingPanel({
         <h2 className="text-lg font-semibold">Opening {target.label}…</h2>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        You're signed in — taking you to your workspace.
+        You are signed in. Your workspace is opening.
       </p>
       {slow && (
         <p className="mt-3 text-sm text-muted-foreground" role="status">
-          Taking longer than expected —{" "}
+          This is taking longer than expected. You can{" "}
           <a
             href={target.href}
             className="font-medium text-primary underline underline-offset-4"
@@ -87,15 +87,15 @@ function TotpChallengeStep({
 
       <h1 className="auth-title">Enter your code</h1>
       <p className="auth-intro">
-        <span className="auth-account-email">{email}</span> has an extra
-        security step. Type the 6-digit code from your authenticator app, or use
-        one of your saved recovery codes.
+        Enter the 6-digit code from your authenticator app for{" "}
+        <span className="auth-account-email">{email}</span>, or use a saved
+        recovery code.
       </p>
 
       <form onSubmit={onVerifyCode} className="auth-form">
         <div className="space-y-2">
           <Label htmlFor="totp-code" className="auth-label">
-            Authentication code
+            Verification or recovery code
           </Label>
           <Input
             id="totp-code"
@@ -115,13 +115,12 @@ function TotpChallengeStep({
             data-testid="input-totp-code"
           />
           <p id="totp-help" className="auth-help">
-            Your app shows a new code every 30 seconds. A recovery code also
-            works here. For security this step expires five minutes after you
-            entered your password (
+            Your app shows a new code every 30 seconds. This sign-in step
+            expires five minutes after you entered your password (
             <span data-testid="text-totp-expiry">
               {mfaExpiryHint(mfa.issuedAt, now)}
             </span>
-            ) — start over if you need more time.
+            ). Start over if you need more time.
           </p>
         </div>
         {totpError && (
@@ -147,7 +146,7 @@ function TotpChallengeStep({
           {pending === "totp" && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           )}
-          Verify and continue
+          Sign in
           {pending !== "totp" && (
             <ArrowRight className="size-4" aria-hidden="true" />
           )}
@@ -161,7 +160,7 @@ function TotpChallengeStep({
         data-testid="button-totp-restart"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        Start over with your password
+        Start over
       </button>
     </div>
   );
@@ -190,9 +189,9 @@ function PasswordStep({ flow }: { flow: SignInFlow }) {
         Secure sign-in
       </div>
 
-      <h1 className="auth-title">Welcome back</h1>
+      <h1 className="auth-title">Sign in to Valo</h1>
       <p className="auth-intro">
-        Sign in and we&apos;ll take you straight to your workspace.
+        Use the email address and password for your Valo account.
       </p>
 
       {arrival.expired && arrival.returnTo && (
@@ -203,7 +202,7 @@ function PasswordStep({ flow }: { flow: SignInFlow }) {
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>
-            Your session expired — sign in to continue where you left off.
+            Your session expired. Sign in to continue where you left off.
           </span>
         </div>
       )}
@@ -304,7 +303,7 @@ function PasswordStep({ flow }: { flow: SignInFlow }) {
       <div className="auth-account-note">
         <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
         <span>
-          Your connection is secure. You only see what your account allows.
+          You can only open workspaces and records your account has access to.
         </span>
       </div>
       <div className="auth-support-links">

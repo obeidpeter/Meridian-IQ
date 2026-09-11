@@ -15,9 +15,9 @@ const views: View[] = ["overview", "evidence", "history"];
 const clients = [
   {
     name: "Ade Studio",
-    task: "Buyer details need a review",
+    task: "Customer details need review",
     ref: "INV-2026-041",
-    status: "Review needed",
+    status: "Needs review",
     tone: "is-review",
   },
   {
@@ -74,8 +74,8 @@ function InvoiceOverview() {
         <div>
           <strong>Review before submission</strong>
           <p>
-            Check the buyer details and supporting record. This draft has not
-            been submitted to a tax authority.
+            Check the customer details and supporting document. This draft has
+            not been submitted to a tax authority.
           </p>
         </div>
       </div>
@@ -93,7 +93,7 @@ function ClientOverview() {
   return (
     <>
       <div className="editorial-document-label">
-        <Users size={16} aria-hidden="true" /> Client review queue{" "}
+        <Users size={16} aria-hidden="true" /> Clients needing review{" "}
         <span>3 clients</span>
       </div>
       <ul className="editorial-client-list">
@@ -111,7 +111,7 @@ function ClientOverview() {
         ))}
       </ul>
       <p className="editorial-demo-foot">
-        Internal review states, not tax-authority approvals.
+        These are internal review results, not tax-authority approvals.
       </p>
     </>
   );
@@ -126,7 +126,7 @@ function Evidence({ firm }: { firm: boolean }) {
       ]
     : [
         ["Brief-041.pdf", "Project scope and agreed work", "PDF"],
-        ["Buyer-details.txt", "Buyer information for review", "TXT"],
+        ["Buyer-details.txt", "Customer information for review", "TXT"],
         ["Delivery-041.pdf", "Supporting delivery record", "PDF"],
       ];
   return (
@@ -150,7 +150,7 @@ function Evidence({ firm }: { firm: boolean }) {
       <div className="editorial-review-note">
         <Paperclip size={18} aria-hidden="true" />
         <div>
-          <strong>Context stays with the record</strong>
+          <strong>Documents stay with the invoice</strong>
           <p>
             Supporting files and invoice details can be reviewed together. These
             are sample file names, not downloadable client documents.
@@ -173,11 +173,7 @@ function History({ firm }: { firm: boolean }) {
         ["09:47", "Review requested", "Ade Studio / INV-2026-041"],
       ]
     : [
-        [
-          "09:47",
-          "Internal review requested",
-          "Buyer details flagged for a closer look.",
-        ],
+        ["09:47", "Internal review requested", "Customer details need review."],
         [
           "09:45",
           "Supporting record added",
@@ -255,9 +251,9 @@ export function LandingProductExample({
         <div className="editorial-demo-title">
           <div>
             <p className="editorial-label">
-              {firm ? "Accountant Console" : "INV-2026-041"}
+              {firm ? "Accountant workspace" : "INV-2026-041"}
             </p>
-            <h3>{firm ? "Client attention" : "July design services"}</h3>
+            <h3>{firm ? "Clients needing action" : "July design services"}</h3>
           </div>
           <span
             className={`editorial-status ${firm ? "is-progress" : "is-review"}`}

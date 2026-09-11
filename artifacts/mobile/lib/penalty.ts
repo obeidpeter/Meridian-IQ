@@ -109,16 +109,17 @@ export const FILING_TYPE_OPTIONS: FilingTypeOption[] = [
     value: "access",
     label: "Systems access (s.103)",
     description:
-      "Tax authority could not access fiscalisation systems/records.",
+      "The tax authority was not given access to e-invoicing systems or records.",
   },
   {
     value: "invoice",
-    label: "Unissued e-invoices (s.104)",
-    description: "Compliant electronic invoices were not issued.",
+    label: "Missing required e-invoices (s.104)",
+    description: "Required electronic invoices were not issued.",
   },
   {
     value: "both",
-    label: "Both failures",
-    description: "Access was withheld and invoices were not fiscalised.",
+    label: "Both issues",
+    description:
+      "Systems access was blocked and required electronic invoices were not issued.",
   },
 ];

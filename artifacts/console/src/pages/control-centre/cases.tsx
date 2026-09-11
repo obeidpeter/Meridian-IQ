@@ -132,8 +132,8 @@ export function ComplianceOperationsWorkspace() {
       </MetricStrip>
 
       <WorkQueue
-        title="Prioritized exception queue"
-        description="Overdue first, then priority and nearest deadline. All actions stay in their governed source workflow."
+        title="Cases needing attention"
+        description="Overdue cases first, then priority and nearest deadline. Open a case to act with its existing approval controls."
         items={queueItems}
         emptyTitle="No exceptions in this view"
         emptyDescription="The selected case segment has no open work."

@@ -164,8 +164,8 @@ export default function SettingsScreen() {
             setDraft(null);
           }
           Alert.alert(
-            "Could not save",
-            "Your preference was not saved. Please try again.",
+            "Could not confirm changes",
+            "Refresh your alert settings to check whether the change was saved before trying again.",
           );
         }
       });
@@ -188,7 +188,7 @@ export default function SettingsScreen() {
           const result = await acquireExpoPushToken();
           if (!result.ok || !result.token) {
             Alert.alert(
-              "Push unavailable",
+              "Device alerts unavailable",
               result.reason ?? "Could not set up push notifications.",
             );
             return;
@@ -218,7 +218,10 @@ export default function SettingsScreen() {
       } catch (error) {
         Alert.alert(
           "Push notifications",
-          apiErrorMessage(error, "Push setup failed."),
+          apiErrorMessage(
+            error,
+            "Could not set up device alerts. Check notification permissions and try again.",
+          ),
         );
       } finally {
         setPushBusy(false);
@@ -244,7 +247,7 @@ export default function SettingsScreen() {
           if (!results.length) {
             Alert.alert(
               "Test alert",
-              "No channels are enabled. Turn on at least one channel first.",
+              "No alert delivery methods are enabled. Turn on at least one first.",
             );
             return;
           }
@@ -254,10 +257,13 @@ export default function SettingsScreen() {
               r.status !== "sent" && r.detail ? ` — ${r.detail}` : ""
             }`;
           });
-          Alert.alert("Test alert sent", lines.join("\n"));
+          Alert.alert("Test alert results", lines.join("\n"));
         },
         onError: () => {
-          Alert.alert("Test alert", "Could not send the test alert.");
+          Alert.alert(
+            "Test alert unconfirmed",
+            "Could not confirm the test alert. Check your messages before trying again.",
+          );
         },
       },
     );
@@ -296,7 +302,7 @@ export default function SettingsScreen() {
         color={colors.mutedForeground}
         style={styles.sectionLabel}
       >
-        Alert channels
+        How you receive alerts
       </AppText>
       {prefsQuery.isLoading ? (
         <CardSkeleton lines={4} />
@@ -360,15 +366,15 @@ export default function SettingsScreen() {
             />
             <Divider />
             <SettingRow
-              title="Transmission failures"
-              subtitle="Invoices that failed to fiscalise"
+              title="Submission failures"
+              subtitle="Invoices that could not be submitted or stamped"
               value={prefs.failureAlerts}
               onValueChange={(next) => savePref("failureAlerts", next)}
             />
             <Divider />
             <SettingRow
               title="Penalty warnings"
-              subtitle="Estimated exposure before penalties accrue"
+              subtitle="Estimates of possible penalties, not official charges"
               value={prefs.penaltyAlerts}
               onValueChange={(next) => savePref("penaltyAlerts", next)}
             />
@@ -430,7 +436,7 @@ export default function SettingsScreen() {
         color={colors.mutedForeground}
         style={{ textAlign: "center", marginTop: 24 }}
       >
-        Valo Companion v{version}
+        Valo mobile v{version}
       </AppText>
     </ScreenScroll>
   );

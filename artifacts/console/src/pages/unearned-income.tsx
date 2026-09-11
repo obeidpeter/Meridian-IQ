@@ -8,7 +8,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { formatNaira, formatPct, humanize } from "@/lib/format";
 
 export function UnearnedIncomePage() {
-  usePageTitle("Unearned income");
+  usePageTitle("Potential revenue");
   const { data, isLoading, error, refetch } = useGetUnearnedIncome();
 
   if (isLoading) {
@@ -45,13 +45,14 @@ export function UnearnedIncomePage() {
             className="text-2xl md:text-3xl font-bold"
             data-testid="text-page-title"
           >
-            Unearned income & revenue share
+            Potential revenue share
           </h1>
           <p className="text-muted-foreground mt-1">
-            Pipeline value not yet billed, at your current revenue share.
+            Estimated revenue from prospects at your current billing rates and
+            revenue share. This has not been billed or earned.
           </p>
         </div>
-        <QueryError thing="unearned income" onRetry={() => refetch()} />
+        <QueryError thing="potential revenue" onRetry={() => refetch()} />
       </div>
     );
   }
@@ -65,17 +66,17 @@ export function UnearnedIncomePage() {
           className="text-2xl md:text-3xl font-bold"
           data-testid="text-page-title"
         >
-          Unearned income & revenue share
+          Potential revenue share
         </h1>
         <p className="text-muted-foreground mt-1">
-          Pipeline value not yet billed, at your current {pct} revenue share.
-          Reconciles to live billing to the naira.
+          Estimated revenue from prospects at your current billing rates and{" "}
+          {pct} revenue share. This has not been billed or earned.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatTile
-          label="Implied monthly billing"
+          label="Estimated monthly billing"
           value={formatNaira(data.impliedMonthlyBilling)}
           detail={`${data.eligibleCount} eligible prospect${data.eligibleCount === 1 ? "" : "s"}`}
           testId="stat-implied-billing"
@@ -85,7 +86,7 @@ export function UnearnedIncomePage() {
         <Card data-testid="stat-monthly-share">
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
-              Monthly revenue share
+              Estimated monthly revenue share
             </p>
             <p className="text-2xl font-bold mt-1 text-primary tabular-nums">
               {formatNaira(data.impliedMonthlyRevenueShare)}
@@ -94,7 +95,7 @@ export function UnearnedIncomePage() {
           </CardContent>
         </Card>
         <StatTile
-          label="Annualised revenue share"
+          label="Estimated annual revenue share"
           value={formatNaira(data.impliedAnnualRevenueShare)}
           detail={`${humanize(data.tierKey)} tier`}
           testId="stat-annual-share"
@@ -117,9 +118,11 @@ export function UnearnedIncomePage() {
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 font-medium">Prospect</th>
                     <th className="py-2 font-medium">Stage</th>
-                    <th className="py-2 font-medium text-right">Est. inv/mo</th>
                     <th className="py-2 font-medium text-right">
-                      Implied billing
+                      Estimated invoices per month
+                    </th>
+                    <th className="py-2 font-medium text-right">
+                      Estimated billing
                     </th>
                     <th className="py-2 font-medium text-right">
                       Revenue share

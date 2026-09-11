@@ -33,7 +33,7 @@ export function StatementImportSection({
   const colors = useColors();
   return (
     <View style={{ gap: 12 }}>
-      <AppText variant="heading">Add a statement</AppText>
+      <AppText variant="heading">Upload a bank statement</AppText>
       <Card style={{ gap: 12 }}>
         {Platform.OS !== "web" ? (
           <AppButton
@@ -49,7 +49,7 @@ export function StatementImportSection({
           label="Or paste your bank CSV"
           value={csv}
           onChangeText={onChangeCsv}
-          placeholder="First line = column headers (GTBank, Zenith, Access and generic exports are recognised)"
+          placeholder="Include column headings on the first line. GTBank, Zenith, Access and generic bank CSV files are supported."
           multiline
           autoCapitalize="none"
           autoCorrect={false}
@@ -61,7 +61,7 @@ export function StatementImportSection({
           </AppText>
         ) : null}
         <AppButton
-          label={busy ? "Working…" : "Check parsing"}
+          label={busy ? "Checking…" : "Check statement"}
           icon="search"
           variant={report && !report.committed ? "ghost" : "primary"}
           onPress={() => void onRunImport(false)}
@@ -71,7 +71,7 @@ export function StatementImportSection({
         />
         {report && !report.committed ? (
           <AppButton
-            label="Commit statement"
+            label="Save statement"
             icon="check-circle"
             onPress={() => void onRunImport(true)}
             disabled={!csv.trim() || busy || report.parsedCount === 0}

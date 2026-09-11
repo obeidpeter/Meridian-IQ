@@ -107,7 +107,7 @@ export function MonthEnd() {
         <WorkspaceHeader
           eyebrow="Close"
           title="Month-end"
-          description="Review the records that need attention before the books move forward."
+          description="Review the records that need attention before completing your month-end checks."
         />
         <QueryError
           thing="the month-end close"
@@ -149,14 +149,14 @@ export function MonthEnd() {
         title="Month-end"
         description={
           <>
-            A single control room for unresolved paper, money checks, filings
-            and approved Clerk automation.{" "}
+            Review unfinished invoices, payment checks, tax filings and approved
+            automatic actions.{" "}
             <Link
               href="/help#month-end"
               className="font-bold text-teal-800 underline underline-offset-2"
               data-testid="link-help-month-end"
             >
-              What a close is
+              About month-end checks
             </Link>
           </>
         }
@@ -173,9 +173,9 @@ export function MonthEnd() {
         className="text-sm text-muted-foreground"
         data-testid="text-close-explainer"
       >
-        {vatMonthLabel(close.asOf)} checks — when every check below is clear,
-        you can treat the month&apos;s books as complete. Valo records the
-        checks; a human closes the month.
+        {vatMonthLabel(close.asOf)} checks. Review these before completing your
+        month-end records. Valo records the checks; you or your accountant
+        decide when the month is complete.
       </p>
 
       <MetricStrip label="Month-end status">

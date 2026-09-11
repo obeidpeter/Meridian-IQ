@@ -31,7 +31,7 @@ export function CalculatorDocument() {
             <div>
               <p className="text-base font-semibold leading-none">Valo</p>
               <p className="text-xs leading-tight text-white/70">
-                Compliance planning tools
+                Penalty planning tool
               </p>
             </div>
           </a>
@@ -49,12 +49,12 @@ export function CalculatorDocument() {
           <a
             href="/login"
             data-testid="link-all-apps"
-            aria-label="Open all apps"
+            aria-label="Open Valo workspaces"
             className={`inline-flex size-9 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10 hover:text-white sm:size-auto sm:px-3 sm:py-2 ${FOCUS_RING}`}
           >
             <Grid2x2 className="h-5 w-5" aria-hidden="true" />
             <span className="hidden text-sm font-semibold sm:inline">
-              All apps
+              Workspaces
             </span>
           </a>
         </div>

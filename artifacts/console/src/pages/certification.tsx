@@ -284,8 +284,9 @@ export function Certification() {
           Certification
         </h1>
         <p className="text-muted-foreground mt-1">
-          CPD-accredited courses on the mandatory e-invoicing rails. Completing
-          a course mints a certificate with a verifiable serial.
+          Accredited continuing professional development (CPD) courses on
+          mandatory e-invoicing. Completing a course mints a certificate with a
+          verifiable serial.
         </p>
       </div>
 

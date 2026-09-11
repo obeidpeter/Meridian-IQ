@@ -106,14 +106,14 @@ export function useAutomationActions({
         invalidateAfterRun();
         setBanner({
           tone: "success",
-          message: `Batch complete — ${actionOutcomeSummary(result.decision)}`,
+          message: `Batch results: ${actionOutcomeSummary(result.decision)}`,
         });
       } catch (error) {
         setBanner({
           tone: "error",
           message: apiErrorMessage(
             error,
-            "We couldn't run that batch. Please try again.",
+            "Could not confirm the batch result. Check the run history before trying again.",
           ),
         });
       }
@@ -149,16 +149,16 @@ export function useAutomationActions({
         invalidatePolicyQueries();
         setBanner({
           tone: "success",
-          message: `Daily automation is on — ${policyKindLabel(
+          message: `Daily automation is on: ${policyKindLabel(
             kind,
-          )}, up to ${POLICY_CAP_DEFAULT} per run. You can pause or revoke it below.`,
+          )}, up to ${POLICY_CAP_DEFAULT} invoices per run. You can pause or remove it below.`,
         });
       } catch (error) {
         setBanner({
           tone: "error",
           message: apiErrorMessage(
             error,
-            "We couldn't turn on that automation. Please try again.",
+            "Could not confirm whether automation is on. Refresh the list before trying again.",
           ),
         });
       }
@@ -215,7 +215,7 @@ export function useAutomationActions({
           void runPolicyChange(
             () => pause.mutateAsync({ id: policy.id }),
             `${policyKindLabel(policy.kind)} is paused.`,
-            "We couldn't pause that automation. Please try again.",
+            "Could not confirm whether automation is paused. Refresh the list before trying again.",
           ),
       ),
     [pause, runPolicyChange],
@@ -230,8 +230,8 @@ export function useAutomationActions({
         () =>
           void runPolicyChange(
             () => resume.mutateAsync({ id: policy.id }),
-            `${policyKindLabel(policy.kind)} will run again from its next sweep.`,
-            "We couldn't resume that automation. Please try again.",
+            `${policyKindLabel(policy.kind)} will run again at the next daily check.`,
+            "Could not confirm whether automation resumed. Refresh the list before trying again.",
           ),
       ),
     [resume, runPolicyChange],
@@ -246,8 +246,8 @@ export function useAutomationActions({
         () =>
           void runPolicyChange(
             () => revoke.mutateAsync({ id: policy.id }),
-            `${policyKindLabel(policy.kind)} is revoked.`,
-            "We couldn't revoke that automation. Please try again.",
+            `${policyKindLabel(policy.kind)} was removed.`,
+            "Could not confirm whether automation was removed. Refresh the list before trying again.",
           ),
         true,
       ),

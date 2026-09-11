@@ -47,7 +47,7 @@ import {
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 import { formatDateTime, humanize, pillClasses } from "@/lib/format";
 import type { BadgeTone } from "@/lib/format";
 import {
@@ -83,11 +83,11 @@ export const MACHINE_CAPABILITY_OPTIONS = [
     value: "invoice.write",
     label: "Write draft invoices",
     description:
-      "Create and edit drafts. Submission to the rails stays a human action.",
+      "Create and edit drafts. A person must still submit invoices to the submission service.",
   },
   {
     value: "statement.write",
-    label: "Push bank statements",
+    label: "Upload bank statements",
     description: "Upload statement files for reconciliation.",
   },
 ] as const;
@@ -97,7 +97,8 @@ export const WEBHOOK_EVENT_OPTIONS = [
   {
     value: "invoice.stamped",
     label: "Invoice stamped",
-    description: "An invoice was accepted and stamped by the rails.",
+    description:
+      "An invoice was accepted and stamped by the submission service.",
   },
   {
     value: "invoice.settled",
@@ -189,7 +190,7 @@ export function retryDeliveryErrorNote(err: unknown): string {
   if (errorStatus(err) === 409) {
     return "This delivery is not dead / endpoint disabled.";
   }
-  return serverErrorMessage(err) ?? "Could not retry the delivery. Try again.";
+  return userErrorMessage(err) ?? "Could not retry the delivery. Try again.";
 }
 
 type RetryCallbacks = {
@@ -376,7 +377,7 @@ function ApiKeysCard() {
         },
         onError: (err) =>
           setCreateError(
-            serverErrorMessage(err) ?? "Could not create the key. Try again.",
+            userErrorMessage(err) ?? "Could not create the key. Try again.",
           ),
       },
     );
@@ -395,7 +396,7 @@ function ApiKeysCard() {
         onError: (err) =>
           toast({
             title: "Could not revoke the key",
-            description: serverErrorMessage(err),
+            description: userErrorMessage(err),
             variant: "destructive",
           }),
         onSettled: () => setRevokeTarget(null),
@@ -428,7 +429,8 @@ function ApiKeysCard() {
           Machine credentials for server-to-server callers (
           <code className="text-[11px]">Authorization: Bearer mk_…</code>). Each
           key carries exactly the capabilities you pick — nothing can submit to
-          the government rails, spend Clerk tokens or manage accounts.
+          the government submission service, spend Clerk tokens or manage
+          accounts.
         </p>
         {isLoading ? (
           <Skeleton className="h-16" />
@@ -713,7 +715,7 @@ function WebhookDeliveries({ webhookId }: { webhookId: string }) {
                   className={`w-3 h-3 mr-1 ${retryingId === d.id ? "animate-spin" : ""}`}
                   aria-hidden="true"
                 />
-                {retryingId === d.id ? "Retrying…" : "Retry"}
+                {retryingId === d.id ? "Trying again…" : "Try again"}
               </Button>
             )}
           </div>
@@ -790,7 +792,7 @@ function WebhooksCard() {
         },
         onError: (err) =>
           setCreateError(
-            serverErrorMessage(err) ??
+            userErrorMessage(err) ??
               "Could not register the endpoint. Try again.",
           ),
       },
@@ -810,7 +812,7 @@ function WebhooksCard() {
         onError: (err) =>
           toast({
             title: "Could not disable the webhook",
-            description: serverErrorMessage(err),
+            description: userErrorMessage(err),
             variant: "destructive",
           }),
         onSettled: () => setDisableTarget(null),

@@ -40,10 +40,10 @@ export function LandingReadiness() {
       <p role="status">
         <span className={`editorial-status-dot ${state}`} aria-hidden="true" />
         {state === "checking"
-          ? "Checking platform availability"
+          ? "Checking Valo availability"
           : state === "operational"
-            ? "Core platform is operational"
-            : "Platform availability is degraded"}
+            ? "Valo is available"
+            : "We could not confirm Valo is available"}
       </p>
       {state === "degraded" && (
         <button
@@ -52,7 +52,7 @@ export function LandingReadiness() {
           onClick={() => setRefresh((value) => value + 1)}
         >
           <RotateCw size={16} aria-hidden="true" />
-          Check again
+          Try again
         </button>
       )}
     </div>

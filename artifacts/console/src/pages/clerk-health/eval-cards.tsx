@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { formatDateTime, formatPct } from "@/lib/format";
 import {
   retrievalRunLine,
@@ -323,7 +323,7 @@ export function RetrievalEvalCard() {
         toast({
           title: "Retrieval eval failed",
           description:
-            serverErrorMessage(e) ??
+            userErrorMessage(e) ??
             "The embedding provider may not be configured.",
           variant: "destructive",
         }),
@@ -417,7 +417,7 @@ export function PromoteToIntentCorpus({ caseId }: { caseId: string }) {
         toast({
           title: "Could not promote the question",
           description:
-            serverErrorMessage(e) ??
+            userErrorMessage(e) ??
             "The expected key must come from the eval's offered context.",
           variant: "destructive",
         }),

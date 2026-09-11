@@ -82,7 +82,7 @@ export function CollectionsDesk() {
         <Metric
           label="Open invoices"
           value={String(invoiceCount)}
-          detail="Across the client book"
+          detail="Across your clients"
           icon={<WalletCards className="size-4" aria-hidden="true" />}
         />
         <Metric
@@ -101,8 +101,8 @@ export function CollectionsDesk() {
       </MetricStrip>
 
       <WorkQueue
-        title="Aged collection queue"
-        description="Client balances older than 90 days, ordered by the server's risk view."
+        title="Overdue balances to follow up"
+        description="Client balances more than 90 days overdue, ordered by recorded risk."
         items={workItems}
         emptyTitle="No 90+ day client balances"
         emptyDescription="The current receivables report has no severely aged balances."

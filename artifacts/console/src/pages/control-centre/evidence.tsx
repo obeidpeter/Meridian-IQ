@@ -84,7 +84,7 @@ export function EvidenceVaultWorkspace() {
     <div className="space-y-6">
       <MetricStrip label="Evidence vault summary">
         <Metric
-          label="Indexed artifacts"
+          label="Saved records"
           value={String(data.totalArtifacts)}
           detail={`${data.artifactsLast30d} recorded in 30 days`}
           icon={<Archive className="size-4" aria-hidden="true" />}
@@ -173,7 +173,7 @@ export function EvidenceVaultWorkspace() {
 
       <WorkQueue
         title="Evidence index"
-        description="Newest durable artifacts across stamps, filings, authority responses and settlement signals."
+        description="Latest saved stamps, filings, tax authority responses and settlement observations."
         items={queueItems}
         emptyTitle="No evidence in this view"
         emptyDescription="The selected evidence category has no indexed records."

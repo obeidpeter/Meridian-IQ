@@ -22,10 +22,10 @@ export function BuyerPicker({
   const blocked = disabled || !picker.available;
   return (
     <View style={{ gap: 8 }}>
-      <AppText variant="heading">Buyer</AppText>
+      <AppText variant="heading">Customer</AppText>
       <TextField
-        label="Search buyers"
-        accessibilityLabel="Search buyers by name or TIN"
+        label="Search customers"
+        accessibilityLabel="Search customers by name or TIN"
         value={picker.search}
         onChangeText={picker.setSearch}
         placeholder="Name or TIN"
@@ -42,14 +42,14 @@ export function BuyerPicker({
           >
             <Feather name="check-circle" size={20} color={colors.primary} />
             <View style={{ flex: 1 }}>
-              <AppText variant="label">Selected buyer</AppText>
+              <AppText variant="label">Selected customer</AppText>
               <AppText>
                 {picker.selected?.legalName ??
                   (picker.selectionPaused
                     ? "Waiting for connection"
                     : picker.selectionError
-                      ? "Selected buyer unavailable"
-                      : "Checking selected buyer...")}
+                      ? "Selected customer unavailable"
+                      : "Checking selected customer...")}
               </AppText>
               {picker.selected?.tin ? (
                 <AppText variant="caption" color={colors.mutedForeground}>
@@ -59,7 +59,7 @@ export function BuyerPicker({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Clear selected buyer"
+              accessibilityLabel="Clear selected customer"
               accessibilityState={{ disabled: blocked }}
               disabled={blocked}
               onPress={() => onSelect(null)}
@@ -75,7 +75,7 @@ export function BuyerPicker({
           </View>
           {picker.selectionError ? (
             <AppButton
-              label="Retry selected buyer"
+              label="Check customer again"
               icon="refresh-cw"
               variant="ghost"
               onPress={picker.retrySelection}
@@ -87,7 +87,7 @@ export function BuyerPicker({
       <View accessibilityLiveRegion="polite">
         {!picker.available ? (
           <AppText color={colors.mutedForeground}>
-            Verify your session to search buyers.
+            Verify your sign-in to search customers.
           </AppText>
         ) : picker.paused ? (
           <AppText color={colors.mutedForeground}>
@@ -99,15 +99,16 @@ export function BuyerPicker({
             accessibilityState={{ busy: true }}
           >
             <ActivityIndicator color={colors.primary} />
-            <AppText>Searching buyers...</AppText>
+            <AppText>Searching customers...</AppText>
           </View>
         ) : picker.error ? (
           <View accessibilityRole="alert" style={{ gap: 8 }}>
             <AppText color={colors.destructiveText}>
-              Buyers could not be loaded. Check your connection and access.
+              Could not load customers. Check your connection and account
+              access.
             </AppText>
             <AppButton
-              label="Retry buyer search"
+              label="Try search again"
               icon="refresh-cw"
               variant="ghost"
               onPress={picker.retry}
@@ -117,17 +118,17 @@ export function BuyerPicker({
         ) : picker.items.length === 0 ? (
           <AppText color={colors.mutedForeground}>
             {picker.search.trim()
-              ? "No buyers match this search."
+              ? "No customers match this search."
               : picker.offset
-                ? "No more buyers."
-                : "No buyers available."}
+                ? "No more customers."
+                : "No customers available."}
           </AppText>
         ) : null}
       </View>
       {!picker.loading && !picker.paused && picker.items.length > 0 ? (
         <View
           accessibilityRole="radiogroup"
-          accessibilityLabel="Buyer search results"
+          accessibilityLabel="Customer search results"
         >
           {picker.items.map((buyer) => (
             <Pressable
@@ -178,7 +179,7 @@ export function BuyerPicker({
       {picker.available && (picker.offset > 0 || picker.hasNext) ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           <AppButton
-            label="Previous buyers"
+            label="Previous"
             icon="chevron-left"
             variant="ghost"
             fullWidth={false}
@@ -186,7 +187,7 @@ export function BuyerPicker({
             disabled={blocked || picker.loading || picker.offset === 0}
           />
           <AppButton
-            label="Next buyers"
+            label="Next"
             icon="chevron-right"
             variant="ghost"
             fullWidth={false}

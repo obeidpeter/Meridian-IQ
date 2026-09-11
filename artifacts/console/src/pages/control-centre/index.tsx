@@ -42,23 +42,23 @@ const SECTIONS: Array<{
     label: "Activation",
     title: "Evidence and activation",
     description:
-      "Release gates, commercial activation and live proof from platform records.",
+      "Review release requirements, paid subscriptions and evidence recorded by the platform.",
     icon: Gauge,
   },
   {
     key: "buyers",
     label: "Buyer pilots",
-    title: "Buyer Rails pilots",
+    title: "Buyer pilots",
     description:
-      "Anchor-buyer participation, response behavior and scale-readiness evidence.",
+      "Review participating buyers, their responses and evidence needed to expand each pilot.",
     icon: Network,
   },
   {
     key: "cases",
     label: "Cases",
-    title: "Compliance case orchestration",
+    title: "Compliance cases",
     description:
-      "One SLA-ranked view of managed cases, statutory deadlines and buyer exceptions.",
+      "Review cases, statutory deadlines and buyer issues by priority and response deadline.",
     icon: BriefcaseBusiness,
   },
   {
@@ -66,31 +66,31 @@ const SECTIONS: Array<{
     label: "Reliability",
     title: "Integration reliability",
     description:
-      "Connector freshness, run outcomes, row quality and platform-delivery health.",
+      "Check when connections last updated, which runs failed and which records need attention.",
     icon: DatabaseZap,
   },
   {
     key: "evidence",
     label: "Evidence vault",
-    title: "Evidence vault and trust",
+    title: "Saved compliance evidence",
     description:
-      "Durable compliance artifacts, chain verification and enterprise control posture.",
+      "Review saved compliance records, audit-chain verification and data-retention controls.",
     icon: Fingerprint,
   },
   {
     key: "clerk",
     label: "Clerk assurance",
-    title: "Clerk operational assurance",
+    title: "Clerk quality and safety",
     description:
-      "Human-review boundaries, eval quality, grounding and deployment guardrails.",
+      "Check human approval controls, test results, source evidence and release safeguards.",
     icon: Bot,
   },
   {
     key: "credit",
     label: "Credit",
-    title: "Credit data governance",
+    title: "Credit data controls",
     description:
-      "Rules-first eligibility, KYB, structural replay and bank Data Room controls.",
+      "Review eligibility rules, know-your-business (KYB) checks, consistency tests and bank access.",
     icon: Landmark,
   },
 ];

@@ -98,7 +98,7 @@ export function Analytics() {
         <WorkspaceHeader
           eyebrow="Performance"
           title="Analytics"
-          description="Track operating outcomes from the records already in Valo."
+          description="Review invoice results and payment trends from your Valo records."
         />
         <QueryError
           thing="your analytics"
@@ -171,7 +171,7 @@ export function Analytics() {
       <WorkspaceHeader
         eyebrow="Performance"
         title="Analytics"
-        description="Submission quality, money exposure and the next actions that can improve both."
+        description="Review invoice submissions, financial risks and the records that need attention."
       />
 
       <MetricStrip label="Performance summary">
@@ -265,7 +265,7 @@ export function Analytics() {
 
       <WorkQueue
         title="Recommended actions"
-        description="The highest-leverage record changes based on current outcomes."
+        description="Start with these records to address the issues shown above."
         items={workItems}
         emptyTitle="No negative outcome needs action"
         emptyDescription="There are no failed submissions, at-risk invoices or 90+ day balances."

@@ -63,7 +63,7 @@ export function BuyerPilotsWorkspace() {
         <Metric
           label="Response coverage"
           value={pct(data.buyerResponseRate30d)}
-          detail={`${data.confirmationResponses30d} responses in cohort`}
+          detail={`${data.confirmationResponses30d} responses in this buyer group`}
           icon={<CheckCircle2 className="size-4" aria-hidden="true" />}
           tone="positive"
         />
@@ -102,7 +102,7 @@ export function BuyerPilotsWorkspace() {
               },
               {
                 value: "scale_ready",
-                label: "Scale ready",
+                label: "Ready to expand",
                 count: data.pilots.filter(
                   (pilot) => pilot.stage === "scale_ready",
                 ).length,

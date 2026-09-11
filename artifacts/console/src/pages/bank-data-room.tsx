@@ -113,9 +113,9 @@ export function BankDataRoom() {
   return (
     <div className="space-y-6">
       <WorkspaceHeader
-        eyebrow="Private institutional workspace"
-        title="Credit Data Room"
-        description="Consent-governed, anonymized portfolio evidence for diligence. No customer identities, exact amounts, offers or financing actions are exposed here."
+        eyebrow="Private bank workspace"
+        title="Credit data room"
+        description="Review anonymized business summaries shared with consent. Customer identities, exact amounts, financing offers and financing actions are not available here."
         actions={
           <Button
             size="sm"
@@ -139,9 +139,9 @@ export function BankDataRoom() {
         <div>
           <h2 className="text-sm font-extrabold">Privacy boundary enforced</h2>
           <p className="mt-1 text-xs leading-5 text-white/70">
-            Fixed quarterly cohorts, minimum population thresholds and amount
-            bands prevent drill-down to a business or invoice. Every view is
-            recorded against your bank access grant.
+            Quarterly business groups, minimum group sizes and amount ranges
+            prevent access to individual businesses or invoices. Every view is
+            recorded against your bank access permission.
           </p>
         </div>
         <span className="text-xs font-bold text-[#f0d978]">Aggregate only</span>
@@ -151,7 +151,7 @@ export function BankDataRoom() {
         <LoadingState />
       ) : room.isError || !room.data ? (
         <QueryError
-          thing="the credit Data Room"
+          thing="the credit data room"
           onRetry={() => room.refetch()}
         />
       ) : !room.data.available || !room.data.metrics ? (
@@ -161,10 +161,10 @@ export function BankDataRoom() {
             aria-hidden="true"
           />
           <h2 className="mt-4 text-lg font-extrabold text-slate-950">
-            Cohort withheld for privacy
+            Business group hidden for privacy
           </h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-            The consented population has not reached the minimum cohort of{" "}
+            The group does not yet have consent from the minimum of{" "}
             {room.data.privacy.minimumCohortSize} businesses. No counts or
             derived rates are released below that boundary.
           </p>
@@ -175,7 +175,7 @@ export function BankDataRoom() {
             <Metric
               label="Consented businesses"
               value={String(room.data.metrics.consentingBusinesses)}
-              detail="Layer-3 permission current"
+              detail="Current consent to share credit data (Layer 3)"
               icon={<ShieldCheck className="size-4" aria-hidden="true" />}
               tone="positive"
             />
@@ -207,7 +207,7 @@ export function BankDataRoom() {
             className="space-y-4"
           >
             <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-md border border-slate-200 bg-white p-1">
-              <TabsTrigger value="cohorts">Cohorts</TabsTrigger>
+              <TabsTrigger value="cohorts">Business groups</TabsTrigger>
               <TabsTrigger value="assurance">Method & assurance</TabsTrigger>
               <TabsTrigger value="access">Access history</TabsTrigger>
             </TabsList>
@@ -216,7 +216,7 @@ export function BankDataRoom() {
               <section className="overflow-hidden border border-slate-200 bg-white">
                 <div className="border-b border-slate-200 px-5 py-4">
                   <h2 className="text-base font-extrabold text-slate-950">
-                    Quarterly eligibility cohorts
+                    Quarterly eligibility by business group
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
                     Cells below {room.data.privacy.minimumCohortSize} distinct
@@ -226,13 +226,14 @@ export function BankDataRoom() {
                 </div>
                 {room.data.cohorts.length === 0 ? (
                   <p className="px-5 py-10 text-center text-sm text-slate-500">
-                    Every current cohort is below the privacy threshold.
+                    Every current business group is below the minimum privacy
+                    threshold.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[58rem] text-left text-sm">
                       <caption className="sr-only">
-                        Quarterly credit cohorts grouped by fixed amount band
+                        Quarterly credit evidence grouped by fixed amount range
                       </caption>
                       <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
                         <tr>
@@ -369,7 +370,7 @@ export function BankDataRoom() {
                       </dt>
                       <dd className="mt-1 text-slate-700">
                         {room.data.assurance.scorecardVersions.join(", ") ||
-                          "No released cohort"}
+                          "No shared business group"}
                       </dd>
                     </div>
                     <div>
@@ -378,7 +379,7 @@ export function BankDataRoom() {
                       </dt>
                       <dd className="mt-1 text-slate-700">
                         {room.data.assurance.rulesetVersions.join(", ") ||
-                          "No released cohort"}
+                          "No shared business group"}
                       </dd>
                     </div>
                   </dl>

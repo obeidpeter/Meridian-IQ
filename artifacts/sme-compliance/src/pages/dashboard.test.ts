@@ -31,7 +31,7 @@ describe("planPolicyStatusLine", () => {
         pausedReason: null,
         lastRunMonth: null,
       }),
-    ).toBe("Runs monthly · runs when there is eligible paper");
+    ).toBe("Runs monthly · processes invoices that meet the requirements");
   });
 
   test("a consumed month reads as up-to-date, not as a claimed run", () => {

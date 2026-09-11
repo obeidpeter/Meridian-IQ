@@ -102,7 +102,7 @@ export function useInvoiceDraft({
           setBanner({
             tone: "error",
             message:
-              "The saved invoice draft could not be loaded. Retry before creating an invoice, or explicitly reset the form.",
+              "Could not load the saved draft. Try loading it again before creating an invoice, or choose to reset the form.",
           });
       });
     return () => {
@@ -180,7 +180,7 @@ export function useInvoiceDraft({
         setBanner({
           tone: "error",
           message:
-            "The new invoice draft could not be saved. The previous intent has been retained.",
+            "Could not save the new draft. The previous draft and its submission details were kept.",
         });
       return;
     }
@@ -203,7 +203,7 @@ export function useInvoiceDraft({
     if (intentRef.current?.payload || !hydrated) {
       Alert.alert(
         "Start a new invoice?",
-        "A previous attempt may already have created an invoice. Check your invoices before starting a separate intent.",
+        "A previous attempt may already have created an invoice. Check your invoice list before starting a new one.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Start new invoice", onPress: () => void resetForm() },

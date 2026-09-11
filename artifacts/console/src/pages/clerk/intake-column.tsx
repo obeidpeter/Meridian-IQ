@@ -37,7 +37,7 @@ export function IntakeColumn({ state }: { state: ClerkWorkspaceState }) {
     <Card className="self-start lg:sticky lg:top-24 lg:flex lg:max-h-[calc(100vh-7rem)] lg:flex-col lg:overflow-hidden">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base flex items-baseline gap-2">
-          New intake
+          Review queue
           <span
             className="text-sm font-normal text-muted-foreground"
             data-testid="text-open-count"
@@ -58,7 +58,7 @@ export function IntakeColumn({ state }: { state: ClerkWorkspaceState }) {
           onClick={() => setCaptureOpen((o) => !o)}
           data-testid="button-new-capture"
         >
-          <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New
+          <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add document
         </Button>
       </CardHeader>
       <CardContent className="space-y-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
@@ -72,14 +72,14 @@ export function IntakeColumn({ state }: { state: ClerkWorkspaceState }) {
             onChange={(event) => setQueueSearch(event.target.value)}
             placeholder="Search cases"
             className="pl-9"
-            aria-label="Search intake cases"
+            aria-label="Search review cases"
             data-testid="input-search-cases"
           />
         </div>
         {/* One queue kind at a time: invoice extraction cases or
                     tax-authority notice cases (Notice Desk). The kind
                     travels to the server as the list's kind param. */}
-        <div className="flex gap-1" aria-label="Intake kind">
+        <div className="flex gap-1" aria-label="Document type">
           <Button
             size="sm"
             aria-pressed={queueKind === "extraction"}
@@ -111,7 +111,7 @@ export function IntakeColumn({ state }: { state: ClerkWorkspaceState }) {
             data-testid="button-bulk-approve"
           >
             <ShieldCheck className="w-4 h-4 mr-1" aria-hidden="true" />
-            Approve fast lane ({bulkCandidates.length})
+            Review ready cases ({bulkCandidates.length})
           </Button>
         )}
         {captureOpen && <CaptureForm state={state} />}
@@ -217,7 +217,7 @@ export function IntakeColumn({ state }: { state: ClerkWorkspaceState }) {
                 >
                   <p className="px-1 text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">
-                      {batch?.name?.trim() || "Batch intake"}
+                      {batch?.name?.trim() || "Uploaded batch"}
                     </span>
                     {/* Counts only when the batch row resolved — a
                                 batch beyond the newest-50 list must not

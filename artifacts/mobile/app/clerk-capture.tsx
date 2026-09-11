@@ -187,7 +187,7 @@ export default function ClerkCaptureScreen() {
         tone: "error",
         message: apiErrorMessage(
           error,
-          "We couldn't send that to Clerk. Please try again.",
+          "Could not confirm the upload. Check your recent uploads before trying again.",
         ),
       });
     }
@@ -308,7 +308,7 @@ export default function ClerkCaptureScreen() {
 
   return (
     <>
-      <Stack.Screen options={stackHeaderOptions(colors, "Send to Clerk")} />
+      <Stack.Screen options={stackHeaderOptions(colors, "Upload documents")} />
       <KeyboardAwareScrollViewCompat
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
@@ -328,13 +328,13 @@ export default function ClerkCaptureScreen() {
           <EmptyState
             icon="lock"
             title="Clerk isn't available on your account"
-            message="Ask your accounting firm to enable Clerk capture for you."
+            message="Ask your accounting firm to enable document uploads to Clerk."
           />
         ) : (
           <View style={{ gap: 20 }}>
             <Banner
               tone="info"
-              message="Clerk reads it — your accountant reviews before anything is created."
+              message="Clerk suggests details from your document. Your accountant must approve them before a draft invoice or tax obligation is created. Nothing is submitted to the tax authority here."
             />
 
             {banner ? (
@@ -345,12 +345,12 @@ export default function ClerkCaptureScreen() {
               <Card style={{ gap: 12 }}>
                 <Banner
                   tone="warning"
-                  message="Clerk has already seen this exact document. Send it again anyway?"
+                  message="This document was already uploaded. Upload it again for a separate review?"
                 />
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   <View style={{ flex: 1 }}>
                     <AppButton
-                      label="Create anyway"
+                      label="Upload again"
                       icon="copy"
                       onPress={() =>
                         void submit({ ...duplicate, allowDuplicate: true })
@@ -377,8 +377,8 @@ export default function ClerkCaptureScreen() {
             <View style={{ gap: 12 }}>
               <AppText variant="heading">
                 {docKind === "notice"
-                  ? "Capture a tax notice"
-                  : "Capture an invoice"}
+                  ? "Upload a tax notice"
+                  : "Upload an invoice"}
               </AppText>
               <Card style={{ gap: 12 }}>
                 {/* Invoice / Tax-notice segmented pair (the estimator's
@@ -431,7 +431,7 @@ export default function ClerkCaptureScreen() {
                 {docKind === "notice" ? (
                   <AppText variant="caption" color={colors.mutedForeground}>
                     Photograph or upload the tax-authority notice, or paste its
-                    text — your accountant confirms the deadline before an
+                    text. Your accountant confirms the deadline before a tax
                     obligation is recorded.
                   </AppText>
                 ) : null}
@@ -449,7 +449,7 @@ export default function ClerkCaptureScreen() {
                       testID="button-take-photo"
                     />
                     <AppButton
-                      label="Pick a document"
+                      label="Choose document"
                       icon="upload"
                       variant="secondary"
                       onPress={() => void pickDocument()}
@@ -469,8 +469,8 @@ export default function ClerkCaptureScreen() {
                   onChangeText={setText}
                   placeholder={
                     docKind === "notice"
-                      ? "Paste the notice text — Clerk pulls out the authority, reference and deadline."
-                      : "Paste an email, message, or typed-out invoice — Clerk pulls out the details."
+                      ? "Paste the notice text for Clerk to suggest the authority, reference and deadline."
+                      : "Paste an email, message or invoice text for Clerk to suggest the details."
                   }
                   multiline
                   autoCapitalize="none"
@@ -491,7 +491,7 @@ export default function ClerkCaptureScreen() {
             </View>
 
             <View style={{ gap: 12 }}>
-              <AppText variant="heading">My submissions</AppText>
+              <AppText variant="heading">My uploads</AppText>
               {casesQuery.isLoading ? (
                 <View style={{ gap: 12 }}>
                   <CardSkeleton lines={1} />
@@ -499,14 +499,14 @@ export default function ClerkCaptureScreen() {
                 </View>
               ) : casesQuery.isError ? (
                 <ErrorState
-                  message="We couldn't load your submissions."
+                  message="Could not load your uploads. Try again."
                   onRetry={() => void casesQuery.refetch()}
                 />
               ) : cases.length === 0 ? (
                 <EmptyState
                   icon="inbox"
-                  title="Nothing sent yet"
-                  message="Take a photo, send a document, or paste text above — your submissions and their review status appear here."
+                  title="No uploads yet"
+                  message="Take a photo, choose a document or send text to start a review."
                 />
               ) : (
                 cases.map((kase) => (
@@ -558,7 +558,7 @@ function CaseRow({
       accessibilityRole="button"
       accessibilityState={{ expanded }}
       accessibilityLabel={`${title}, ${meta.label}, ${timeAgo(kase.createdAt)}`}
-      accessibilityHint="Shows what Clerk read from this submission"
+      accessibilityHint="Shows Clerk's suggested details from this upload"
       testID={`clerk-case-${kase.id}`}
     >
       <Card style={{ gap: 10 }}>

@@ -254,9 +254,11 @@ describe("bulk confirm", () => {
     expect(byTestId("text-bulk-dialog-total")!.textContent).toContain("3,500");
     expect(byTestId("text-bulk-dialog-method")!.textContent).toBe("Portal");
     expect(byTestId("text-bulk-dialog-suppliers")!.textContent).toBe("2");
-    expect(dialog!.textContent).toContain("Each supplier will be notified");
+    expect(dialog!.textContent).toContain(
+      "Each supplier can view the recorded response",
+    );
     expect(byTestId("text-bulk-dialog-no-set-off")!.textContent).toContain(
-      "strengthens the supplier's financeability evidence",
+      "can support a financing assessment but does not guarantee financing",
     );
     expect(dialog!.textContent).toContain("does not guarantee financing");
 

@@ -6,6 +6,7 @@ import {
   killSwitchTripped,
   serverErrorMessage,
   serverErrorToast,
+  userErrorMessage,
 } from "./errors";
 
 describe("errorStatus", () => {
@@ -76,6 +77,31 @@ describe("serverErrorMessage", () => {
   });
 });
 
+describe("userErrorMessage", () => {
+  test.each([
+    [
+      "Internal server error",
+      "Valo could not finish this request. Check the latest status before trying again.",
+    ],
+    ["Unauthorized", "Please sign in again to continue."],
+    ["Forbidden", "Your account does not have permission to do this."],
+  ])(
+    "translates %s for display without changing the raw classifier",
+    (raw, display) => {
+      const error = { status: 403, data: { error: raw } };
+      expect(userErrorMessage(error)).toBe(display);
+      expect(serverErrorMessage(error)).toBe(raw);
+      expect(isForbidden(error)).toBe(true);
+    },
+  );
+
+  test("retains exact domain messages used by account checks", () => {
+    const error = { data: { error: "Account has no active membership" } };
+    expect(serverErrorMessage(error)).toBe("Account has no active membership");
+    expect(userErrorMessage(error)).toBe("Account has no active membership");
+  });
+});
+
 describe("serverErrorToast", () => {
   const capture = () => {
     const calls: Array<{
@@ -109,7 +135,7 @@ describe("serverErrorToast", () => {
 
   test("uses the caller's fallback when the server sent no words", () => {
     const { calls, toast } = capture();
-    serverErrorToast(toast, new Error("network down"), "Try again.");
+    serverErrorToast(toast, {}, "Try again.");
     expect(calls[0]).toMatchObject({
       title: "Something went wrong",
       description: "Try again.",
@@ -128,4 +154,27 @@ describe("serverErrorToast", () => {
       variant: "destructive",
     });
   });
+
+  test.each([
+    [
+      new TypeError("Failed to fetch"),
+      "The connection was lost before Valo could confirm the result. Check your connection and the latest status before trying again.",
+    ],
+    [
+      new Error("Request timed out"),
+      "This request took too long. Its result is not confirmed. Check the latest status before trying again.",
+    ],
+  ])(
+    "preserves uncertain results in transport error displays",
+    (error, description) => {
+      const { calls, toast } = capture();
+      serverErrorToast(toast, error, "Try again.");
+      expect(calls[0]).toEqual({
+        title: "Something went wrong",
+        description,
+        variant: "destructive",
+      });
+      expect(serverErrorMessage(error)).toBeUndefined();
+    },
+  );
 });

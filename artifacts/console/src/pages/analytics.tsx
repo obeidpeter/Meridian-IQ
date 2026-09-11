@@ -126,7 +126,7 @@ export function PracticeAnalytics() {
 
       <MetricStrip label="Practice summary">
         <Metric
-          label="Client book"
+          label="Clients"
           value={String(data.clientCount)}
           detail={`${invoiceCount} invoices recorded`}
           icon={<Users className="size-4" aria-hidden="true" />}

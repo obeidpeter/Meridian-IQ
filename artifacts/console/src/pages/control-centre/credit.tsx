@@ -36,7 +36,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { humanize, pillClasses } from "@/lib/format";
 import { compactNumber, pct, WorkspaceLoading } from "./shared";
 
@@ -202,7 +202,7 @@ export function CreditGovernanceWorkspace() {
   const notifyError = (error: unknown) =>
     toast({
       title: "Credit control was not recorded",
-      description: serverErrorMessage(error),
+      description: userErrorMessage(error),
       variant: "destructive",
     });
 
@@ -487,7 +487,7 @@ export function CreditGovernanceWorkspace() {
 
         <FormSection
           title="Run one eligibility assessment"
-          description="Evaluate canonical invoice, confirmation, settlement, KYB and concentration evidence."
+          description="Check saved invoices, buyer confirmations, settlement observations, business verification and concentration risk. This does not approve financing."
           icon={Play}
         >
           <form onSubmit={submitAssessment} className="space-y-4">
@@ -537,7 +537,7 @@ export function CreditGovernanceWorkspace() {
 
         <FormSection
           title="Run structural back-test"
-          description="Replay stored source snapshots to detect scorecard drift. This is not predictive loss validation."
+          description="Re-run stored records to check whether scorecard results have changed. This does not validate predictions of credit losses."
           icon={Activity}
         >
           <form onSubmit={submitBacktest} className="grid gap-4 sm:grid-cols-2">
@@ -573,8 +573,8 @@ export function CreditGovernanceWorkspace() {
         </FormSection>
 
         <FormSection
-          title="Record KYB evidence"
-          description="Store outcome and opaque evidence references only; personal identity documents remain with the provider."
+          title="Record business verification (KYB)"
+          description="Save the verification result and reference IDs only. Personal identity documents stay with the provider."
           icon={Fingerprint}
         >
           <form
@@ -593,7 +593,7 @@ export function CreditGovernanceWorkspace() {
               />
             </div>
             <div className={fieldClass()}>
-              <Label htmlFor="kyb-party">Client Party ID</Label>
+              <Label htmlFor="kyb-party">Client record ID</Label>
               <Input
                 id="kyb-party"
                 value={kyb.partyId}
@@ -629,7 +629,9 @@ export function CreditGovernanceWorkspace() {
               />
             </div>
             <div className={fieldClass()}>
-              <Label htmlFor="kyb-coverage">Ownership coverage (bps)</Label>
+              <Label htmlFor="kyb-coverage">
+                Ownership coverage (basis points; 100 = 1%)
+              </Label>
               <Input
                 id="kyb-coverage"
                 type="number"
@@ -716,8 +718,8 @@ export function CreditGovernanceWorkspace() {
         </FormSection>
 
         <FormSection
-          title="Govern bank access"
-          description="Bind a bank user to an executed DPA and finite access window, or suspend/revoke immediately."
+          title="Manage bank access"
+          description="Grant a bank user time-limited access under a signed data processing agreement (DPA), or suspend or revoke access immediately."
           icon={KeyRound}
         >
           <form
@@ -725,7 +727,7 @@ export function CreditGovernanceWorkspace() {
             className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
           >
             <div className={fieldClass()}>
-              <Label htmlFor="access-bank">Bank Party ID</Label>
+              <Label htmlFor="access-bank">Bank record ID</Label>
               <Input
                 id="access-bank"
                 value={access.bankPartyId}
@@ -736,7 +738,7 @@ export function CreditGovernanceWorkspace() {
               />
             </div>
             <div className={fieldClass()}>
-              <Label htmlFor="access-user">Bank User ID</Label>
+              <Label htmlFor="access-user">Bank user ID</Label>
               <Input
                 id="access-user"
                 value={access.userId}

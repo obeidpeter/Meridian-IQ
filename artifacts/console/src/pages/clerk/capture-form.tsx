@@ -50,8 +50,8 @@ export function CaptureForm({ state }: { state: ClerkWorkspaceState }) {
       {!noticeCapture && <CaptureVoiceInputs state={state} />}
       <p className="text-xs text-muted-foreground">
         {noticeCapture
-          ? "or paste the notice text:"
-          : "or paste the invoice text:"}
+          ? "Or paste the notice text:"
+          : "Or paste the invoice text:"}
       </p>
       <Textarea
         aria-label={noticeCapture ? "Notice text" : "Invoice text"}
@@ -90,7 +90,7 @@ export function CaptureForm({ state }: { state: ClerkWorkspaceState }) {
       {pendingDuplicate && (
         <Alert data-testid="banner-duplicate-source">
           <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Already read this one?</AlertTitle>
+          <AlertTitle>This document may already have been uploaded</AlertTitle>
           <AlertDescription className="space-y-2">
             <p>{pendingDuplicate.message}</p>
             <div className="flex gap-2 flex-wrap">
@@ -107,7 +107,9 @@ export function CaptureForm({ state }: { state: ClerkWorkspaceState }) {
                 disabled={createCase.isPending}
                 data-testid="button-create-anyway"
               >
-                {createCase.isPending ? "Reading…" : "Create anyway"}
+                {createCase.isPending
+                  ? "Reading…"
+                  : "Create another review case"}
               </Button>
               <Button
                 size="sm"
@@ -145,7 +147,7 @@ function CaptureVoiceInputs({ state }: { state: ClerkWorkspaceState }) {
   } = state;
   return (
     <>
-      <Label htmlFor="capture-voice">or a voice note (max 5 MB)</Label>
+      <Label htmlFor="capture-voice">Or a voice note (up to 5 MB)</Label>
       <Input
         id="capture-voice"
         type="file"
@@ -229,7 +231,7 @@ function CaptureSubmitButton({ state }: { state: ClerkWorkspaceState }) {
       data-testid="button-run-capture"
     >
       {createCaseBatch.isPending
-        ? "Splitting…"
+        ? "Separating invoices…"
         : createCase.isPending
           ? captureVoice
             ? "Transcribing…"

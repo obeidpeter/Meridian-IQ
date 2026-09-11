@@ -66,7 +66,7 @@ export function Portal() {
           >
             {revocationConfirmed
               ? "You are signed out."
-              : "Signed out locally. Server sign-out could not be confirmed; the session may still be active."}
+              : "Signed out on this device, but we could not confirm sign-out on the server. Your session may still be active. Try signing out again."}
             {!revocationConfirmed && (
               <Button
                 type="button"
@@ -85,7 +85,7 @@ export function Portal() {
                   }
                 }}
               >
-                Retry server sign-out
+                Try signing out again
               </Button>
             )}
           </div>
@@ -145,7 +145,8 @@ export function Portal() {
             Choose your workspace
           </h1>
           <p className="mt-3 text-base leading-7 text-slate-600 sm:text-lg">
-            Your workspace is ready. These are the apps this account can open.
+            Choose an available workspace. Some apps need a different account
+            role.
           </p>
         </section>
 
@@ -179,8 +180,8 @@ export function Portal() {
 
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-xs text-muted-foreground">
           <p>
-            Valo — Lagos, Nigeria. The Penalty Calculator is free for everyone;
-            the other workspaces need a sign-in.
+            Valo, Lagos, Nigeria. The penalty calculator is free for everyone.
+            Other workspaces require an account with access.
           </p>
           <nav className="flex items-center gap-4" aria-label="Footer">
             <a

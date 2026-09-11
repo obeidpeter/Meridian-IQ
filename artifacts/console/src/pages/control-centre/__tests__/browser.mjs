@@ -42,15 +42,11 @@ const report = {
 };
 const routes = [
   ["activation", "Evidence and activation", "Evidence gates"],
-  ["buyers", "Buyer Rails pilots", "Pilot portfolio"],
-  [
-    "cases",
-    "Compliance case orchestration",
-    "Review pending compliance evidence",
-  ],
+  ["buyers", "Buyer pilots", "Pilot portfolio"],
+  ["cases", "Compliance cases", "Review pending compliance evidence"],
   ["reliability", "Integration reliability", "Connection estate"],
-  ["evidence", "Evidence vault and trust", "Enterprise trust controls"],
-  ["clerk", "Clerk operational assurance", "Operational guardrails"],
+  ["evidence", "Saved compliance evidence", "Enterprise trust controls"],
+  ["clerk", "Clerk quality and safety", "Safety checks"],
 ];
 try {
   browser = await chromium.launch({

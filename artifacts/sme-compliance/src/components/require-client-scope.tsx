@@ -38,7 +38,7 @@ export function RequireClientScope({
                 <>
                   Your firm account isn't pinned to a client business, so
                   there's no {thing} to show here. Open a client from the
-                  Accountant Console to work on their behalf.
+                  accountant workspace to work on their behalf.
                 </>
               ) : (
                 <>
@@ -51,7 +51,7 @@ export function RequireClientScope({
           {isFirmUser && (
             <Button asChild variant="outline" size="sm">
               <a href="/console/" data-testid="link-open-console">
-                Open the Accountant Console
+                Open the accountant workspace
               </a>
             </Button>
           )}

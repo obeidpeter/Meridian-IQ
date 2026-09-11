@@ -54,7 +54,7 @@ export function OfflineBanner() {
             color: colors.warningForeground,
           }}
         >
-          You're offline — changes may not save
+          You are offline. Changes may not be saved.
         </Text>
       </View>
     </View>

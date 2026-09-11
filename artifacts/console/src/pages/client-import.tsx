@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { StatTile } from "@/components/stat-tile";
 import { downloadBlob } from "@/lib/download";
-import { errorStatus, isFeatureDisabled } from "@/lib/errors";
+import { errorStatus, isFeatureDisabled, userErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
@@ -278,9 +278,7 @@ export function ClientImport() {
             : "Validation failed",
         description: outcomeUnknown
           ? "Check the client portfolio before trying again to avoid duplicates."
-          : err instanceof Error
-            ? err.message
-            : "Please check your rows.",
+          : (userErrorMessage(err) ?? "Check your rows and try again."),
         variant: "destructive",
       });
     }
@@ -310,8 +308,8 @@ export function ClientImport() {
           Client import
         </h1>
         <p className="text-muted-foreground mt-1">
-          Move a client book across from your practice-management export. Every
-          row is validated before anything is created.
+          Upload client records from your practice-management export. Every row
+          is validated before anything is created.
         </p>
       </div>
 

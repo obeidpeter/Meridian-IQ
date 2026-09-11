@@ -27,7 +27,7 @@ export function ProposalsList({
   return proposals.length === 0 ? (
     <View testID="text-actions-empty">
       <AppText variant="body" color={colors.mutedForeground}>
-        Nothing to suggest right now — automation and history below.
+        No suggestions right now. Review automations and run history below.
       </AppText>
     </View>
   ) : (

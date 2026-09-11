@@ -78,7 +78,7 @@ export function PolicyRow({
           </View>
           <View style={{ flex: 1 }}>
             <AppButton
-              label="Revoke"
+              label="Remove"
               icon="x-circle"
               variant="ghost"
               onPress={onRevoke}

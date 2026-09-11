@@ -32,7 +32,7 @@ import {
 import { QueryError } from "@/components/query-error";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { formatPct, pillClasses } from "@/lib/format";
 import {
   EVAL_RISK_TONE,
@@ -114,7 +114,7 @@ export function EvalCorpusCard() {
         setPendingRetire(null);
         toast({
           title: "Could not retire the fixture",
-          description: serverErrorMessage(e) ?? "Try again in a moment.",
+          description: userErrorMessage(e) ?? "Try again in a moment.",
           variant: "destructive",
         });
       },
@@ -132,7 +132,7 @@ export function EvalCorpusCard() {
       onError: (e) =>
         toast({
           title: "Could not restore the fixture",
-          description: serverErrorMessage(e) ?? "Try again in a moment.",
+          description: userErrorMessage(e) ?? "Try again in a moment.",
           variant: "destructive",
         }),
     },

@@ -39,7 +39,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorToast } from "@/lib/errors";
+import { serverErrorToast, userErrorMessage } from "@/lib/errors";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
   AlertTriangle,
@@ -134,9 +134,8 @@ function StatementFormatsSection() {
           toast({
             title: "Could not save the format",
             description:
-              e instanceof Error
-                ? e.message
-                : "The mapping failed validation against the sample.",
+              userErrorMessage(e) ??
+              "The mapping failed validation against the sample.",
             variant: "destructive",
           }),
       },

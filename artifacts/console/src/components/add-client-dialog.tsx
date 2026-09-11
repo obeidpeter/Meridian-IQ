@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { errorStatus, userErrorMessage } from "@/lib/errors";
 
 // Single-client intake for the portfolio (the SME add-customer-dialog idiom):
 // one dialog creates the party + engagement so a firm's first client never
@@ -57,7 +57,7 @@ export function createClientErrorNote(err: unknown): string {
   if (errorStatus(err) === 409) {
     return "You already have a client with this TIN/name.";
   }
-  return serverErrorMessage(err) ?? "Could not add the client. Try again.";
+  return userErrorMessage(err) ?? "Could not add the client. Try again.";
 }
 
 interface AddClientDialogProps {
@@ -123,7 +123,7 @@ export function AddClientDialog({
       });
       toast({
         title: CLIENT_ADDED_TOAST,
-        description: `${created.legalName} is in your client book.`,
+        description: `${created.legalName} has been added to your clients.`,
       });
       onCreated?.(created);
       handleOpenChange(false);
@@ -139,8 +139,8 @@ export function AddClientDialog({
         <DialogHeader>
           <DialogTitle>Add client</DialogTitle>
           <DialogDescription>
-            Creates the client in your book with an active engagement — invite
-            their owner afterwards so they can sign in and grant consent.
+            Creates a client record with an active engagement. Invite their
+            owner afterwards so they can sign in and grant consent.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

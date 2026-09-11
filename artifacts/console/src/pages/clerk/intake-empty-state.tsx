@@ -24,10 +24,10 @@ export function IntakeEmptyState({ state }: { state: ClerkWorkspaceState }) {
         queueKind === "notice"
           ? queueSearch
             ? "Try a source name, reference, status or case ID."
-            : "Capture a tax-authority notice — a photo, scan or pasted text — Clerk reads it and queues it here for your review."
+            : "Upload a tax authority notice or paste its text. Clerk suggests the details for you to review."
           : queueSearch
             ? "Try a source name, invoice number, status or case ID."
-            : "Capture an invoice document, voice note or pasted text — Clerk reads it and queues it here for your review."
+            : "Upload an invoice or voice note, or paste invoice text. Clerk suggests the details for you to review."
       }
       className="py-8 px-2"
     >
@@ -38,9 +38,7 @@ export function IntakeEmptyState({ state }: { state: ClerkWorkspaceState }) {
           data-testid="button-empty-capture"
         >
           <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-          {queueKind === "notice"
-            ? "Capture your first notice"
-            : "Capture your first document"}
+          {queueKind === "notice" ? "Add a notice" : "Add a document"}
         </Button>
         {queueKind === "extraction" && (
           <Button
@@ -52,7 +50,7 @@ export function IntakeEmptyState({ state }: { state: ClerkWorkspaceState }) {
             }}
             data-testid="button-empty-import-batch"
           >
-            Import a multi-invoice bundle
+            Upload multiple invoices
           </Button>
         )}
       </div>

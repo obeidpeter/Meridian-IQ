@@ -1,5 +1,6 @@
 import type { ConfirmationInputState } from "@workspace/api-client-react";
 import { errorStatus } from "./errors";
+import { userErrorMessage } from "@workspace/api-errors";
 
 // The confirm/query/reject response flow's pure logic, extracted from the
 // invoice-respond page so the copy and the validation rules are testable and
@@ -14,11 +15,11 @@ export type ResponseState = Extract<
 // with the consequence in view, not from a one-word label.
 export const RESPONSE_DESCRIPTIONS: Record<ResponseState, string> = {
   confirmed:
-    "Accepts the invoice as issued. The supplier is notified, and with the no-set-off acknowledgement below the invoice becomes financeable.",
+    "Records that you accept the invoice as issued. The supplier can view your response. The no-set-off acknowledgement below can support a financing assessment. It does not approve financing or make a payment.",
   queried:
-    "Records your question and sends it to the supplier. You cannot change this response. Ask the supplier to clarify and send a new confirmation request; you can respond again when that request arrives.",
+    "Records your question for the supplier to review. You cannot change this response. Ask the supplier to clarify and send a new confirmation request; you can respond again when that request arrives.",
   rejected:
-    "Declines the invoice. The supplier is notified with your reason and must reissue it if they still intend to bill you.",
+    "Records that you reject the invoice. The supplier can review your reason before correcting it or sending a new confirmation request.",
 };
 
 // Said before submit, not only in the 409 and "already responded" states:
@@ -28,7 +29,7 @@ export const RESPONSE_FINALITY =
 
 export const SUBMIT_LABELS: Record<ResponseState, string> = {
   confirmed: "Confirm invoice",
-  queried: "Send query",
+  queried: "Send question",
   rejected: "Reject invoice",
 };
 
@@ -49,8 +50,8 @@ export function noteValidationError(
   if (!noteRequiredFor(state)) return null;
   if (note.trim() !== "") return null;
   return state === "queried"
-    ? "Say what needs clarifying — your note is all the supplier sees."
-    : "Say why you are rejecting — your note is all the supplier sees.";
+    ? "Enter your question so the supplier knows what to clarify."
+    : "Enter a reason so the supplier knows why you are rejecting this invoice.";
 }
 
 /** The post-action confirmation card's copy, per recorded response. */
@@ -63,11 +64,11 @@ export function responseRecordedCopy(state: ResponseState): {
       return {
         title: "Invoice confirmed",
         description:
-          "Your confirmation has been recorded and the supplier has been notified. Nothing more is needed from you on this invoice.",
+          "Your confirmation has been recorded. The supplier can view your recorded response. No further response is needed here. This does not record a payment.",
       };
     case "queried":
       return {
-        title: "Query sent",
+        title: "Question sent",
         description:
           "Your question has been recorded. Ask the supplier to clarify and send a new confirmation request for the stamped invoice. You can respond to the new request, but this recorded response cannot be changed.",
       };
@@ -75,7 +76,7 @@ export function responseRecordedCopy(state: ResponseState): {
       return {
         title: "Invoice rejected",
         description:
-          "Your rejection has been recorded and the supplier has been notified with your reason. They must reissue the invoice to bill you again.",
+          "Your rejection has been recorded. The supplier can view your recorded response and reason. Contact them about any corrections or a new confirmation request.",
       };
   }
 }
@@ -84,12 +85,17 @@ export function responseRecordedCopy(state: ResponseState): {
 export function errorDescription(error: unknown): string {
   const status = errorStatus(error);
   if (status === 401)
-    return "Your session has expired — sign in again from the portal.";
+    return "Your session has expired. Sign in again to continue.";
   if (status === 403) return "Your account doesn't have permission to do this.";
   if (status === 409)
-    return "This invoice was already responded to — refresh to see the latest state.";
+    return (
+      userErrorMessage(error) ??
+      "This action could not be completed with the invoice's current status. Refresh to review the latest status."
+    );
   if (status !== undefined && status >= 500)
-    return "Valo had a problem recording this. Try again in a moment.";
-  const message = error instanceof Error ? error.message : undefined;
-  return message ?? "Something went wrong — try again.";
+    return "Valo could not confirm the result. Check the latest invoice status before trying again.";
+  return (
+    userErrorMessage(error) ??
+    "Valo could not confirm the result. Check the latest invoice status before trying again."
+  );
 }

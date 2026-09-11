@@ -89,9 +89,9 @@ export default function AutomationScreen() {
         ) : (
           <View style={{ gap: 12 }}>
             <AppText variant="body" color={colors.mutedForeground}>
-              Clerk suggests, you decide. Nothing runs until it is approved —
-              here for one batch, or as a standing daily approval you can pause
-              or revoke at any time.
+              Clerk suggests actions for you to review. Approve one batch, or
+              allow a daily automation. Nothing runs without approval. You can
+              pause or remove a daily automation at any time.
             </AppText>
 
             {banner ? (
@@ -102,7 +102,7 @@ export default function AutomationScreen() {
               <EmptyState
                 icon="zap"
                 title="Nothing to automate yet"
-                message="When Clerk has suggestions, standing approvals or run history for this business, they will appear here."
+                message="Clerk's suggestions, approved automations and run history for this business will appear here."
               />
             ) : (
               <>

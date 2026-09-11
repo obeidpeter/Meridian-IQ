@@ -155,7 +155,7 @@ export default function ClerkAskScreen() {
           <View style={{ gap: 20 }}>
             <Banner
               tone="info"
-              message="Answers come from the approved compliance register or live lookups over your own records — nothing is improvised."
+              message="Clerk uses approved compliance guidance or your business records to answer. Review the sources before acting on an answer."
             />
 
             {banner ? <Banner tone="error" message={banner} /> : null}
@@ -295,7 +295,7 @@ function AnswerCard({
         </View>
         <AppText variant="body" color={colors.mutedForeground}>
           {answer.refusalReason ??
-            "That isn't covered by the approved register yet."}
+            "This question is not covered by the approved guidance yet."}
         </AppText>
       </Card>
     );
@@ -340,8 +340,8 @@ function AnswerCard({
                 {s.action ? (
                   <View testID={`text-action-web-only-${i}`}>
                     <AppText variant="caption" color={colors.mutedForeground}>
-                      To approve and run this proposal, open Valo on the web —
-                      approvals are not available in the mobile app yet.
+                      Open Valo on the web to review and approve this proposal.
+                      Approval is not available from this mobile screen.
                     </AppText>
                   </View>
                 ) : null}

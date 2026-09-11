@@ -224,14 +224,14 @@ afterEach(async () => {
 describe("auth presentation contracts", () => {
   test("keeps sign-in landmarks, labels, autofocus and password visibility", async () => {
     await render();
-    expect(container.querySelector("h1")?.textContent).toBe("Welcome back");
+    expect(container.querySelector("h1")?.textContent).toBe("Sign in to Valo");
     expect(container.querySelectorAll("main")).toHaveLength(1);
     expect(container.querySelectorAll("header")).toHaveLength(1);
     expect(container.querySelectorAll("footer")).toHaveLength(1);
     const aside = container.querySelector("aside")!;
     expect(aside.getAttribute("aria-labelledby")).toBe("access-story-title");
     expect(container.querySelector("#access-story-title")?.textContent).toBe(
-      "One account. The right workspace.",
+      "Access your workspace",
     );
     expect(aside.querySelectorAll("li")).toHaveLength(4);
     expect(
@@ -283,6 +283,9 @@ describe("auth presentation contracts", () => {
       data: { email: "ada@example.test", password: "example-password" },
     });
     expect(byTestId("text-login-error").getAttribute("role")).toBe("alert");
+    expect(byTestId("text-login-error").textContent).toContain(
+      "The email or password is incorrect. Check both and try again.",
+    );
     expect(byTestId("input-email").getAttribute("aria-describedby")).toBe(
       "login-error",
     );
@@ -317,6 +320,9 @@ describe("auth presentation contracts", () => {
       data: { mfaToken: "fixture-token", code: "saved-recovery-code" },
     });
     expect(byTestId("text-totp-error").getAttribute("role")).toBe("alert");
+    expect(byTestId("text-totp-error").textContent).toContain(
+      "Try the current code from your authenticator app, or use a recovery code.",
+    );
     expect(byTestId("input-totp-code").getAttribute("aria-describedby")).toBe(
       "totp-error",
     );
@@ -351,14 +357,14 @@ describe("auth presentation contracts", () => {
       "We can't reach Valo right now.",
     );
     const retry = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Retry",
+      (button) => button.textContent === "Try again",
     )!;
     await act(async () => retry.click());
     expect(auth.refetch).toHaveBeenCalledOnce();
     window.history.replaceState(null, "", "/login?reason=local-signout");
     await render();
     expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "Server sign-out could not be confirmed",
+      "we could not confirm sign-out on the server. Your session may still be active",
     );
   });
 
@@ -381,7 +387,7 @@ describe("auth presentation contracts", () => {
       "status",
     );
     expect(byTestId("text-reset-request-sent").textContent).toContain(
-      "If an account exists",
+      "If this address has an account and email delivery is available",
     );
   });
 
@@ -403,7 +409,7 @@ describe("auth presentation contracts", () => {
       data: { token: "fixture-reset-token", password: "new-example-password" },
     });
     expect(byTestId("text-reset-error").textContent).toContain(
-      "invalid or has expired",
+      "The link may be invalid or expired",
     );
     expect(document.activeElement).toBe(byTestId("input-reset-password"));
   });

@@ -611,6 +611,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/api-errors':
+        specifier: workspace:*
+        version: link:../../lib/api-errors
       '@workspace/format':
         specifier: workspace:*
         version: link:../../lib/format

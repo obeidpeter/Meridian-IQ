@@ -24,12 +24,12 @@ export interface WorkspaceTarget {
 // staff belong in the Compliance Workspace.
 const DEFAULT_WORKSPACE: Readonly<Record<string, WorkspaceTarget>> = {
   operator: { href: "/console/operator-queue", label: "Operator queue" },
-  bank_user: { href: "/console/data-room", label: "Bank Data Room" },
-  firm_admin: { href: "/console/", label: "Accountant Console" },
-  firm_staff: { href: "/app/", label: "Compliance Workspace" },
-  client_user: { href: "/app/", label: "Compliance Workspace" },
-  buyer_user: { href: "/buyer/", label: "Buyer Rails" },
-  auditor: { href: "/console/audit", label: "Audit & evidence" },
+  bank_user: { href: "/console/data-room", label: "Bank data room" },
+  firm_admin: { href: "/console/", label: "Accountant workspace" },
+  firm_staff: { href: "/app/", label: "Business workspace" },
+  client_user: { href: "/app/", label: "Business workspace" },
+  buyer_user: { href: "/buyer/", label: "Buyer workspace" },
+  auditor: { href: "/console/audit", label: "Audit and evidence" },
 };
 
 /**
@@ -44,7 +44,7 @@ export function defaultWorkspaceFor(me: {
   clientPartyId?: string | null;
 }): WorkspaceTarget | undefined {
   if (me.role === "firm_staff" && !me.clientPartyId) {
-    return { href: "/console/", label: "Accountant Console" };
+    return { href: "/console/", label: "Accountant workspace" };
   }
   return DEFAULT_WORKSPACE[me.role];
 }

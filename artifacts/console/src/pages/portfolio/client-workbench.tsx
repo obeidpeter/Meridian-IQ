@@ -109,7 +109,7 @@ export function SavedViewsBar({
             data-testid="input-portfolio-view-name"
           />
           <Button type="submit" size="sm" disabled={!name.trim()}>
-            Save
+            Save view
           </Button>
           <Button
             type="button"
@@ -185,7 +185,7 @@ export function ClientWorkbenchTable({
       <div className="flex flex-col gap-4 border-b border-border px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-bold text-foreground">
-            {compact ? "Clients needing attention" : "Client book"}
+            {compact ? "Clients needing attention" : "Clients"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Showing {clients.length} of {totalClients} clients
@@ -268,11 +268,11 @@ export function ClientWorkbenchTable({
             No matching clients
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Change the search or risk filter to widen the client book.
+            Change your search or risk filter to see more clients.
           </p>
         </div>
       ) : (
-        <ScrollRegion label="Client book table">
+        <ScrollRegion label="Clients table">
           <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
             <thead className="bg-muted/50 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
               <tr>

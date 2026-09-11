@@ -25,14 +25,14 @@ export function TransmissionHistory({
   const colors = useColors();
   return (
     <View style={{ gap: 8 }}>
-      <AppText variant="heading">Transmission history</AppText>
+      <AppText variant="heading">Submission history</AppText>
       {loading ? (
         <CardSkeleton lines={2} />
       ) : attempts.length === 0 ? (
         <Card>
           <AppText variant="body" color={colors.mutedForeground}>
-            No transmission attempts yet. Submit the invoice to send it to the
-            rail.
+            No submission attempts yet. Submit the invoice to send it to your
+            configured submission service.
           </AppText>
         </Card>
       ) : (

@@ -17,8 +17,8 @@ import {
 
 test("billStatusLabel reads buyer-side: open means money still to pay", () => {
   assert.equal(billStatusLabel("open"), "Unpaid");
-  assert.equal(billStatusLabel("scheduled"), "Scheduled");
-  assert.equal(billStatusLabel("paid"), "Paid");
+  assert.equal(billStatusLabel("scheduled"), "Payment planned");
+  assert.equal(billStatusLabel("paid"), "Payment recorded");
 });
 
 test("billStatusLabel degrades off-contract statuses instead of crashing", () => {
@@ -90,8 +90,15 @@ test("missingBillsBannerMessage: header, one line per pattern, hedge footer", ()
   assert.match(blocks[2], /^Ikeja Internet has billed/);
   assert.equal(blocks[3], MISSING_BILLS_FOOTER);
   // The hedge keeps its honesty markers.
-  assert.match(MISSING_BILLS_FOOTER, /Advisory only/);
-  assert.match(MISSING_BILLS_FOOTER, /unclaimed input VAT/);
+  assert.match(
+    MISSING_BILLS_FOOTER,
+    /not a confirmed amount owed or VAT entitlement/,
+  );
+  assert.match(MISSING_BILLS_FOOTER, /input VAT you may be able to claim/);
+  assert.match(
+    MISSING_BILLS_FOOTER,
+    /Ignore this if the supplier arrangement has ended/,
+  );
 });
 
 test("verificationChip maps the stored result; never-checked bills get no chip", () => {

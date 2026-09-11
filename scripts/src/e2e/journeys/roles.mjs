@@ -152,7 +152,7 @@ async function journeyPortalAuth(page, BASE, check) {
   check(
     "forgot-password request returns the non-enumerating recovery state",
     (await page.getByTestId("text-reset-request-sent").innerText()).includes(
-      "If an account exists",
+      "If this address has an account",
     ),
   );
 
@@ -165,7 +165,7 @@ async function journeyPortalAuth(page, BASE, check) {
   check(
     "bad password shows uniform error",
     (await page.getByTestId("text-login-error").innerText()).includes(
-      "That email or password is not right",
+      "The email or password is incorrect",
     ),
   );
 
@@ -328,7 +328,7 @@ async function journeyOwnerConsent(page, BASE, check) {
   await checkPageAccessibility(page, check, "client consent");
   await checkShell(page, BASE, check, {
     label: "sme owner",
-    roleText: "Business owner",
+    roleText: "Business user",
     workspaceText: "Adaeze Foods Ltd",
     homeTestId: "nav-today",
   });

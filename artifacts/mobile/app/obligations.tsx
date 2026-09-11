@@ -156,7 +156,7 @@ export default function ObligationsScreen() {
           <EmptyState
             icon="inbox"
             title="No obligations recorded"
-            message="When your accountant approves a captured tax-authority notice, it appears here with its response deadline."
+            message="When your accountant approves an uploaded tax-authority notice, it appears here with its response deadline."
           />
         ) : (
           <View style={{ gap: 12 }}>

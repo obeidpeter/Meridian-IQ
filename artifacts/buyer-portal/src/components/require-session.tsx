@@ -35,7 +35,7 @@ function BrandSplash({
           <div className="min-w-0">
             <p className="text-base font-extrabold leading-none">Valo</p>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
-              Buyer portal
+              Buyer workspace
             </p>
           </div>
         </div>

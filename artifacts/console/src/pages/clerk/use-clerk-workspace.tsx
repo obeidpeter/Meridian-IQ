@@ -37,11 +37,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import {
-  errorStatus,
-  killSwitchTripped,
-  serverErrorMessage,
-} from "@/lib/errors";
+import { errorStatus, killSwitchTripped, userErrorMessage } from "@/lib/errors";
 import {
   type ApproveForm,
   type NoticeApproveForm,
@@ -354,7 +350,7 @@ export function useClerkWorkspace() {
           setPendingDuplicate({
             payload: variables.data,
             message:
-              serverErrorMessage(e) ??
+              userErrorMessage(e) ??
               "This exact document already has a live case.",
           });
           return;

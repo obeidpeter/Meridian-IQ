@@ -46,7 +46,7 @@ export function CaseStatusBanners({
           <AlertDescription className="space-y-2">
             <p>
               {selected.failReason ??
-                "The Clerk could not read this document. Enter the invoice manually."}
+                "Clerk could not read this document. Try again or enter the details manually."}
             </p>
             {/* Retry re-runs extraction on the stored source —
                               only failed extraction cases qualify (the server
@@ -59,7 +59,7 @@ export function CaseStatusBanners({
                 disabled={retryCase.isPending}
                 data-testid="button-retry-case"
               >
-                {retryCase.isPending ? "Retrying…" : "Retry"}
+                {retryCase.isPending ? "Trying again…" : "Try again"}
               </Button>
             )}
           </AlertDescription>
@@ -88,7 +88,7 @@ export function CaseStatusBanners({
             data-testid="preflight-clear"
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Pre-flight clear — nothing blocking approval
+            Approval checks passed. Review the details before approving.
           </p>
         ) : (
           <div
@@ -96,7 +96,7 @@ export function CaseStatusBanners({
             data-testid="preflight-issues"
           >
             <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-              Pre-flight —{" "}
+              Approval checks:{" "}
               {selected.preflight.length === 1
                 ? "1 issue"
                 : `${selected.preflight.length} issues`}{" "}

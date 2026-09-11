@@ -85,9 +85,10 @@ export function FixInvoiceForm({
       )}
       {focus.includes("parties") && (
         <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
-          The rail rejected a TIN. TINs live on the business and customer
-          records, not on this invoice — ask your firm to correct the record (or
-          escalate below), then retry the transmission.
+          The e-invoicing service rejected a Tax Identification Number (TIN).
+          TINs are saved in the business and customer records, not on this
+          invoice. Ask your accountant to correct the record, or request help
+          below, then try submitting again.
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-3">

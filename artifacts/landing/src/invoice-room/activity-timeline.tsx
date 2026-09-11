@@ -12,10 +12,10 @@ export function ActivityTimeline({ detail }: { detail: InvoiceRoomDetail }) {
         <Clock3 className="size-5 text-teal-700" aria-hidden="true" />
         <div>
           <h2 id="activity-heading" className="font-extrabold">
-            Shared activity
+            Invoice history
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            A time-stamped history for this secure room
+            Recorded actions and their dates and times
           </p>
         </div>
       </div>

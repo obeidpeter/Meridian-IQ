@@ -83,7 +83,7 @@ describe("mintFixtureErrorCopy", () => {
     expect(mintFixtureErrorCopy({ status: 500, data: { error: "boom" } })).toBe(
       "boom",
     );
-    expect(mintFixtureErrorCopy(new Error("network"))).toBe(
+    expect(mintFixtureErrorCopy({})).toBe(
       "Could not mint the fixture. Try again in a moment.",
     );
   });

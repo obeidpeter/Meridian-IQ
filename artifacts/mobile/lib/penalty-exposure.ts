@@ -23,20 +23,20 @@ export interface ExposureFigures {
  */
 export function penaltyExposureLine(exposure: ExposureFigures): string {
   const n = exposure.overdueCount;
-  return `${n} invoice${n === 1 ? " is" : "s are"} past the statutory submission window — at least ${formatNaira(
+  return `${n} invoice${n === 1 ? " is" : "s are"} past the statutory submission window. Valo's s.104 planning estimate is ${formatNaira(
     Number(exposure.exposure.small),
-  )} of potential s.104 exposure at the lowest turnover band (${formatNaira(
+  )} at the lowest turnover band (${formatNaira(
     Number(exposure.perInvoice.small),
-  )} per invoice; higher bands reach ${formatNaira(
+  )} per invoice), rising to ${formatNaira(
     Number(exposure.exposure.large),
-  )}).`;
+  )} at the highest band. These are not official penalty amounts.`;
 }
 
 // The fix, stated: this exposure is removable, not a verdict.
 export const PENALTY_EXPOSURE_FIX_LINE =
-  "Submitting the overdue invoices removes this exposure.";
+  "Submit overdue invoices to resolve the outstanding submission work. This does not guarantee that any penalty will be waived.";
 
 /** The estimate disclaimer with the server's as-of date already formatted. */
 export function penaltyExposureNote(asOfLabel: string): string {
-  return `An estimate under Valo's published penalty model — not legal or tax advice. As of ${asOfLabel}.`;
+  return `Based on Valo's planning assumptions, not legal or tax advice. Check current official notices or speak to a tax advisor. As of ${asOfLabel}.`;
 }

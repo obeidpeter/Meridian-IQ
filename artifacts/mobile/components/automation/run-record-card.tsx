@@ -16,7 +16,7 @@ export function RunRecordCard({
   if (decisions.length === 0) return null;
   return (
     <View style={{ gap: 10 }}>
-      <AppText variant="heading">Run record</AppText>
+      <AppText variant="heading">Run history</AppText>
       <Card style={{ gap: 8 }}>
         {decisions.slice(0, DECISION_DISPLAY_CAP).map((d) => (
           <View key={d.id} testID={`decision-${d.id}`}>

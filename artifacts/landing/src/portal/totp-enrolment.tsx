@@ -31,7 +31,8 @@ export function TotpEnrolment({
     <div className="mt-3 space-y-3">
       <p className="text-xs text-muted-foreground">
         Scan the QR code with your authenticator app. If scanning is not
-        available, use the secret or setup link, then confirm with a live code.
+        available, use the setup key or link. Then enter the current code from
+        your app to finish setup.
       </p>
       {qrDataUrl && (
         <div className="flex justify-center rounded-md border bg-white p-3">
@@ -47,9 +48,9 @@ export function TotpEnrolment({
       <div className="rounded-md border bg-background p-2">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-semibold uppercase text-muted-foreground">
-            Secret
+            Setup key
           </p>
-          <CopyButton value={material.secret} label="Copy secret" />
+          <CopyButton value={material.secret} label="Copy setup key" />
         </div>
         <code
           className="block break-all font-mono text-xs"
@@ -61,9 +62,9 @@ export function TotpEnrolment({
       <div className="rounded-md border bg-background p-2">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] font-semibold uppercase text-muted-foreground">
-            Setup link (otpauth)
+            Authenticator setup link
           </p>
-          <CopyButton value={material.otpauthUri} label="Copy otpauth URI" />
+          <CopyButton value={material.otpauthUri} label="Copy setup link" />
         </div>
         <code className="block break-all font-mono text-[11px] text-muted-foreground">
           {material.otpauthUri}
@@ -75,9 +76,9 @@ export function TotpEnrolment({
             className="mt-0.5 h-3.5 w-3.5 shrink-0"
             aria-hidden="true"
           />
-          These recovery codes are shown once — right now. Store them somewhere
-          safe before you continue. Each code signs you in exactly once if you
-          ever lose your authenticator.
+          These recovery codes are shown only once. Save them somewhere safe
+          before you continue. Each code can replace an authenticator code once
+          if you lose access to your app. You still need your password.
         </p>
         <ul
           className="mt-2 grid grid-cols-2 gap-1 font-mono text-xs text-amber-900 dark:text-amber-100"
@@ -100,7 +101,7 @@ export function TotpEnrolment({
             data-testid="button-download-recovery-codes"
           >
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            Download
+            Download codes
           </Button>
         </div>
         <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs font-medium text-amber-950 dark:text-amber-100">
@@ -148,7 +149,7 @@ export function TotpEnrolment({
           </p>
         )}
         <p className="text-xs text-muted-foreground">
-          Activating signs out every other session on this account.
+          Turning this on signs you out of all other browsers and mobile apps.
         </p>
         <div className="flex gap-2 pt-1">
           <Button
@@ -161,7 +162,7 @@ export function TotpEnrolment({
             }
             data-testid="button-totp-activate"
           >
-            {activate.isPending ? "Verifying…" : "Verify & turn on"}
+            {activate.isPending ? "Verifying…" : "Verify and turn on"}
           </Button>
           <Button
             type="button"

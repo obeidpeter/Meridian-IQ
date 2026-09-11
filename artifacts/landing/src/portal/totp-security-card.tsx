@@ -37,7 +37,7 @@ export function TotpSecurityCard() {
             className="h-4 w-4 text-teal-600 dark:text-teal-400"
             aria-hidden="true"
           />
-          Two-factor authentication
+          Two-step verification
         </p>
         {info &&
           (info.enabled ? (
@@ -61,8 +61,8 @@ export function TotpSecurityCard() {
       ) : info ? (
         <div className="mt-2 space-y-2">
           <p className="text-xs text-muted-foreground">
-            Require a code from an authenticator app at sign-in, on top of your
-            password.
+            Add a code from an authenticator app to your password when you sign
+            in.
           </p>
           {justDisabled && (
             <p
@@ -71,7 +71,7 @@ export function TotpSecurityCard() {
               data-testid="text-totp-disabled"
             >
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{" "}
-              Two-factor turned off.
+              Two-step verification is off.
             </p>
           )}
           {setupError && (
@@ -94,12 +94,12 @@ export function TotpSecurityCard() {
             data-testid="button-totp-enable"
           >
             <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
-            {setup.isPending ? "Preparing…" : "Enable two-factor"}
+            {setup.isPending ? "Preparing…" : "Set up two-step verification"}
           </Button>
         </div>
       ) : statusQuery.isError ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Could not load two-factor status. Refresh to retry.
+          Could not check two-step verification. Refresh the page to try again.
         </p>
       ) : null}
     </div>

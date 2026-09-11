@@ -1,5 +1,7 @@
 // The generated client throws ApiError carrying the parsed body; the server
 // answers { error: string }.
+export { userErrorMessage } from "@workspace/api-errors";
+
 export function serverErrorFrom(err: unknown): string | null {
   const data = (err as { data?: unknown })?.data;
   return data && typeof data === "object" && "error" in data

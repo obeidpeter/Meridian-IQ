@@ -149,7 +149,7 @@ function FlagCohort({
       {isLoading ? (
         <Skeleton className="h-10" />
       ) : error ? (
-        <QueryError thing="pilot cohort" onRetry={() => refetch()} />
+        <QueryError thing="pilot firm group" onRetry={() => refetch()} />
       ) : (overrides ?? []).length === 0 ? (
         <p
           className="text-sm text-muted-foreground"
@@ -310,7 +310,7 @@ function FlagRow({
             data-testid={`button-cohort-${flag.key}`}
           >
             <Users className="w-3.5 h-3.5" aria-hidden="true" />
-            Pilot cohort ({flag.overrideCount})
+            Pilot firms ({flag.overrideCount})
             {cohortOpen ? (
               <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
             ) : (
@@ -418,9 +418,10 @@ export function FeatureFlags() {
           Feature flags
         </h1>
         <p className="text-muted-foreground mt-1">
-          Release-tagged surfaces ship dark and go live per gate (PL-02). A
-          firm's pilot cohort lights a flag for that firm ahead of the platform
-          switch — every override carries a reason and lands on the audit chain.
+          New features stay off until their release requirements are met. A
+          firm-specific setting can enable a pilot before the platform-wide
+          release. Every exception requires a reason and is saved in the audit
+          log.
         </p>
       </div>
 
@@ -430,8 +431,8 @@ export function FeatureFlags() {
           data-testid="text-read-only"
         >
           <Info className="w-4 h-4" aria-hidden="true" />
-          Read-only view — only the Compliance Desk operator can flip release
-          flags or change a pilot cohort.
+          Read-only view. Only a compliance desk operator can change release
+          flags or pilot firm settings.
         </p>
       )}
 

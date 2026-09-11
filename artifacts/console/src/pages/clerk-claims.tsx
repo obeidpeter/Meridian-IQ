@@ -56,11 +56,7 @@ import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import {
-  errorStatus,
-  killSwitchTripped,
-  serverErrorMessage,
-} from "@/lib/errors";
+import { errorStatus, killSwitchTripped, userErrorMessage } from "@/lib/errors";
 import { formatDate, pillClasses, type BadgeTone } from "@/lib/format";
 import { clerkDisabledToast, serverErrorToast } from "@/pages/clerk-shared";
 import {
@@ -610,7 +606,7 @@ export function ClerkClaims() {
       toast({
         title: "Maker-checker blocked this",
         description:
-          serverErrorMessage(err) ??
+          userErrorMessage(err) ??
           "The author of a claim version cannot approve it. A second operator must review and approve.",
         variant: "destructive",
       });
@@ -657,7 +653,7 @@ export function ClerkClaims() {
         setDraftSuccess(null);
         if (killSwitchTripped(e)) setDisabledBanner(true);
         setDraftError(
-          serverErrorMessage(e) ??
+          userErrorMessage(e) ??
             (killSwitchTripped(e)
               ? "Clerk is switched off (clerk_ai kill switch), so it cannot draft claims right now."
               : "Clerk could not draft a claim from this text. Trim it to the relevant passage and try again."),

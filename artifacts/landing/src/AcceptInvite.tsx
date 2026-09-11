@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
-import { serverErrorFrom } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { clearQuerySecret, takeQuerySecret } from "@/lib/query-secret";
 import "@/auth.css";
 
@@ -28,26 +28,27 @@ function acceptError(err: unknown): { message: string; showSignIn: boolean } {
   if (status === 400) {
     return {
       message:
-        "This invitation link is invalid or has expired. Ask your administrator to send a fresh invitation.",
+        "This invitation link is invalid or has expired. Ask your administrator for a new invitation.",
       showSignIn: false,
     };
   }
   if (status === 409) {
     return {
-      message: "An account with this email already exists — sign in instead.",
+      message: "An account with this email already exists. Sign in instead.",
       showSignIn: true,
     };
   }
   if (status !== undefined) {
     return {
       message:
-        serverErrorFrom(err) ??
-        "Could not activate your account. Please try again.",
+        userErrorMessage(err) ?? "Could not set up your account. Try again.",
       showSignIn: false,
     };
   }
   return {
-    message: "Could not activate your account. Please try again.",
+    message:
+      userErrorMessage(err) ??
+      "Could not confirm account setup. Try signing in before using this invitation again.",
     showSignIn: false,
   };
 }
@@ -87,7 +88,7 @@ function inviteRoleLabel(role: string): string {
 function previewErrorMessage(err: unknown): string {
   const status = (err as { status?: number })?.status;
   if (status === 400) {
-    return "This invitation is invalid, expired, revoked, or already used. Ask the person who invited you to create a new link.";
+    return "This invitation is invalid, expired, cancelled or already used. Ask the person who invited you for a new link.";
   }
   if (status === 429) {
     return "Too many invitation checks were made from this connection. Wait a few minutes, then try again.";
@@ -162,19 +163,19 @@ export function AcceptInvite() {
               aria-hidden="true"
             />
             <h1 className="text-lg font-semibold">
-              Invitation link incomplete
+              This invitation link is incomplete
             </h1>
           </div>
           <p
             className="mt-2 text-sm text-muted-foreground"
             data-testid="text-missing-token"
           >
-            This page does not contain an invitation token. Ask the person who
-            invited you to copy and share a new Valo invitation link.
+            This link is missing details needed to open your invitation. Ask the
+            person who invited you for a new Valo invitation link.
           </p>
           <Button asChild variant="outline" className="auth-secondary mt-4">
             <a href="/login" data-testid="link-missing-token-sign-in">
-              Go to sign in
+              Sign in
             </a>
           </Button>
         </Card>
@@ -198,7 +199,7 @@ export function AcceptInvite() {
             <div>
               <h1 className="text-lg font-semibold">Checking invitation</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Confirming which account and workspace this link opens.
+                Checking the account and workspace you were invited to join.
               </p>
             </div>
           </div>
@@ -237,7 +238,7 @@ export function AcceptInvite() {
               Try again
             </Button>
             <Button asChild variant="outline" className="auth-secondary flex-1">
-              <a href="/login">Go to sign in</a>
+              <a href="/login">Sign in</a>
             </Button>
           </div>
         </Card>
@@ -270,7 +271,7 @@ export function AcceptInvite() {
           </p>
           <Button asChild className="auth-submit mt-4">
             <a href="/login" data-testid="link-continue-sign-in">
-              Continue to sign in
+              Sign in
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
           </Button>
@@ -287,7 +288,7 @@ export function AcceptInvite() {
   return (
     <InviteShell>
       <Card className="auth-flow-panel">
-        <h1 className="text-lg font-semibold">Activate your account</h1>
+        <h1 className="text-lg font-semibold">Set up your account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Set a password to finish setting up your Valo account.
         </p>
@@ -427,7 +428,7 @@ export function AcceptInvite() {
                       className="font-medium underline underline-offset-4"
                       data-testid="link-accept-sign-in"
                     >
-                      Go to sign in
+                      Sign in
                     </a>
                   </>
                 )}
@@ -446,7 +447,7 @@ export function AcceptInvite() {
             {accept.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             )}
-            Activate account
+            Set up account
           </Button>
         </form>
       </Card>

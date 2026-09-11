@@ -372,17 +372,17 @@ const INTAKE_KIND: Record<
   string,
   { label: string; eyebrow: string; icon: LucideIcon }
 > = {
-  voice: { label: "Voice note", eyebrow: "Voice intake", icon: Mic },
-  pdf: { label: "Invoice scan", eyebrow: "Document intake", icon: ScanLine },
-  image: { label: "Invoice scan", eyebrow: "Document intake", icon: ScanLine },
-  text: { label: "Message", eyebrow: "Text intake", icon: MessageSquareText },
+  voice: { label: "Voice note", eyebrow: "Voice note review", icon: Mic },
+  pdf: { label: "Invoice scan", eyebrow: "Document review", icon: ScanLine },
+  image: { label: "Invoice scan", eyebrow: "Document review", icon: ScanLine },
+  text: { label: "Message", eyebrow: "Text review", icon: MessageSquareText },
 };
 
 function intakeKind(sourceType: string | null | undefined) {
   return (
     INTAKE_KIND[sourceType ?? ""] ?? {
       label: "Document",
-      eyebrow: "Document intake",
+      eyebrow: "Document review",
       icon: FileText,
     }
   );
@@ -551,7 +551,7 @@ export function caseIntakeKind(kase: Pick<ClerkCase, "kind" | "sourceType">): {
 } {
   const base = intakeKind(kase.sourceType);
   if (kase.kind !== "notice") return base;
-  return { ...base, label: "Tax notice", eyebrow: "Notice intake" };
+  return { ...base, label: "Tax notice", eyebrow: "Notice review" };
 }
 
 // Batch-aware queue grouping (round-8 idea #3): cases that came out of the

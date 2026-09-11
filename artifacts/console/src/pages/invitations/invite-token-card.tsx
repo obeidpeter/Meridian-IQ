@@ -60,7 +60,7 @@ export function InviteTokenCard({
         </p>
 
         <div className="space-y-1.5">
-          <Label htmlFor="invite-accept-link">Accept link</Label>
+          <Label htmlFor="invite-accept-link">Invitation link</Label>
           <div className="flex gap-2">
             <Input
               id="invite-accept-link"

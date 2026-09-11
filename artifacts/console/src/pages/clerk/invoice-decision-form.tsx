@@ -74,7 +74,7 @@ export function InvoiceDecisionForm({
           testId="select-firm"
         />
         <PartySelect
-          label="Supplier party"
+          label="Supplier"
           placeholder="Choose supplier"
           parties={parties}
           value={form.supplierPartyId}
@@ -89,8 +89,8 @@ export function InvoiceDecisionForm({
           />
         </PartySelect>
         <PartySelect
-          label="Buyer party"
-          placeholder="Choose buyer"
+          label="Customer"
+          placeholder="Choose customer"
           parties={parties}
           value={form.buyerPartyId}
           onChange={(v) => setForm({ ...form, buyerPartyId: v })}
@@ -170,7 +170,7 @@ export function InvoiceDecisionForm({
             : ""
         }`}
       >
-        <Label>Lines</Label>
+        <Label>Invoice items</Label>
         {form.lines.map((line, i) => (
           <div
             key={i}

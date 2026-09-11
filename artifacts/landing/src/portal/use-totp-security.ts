@@ -13,7 +13,7 @@ import {
   useDisableTotp,
   getGetTotpStatusQueryKey,
 } from "@workspace/api-client-react";
-import { serverErrorFrom } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { TOTP_CARD_INITIAL, totpCardTransition } from "@/lib/totp-card";
 
 export type TotpSecurity = ReturnType<typeof useTotpSecurity>;
@@ -76,7 +76,7 @@ export function useTotpSecurity() {
     if (!material) return;
     const blob = new Blob(
       [
-        "Valo two-factor recovery codes\n",
+        "Valo two-step verification recovery codes\n",
         "Store these securely. Each code works once.\n\n",
         material.recoveryCodes.join("\n"),
         "\n",
@@ -102,7 +102,7 @@ export function useTotpSecurity() {
       dispatch({
         type: "begin-error",
         message:
-          serverErrorFrom(err) ?? "Could not start enrolment. Try again.",
+          userErrorMessage(err) ?? "Could not start two-step setup. Try again.",
       });
     }
   };
@@ -123,7 +123,7 @@ export function useTotpSecurity() {
       dispatch({
         type: "activate-error",
         message:
-          serverErrorFrom(err) ??
+          userErrorMessage(err) ??
           "That code did not match. Check the authenticator app and try again.",
       });
       document.getElementById("totp-activate")?.focus();
@@ -146,9 +146,9 @@ export function useTotpSecurity() {
         type: "disable-error",
         message:
           status === 401
-            ? "Invalid password or code."
-            : (serverErrorFrom(err) ??
-              "Could not turn off two-factor. Try again."),
+            ? "The password or code is incorrect. Check both and try again."
+            : (userErrorMessage(err) ??
+              "Could not turn off two-step verification. Try again."),
       });
     }
   };

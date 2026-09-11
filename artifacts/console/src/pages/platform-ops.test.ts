@@ -78,7 +78,7 @@ describe("operational proof", () => {
           evidenceSource: "operator_attestation",
         },
       }).label,
-    ).toBe("Attested");
+    ).toBe("Operator attestation");
   });
   test("rows render current timestamps, owner and next action without arbitrary evidence", () => {
     const html = renderToStaticMarkup(
@@ -139,11 +139,11 @@ describe("operational proof", () => {
 describe("HEALTH_ALERT_ACTION_LABELS", () => {
   test("covers exactly the eight known alert actions with their words", () => {
     expect(HEALTH_ALERT_ACTION_LABELS).toEqual({
-      "ops.rail.circuit_open": "Rail circuit open",
-      "ops.outbox.dead": "Dead-lettered event",
-      "ops.sweep.pass_abandoned": "Sweep pass abandoned",
-      "ops.webhook.delivery_dead": "Webhook delivery dead",
-      "clerk.spend.anomaly": "Firm spend anomaly",
+      "ops.rail.circuit_open": "Submission service paused after failures",
+      "ops.outbox.dead": "Event stopped after repeated failures",
+      "ops.sweep.pass_abandoned": "Background check stopped before completion",
+      "ops.webhook.delivery_dead": "Webhook delivery stopped after failures",
+      "clerk.spend.anomaly": "Unusual firm spending",
       "clerk.quality.drop": "Extraction quality drop",
       "clerk.injection_resistance.dropped": "Injection resistance drop",
       "clerk.reconcile_agreement.drop": "Reconciliation agreement drop",
@@ -153,8 +153,12 @@ describe("HEALTH_ALERT_ACTION_LABELS", () => {
 
 describe("healthAlertLabel", () => {
   test("known actions resolve through the map", () => {
-    expect(healthAlertLabel("ops.rail.circuit_open")).toBe("Rail circuit open");
-    expect(healthAlertLabel("clerk.spend.anomaly")).toBe("Firm spend anomaly");
+    expect(healthAlertLabel("ops.rail.circuit_open")).toBe(
+      "Submission service paused after failures",
+    );
+    expect(healthAlertLabel("clerk.spend.anomaly")).toBe(
+      "Unusual firm spending",
+    );
   });
 
   test("an action from a newer server humanizes instead of blanking", () => {
@@ -175,7 +179,7 @@ describe("rail configuration pills", () => {
   test("configured rails are emerald, dark rails neutral slate", () => {
     expect(railConfiguredLabel(true)).toBe("Configured");
     expect(railConfiguredBadgeClasses(true)).toContain("emerald");
-    expect(railConfiguredLabel(false)).toBe("Dark");
+    expect(railConfiguredLabel(false)).toBe("Not configured");
     expect(railConfiguredBadgeClasses(false)).toContain("slate");
   });
 
@@ -247,14 +251,12 @@ describe("railTransportLine", () => {
 
 describe("card copy", () => {
   test("the quiet-platform empty state says so in words", () => {
-    expect(HEALTH_ALERTS_EMPTY).toBe(
-      "No health alerts — the platform is quiet.",
-    );
+    expect(HEALTH_ALERTS_EMPTY).toBe("No platform health alerts are recorded.");
   });
 
   test("the rail-config intro promises presence-only — values never shown", () => {
     expect(RAIL_CONFIG_INTRO).toBe(
-      "Which environment-lit rails this deployment has configured. Values are never shown.",
+      "Services with configuration present in this deployment. Credentials are never shown. Configuration alone does not prove a service is working.",
     );
   });
 });
@@ -294,7 +296,7 @@ describe("rail last error and retrying lines (R102)", () => {
         now,
       ),
     ).toMatch(
-      /^0\/6 attempts · parked behind the rail breaker \(3 parks\) · wakes /,
+      /^0\/6 attempts · paused while the submission service recovers \(3 pauses\) · resumes /,
     );
     expect(
       retryingLine(

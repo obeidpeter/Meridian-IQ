@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollRegion } from "@/components/scroll-region";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { userErrorMessage } from "@/lib/errors";
 import { formatPct, pillClasses, type BadgeTone } from "@/lib/format";
 import {
   EVAL_RISK_TONE,
@@ -141,7 +141,8 @@ export function PromptCanaryCard() {
       onError: (e) =>
         toast({
           title: "Canary failed",
-          description: serverErrorMessage(e) ?? "Could not run the canary.",
+          description:
+            userErrorMessage(e) ?? "Could not run the comparison test.",
           variant: "destructive",
         }),
     },
@@ -258,7 +259,7 @@ export function ModelCanaryCard() {
         toast({
           title: "Model canary failed",
           description:
-            serverErrorMessage(e) ?? "Could not run the model canary.",
+            userErrorMessage(e) ?? "Could not run the model comparison test.",
           variant: "destructive",
         }),
     },

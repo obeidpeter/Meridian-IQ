@@ -25,8 +25,8 @@ export function VoiceDraftCard({
         {voice.recording ? <Badge label="Recording…" tone="warning" /> : null}
       </View>
       <AppText variant="caption" color={colors.mutedForeground}>
-        Say the invoice — buyer, amount, what it&apos;s for — and Clerk prefills
-        this form. Nothing is saved until you submit.
+        Describe the customer, amount and work. Clerk suggests details for this
+        form. Review every field before creating and submitting the invoice.
       </AppText>
       <AppButton
         label={

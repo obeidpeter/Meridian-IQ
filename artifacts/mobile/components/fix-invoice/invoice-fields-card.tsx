@@ -55,7 +55,7 @@ export function InvoiceFieldsCard({
           autoCapitalize="characters"
           hint={
             focus.includes("invoiceNumber")
-              ? "Pick a number you haven't used before — the rail saw this one already."
+              ? "Enter an unused invoice number. The submission service has this number already."
               : undefined
           }
         />

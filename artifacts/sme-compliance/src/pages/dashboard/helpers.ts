@@ -80,7 +80,7 @@ export function planPolicyStatusLine(p: {
   if (p.pausedAt) return PLAN_PAUSE_LABELS[p.pausedReason ?? ""] ?? "Paused";
   return p.lastRunMonth
     ? `Runs monthly · up to date for ${p.lastRunMonth}`
-    : "Runs monthly · runs when there is eligible paper";
+    : "Runs monthly · processes invoices that meet the requirements";
 }
 
 // The week bucket labels the cash-flow outlook and net-position cards

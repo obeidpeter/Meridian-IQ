@@ -17,10 +17,10 @@ export function RailFocusCard({ focus }: { focus: FocusArea[] }) {
     >
       <AppText variant="label">
         {focus.includes("parties")
-          ? "The rail rejected a tax identification number (TIN). Check the highlighted business details below, then retry."
+          ? "The submission service rejected a tax identification number (TIN). Check the highlighted business details, then try again."
           : focus.includes("invoiceNumber")
-            ? "The rail flagged this invoice number as a duplicate. Change the invoice number below, then retry."
-            : "The rail rejected the invoice data. Check the highlighted invoice fields and line items, then retry."}
+            ? "The submission service found this invoice number already in use. Enter an unused invoice number, then try again."
+            : "The submission service rejected the invoice details. Check the highlighted fields and items, then try again."}
       </AppText>
     </Card>
   );

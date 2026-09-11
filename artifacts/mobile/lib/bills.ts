@@ -22,9 +22,9 @@ export function billStatusLabel(payStatus: string): string {
     case "open":
       return "Unpaid";
     case "scheduled":
-      return "Scheduled";
+      return "Payment planned";
     case "paid":
-      return "Paid";
+      return "Payment recorded";
     default:
       // Off-contract statuses from a newer server degrade to a title-cased
       // token, never a crash or an empty badge.
@@ -108,12 +108,12 @@ export function missingBillLine(pattern: MissingBillPattern): string {
   )} and has not been captured.`;
 }
 
-export const MISSING_BILLS_HEADER = "Expected vendor bills not captured yet";
+export const MISSING_BILLS_HEADER = "Expected supplier bills not yet recorded";
 
 // The hedge: advisory only, and an ended arrangement is a fine reason to
 // ignore it.
 export const MISSING_BILLS_FOOTER =
-  "Advisory only, from your own capture history. An uncaptured bill means unclaimed input VAT — if the vendor arrangement has ended, you can ignore this.";
+  "Suggested from your past bills, not a confirmed amount owed or VAT entitlement. Check for a missing bill and any input VAT you may be able to claim. Ignore this if the supplier arrangement has ended.";
 
 /** The full advisory banner text: header, one line per pattern, hedge. */
 export function missingBillsBannerMessage(

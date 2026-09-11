@@ -26,3 +26,16 @@ test("optional endpoint detail remains distinct from the high-contrast error mes
     "Unable to load firm branding.",
   );
 });
+
+test("generic endpoint detail is translated without losing the alert or retry action", () => {
+  const retry = vi.fn();
+  render(
+    <QueryError thing="your workspace" detail="Unauthorized" onRetry={retry} />,
+  );
+  expect(screen.getByRole("alert")).toBeTruthy();
+  expect(screen.getByTestId("text-error-detail").textContent).toBe(
+    "Please sign in again to continue.",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(retry).toHaveBeenCalledTimes(1);
+});

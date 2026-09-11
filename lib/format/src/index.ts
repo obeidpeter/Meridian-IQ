@@ -276,7 +276,7 @@ export function severityBadgeClasses(severity: string): string {
 const CONFIRMATION_LABELS: Record<ConfirmationState | "none", string> = {
   requested: "Awaiting response",
   confirmed: "Confirmed",
-  queried: "Queried",
+  queried: "Question sent",
   rejected: "Rejected",
   none: "Not requested",
 };
@@ -370,7 +370,7 @@ export function decisionLine(decision: {
   failedCount: number;
   policyId: string | null;
 }): string {
-  return `${formatDateTime(decision.createdAt)} · ${decision.kind} · ${decision.executedCount} executed · ${decision.skippedCount} skipped · ${decision.failedCount} failed${decision.policyId ? " · auto" : ""}`;
+  return `${formatDateTime(decision.createdAt)} · ${humanize(decision.kind)} · ${decision.executedCount} completed · ${decision.skippedCount} skipped · ${decision.failedCount} failed${decision.policyId ? " · automatic" : ""}`;
 }
 
 // ---- Notification bell vocabulary -----------------------------------------
@@ -391,7 +391,7 @@ export function roleLabel(role: string | undefined): string {
     {
       firm_admin: "Firm admin",
       firm_staff: "Firm staff",
-      client_user: "Client user",
+      client_user: "Business user",
       operator: "Operator",
       buyer_user: "Buyer",
       auditor: "Auditor",
@@ -410,14 +410,14 @@ export function roleHomeHref(
 ): { href: string; label: string } | null {
   return (
     {
-      firm_admin: { href: "/console/", label: "the Accountant Console" },
-      firm_staff: { href: "/app/", label: "the Compliance App" },
-      client_user: { href: "/app/", label: "the Compliance App" },
+      firm_admin: { href: "/console/", label: "the accountant workspace" },
+      firm_staff: { href: "/app/", label: "the business workspace" },
+      client_user: { href: "/app/", label: "the business workspace" },
       operator: {
         href: "/console/operator-queue",
-        label: "the Operator queue",
+        label: "the operator queue",
       },
-      buyer_user: { href: "/buyer/", label: "Buyer Rails" },
+      buyer_user: { href: "/buyer/", label: "the buyer workspace" },
       auditor: { href: "/console/audit", label: "Audit & evidence" },
     }[role ?? ""] ?? null
   );
