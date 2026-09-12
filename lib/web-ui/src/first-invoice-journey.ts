@@ -8,8 +8,12 @@ const invoiceStages: Record<string, { label: string; order: number }> = {
   first_customer: { label: "Customer", order: 4 },
   first_invoice: { label: "Draft", order: 5 },
   invoice_validation: { label: "Validation", order: 6 },
-  invoice_submission: { label: "Submission", order: 7 },
-  invoice_evidence: { label: "Evidence", order: 8 },
+  invoice_consent: { label: "Consent", order: 7 },
+  invoice_approval: { label: "Approval", order: 8 },
+  invoice_service: { label: "Service", order: 9 },
+  invoice_submission: { label: "Submission", order: 10 },
+  invoice_acknowledgement: { label: "Response", order: 11 },
+  invoice_evidence: { label: "Evidence", order: 12 },
 };
 
 // These are recommendation prerequisites, not authorization or mutation gates.
@@ -31,7 +35,14 @@ const prerequisites: Record<string, string[]> = {
     "first_customer",
     "first_invoice",
     "invoice_validation",
+    "invoice_consent",
+    "invoice_approval",
+    "invoice_service",
   ],
+  invoice_consent: ["first_invoice"],
+  invoice_approval: ["first_invoice", "invoice_validation"],
+  invoice_service: ["first_invoice"],
+  invoice_acknowledgement: ["invoice_submission"],
   invoice_evidence: ["first_invoice"],
 };
 
@@ -44,7 +55,8 @@ export function firstInvoiceJourney(setup: TodaySetupStepView[]) {
   const ordered = isInvoiceJourney
     ? [...setup].sort(
         (a, b) =>
-          (invoiceStages[a.id]?.order ?? 9) - (invoiceStages[b.id]?.order ?? 9),
+          (invoiceStages[a.id]?.order ?? 13) -
+          (invoiceStages[b.id]?.order ?? 13),
       )
     : setup;
   const steps = ordered.map((step) => {

@@ -553,6 +553,22 @@ const LADDER: LadderStep[] = [
 ];
 
 LADDER.push(...RELIABILITY_LADDER);
+const evidenceProbes = [
+  pol("evidence_requests"),
+  pol("evidence_files"),
+  pol("evidence_events"),
+  appendOnly("evidence_events"),
+  fn("meridian_evidence_request_guard"),
+  fn("meridian_evidence_file_guard"),
+  fn("meridian_evidence_invoice_anchor_guard"),
+  fn("meridian_evidence_filing_anchor_guard"),
+  fn("meridian_evidence_event_guard"),
+];
+LADDER.push({
+  version: 57,
+  atTop: evidenceProbes,
+  afterRollback: evidenceProbes,
+});
 
 // Markers that hold in the fully-migrated state: every step's atTop except
 // those a later migration supersedes.

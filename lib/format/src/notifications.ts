@@ -23,6 +23,7 @@ export const NOTIFICATION_FEED_LIMIT = 20;
 // (a future channel on a newer server) humanize into a slate chip instead of
 // breaking the feed.
 const CHANNEL_LABELS: Record<string, string> = {
+  in_app: "In app",
   email: "Email",
   push: "Push",
   sms: "SMS",
@@ -30,6 +31,7 @@ const CHANNEL_LABELS: Record<string, string> = {
 };
 
 const CHANNEL_TONES: Record<string, BadgeTone> = {
+  in_app: "teal",
   email: "blue",
   push: "violet",
   sms: "teal",

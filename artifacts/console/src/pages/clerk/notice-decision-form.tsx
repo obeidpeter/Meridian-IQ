@@ -19,6 +19,7 @@ import {
 } from "@/pages/clerk-shared";
 import { AUTHORITIES, NOTICE_TYPES, TAX_TYPES } from "./constants";
 import { FirmSelect, PartySelect } from "./selects";
+import { NoticeApprovalSummary } from "./approval-summary";
 
 export function NoticeDecisionForm({
   noticeForm,
@@ -47,7 +48,7 @@ export function NoticeDecisionForm({
         Review and approve to record a response obligation. No response is sent.
       </p>
       {claimControls}
-      <div className="grid sm:grid-cols-2 gap-3">
+      <div className="clerk-review-fields">
         <FirmSelect
           firms={firms}
           value={noticeForm.firmId}
@@ -68,7 +69,7 @@ export function NoticeDecisionForm({
           testId="select-notice-client"
         />
       </div>
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="clerk-review-fields">
         <CatalogueSelect
           label="Notice type"
           value={noticeForm.noticeType}
@@ -112,7 +113,7 @@ export function NoticeDecisionForm({
           testId="select-notice-tax-type"
         />
       </div>
-      <div className="grid sm:grid-cols-4 gap-3">
+      <div className="clerk-review-fields">
         <div className="space-y-1">
           <Label htmlFor="ntc-reference">Reference</Label>
           <Input
@@ -172,7 +173,7 @@ export function NoticeDecisionForm({
           />
         </div>
       </div>
-      <div className="grid sm:grid-cols-2 gap-3">
+      <div className="clerk-review-fields">
         <div className="space-y-1">
           <Label htmlFor="ntc-issue">Issue date</Label>
           <Input
@@ -231,8 +232,16 @@ export function NoticeDecisionForm({
           data-testid="input-notice-reason"
         />
       </div>
+      <NoticeApprovalSummary
+        form={noticeForm}
+        firms={firms}
+        parties={parties}
+      />
       <div className="flex gap-2 flex-wrap">
         <Button
+          type="button"
+          className="h-auto min-h-11 whitespace-normal"
+          aria-describedby="notice-approval-summary"
           onClick={() =>
             decideNotice.mutate({
               id: caseId,

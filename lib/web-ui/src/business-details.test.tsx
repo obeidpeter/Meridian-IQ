@@ -326,6 +326,47 @@ test("discard after save uses the successful response while the caller prop is s
   );
 });
 
+test("discard after a confirmed save retains its stamp even while the caller prop is stale", async () => {
+  const onSave = vi
+    .fn()
+    .mockResolvedValue({ ...party, city: "Abuja", updatedAt: "stamp-2" });
+  render(
+    <BusinessDetailsForm
+      party={{ ...party, updatedAt: "stamp-1" }}
+      onSave={onSave}
+    />,
+  );
+  change("City", "Abuja");
+  submit();
+  await screen.findByText("Business details saved.");
+  change("City", "Kano");
+  fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+  change("City", "Ibadan");
+  submit();
+  await waitFor(() =>
+    expect(onSave).toHaveBeenLastCalledWith({
+      city: "Ibadan",
+      expectedUpdatedAt: "stamp-2",
+    }),
+  );
+});
+
+test("a synchronously thrown save error does not leave the request lock stuck", async () => {
+  const onSave = vi
+    .fn()
+    .mockImplementationOnce(() => {
+      throw new Error("Synchronous failure");
+    })
+    .mockResolvedValue({ ...party, city: "Abuja" });
+  render(<BusinessDetailsForm party={party} onSave={onSave} />);
+  change("City", "Abuja");
+  submit();
+  await screen.findByText("Synchronous failure");
+  submit();
+  await screen.findByText("Business details saved.");
+  expect(onSave).toHaveBeenCalledTimes(2);
+});
+
 test("the save carries the stamp of the record the user edited, then adopts the saved one (R113)", async () => {
   const stamped = { ...party, updatedAt: "2026-09-09T08:00:00.000Z" };
   const onSave = vi.fn().mockResolvedValue({

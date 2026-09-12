@@ -2,11 +2,18 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
+import { Router, Route, Switch, useLocation, useSearch } from "wouter";
+import {
+  UnsavedWorkProvider,
+  useProtectedLocation,
+  useProtectedSearch,
+} from "../../../../lib/web-ui/src/unsaved-work";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Me, Party } from "@workspace/api-client-react";
 
@@ -60,9 +67,15 @@ const party: Party = {
 };
 let client: QueryClient;
 beforeEach(() => {
+  window.history.replaceState(
+    null,
+    "",
+    "/clients/client-a/business?tab=identity",
+  );
   vi.clearAllMocks();
   h.id = "client-a";
   h.me = {
+    userId: "user-a",
     role: "firm_staff",
     capabilities: ["party.read", "party.write"],
   } as Me;
@@ -82,8 +95,41 @@ afterEach(() => {
 function page() {
   return (
     <QueryClientProvider client={client}>
-      <BusinessDetails />
+      <UnsavedWorkProvider>
+        <Router hook={useProtectedLocation} searchHook={useProtectedSearch}>
+          <NavigationProbe />
+          <Switch>
+            <Route path="/clients/:id/business">
+              <BusinessDetails />
+            </Route>
+            <Route>
+              <h1>Client workspace</h1>
+            </Route>
+          </Switch>
+        </Router>
+      </UnsavedWorkProvider>
     </QueryClientProvider>
+  );
+}
+function NavigationProbe() {
+  const [location, navigate] = useLocation();
+  const search = useSearch();
+  return (
+    <>
+      <output aria-label="Route">
+        {location}?{search}
+      </output>
+      <button
+        onClick={() =>
+          navigate("/portfolio?scope=mine", {
+            replace: true,
+            state: { from: "business" },
+          })
+        }
+      >
+        Open portfolio
+      </button>
+    </>
   );
 }
 function editCity() {
@@ -232,4 +278,81 @@ test("a 409 from a newer save refetches the record and keeps the unsaved edit (R
     id: "client-a",
     data: { city: "Abuja", expectedUpdatedAt: "2026-09-09T08:00:00Z" },
   });
+});
+
+test("wouter back link supports Stay and Discard without sending a save", () => {
+  render(page());
+  editCity();
+  fireEvent.click(screen.getByRole("link", { name: "Back to client" }));
+  expect(screen.getByRole("alertdialog")).toBeTruthy();
+  expect(window.location.search).toBe("?tab=identity");
+  fireEvent.click(screen.getByRole("button", { name: "Stay" }));
+  expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
+    "Abuja",
+  );
+  fireEvent.click(screen.getByRole("link", { name: "Back to client" }));
+  fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+  expect(window.location.pathname).toBe("/clients/client-a");
+  expect(
+    screen.getByRole("heading", { name: "Client workspace" }),
+  ).toBeTruthy();
+  expect(h.mutate).not.toHaveBeenCalled();
+});
+
+test("programmatic replacement waits for confirmed save and keeps the destination query", async () => {
+  h.mutate.mockRejectedValueOnce({
+    status: 409,
+    data: { error: "Newer saved details exist." },
+  });
+  render(page());
+  editCity();
+  const length = window.history.length;
+  fireEvent.click(screen.getByRole("button", { name: "Open portfolio" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByText("Newer saved details exist.");
+  expect(window.location.pathname).toBe("/clients/client-a/business");
+  expect(h.retry).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("heading", { name: "Client workspace" });
+  expect(window.location.search).toBe("?scope=mine");
+  expect(window.history.length).toBe(length);
+  expect(h.mutate).toHaveBeenCalledTimes(2);
+});
+
+test("an account switch cancels pending navigation, drops the old draft and ignores the old save response", async () => {
+  let finish!: (value: Party) => void;
+  h.mutate.mockImplementationOnce(
+    () =>
+      new Promise<Party>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(page());
+  editCity();
+  fireEvent.click(screen.getByRole("button", { name: "Open portfolio" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(h.mutate).toHaveBeenCalledOnce());
+  h.me = { ...h.me!, userId: "user-b" };
+  view.rerender(page());
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
+    "Lagos",
+  );
+  await act(async () => finish({ ...party, city: "Abuja" }));
+  expect(client.getQueryData(getGetPartyQueryKey("client-a"))).toBeUndefined();
+  expect(window.location.pathname).toBe("/clients/client-a/business");
+});
+
+test("a mismatched successful response is rejected before it can replace the cached editor", async () => {
+  h.mutate.mockResolvedValueOnce({ ...party, id: "another-business" });
+  render(page());
+  editCity();
+  fireEvent.submit(screen.getByRole("form"));
+  await screen.findByText(
+    "The saved business record did not match this business.",
+  );
+  expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
+    "Abuja",
+  );
+  expect(client.getQueryData(getGetPartyQueryKey("client-a"))).toBeUndefined();
 });

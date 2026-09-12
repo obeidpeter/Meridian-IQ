@@ -15,6 +15,7 @@ import {
 
 describe("channel vocabulary", () => {
   test("labels match the canonical set exactly", () => {
+    expect(channelLabel("in_app")).toBe("In app");
     expect(channelLabel("email")).toBe("Email");
     expect(channelLabel("push")).toBe("Push");
     expect(channelLabel("sms")).toBe("SMS");
@@ -22,6 +23,7 @@ describe("channel vocabulary", () => {
   });
 
   test("tones match the canonical set exactly", () => {
+    expect(channelBadgeClasses("in_app")).toContain("teal");
     expect(channelBadgeClasses("email")).toContain("blue");
     expect(channelBadgeClasses("push")).toContain("violet");
     expect(channelBadgeClasses("sms")).toContain("teal");

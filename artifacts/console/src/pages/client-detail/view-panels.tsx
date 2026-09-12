@@ -36,7 +36,13 @@ export function ClientViewPanels({
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       {(activeView === "today" || activeView === "invoices") && (
-        <ClientInvoicesCard client={client} invoices={invoices} />
+        <ClientInvoicesCard
+          key={id}
+          clientPartyId={id}
+          client={client}
+          invoices={invoices}
+          me={me}
+        />
       )}
 
       {activeView === "today" && <ClientDeadlinesCard deadlines={deadlines} />}

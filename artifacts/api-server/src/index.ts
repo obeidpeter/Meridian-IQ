@@ -16,6 +16,7 @@ import {
 import { seedPlatform } from "./bootstrap/seed";
 import { disableProductionDemoIdentities } from "./bootstrap/security";
 import { provisionProductionPilotOperator } from "./bootstrap/pilot-operator";
+import { assertEvidenceGuardrails } from "./bootstrap/evidence-guardrails";
 import { assertSessionSigningConfigured } from "./modules/auth/session";
 import { assertPublicAppUrlConfigured } from "./lib/public-app-url";
 import { markReady, markUnready } from "./lib/readiness";
@@ -88,6 +89,7 @@ async function applyProductionGuardrails(): Promise<void> {
 // tenant isolation is never silently absent.
 async function verifyProductionGuardrails(): Promise<void> {
   try {
+    await assertEvidenceGuardrails(pool);
     const { rows } = await pool.query(
       `SELECT
          (SELECT count(*) FROM pg_policies

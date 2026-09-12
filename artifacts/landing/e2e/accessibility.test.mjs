@@ -201,7 +201,7 @@ for (const [name, viewport] of viewports) {
         .getByRole("main")
         .getByRole("heading", { level: 1 })
         .textContent(),
-      "Valo e-invoicing.Records together.",
+      "Create invoices.Keep your records organised.",
     );
     await audit(page, `landing-${name}`, true);
 

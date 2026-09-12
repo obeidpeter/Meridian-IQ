@@ -104,6 +104,13 @@ const NAV_GROUPS: NavGroup[] = [
         icon: ListChecks,
         capability: "work.read",
       },
+      {
+        href: "/evidence",
+        label: "Evidence Hub",
+        icon: FileText,
+        capability: "evidence.read",
+        feature: "evidence_hub",
+      },
       { href: "/invoices", label: "Invoices", icon: FileText },
       { href: "/import", label: "Import", icon: Upload },
     ],

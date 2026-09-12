@@ -24,6 +24,8 @@ import {
   getListConfirmationsQueryKey,
   getListSettlementsQueryKey,
   getGetInvoiceStatusLightQueryKey,
+  useListInvoiceApprovals,
+  getListInvoiceApprovalsQueryKey,
   type Invoice,
   type SubmissionAttempt,
 } from "@workspace/api-client-react";
@@ -74,7 +76,7 @@ export function useInvoiceHistory(
   invoice: Invoice | undefined,
   stampedFamily: boolean,
 ) {
-  const { data: attempts } = useListSubmissionAttempts(id, {
+  const attemptsQuery = useListSubmissionAttempts(id, {
     query: {
       enabled: !!id,
       queryKey: getListSubmissionAttemptsQueryKey(id),
@@ -83,27 +85,33 @@ export function useInvoiceHistory(
       refetchInterval: invoice?.status === "submitted" ? 15_000 : false,
     },
   });
-  const { data: stamp } = useGetInvoiceStamp(id, {
+  const stampQuery = useGetInvoiceStamp(id, {
     query: {
       enabled: !!id && stampedFamily,
       queryKey: getGetInvoiceStampQueryKey(id),
     },
   });
-  const { data: escalations } = useListEscalations(id, {
+  const escalationsQuery = useListEscalations(id, {
     query: { enabled: !!id, queryKey: getListEscalationsQueryKey(id) },
   });
-  const { data: confirmations, error: confirmationsError } =
-    useListConfirmations(id, {
-      query: {
-        enabled: !!id,
-        queryKey: getListConfirmationsQueryKey(id),
-        retry: false,
-      },
-    });
-  const { data: settlements } = useListSettlements(id, {
+  const confirmationsQuery = useListConfirmations(id, {
+    query: {
+      enabled: !!id,
+      queryKey: getListConfirmationsQueryKey(id),
+      retry: false,
+    },
+  });
+  const settlementsQuery = useListSettlements(id, {
     query: {
       enabled: !!id,
       queryKey: getListSettlementsQueryKey(id),
+      retry: false,
+    },
+  });
+  const approvalsQuery = useListInvoiceApprovals(id, {
+    query: {
+      enabled: !!id,
+      queryKey: getListInvoiceApprovalsQueryKey(id),
       retry: false,
     },
   });
@@ -137,12 +145,18 @@ export function useInvoiceHistory(
   });
 
   return {
-    attempts,
-    stamp,
-    escalations,
-    confirmations,
-    confirmationsError,
-    settlements,
+    attempts: attemptsQuery.data,
+    stamp: stampQuery.data,
+    escalations: escalationsQuery.data,
+    confirmations: confirmationsQuery.data,
+    confirmationsError: confirmationsQuery.error,
+    settlements: settlementsQuery.data,
+    attemptsQuery,
+    stampQuery,
+    escalationsQuery,
+    confirmationsQuery,
+    settlementsQuery,
+    approvalsQuery,
     statusLight,
     statusLightLoading,
     riskEligible,

@@ -235,6 +235,9 @@ importers:
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.10.1
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5

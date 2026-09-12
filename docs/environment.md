@@ -75,6 +75,19 @@ starts without an operator (R111); they never hold readiness. A restore to a
 snapshot taken before the claim row re-arms the bootstrap, so remove the
 settings before any such restore.
 
+## Client Evidence Hub
+
+| Variable | Purpose and handling |
+| --- | --- |
+| `EVIDENCE_ENCRYPTION_KEY` | Dedicated 32-byte AES-GCM key, encoded as 64 hex characters or canonical base64. Required for production evidence uploads; keep in deployment secrets and back up separately from the database. |
+| `EVIDENCE_CLAMAV_PORT` | Protected ClamAV daemon port on `127.0.0.1` (1-65535). Missing or unavailable scanning leaves uploads quarantined. No remote host or user-provided scanner URL is accepted. |
+
+The bounded PDF text-extraction subprocess inherits only operating-system
+runtime paths: `PATH`, `SystemRoot`, `TEMP` and `TMP`. It does not inherit
+database connections, provider credentials or Node startup hooks. These path
+variables are supplied by the operating system, not application secrets.
+See [Client Evidence Hub](client-evidence-hub.md) for scanning and recovery checks.
+
 ## Clerk AI
 
 | Variable                          | Purpose                                                                        |

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.102.0
+ * OpenAPI spec version: 0.104.0
  */
 
 export * from './acceptInvitationInput';
@@ -50,6 +50,7 @@ export * from './askSectionActionKind';
 export * from './assessmentAnswer';
 export * from './assessmentReport';
 export * from './assessmentReportBand';
+export * from './assistEvidenceRequestInput';
 export * from './assistMatchProposalsInput';
 export * from './auditBundle';
 export * from './auditEvent';
@@ -324,6 +325,7 @@ export * from './createClerkBatchInputSourceType';
 export * from './createClientInput';
 export * from './createCollectionAccountInput';
 export * from './createdClient';
+export * from './createEvidenceRequestInput';
 export * from './createFirmApiKeyInput';
 export * from './createFirmWebhookInput';
 export * from './createInvitationInput';
@@ -422,6 +424,18 @@ export * from './escalationStatus';
 export * from './evalFixtureReport';
 export * from './evalFixtureSummary';
 export * from './evalFixtureSummarySource';
+export * from './evidenceAssistance';
+export * from './evidenceAssistanceChecksItem';
+export * from './evidenceAssistanceChecksItemStatus';
+export * from './evidenceDetail';
+export * from './evidenceDocumentType';
+export * from './evidenceEvent';
+export * from './evidenceFile';
+export * from './evidenceFileContentType';
+export * from './evidenceFileScanStatus';
+export * from './evidenceRequest';
+export * from './evidenceRequestList';
+export * from './evidenceRequestStatus';
 export * from './evidenceVaultItem';
 export * from './evidenceVaultItemIntegrity';
 export * from './evidenceVaultItemKind';
@@ -649,6 +663,7 @@ export * from './listCollectionAccountsParams';
 export * from './listDeadLettersParams';
 export * from './listEngagementsParams';
 export * from './listErpConnectionsParams';
+export * from './listEvidenceRequestsParams';
 export * from './listFilingsParams';
 export * from './listFilingsStatus';
 export * from './listFilingsTaxType';
@@ -733,6 +748,7 @@ export * from './noticeDecisionInputTaxType';
 export * from './noticeDecisionResult';
 export * from './notificationFeed';
 export * from './notificationFeedItemsItem';
+export * from './notificationFeedItemsItemChannel';
 export * from './obligation';
 export * from './obligationList';
 export * from './obligationResponseDraft';
@@ -900,7 +916,10 @@ export * from './resetPasswordInput';
 export * from './resolveCaseInput';
 export * from './retrievalEvalFixtureResult';
 export * from './retrievalEvalRun';
+export * from './retryEvidenceScanInput';
 export * from './revenueShareStatement';
+export * from './reviewEvidenceRequestInput';
+export * from './reviewEvidenceRequestInputDecision';
 export * from './revokeInvoiceRoom200';
 export * from './runAssessmentInput';
 export * from './runCreditAssessmentInput';
@@ -973,6 +992,7 @@ export * from './unmatchedCollectionsAccountsItem';
 export * from './unmatchedCredits';
 export * from './unmatchedCreditsRowsItem';
 export * from './unprocessableEntityResponse';
+export * from './updateEvidenceRequestInput';
 export * from './updateFilingStatusInput';
 export * from './updateFilingStatusInputStatus';
 export * from './updateFirmPoliciesInput';
@@ -982,6 +1002,8 @@ export * from './updateStaffNotificationPreferencesInput';
 export * from './updateWorkItemInput';
 export * from './updateWorkItemInputPriority';
 export * from './updateWorkItemInputStatus';
+export * from './uploadEvidenceFileInput';
+export * from './uploadEvidenceFileInputContentType';
 export * from './usabilityEventInput';
 export * from './usabilityEventInputEvent';
 export * from './usabilityEventInputSurface';

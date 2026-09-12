@@ -402,9 +402,9 @@ export default function LandingPage() {
               For Nigerian businesses
             </p>
             <h1>
-              Valo e-invoicing.
+              Create invoices.
               <br />
-              Records together.
+              Keep your records organised.
             </h1>
             <p className="editorial-hero-description">
               Create and check invoices, track compliance tasks and keep

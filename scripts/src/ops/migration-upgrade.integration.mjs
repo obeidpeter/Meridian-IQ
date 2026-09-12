@@ -43,8 +43,8 @@ test("migration-only R198 upgrade matches scratch schema semantics and preserves
     SET LOCAL statement_timeout = '60s';
     SET LOCAL lock_timeout = '5s';
     DO $$ BEGIN
-      IF (SELECT max(version) FROM _schema_migrations) <> 56 THEN
-        RAISE EXCEPTION 'upgrade fixture requires the reviewed 0056 baseline';
+      IF (SELECT max(version) FROM _schema_migrations) <> 57 THEN
+        RAISE EXCEPTION 'upgrade fixture requires the reviewed 0057 schema';
       END IF;
     END $$;
     INSERT INTO firms(id,name) VALUES ('${firm}','Migration-only fixture');

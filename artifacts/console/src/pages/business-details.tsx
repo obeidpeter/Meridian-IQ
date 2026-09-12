@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,6 +12,7 @@ import {
 } from "@workspace/api-client-react";
 import {
   BusinessDetailsForm,
+  useBusinessDetailsSaveScope,
   RouteLoading,
   WorkspaceHeader,
   type BusinessDetailsPatch,
@@ -41,24 +41,28 @@ export default function BusinessDetails() {
   });
   const update = useUpdateParty();
   const client = useQueryClient();
-  const [dirty, setDirty] = useState(false);
-  useEffect(() => {
-    if (!dirty) return;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [dirty]);
+  const scope = useBusinessDetailsSaveScope(
+    me.data,
+    id,
+    canEdit,
+    me.error,
+    party.data,
+  );
 
   async function save(patch: BusinessDetailsPatch) {
     if (!canEdit || me.error || !id)
       throw new Error("This account cannot edit these business details.");
     try {
       await client.cancelQueries({ queryKey: getGetPartyQueryKey(id) });
+      scope.assertCurrent();
       const updated = await update.mutateAsync({ id, data: patch });
+      scope.assertCurrent();
+      if (updated.id !== id || updated.type !== "client_business")
+        throw new Error(
+          "The saved business record did not match this business.",
+        );
       await client.cancelQueries({ queryKey: getGetPartyQueryKey(id) });
+      scope.assertCurrent();
       client.setQueryData(getGetPartyQueryKey(id), updated);
       for (const queryKey of [
         getGetWorkspaceTodayQueryKey(),
@@ -73,7 +77,7 @@ export default function BusinessDetails() {
       // R113: a 409 is another save landing first. Refetch so the form can
       // show the newer saved values beside the unsaved ones; the message
       // below is the server's own.
-      if (errorStatus(error) === 409) void party.refetch();
+      if (scope.isCurrent() && errorStatus(error) === 409) void party.refetch();
       throw new Error(
         userErrorMessage(error) ??
           "Business details could not be saved. Please try again.",
@@ -134,9 +138,9 @@ export default function BusinessDetails() {
             />
           ) : null}
           <BusinessDetailsForm
+            key={scope.key}
             party={party.data}
             onSave={save}
-            onDirtyChange={setDirty}
             disabledReason={
               me.error
                 ? "Account permissions could not be refreshed. Try again before saving."

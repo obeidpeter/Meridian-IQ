@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.102.0
+ * OpenAPI spec version: 0.104.0
  */
 import {
   useMutation,
@@ -37,6 +37,7 @@ import type {
   AskClerkInput,
   AskFeedbackReport,
   AssessmentReport,
+  AssistEvidenceRequestInput,
   AssistMatchProposalsInput,
   AuditBundle,
   AuditVerification,
@@ -138,6 +139,7 @@ import type {
   CreateClerkBatchInput,
   CreateClientInput,
   CreateCollectionAccountInput,
+  CreateEvidenceRequestInput,
   CreateFirmApiKeyInput,
   CreateFirmWebhookInput,
   CreateInvitationInput,
@@ -188,6 +190,9 @@ import type {
   EscalationReplyDraft,
   EvalFixtureReport,
   EvalFixtureSummary,
+  EvidenceAssistance,
+  EvidenceDetail,
+  EvidenceRequestList,
   EvidenceVaultWorkspace,
   ExecuteActionInput,
   ExecuteActionResult,
@@ -319,6 +324,7 @@ import type {
   ListDeadLettersParams,
   ListEngagementsParams,
   ListErpConnectionsParams,
+  ListEvidenceRequestsParams,
   ListFilingsParams,
   ListInvoiceDrafts200,
   ListInvoiceDraftsParams,
@@ -433,7 +439,9 @@ import type {
   ResetPasswordInput,
   ResolveCaseInput,
   RetrievalEvalRun,
+  RetryEvidenceScanInput,
   RevenueShareStatement,
+  ReviewEvidenceRequestInput,
   RevokeInvoiceRoom200,
   RunAssessmentInput,
   RunCreditAssessmentInput,
@@ -481,11 +489,13 @@ import type {
   UnmatchedCollections,
   UnmatchedCredits,
   UnprocessableEntityResponse,
+  UpdateEvidenceRequestInput,
   UpdateFilingStatusInput,
   UpdateFirmPoliciesInput,
   UpdateObligationStatusInput,
   UpdateStaffNotificationPreferencesInput,
   UpdateWorkItemInput,
+  UploadEvidenceFileInput,
   UsabilityEventInput,
   User,
   UserInput,
@@ -534,6 +544,761 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListEvidenceRequestsUrl = (params?: ListEvidenceRequestsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/evidence/requests?${stringifiedParams}` : `/api/evidence/requests`
+}
+
+/**
+ * Requires evidence_hub and evidence.read. Client principals are restricted to their business.
+ * @summary List scoped evidence requests
+ */
+export const listEvidenceRequests = async (params?: ListEvidenceRequestsParams, options?: RequestInit): Promise<EvidenceRequestList> => {
+
+  return customFetch<EvidenceRequestList>(getListEvidenceRequestsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEvidenceRequestsQueryKey = (params?: ListEvidenceRequestsParams,) => {
+    return [
+    `/api/evidence/requests`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListEvidenceRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listEvidenceRequests>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(params?: ListEvidenceRequestsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvidenceRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEvidenceRequestsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEvidenceRequests>>> = ({ signal }) => listEvidenceRequests(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEvidenceRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEvidenceRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listEvidenceRequests>>>
+export type ListEvidenceRequestsQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>
+
+
+/**
+ * @summary List scoped evidence requests
+ */
+
+export function useListEvidenceRequests<TData = Awaited<ReturnType<typeof listEvidenceRequests>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(
+ params?: ListEvidenceRequestsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvidenceRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEvidenceRequestsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateEvidenceRequestUrl = () => {
+
+
+
+
+  return `/api/evidence/requests`
+}
+
+/**
+ * Requires evidence_hub and staff evidence.request. Exactly one invoice, filing or period anchor is validated by the server. clientRequestId makes retries idempotent.
+ * @summary Request evidence from an active client
+ */
+export const createEvidenceRequest = async (createEvidenceRequestInput: CreateEvidenceRequestInput, options?: RequestInit): Promise<EvidenceDetail> => {
+
+  return customFetch<EvidenceDetail>(getCreateEvidenceRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createEvidenceRequestInput)
+  }
+);}
+
+
+
+
+
+export const getCreateEvidenceRequestMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEvidenceRequest>>, TError,{data: BodyType<CreateEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEvidenceRequest>>, TError,{data: BodyType<CreateEvidenceRequestInput>}, TContext> => {
+
+const mutationKey = ['createEvidenceRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEvidenceRequest>>, {data: BodyType<CreateEvidenceRequestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createEvidenceRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEvidenceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createEvidenceRequest>>>
+    export type CreateEvidenceRequestMutationBody = BodyType<CreateEvidenceRequestInput>
+    export type CreateEvidenceRequestMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Request evidence from an active client
+ */
+export const useCreateEvidenceRequest = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEvidenceRequest>>, TError,{data: BodyType<CreateEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEvidenceRequest>>,
+        TError,
+        {data: BodyType<CreateEvidenceRequestInput>},
+        TContext
+      > => {
+      return useMutation(getCreateEvidenceRequestMutationOptions(options));
+    }
+
+export const getUpdateEvidenceRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/requests/${id}`
+}
+
+/**
+ * Requires staff evidence.request. Closed requests cannot be changed. The server validates a workspace owner with access to this client and expectedVersion. Retries reuse clientRequestId.
+ * @summary Update an open evidence request's owner or deadline
+ */
+export const updateEvidenceRequest = async (id: string,
+    updateEvidenceRequestInput: UpdateEvidenceRequestInput, options?: RequestInit): Promise<EvidenceDetail> => {
+
+  return customFetch<EvidenceDetail>(getUpdateEvidenceRequestUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateEvidenceRequestInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateEvidenceRequestMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEvidenceRequest>>, TError,{id: string;data: BodyType<UpdateEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEvidenceRequest>>, TError,{id: string;data: BodyType<UpdateEvidenceRequestInput>}, TContext> => {
+
+const mutationKey = ['updateEvidenceRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEvidenceRequest>>, {id: string;data: BodyType<UpdateEvidenceRequestInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateEvidenceRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateEvidenceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof updateEvidenceRequest>>>
+    export type UpdateEvidenceRequestMutationBody = BodyType<UpdateEvidenceRequestInput>
+    export type UpdateEvidenceRequestMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Update an open evidence request's owner or deadline
+ */
+export const useUpdateEvidenceRequest = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEvidenceRequest>>, TError,{id: string;data: BodyType<UpdateEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateEvidenceRequest>>,
+        TError,
+        {id: string;data: BodyType<UpdateEvidenceRequestInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateEvidenceRequestMutationOptions(options));
+    }
+
+export const getGetEvidenceRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/requests/${id}`
+}
+
+/**
+ * @summary Read an evidence request, file versions and review history
+ */
+export const getEvidenceRequest = async (id: string, options?: RequestInit): Promise<EvidenceDetail> => {
+
+  return customFetch<EvidenceDetail>(getGetEvidenceRequestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEvidenceRequestQueryKey = (id: string,) => {
+    return [
+    `/api/evidence/requests/${id}`
+    ] as const;
+    }
+
+
+export const getGetEvidenceRequestQueryOptions = <TData = Awaited<ReturnType<typeof getEvidenceRequest>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEvidenceRequest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEvidenceRequestQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEvidenceRequest>>> = ({ signal }) => getEvidenceRequest(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEvidenceRequest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEvidenceRequestQueryResult = NonNullable<Awaited<ReturnType<typeof getEvidenceRequest>>>
+export type GetEvidenceRequestQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>
+
+
+/**
+ * @summary Read an evidence request, file versions and review history
+ */
+
+export function useGetEvidenceRequest<TData = Awaited<ReturnType<typeof getEvidenceRequest>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEvidenceRequest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEvidenceRequestQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUploadEvidenceFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/requests/${id}/files`
+}
+
+/**
+ * Requires evidence.upload. Server validates type, magic bytes, a decoded 5 MiB limit, scope and expectedVersion. Retries reuse the same clientRequestId and payload.
+ * @summary Upload a new quarantined evidence version
+ */
+export const uploadEvidenceFile = async (id: string,
+    uploadEvidenceFileInput: UploadEvidenceFileInput, options?: RequestInit): Promise<EvidenceDetail> => {
+
+  return customFetch<EvidenceDetail>(getUploadEvidenceFileUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(uploadEvidenceFileInput)
+  }
+);}
+
+
+
+
+
+export const getUploadEvidenceFileMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadEvidenceFile>>, TError,{id: string;data: BodyType<UploadEvidenceFileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadEvidenceFile>>, TError,{id: string;data: BodyType<UploadEvidenceFileInput>}, TContext> => {
+
+const mutationKey = ['uploadEvidenceFile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadEvidenceFile>>, {id: string;data: BodyType<UploadEvidenceFileInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadEvidenceFile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadEvidenceFileMutationResult = NonNullable<Awaited<ReturnType<typeof uploadEvidenceFile>>>
+    export type UploadEvidenceFileMutationBody = BodyType<UploadEvidenceFileInput>
+    export type UploadEvidenceFileMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Upload a new quarantined evidence version
+ */
+export const useUploadEvidenceFile = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadEvidenceFile>>, TError,{id: string;data: BodyType<UploadEvidenceFileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadEvidenceFile>>,
+        TError,
+        {id: string;data: BodyType<UploadEvidenceFileInput>},
+        TContext
+      > => {
+      return useMutation(getUploadEvidenceFileMutationOptions(options));
+    }
+
+export const getReviewEvidenceRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/requests/${id}/review`
+}
+
+/**
+ * Requires staff evidence.review. Acceptance requires a clean file; it is not automatic verification or proof of payment. Server validates transitions and expectedVersion.
+ * @summary Record an explicit staff review decision
+ */
+export const reviewEvidenceRequest = async (id: string,
+    reviewEvidenceRequestInput: ReviewEvidenceRequestInput, options?: RequestInit): Promise<EvidenceDetail> => {
+
+  return customFetch<EvidenceDetail>(getReviewEvidenceRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reviewEvidenceRequestInput)
+  }
+);}
+
+
+
+
+
+export const getReviewEvidenceRequestMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewEvidenceRequest>>, TError,{id: string;data: BodyType<ReviewEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewEvidenceRequest>>, TError,{id: string;data: BodyType<ReviewEvidenceRequestInput>}, TContext> => {
+
+const mutationKey = ['reviewEvidenceRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewEvidenceRequest>>, {id: string;data: BodyType<ReviewEvidenceRequestInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reviewEvidenceRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewEvidenceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof reviewEvidenceRequest>>>
+    export type ReviewEvidenceRequestMutationBody = BodyType<ReviewEvidenceRequestInput>
+    export type ReviewEvidenceRequestMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Record an explicit staff review decision
+ */
+export const useReviewEvidenceRequest = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewEvidenceRequest>>, TError,{id: string;data: BodyType<ReviewEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewEvidenceRequest>>,
+        TError,
+        {id: string;data: BodyType<ReviewEvidenceRequestInput>},
+        TContext
+      > => {
+      return useMutation(getReviewEvidenceRequestMutationOptions(options));
+    }
+
+export const getDownloadEvidenceFileUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/files/${id}/download`
+}
+
+/**
+ * Requires evidence.read. Quarantined and rejected files cannot be downloaded. PDFs are download-only; clean JPEG and PNG files may be previewed.
+ * @summary Download a clean, authorised evidence file as an attachment
+ */
+export const downloadEvidenceFile = async (id: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadEvidenceFileUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadEvidenceFileQueryKey = (id: string,) => {
+    return [
+    `/api/evidence/files/${id}/download`
+    ] as const;
+    }
+
+
+export const getDownloadEvidenceFileQueryOptions = <TData = Awaited<ReturnType<typeof downloadEvidenceFile>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadEvidenceFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadEvidenceFileQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadEvidenceFile>>> = ({ signal }) => downloadEvidenceFile(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadEvidenceFile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadEvidenceFileQueryResult = NonNullable<Awaited<ReturnType<typeof downloadEvidenceFile>>>
+export type DownloadEvidenceFileQueryError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+
+/**
+ * @summary Download a clean, authorised evidence file as an attachment
+ */
+
+export function useDownloadEvidenceFile<TData = Awaited<ReturnType<typeof downloadEvidenceFile>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadEvidenceFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadEvidenceFileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRetryEvidenceScanUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/files/${id}/scan`
+}
+
+/**
+ * Requires staff evidence.review. Scan errors remain quarantined; queueing a scan never marks a file clean.
+ * @summary Queue a staff-requested scan retry
+ */
+export const retryEvidenceScan = async (id: string,
+    retryEvidenceScanInput: RetryEvidenceScanInput, options?: RequestInit): Promise<EvidenceDetail> => {
+
+  return customFetch<EvidenceDetail>(getRetryEvidenceScanUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(retryEvidenceScanInput)
+  }
+);}
+
+
+
+
+
+export const getRetryEvidenceScanMutationOptions = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryEvidenceScan>>, TError,{id: string;data: BodyType<RetryEvidenceScanInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryEvidenceScan>>, TError,{id: string;data: BodyType<RetryEvidenceScanInput>}, TContext> => {
+
+const mutationKey = ['retryEvidenceScan'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryEvidenceScan>>, {id: string;data: BodyType<RetryEvidenceScanInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  retryEvidenceScan(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryEvidenceScanMutationResult = NonNullable<Awaited<ReturnType<typeof retryEvidenceScan>>>
+    export type RetryEvidenceScanMutationBody = BodyType<RetryEvidenceScanInput>
+    export type RetryEvidenceScanMutationError = ErrorType<ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Queue a staff-requested scan retry
+ */
+export const useRetryEvidenceScan = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryEvidenceScan>>, TError,{id: string;data: BodyType<RetryEvidenceScanInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryEvidenceScan>>,
+        TError,
+        {id: string;data: BodyType<RetryEvidenceScanInput>},
+        TContext
+      > => {
+      return useMutation(getRetryEvidenceScanMutationOptions(options));
+    }
+
+export const getAssistEvidenceRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/requests/${id}/assist`
+}
+
+/**
+ * Requires evidence.read and staff evidence.review. Assistance is advisory, never acceptance or automatic verification, and may only use clean files.
+ * @summary Explicitly request staff evidence assistance
+ */
+export const assistEvidenceRequest = async (id: string,
+    assistEvidenceRequestInput: AssistEvidenceRequestInput, options?: RequestInit): Promise<EvidenceAssistance> => {
+
+  return customFetch<EvidenceAssistance>(getAssistEvidenceRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assistEvidenceRequestInput)
+  }
+);}
+
+
+
+
+
+export const getAssistEvidenceRequestMutationOptions = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assistEvidenceRequest>>, TError,{id: string;data: BodyType<AssistEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assistEvidenceRequest>>, TError,{id: string;data: BodyType<AssistEvidenceRequestInput>}, TContext> => {
+
+const mutationKey = ['assistEvidenceRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assistEvidenceRequest>>, {id: string;data: BodyType<AssistEvidenceRequestInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  assistEvidenceRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssistEvidenceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof assistEvidenceRequest>>>
+    export type AssistEvidenceRequestMutationBody = BodyType<AssistEvidenceRequestInput>
+    export type AssistEvidenceRequestMutationError = ErrorType<ForbiddenResponse | ConflictResponse>
+
+    /**
+ * @summary Explicitly request staff evidence assistance
+ */
+export const useAssistEvidenceRequest = <TError = ErrorType<ForbiddenResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assistEvidenceRequest>>, TError,{id: string;data: BodyType<AssistEvidenceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assistEvidenceRequest>>,
+        TError,
+        {id: string;data: BodyType<AssistEvidenceRequestInput>},
+        TContext
+      > => {
+      return useMutation(getAssistEvidenceRequestMutationOptions(options));
+    }
+
+export const getDownloadEvidencePackUrl = (id: string,) => {
+
+
+
+
+  return `/api/evidence/requests/${id}/pack`
+}
+
+/**
+ * Requires evidence.read. Contains authorised clean files and the review record; quarantined and rejected content is excluded.
+ * @summary Download an authorised evidence pack
+ */
+export const downloadEvidencePack = async (id: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadEvidencePackUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadEvidencePackQueryKey = (id: string,) => {
+    return [
+    `/api/evidence/requests/${id}/pack`
+    ] as const;
+    }
+
+
+export const getDownloadEvidencePackQueryOptions = <TData = Awaited<ReturnType<typeof downloadEvidencePack>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadEvidencePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadEvidencePackQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadEvidencePack>>> = ({ signal }) => downloadEvidencePack(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadEvidencePack>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadEvidencePackQueryResult = NonNullable<Awaited<ReturnType<typeof downloadEvidencePack>>>
+export type DownloadEvidencePackQueryError = ErrorType<ForbiddenResponse | NotFoundResponse>
+
+
+/**
+ * @summary Download an authorised evidence pack
+ */
+
+export function useDownloadEvidencePack<TData = Awaited<ReturnType<typeof downloadEvidencePack>>, TError = ErrorType<ForbiddenResponse | NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadEvidencePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadEvidencePackQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 

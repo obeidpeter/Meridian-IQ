@@ -35,7 +35,7 @@ export function SubmitConfirmDialog({
             your configured e-invoicing service.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <dl className="divide-y rounded-md border bg-muted/25 px-3 text-sm">
+        <dl className="divide-y rounded-md border bg-muted/25 px-3 text-sm [&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere]">
           <div className="flex justify-between gap-4 py-2.5">
             <dt className="text-muted-foreground">Invoice</dt>
             <dd className="text-right font-medium">{invoice.invoiceNumber}</dd>

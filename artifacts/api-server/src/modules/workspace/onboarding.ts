@@ -12,14 +12,22 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { partySphereCondition } from "../party/party";
+import { firstSubmissionSetup } from "./submission-journey";
 
-export type SetupStep = {
-  id: string;
-  label: string;
-  description: string;
-  complete: boolean;
-  href: string;
-};
+import type { SetupStep } from "./setup-step";
+export type { SetupStep } from "./setup-step";
+
+function invoiceDestination(
+  clientId: string | null,
+  supplierId?: string,
+  invoiceId?: string,
+): string {
+  if (clientId) return invoiceId ? `/invoices/${invoiceId}` : "/invoices/new";
+  if (!supplierId) return "/portfolio?action=add-client";
+  const query = new URLSearchParams({ view: "invoices" });
+  if (invoiceId) query.set("invoiceId", invoiceId);
+  return `/clients/${supplierId}?${query}`;
+}
 
 export function businessDetailsComplete(
   party:
@@ -97,6 +105,8 @@ export async function firstInvoiceSetup(
     ? await getDb()
         .select({
           id: invoicesTable.id,
+          firmId: invoicesTable.firmId,
+          supplierPartyId: invoicesTable.supplierPartyId,
           status: invoicesTable.status,
           buyerPartyId: invoicesTable.buyerPartyId,
         })
@@ -146,13 +156,7 @@ export async function firstInvoiceSetup(
         .limit(1)
     : [];
 
-  const invoiceHref = clientId
-    ? invoice
-      ? `/invoices/${invoice.id}`
-      : "/invoices/new"
-    : supplier
-      ? `/clients/${supplier.id}?view=invoices`
-      : "/portfolio?action=add-client";
+  const invoiceHref = invoiceDestination(clientId, supplier?.id, invoice?.id);
   const createHref = clientId ? "/invoices/new" : "/work?action=new";
   const businessHref = clientId
     ? "/business"
@@ -218,5 +222,6 @@ export async function firstInvoiceSetup(
       complete: Boolean(history),
       href: invoiceHref,
     },
+    ...(await firstSubmissionSetup(principal, invoice, invoiceHref)),
   ];
 }

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
+import { useUrlParam } from "@workspace/web-ui";
+import { invoiceReturnTarget } from "../invoice-list-navigation";
 
 export function DetailSkeleton() {
   return (
@@ -35,10 +37,11 @@ export function DetailSkeleton() {
 }
 
 export function BackToVault() {
+  const [returnTo] = useUrlParam("returnTo");
   return (
     <Link
-      href="/invoices"
-      className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      href={invoiceReturnTarget(returnTo)}
+      className="inline-flex min-h-11 items-center rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
     </Link>
@@ -57,6 +60,7 @@ export function DetailLoadError({ onRetry }: { onRetry: () => void }) {
 }
 
 export function UnknownInvoice() {
+  const [returnTo] = useUrlParam("returnTo");
   // Genuinely missing record (404): neutral not-found card.
   return (
     <div className="space-y-6">
@@ -69,7 +73,7 @@ export function UnknownInvoice() {
           description="It may have been removed, or the link may be out of date."
         >
           <Button asChild className="mt-2">
-            <Link href="/invoices">Back to vault</Link>
+            <Link href={invoiceReturnTarget(returnTo)}>Back to vault</Link>
           </Button>
         </EmptyState>
       </Card>

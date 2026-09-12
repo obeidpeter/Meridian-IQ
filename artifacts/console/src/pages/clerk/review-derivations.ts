@@ -1,6 +1,7 @@
 import type { ClerkCase } from "@workspace/api-client-react";
 import {
   type ApproveForm,
+  type NoticeApproveForm,
   fieldLabel,
   noticeFieldLabel,
   vatPercentInvalid,
@@ -26,6 +27,135 @@ export function approveDisabledFor(form: ApproveForm | null): boolean {
         !l.unitPrice ||
         vatPercentInvalid(l.vatRate),
     )
+  );
+}
+
+export function fieldsNeedingReview(
+  selected: ClerkCase,
+  form: ApproveForm | null,
+  noticeForm: NoticeApproveForm | null,
+): string[] {
+  if (selected.status !== "extracted" && selected.status !== "in_review")
+    return [];
+  const { detailExtraction, activePreflight } = reviewPaneFields(selected);
+  const fields = new Set<string>();
+  for (const field of detailExtraction?.fields ?? []) {
+    if (
+      field.flagged ||
+      (field.critical && (field.confidence < 0.9 || !field.value?.trim()))
+    )
+      fields.add(field.field);
+  }
+  for (const issue of activePreflight) fields.add(issue.field);
+  if (form) {
+    for (const field of [
+      "firmId",
+      "supplierPartyId",
+      "buyerPartyId",
+      "invoiceNumber",
+      "issueDate",
+    ] as const) {
+      if (!form[field].trim()) fields.add(field);
+    }
+    if (form.lines.length === 0) fields.add("lines");
+    form.lines.forEach((line, index) => {
+      for (const field of [
+        "description",
+        "quantity",
+        "unitPrice",
+        "vatRate",
+      ] as const) {
+        if (
+          field === "vatRate"
+            ? vatPercentInvalid(line[field])
+            : !line[field].trim()
+        )
+          fields.add(`lines.${index}.${field}`);
+      }
+    });
+  }
+  if (noticeForm) {
+    for (const field of [
+      "firmId",
+      "clientPartyId",
+      "noticeType",
+      "authority",
+      "responseDueDate",
+    ] as const) {
+      if (!noticeForm[field]) fields.add(field);
+    }
+  }
+  return [...fields];
+}
+
+const INVOICE_CONTROLS: Record<string, string> = {
+  firmId: "select-firm-control",
+  supplierPartyId: "select-supplier-control",
+  supplierName: "select-supplier-control",
+  supplierTin: "select-supplier-control",
+  buyerPartyId: "select-buyer-control",
+  buyerName: "select-buyer-control",
+  buyerTin: "select-buyer-control",
+  invoiceNumber: "apr-number",
+  issueDate: "apr-issue",
+  dueDate: "apr-due",
+  currency: "apr-currency",
+  category: "apr-category",
+  lines: "apr-lines",
+  subtotal: "apr-lines",
+  vatTotal: "apr-lines",
+  grandTotal: "apr-lines",
+};
+const NOTICE_CONTROLS: Record<string, string> = {
+  firmId: "select-notice-firm-control",
+  clientPartyId: "select-notice-client-control",
+  taxpayerName: "select-notice-client-control",
+  taxpayerTin: "select-notice-client-control",
+  tin: "select-notice-client-control",
+  noticeType: "select-notice-type-control",
+  authority: "select-notice-authority-control",
+  taxType: "select-notice-tax-type-control",
+  referenceNumber: "ntc-reference",
+  reference: "ntc-reference",
+  amountDemanded: "ntc-amount",
+  amount: "ntc-amount",
+  period: "ntc-period",
+  currency: "ntc-currency",
+  issueDate: "ntc-issue",
+  responseDueDate: "ntc-due",
+  notes: "ntc-notes",
+};
+
+export function reviewControlId(
+  kind: ClerkCase["kind"],
+  field: string,
+): string | undefined {
+  if (kind === "notice") return NOTICE_CONTROLS[field];
+  const line = /^lines\.(\d+)\.(description|quantity|unitPrice|vatRate)$/.exec(
+    field,
+  );
+  if (line) return `apr-line-${line[1]}-${line[2]}`;
+  if (field.startsWith("lines.")) return "apr-lines";
+  return INVOICE_CONTROLS[field];
+}
+
+export function reviewTargetLabel(
+  kind: ClerkCase["kind"],
+  field: string,
+): string {
+  const labels: Record<string, string> = {
+    firmId: "Firm",
+    supplierPartyId: "Supplier",
+    buyerPartyId: "Customer",
+    clientPartyId: "Client",
+    lines: "Invoice items",
+  };
+  const line = /^lines\.(\d+)\.(.+)$/.exec(field);
+  if (line)
+    return `Line ${Number(line[1]) + 1} ${fieldLabel(line[2]).toLowerCase()}`;
+  return (
+    labels[field] ??
+    (kind === "notice" ? noticeFieldLabel(field) : fieldLabel(field))
   );
 }
 

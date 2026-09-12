@@ -28,9 +28,13 @@ export function FirmSelect({
         <SelectTrigger id={id} data-testid={testId}>
           <SelectValue placeholder="Choose firm" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="max-w-[calc(100vw-2rem)]">
           {(firms ?? []).map((f) => (
-            <SelectItem key={f.id} value={f.id}>
+            <SelectItem
+              key={f.id}
+              value={f.id}
+              className="whitespace-normal [overflow-wrap:anywhere]"
+            >
               {f.name}
             </SelectItem>
           ))}
@@ -67,9 +71,13 @@ export function PartySelect({
         <SelectTrigger id={id} data-testid={testId}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="max-w-[calc(100vw-2rem)]">
           {(parties ?? []).map((p) => (
-            <SelectItem key={p.id} value={p.id}>
+            <SelectItem
+              key={p.id}
+              value={p.id}
+              className="whitespace-normal [overflow-wrap:anywhere]"
+            >
               {p.legalName}
             </SelectItem>
           ))}

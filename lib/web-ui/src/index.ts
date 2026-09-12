@@ -30,6 +30,13 @@ export {
 } from "./use-global-shortcuts";
 export { useUrlParam } from "./use-url-param";
 export {
+  UnsavedWorkProvider,
+  useProtectedLocation,
+  useProtectedSearch,
+  useProtectedHistoryState,
+  useUnsavedWork,
+} from "./unsaved-work";
+export {
   readRecentItems,
   recordRecentItem,
   useRecordRecentItem,
@@ -130,8 +137,16 @@ export {
 } from "./readiness";
 export { NavigationSection } from "./navigation-section";
 export { ValoMark } from "./valo-mark";
+export { EvidenceHub, type EvidenceHubProps } from "./evidence-hub";
+export { createEvidenceApi } from "./evidence-api";
+export type {
+  EvidenceApi,
+  EvidenceOption,
+  EvidenceDetailView,
+} from "./evidence-types";
 export {
   BusinessDetailsForm,
+  useBusinessDetailsSaveScope,
   type BusinessDetailsRecord,
   type BusinessDetailsPatch,
 } from "./business-details";

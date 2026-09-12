@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.102.0
+  version: 0.104.0
   description: >-
     Valo platform API — data spine, compliance rails and consent.
     Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained
@@ -52,7 +52,279 @@ tags:
   - name: work
   - name: invoice-room
   - name: credit
+  - name: evidence
 paths:
+  /evidence/requests:
+    get:
+      operationId: listEvidenceRequests
+      tags: [evidence]
+      summary: List scoped evidence requests
+      description: Requires evidence_hub and evidence.read. Client principals are restricted to their business.
+      parameters:
+        - name: clientPartyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: invoiceId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: filingId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/EvidenceRequestStatus"
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Scoped request page and provider availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceRequestList"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createEvidenceRequest
+      tags: [evidence]
+      summary: Request evidence from an active client
+      description: Requires evidence_hub and staff evidence.request. Exactly one invoice, filing or period anchor is validated by the server. clientRequestId makes retries idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEvidenceRequestInput"
+      responses:
+        "201":
+          description: Created request, or the original result of an identical retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /evidence/requests/{id}:
+    patch:
+      operationId: updateEvidenceRequest
+      tags: [evidence]
+      summary: Update an open evidence request's owner or deadline
+      description: Requires staff evidence.request. Closed requests cannot be changed. The server validates a workspace owner with access to this client and expectedVersion. Retries reuse clientRequestId.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEvidenceRequestInput"
+      responses:
+        "200":
+          description: Updated evidence detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    get:
+      operationId: getEvidenceRequest
+      tags: [evidence]
+      summary: Read an evidence request, file versions and review history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Evidence detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /evidence/requests/{id}/files:
+    post:
+      operationId: uploadEvidenceFile
+      tags: [evidence]
+      summary: Upload a new quarantined evidence version
+      description: Requires evidence.upload. Server validates type, magic bytes, a decoded 5 MiB limit, scope and expectedVersion. Retries reuse the same clientRequestId and payload.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadEvidenceFileInput"
+      responses:
+        "200":
+          description: Updated evidence detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /evidence/requests/{id}/review:
+    post:
+      operationId: reviewEvidenceRequest
+      tags: [evidence]
+      summary: Record an explicit staff review decision
+      description: Requires staff evidence.review. Acceptance requires a clean file; it is not automatic verification or proof of payment. Server validates transitions and expectedVersion.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewEvidenceRequestInput"
+      responses:
+        "200":
+          description: Reviewed evidence detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /evidence/files/{id}/download:
+    get:
+      operationId: downloadEvidenceFile
+      tags: [evidence]
+      summary: Download a clean, authorised evidence file as an attachment
+      description: Requires evidence.read. Quarantined and rejected files cannot be downloaded. PDFs are download-only; clean JPEG and PNG files may be previewed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Private attachment with no-store and nosniff headers
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /evidence/files/{id}/scan:
+    post:
+      operationId: retryEvidenceScan
+      tags: [evidence]
+      summary: Queue a staff-requested scan retry
+      description: Requires staff evidence.review. Scan errors remain quarantined; queueing a scan never marks a file clean.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetryEvidenceScanInput"
+      responses:
+        "200":
+          description: Evidence detail after scan retry is queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /evidence/requests/{id}/assist:
+    post:
+      operationId: assistEvidenceRequest
+      tags: [evidence]
+      summary: Explicitly request staff evidence assistance
+      description: Requires evidence.read and staff evidence.review. Assistance is advisory, never acceptance or automatic verification, and may only use clean files.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistEvidenceRequestInput"
+      responses:
+        "200":
+          description: Advisory source-grounded assistance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceAssistance"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /evidence/requests/{id}/pack:
+    get:
+      operationId: downloadEvidencePack
+      tags: [evidence]
+      summary: Download an authorised evidence pack
+      description: Requires evidence.read. Contains authorised clean files and the review record; quarantined and rejected content is excluded.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Private ZIP attachment with no-store and nosniff headers
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /healthz:
     get:
       operationId: healthCheck
@@ -8217,6 +8489,157 @@ components:
           schema:
             $ref: "#/components/schemas/ImportRunDetail"
   schemas:
+    EvidenceDocumentType:
+      type: string
+      enum: [purchase_order, delivery_note, payment_receipt, tax_acknowledgement, contract, other]
+    EvidenceRequestStatus:
+      type: string
+      enum: [requested, uploaded, needs_changes, accepted, cancelled]
+    EvidenceRequest:
+      type: object
+      required: [id, firmId, clientPartyId, invoiceId, filingId, period, title, description, documentType, status, ownerId, createdBy, dueAt, version, latestFileId, acceptedFileId, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        firmId: { type: string, format: uuid }
+        clientPartyId: { type: string, format: uuid }
+        invoiceId: { type: [string, "null"], format: uuid }
+        filingId: { type: [string, "null"], format: uuid }
+        period: { type: [string, "null"], pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: [string, "null"], maxLength: 2000 }
+        documentType:
+          $ref: "#/components/schemas/EvidenceDocumentType"
+        status:
+          $ref: "#/components/schemas/EvidenceRequestStatus"
+        ownerId: { type: string, format: uuid }
+        createdBy: { type: string, format: uuid }
+        dueAt: { type: [string, "null"], format: date-time }
+        version: { type: integer, minimum: 1 }
+        latestFileId: { type: [string, "null"], format: uuid }
+        acceptedFileId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    EvidenceFile:
+      type: object
+      required: [id, requestId, filename, contentType, byteSize, sha256, scanStatus, scanError, uploadedBy, createdAt, scannedAt]
+      properties:
+        id: { type: string, format: uuid }
+        requestId: { type: string, format: uuid }
+        filename: { type: string, maxLength: 160 }
+        contentType: { type: string, enum: [image/jpeg, image/png, application/pdf] }
+        byteSize: { type: integer, minimum: 1, maximum: 5242880 }
+        sha256: { type: string }
+        scanStatus: { type: string, enum: [quarantined, clean, rejected] }
+        scanError: { type: [string, "null"] }
+        uploadedBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        scannedAt: { type: [string, "null"], format: date-time }
+    EvidenceEvent:
+      type: object
+      required: [id, requestId, actorId, action, comment, fileId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        requestId: { type: string, format: uuid }
+        actorId: { type: [string, "null"], format: uuid }
+        action: { type: string }
+        comment: { type: [string, "null"] }
+        fileId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+    EvidenceDetail:
+      type: object
+      required: [request, files, events]
+      properties:
+        request:
+          $ref: "#/components/schemas/EvidenceRequest"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceFile"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEvent"
+    EvidenceRequestList:
+      type: object
+      required: [items, total, uploadAvailable, scanAvailable, notice]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceRequest"
+        total: { type: integer, minimum: 0 }
+        uploadAvailable: { type: boolean }
+        scanAvailable: { type: boolean }
+        notice: { type: [string, "null"] }
+    CreateEvidenceRequestInput:
+      type: object
+      required: [clientPartyId, title, documentType, clientRequestId]
+      properties:
+        clientPartyId: { type: string, format: uuid }
+        invoiceId: { type: string, format: uuid }
+        filingId: { type: string, format: uuid }
+        period: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000 }
+        documentType:
+          $ref: "#/components/schemas/EvidenceDocumentType"
+        dueAt: { type: string, format: date-time }
+        ownerId: { type: string, format: uuid }
+        clientRequestId: { type: string, format: uuid }
+    UploadEvidenceFileInput:
+      type: object
+      required: [clientRequestId, expectedVersion, filename, contentType, contentBase64]
+      properties:
+        clientRequestId: { type: string, format: uuid }
+        expectedVersion: { type: integer, minimum: 1 }
+        filename: { type: string, minLength: 1, maxLength: 160 }
+        contentType: { type: string, enum: [image/jpeg, image/png, application/pdf] }
+        contentBase64: { type: string, minLength: 1, maxLength: 7000000 }
+    UpdateEvidenceRequestInput:
+      type: object
+      required: [clientRequestId, expectedVersion]
+      properties:
+        clientRequestId: { type: string, format: uuid }
+        expectedVersion: { type: integer, minimum: 1 }
+        ownerId: { type: string, format: uuid }
+        dueAt: { type: [string, "null"], format: date-time }
+    ReviewEvidenceRequestInput:
+      type: object
+      required: [clientRequestId, expectedVersion, decision]
+      properties:
+        clientRequestId: { type: string, format: uuid }
+        expectedVersion: { type: integer, minimum: 1 }
+        fileId: { type: string, format: uuid }
+        decision: { type: string, enum: [accepted, needs_changes, cancelled] }
+        comment: { type: string, maxLength: 2000 }
+    RetryEvidenceScanInput:
+      type: object
+      required: [clientRequestId]
+      properties:
+        clientRequestId: { type: string, format: uuid }
+    AssistEvidenceRequestInput:
+      type: object
+      required: [fileId]
+      properties:
+        fileId: { type: string, format: uuid }
+    EvidenceAssistance:
+      type: object
+      required: [summary, suggestedDocumentType, checks, extractedText]
+      properties:
+        summary: { type: string }
+        suggestedDocumentType: { type: [string, "null"] }
+        extractedText: { type: [string, "null"] }
+        clerkCaseId: { type: [string, "null"] }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [label, status, sourceValue, expectedValue]
+            properties:
+              label: { type: string }
+              status: { type: string, enum: [match, mismatch, unknown] }
+              sourceValue: { type: [string, "null"] }
+              expectedValue: { type: [string, "null"] }
     HealthStatus:
       type: object
       properties:
@@ -8762,6 +9185,9 @@ components:
           type: boolean
         href:
           type: string
+        blockedReason:
+          type: [string, "null"]
+          description: Current server-checked reason this step cannot be continued. Omitted when the destination remains actionable.
 
     WorkspaceSearchResult:
       type: object
@@ -11705,7 +12131,7 @@ components:
           type: string
         channel:
           type: string
-          enum: [whatsapp, sms, email, push]
+          enum: [whatsapp, sms, email, push, in_app]
         recipientRef:
           type: string
         templateKey:
@@ -19090,6 +19516,7 @@ components:
                 type: string
               channel:
                 type: string
+                enum: [whatsapp, sms, email, push, in_app]
               templateKey:
                 type: string
               # Human copy resolved server-side from the template registry —

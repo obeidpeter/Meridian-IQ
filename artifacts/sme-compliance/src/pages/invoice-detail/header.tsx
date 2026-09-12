@@ -7,15 +7,7 @@ import { Link } from "wouter";
 import { getGetInvoicePdfUrl, type Invoice } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { invoicePdfFilename, triggerDownload } from "@/lib/download";
-import {
-  Ban,
-  Download,
-  FilePlus,
-  Pin,
-  Send,
-  Undo2,
-  Wrench,
-} from "lucide-react";
+import { Ban, Download, FilePlus, Pin, Undo2, Wrench } from "lucide-react";
 import { whtCategoryLabel } from "@workspace/format/wht-copy";
 import { formatDate, statusLabel, badgeClasses } from "@/lib/format";
 import type { InvoiceAbilities } from "./abilities";
@@ -23,7 +15,7 @@ import type { InvoiceDetailState } from "./use-invoice-detail";
 
 export function DetailHeader({ invoice }: { invoice: Invoice }) {
   return (
-    <div>
+    <div className="min-w-0 [overflow-wrap:anywhere]">
       <div className="flex items-center gap-2 flex-wrap">
         <h1
           className="text-2xl md:text-3xl font-bold"
@@ -52,7 +44,7 @@ export function DetailHeader({ invoice }: { invoice: Invoice }) {
       <p className="mt-1 text-xs text-muted-foreground">
         <Link
           href="/help#stamping"
-          className="font-bold text-teal-800 underline underline-offset-2"
+          className="font-bold text-teal-800 underline underline-offset-2 dark:text-teal-300"
           data-testid="link-help-stamping"
         >
           What does stamping mean?
@@ -74,17 +66,14 @@ export function DetailActions({
   const {
     id,
     pinnedInvoices,
-    validate,
-    submit,
     fix,
     openFix,
-    setConfirmSubmit,
     setAdjustKind,
     handleNewFromInvoice,
   } = state;
-  const { canSubmit, canCredit, canCancel } = abilities;
+  const { canCredit, canCancel } = abilities;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex max-w-full flex-wrap gap-2 [&_button]:h-auto [&_button]:min-h-9 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2">
       <Button
         type="button"
         variant="outline"
@@ -104,20 +93,8 @@ export function DetailActions({
         />
         {pinnedInvoices.isPinned(id) ? "Pinned" : "Pin"}
       </Button>
-      {canSubmit && (
-        <Button
-          onClick={() => setConfirmSubmit(true)}
-          disabled={validate.isPending || submit.isPending}
-        >
-          <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-          {validate.isPending || submit.isPending
-            ? "Submitting…"
-            : invoice.status === "failed"
-              ? "Retry transmission"
-              : "Submit for stamping"}
-        </Button>
-      )}
-      {(invoice.status === "draft" || invoice.status === "validated") &&
+      {abilities.canEdit &&
+        (invoice.status === "draft" || invoice.status === "validated") &&
         !fix && (
           <Button
             variant="outline"
@@ -157,7 +134,7 @@ export function DetailActions({
       {canCancel && (
         <Button
           variant="outline"
-          className="text-destructive hover:text-destructive"
+          className="text-destructive hover:text-destructive dark:text-red-300 dark:hover:text-red-200"
           onClick={() => setAdjustKind("cancel")}
           data-testid="button-cancel-invoice"
         >
@@ -167,6 +144,7 @@ export function DetailActions({
       <Button
         variant="outline"
         onClick={handleNewFromInvoice}
+        disabled={!abilities.canWrite}
         data-testid="button-new-from-invoice"
       >
         <FilePlus className="w-4 h-4 mr-2" aria-hidden="true" /> New from this

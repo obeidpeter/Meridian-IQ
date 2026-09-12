@@ -107,6 +107,51 @@ async function assertAssignable(
   }
 }
 
+function workEntityType(body: {
+  entityType?: string;
+  entityId?: string;
+}): string | undefined {
+  if ((body.entityType === undefined) !== (body.entityId === undefined)) {
+    throw new DomainError(
+      "INVALID_WORK_ENTITY",
+      "Entity type and entity id must be provided together",
+      400,
+    );
+  }
+  const entityType = body.entityType?.trim();
+  if (entityType?.toLowerCase() === "evidence_request") {
+    throw new DomainError(
+      "EVIDENCE_WORK_CONTROLLED",
+      "Create document requests through the Evidence Hub",
+      403,
+    );
+  }
+  if (body.entityType !== undefined && !entityType) {
+    throw new DomainError(
+      "INVALID_WORK_ENTITY",
+      "Entity type must not be blank",
+      400,
+    );
+  }
+  return entityType;
+}
+
+function assertEvidenceWorkPatch(
+  entityType: string | null,
+  changedFields: string[],
+): void {
+  if (
+    entityType === "evidence_request" &&
+    changedFields.some((field) => field !== "priority")
+  ) {
+    throw new DomainError(
+      "EVIDENCE_WORK_CONTROLLED",
+      "Update document requests through the Evidence Hub; work comments and priority remain available",
+      403,
+    );
+  }
+}
+
 router.get("/work-items", async (req, res): Promise<void> => {
   assertCan(req.principal, "work.read");
   const query = parseOrThrow(ListWorkItemsQueryParams, req.query);
@@ -165,21 +210,7 @@ router.post("/work-items", async (req, res): Promise<void> => {
     }
   }
   await assertAssignable(firmId, body.assignedTo, clientPartyId);
-  if ((body.entityType === undefined) !== (body.entityId === undefined)) {
-    throw new DomainError(
-      "INVALID_WORK_ENTITY",
-      "Entity type and entity id must be provided together",
-      400,
-    );
-  }
-  const entityType = body.entityType?.trim();
-  if (body.entityType !== undefined && !entityType) {
-    throw new DomainError(
-      "INVALID_WORK_ENTITY",
-      "Entity type must not be blank",
-      400,
-    );
-  }
+  const entityType = workEntityType(body);
 
   const [inserted] = await getDb()
     .insert(workItemsTable)
@@ -202,20 +233,31 @@ router.post("/work-items", async (req, res): Promise<void> => {
     })
     .returning({ id: workItemsTable.id });
 
-  const id =
-    inserted?.id ??
-    (
-      await getDb()
-        .select({ id: workItemsTable.id })
-        .from(workItemsTable)
-        .where(
-          and(
-            eq(workItemsTable.firmId, firmId),
-            eq(workItemsTable.clientRequestId, body.clientRequestId),
-          ),
-        )
-        .limit(1)
-    )[0]?.id;
+  const existing = inserted
+    ? undefined
+    : (
+        await getDb()
+          .select({
+            id: workItemsTable.id,
+            entityType: workItemsTable.entityType,
+          })
+          .from(workItemsTable)
+          .where(
+            and(
+              eq(workItemsTable.firmId, firmId),
+              eq(workItemsTable.clientRequestId, body.clientRequestId),
+            ),
+          )
+          .limit(1)
+      )[0];
+  if (existing?.entityType === "evidence_request") {
+    throw new DomainError(
+      "EVIDENCE_WORK_CONTROLLED",
+      "Document request work is managed through the Evidence Hub",
+      403,
+    );
+  }
+  const id = inserted?.id ?? existing?.id;
   if (!id) {
     throw new DomainError(
       "WORK_CREATE_FAILED",
@@ -252,6 +294,7 @@ router.patch("/work-items/:id", async (req, res): Promise<void> => {
     throw new DomainError("NO_CHANGES", "Provide a field to update", 400);
   }
   const current = await getWorkItemView(req.principal, params.id);
+  assertEvidenceWorkPatch(current.entityType, changedFields);
   const title = body.title?.trim();
   if (body.title !== undefined && (!title || title.length < 2)) {
     throw new DomainError(

@@ -118,6 +118,10 @@ const ALL = [
   // internal working context that is not audit evidence.
   "work.read",
   "work.write",
+  "evidence.read",
+  "evidence.request",
+  "evidence.upload",
+  "evidence.review",
   // R3 bank users receive one purpose-built capability. The data-room
   // service still requires an active DPA grant and MFA on every request;
   // this capability alone never opens cross-tenant invoice or audit data.
@@ -127,7 +131,9 @@ const ALL = [
 export type Capability = (typeof ALL)[number];
 
 const READ_ONLY: Capability[] = ALL.filter(
-  (c) => (c.endsWith(".read") && c !== "work.read") || c === "audit.export",
+  (c) =>
+    (c.endsWith(".read") && c !== "work.read" && c !== "evidence.read") ||
+    c === "audit.export",
 );
 
 // Role-permission matrix (Appendix C).
@@ -181,6 +187,10 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "filing.write",
     "work.read",
     "work.write",
+    "evidence.read",
+    "evidence.request",
+    "evidence.upload",
+    "evidence.review",
   ],
   firm_staff: [
     "invoice.read",
@@ -216,6 +226,10 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "filing.write",
     "work.read",
     "work.write",
+    "evidence.read",
+    "evidence.request",
+    "evidence.upload",
+    "evidence.review",
   ],
   client_user: [
     "invoice.read",
@@ -247,6 +261,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "filing.read",
     "work.read",
     "work.write",
+    "evidence.read",
+    "evidence.upload",
   ],
   operator: [
     "invoice.read",

@@ -3,12 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { formatDateTime } from "@/lib/format";
-import {
-  caseIntakeKind,
-  imageDataUri,
-  voiceDuration,
-} from "@/pages/clerk-shared";
+import { caseIntakeKind, voiceDuration } from "@/pages/clerk-shared";
 import type { ClerkWorkspaceState } from "./use-clerk-workspace";
+import { DocumentViewer } from "./document-viewer";
 
 // The selected case's source panels (R126 moved them out of the review
 // pane): the quoted text, the inline document image and the lazily fetched
@@ -26,10 +23,7 @@ export function CaseSourcePanels({
       {/* The source, quoted: a voice note's transcript or the
                         pasted text, with its provenance line. */}
       {selected.sourceText ? (
-        <div
-          className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
-          data-testid="card-source-text"
-        >
+        <div className="min-w-0 space-y-2.5" data-testid="card-source-text">
           <div className="flex items-center gap-2.5">
             <span
               className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white dark:bg-teal-500"
@@ -49,9 +43,21 @@ export function CaseSourcePanels({
               · {formatDateTime(selected.createdAt)}
             </p>
           </div>
-          <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
-            {selected.sourceText}
-          </p>
+          <h3 className="text-sm font-medium">
+            {selected.sourceType === "voice"
+              ? "Original transcript"
+              : "Original text"}
+          </h3>
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Original source text"
+            className="max-h-[60vh] overflow-auto overscroll-contain rounded-md border bg-muted/30 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <p className="text-[15px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
+              {selected.sourceText}
+            </p>
+          </div>
         </div>
       ) : null}
       {/* The captured document itself: a single photographed/
@@ -59,10 +65,7 @@ export function CaseSourcePanels({
                         with no extra fetch. Expanded by default — seeing the
                         paper is the whole point of the review pane. */}
       {selected.sourceImageB64 ? (
-        <div
-          className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
-          data-testid="card-source-image"
-        >
+        <div className="min-w-0 space-y-2.5" data-testid="card-source-image">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium">Document</p>
             <Button
@@ -76,17 +79,22 @@ export function CaseSourcePanels({
             </Button>
           </div>
           {imageOpen && (
-            <div className="max-h-96 overflow-auto rounded-md border bg-background">
-              <img
-                src={imageDataUri(selected.sourceImageB64)}
-                alt={`Captured document for ${selected.sourceName ?? "this case"}`}
-                className="w-full"
-                data-testid="img-source-document"
-              />
-            </div>
+            <DocumentViewer
+              key={selected.id}
+              pages={[selected.sourceImageB64]}
+              name={selected.sourceName ?? "this case"}
+              singleImage
+            />
           )}
         </div>
       ) : null}
+      {!selected.sourceText &&
+        !selected.sourceImageB64 &&
+        selected.sourceType !== "pdf" && (
+          <p className="text-sm text-muted-foreground">
+            The original source is not available for this case.
+          </p>
+        )}
       {/* A scanned PDF has neither text nor an inline image —
                         its rendered pages are fetched lazily, only when the
                         operator asks, and only while retention still holds
@@ -118,10 +126,7 @@ function ScannedPagesCard({
     refetchSourcePages,
   } = state;
   return (
-    <div
-      className="rounded-lg border bg-muted/30 p-4 space-y-2.5"
-      data-testid="card-source-pages"
-    >
+    <div className="min-w-0 space-y-2.5" data-testid="card-source-pages">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium">Scanned document</p>
         {!pagesOpen && (
@@ -156,17 +161,11 @@ function ScannedPagesCard({
             The document content has been cleared by retention.
           </p>
         ) : (
-          <div className="max-h-96 space-y-2 overflow-auto rounded-md border bg-background p-2">
-            {sourcePages.pages.map((page, i) => (
-              <img
-                key={i}
-                src={imageDataUri(page)}
-                alt={`Page ${i + 1} of ${selected.sourceName ?? "the scanned document"}`}
-                className="w-full"
-                data-testid={`img-source-page-${i + 1}`}
-              />
-            ))}
-          </div>
+          <DocumentViewer
+            key={selected.id}
+            pages={sourcePages.pages}
+            name={selected.sourceName ?? "the scanned document"}
+          />
         ))}
     </div>
   );

@@ -3,6 +3,7 @@
 // the confidence badge and the constants). The route (App.tsx) keeps
 // importing "@/pages/clerk": this module is the page's surface.
 
+import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
@@ -12,9 +13,11 @@ import { BulkApproveDialog } from "./bulk-approve-dialog";
 import { useClerkWorkspace } from "./use-clerk-workspace";
 import { IntakeColumn } from "./intake-column";
 import { CaseDetail } from "./case-detail";
+import "./review.css";
 
 export function ClerkWorkspace() {
   const state = useClerkWorkspace();
+  const [queueOpen, setQueueOpen] = useState(false);
   const {
     disabledBanner,
     clerkFlag,
@@ -84,9 +87,30 @@ export function ClerkWorkspace() {
         </ClerkDisabledBanner>
       )}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[24rem_minmax(0,1fr)]">
-        <IntakeColumn state={state} />
-        <CaseDetail state={state} />
+      <div
+        className={
+          state.selected
+            ? "space-y-5"
+            : "grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]"
+        }
+      >
+        {state.selected ? (
+          <details
+            className="border-y py-3"
+            open={queueOpen}
+            onToggle={(event) => setQueueOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              Queue and capture ({state.filteredCases.length} cases)
+            </summary>
+            <div className="mt-4">
+              <IntakeColumn state={state} />
+            </div>
+          </details>
+        ) : (
+          <IntakeColumn state={state} />
+        )}
+        <CaseDetail key={state.selected?.id ?? "empty"} state={state} />
       </div>
 
       <BulkApproveDialog
