@@ -65,6 +65,22 @@ const selectedSegment = '.mi-segmented__item[aria-pressed="true"]';
 const unselectedCount =
   '.mi-segmented__item:not([aria-pressed="true"]) .mi-segmented__count';
 
+test("segment selection colors stay atomic under global reduced-motion durations", () => {
+  const button = document.createElement("button");
+  button.className = "mi-segmented__item";
+  button.innerHTML =
+    '<span>ERP</span><span class="mi-segmented__count">0</span>';
+  document.body.append(button);
+  try {
+    for (const element of [button, ...button.children]) {
+      element.setAttribute("style", "transition-duration: 0.01ms !important");
+      expect(getComputedStyle(element).transitionProperty).toBe("none");
+    }
+  } finally {
+    button.remove();
+  }
+});
+
 test.each(["light", "dark"])(
   "%s filled controls and both segment states retain small-text contrast",
   (theme) => {
