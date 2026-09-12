@@ -6,7 +6,7 @@ import {
   renderHook,
   screen,
 } from "@testing-library/react";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { useUrlTab } from "./use-url-tab";
 import {
   UnsavedWorkProvider,
@@ -104,6 +104,7 @@ test("a tab replacement cannot update local state ahead of a blocked navigation"
   act(() => result.current[1]("compliance"));
   expect(result.current[0]).toBe("money");
   expect(window.location.search).toBe("?tab=money");
+  await act(() => vi.dynamicImportSettled());
   fireEvent.click(await screen.findByRole("button", { name: "Stay" }));
   expect(result.current[0]).toBe("money");
 });

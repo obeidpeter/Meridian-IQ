@@ -2,13 +2,13 @@ import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Activity, X } from "lucide-react";
 import { lazyRoute } from "./route-recovery";
-import type { RecoveryProps } from "./session-operation-recovery";
+import type { RecoveryProps } from "./session-operation-history";
 
 export function SessionOperationRecovery(props: RecoveryProps) {
   const [open, setOpen] = useState(false);
   const [History] = useState(() =>
     lazyRoute(() =>
-      import("./session-operation-recovery").then((module) => ({
+      import("./session-operation-history").then((module) => ({
         default: module.SessionActivityCenter,
       })),
     ),
