@@ -96,6 +96,11 @@ function edit(value = "Abuja", label = "City") {
 function leave() {
   fireEvent.click(screen.getByRole("button", { name: "Today" }));
 }
+async function openSavePrompt() {
+  leave();
+  expect(window.location.pathname).toBe("/business");
+  await screen.findByRole("alertdialog");
+}
 function dialogButton(name: string) {
   return within(screen.getByRole("alertdialog")).getByRole("button", {
     name,
@@ -127,7 +132,7 @@ test("Stay is focused by default, Escape keeps edits and restores trigger focus,
   edit();
   const trigger = screen.getByRole("button", { name: "Today" });
   trigger.focus();
-  leave();
+  await openSavePrompt();
   expect(document.activeElement).toBe(dialogButton("Stay"));
   expect(
     screen.getByRole("alertdialog").getAttribute("aria-describedby"),
@@ -139,7 +144,7 @@ test("Stay is focused by default, Escape keeps edits and restores trigger focus,
     "Abuja",
   );
   expect(document.activeElement).toBe(trigger);
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Discard"));
   expect(screen.getByRole("heading", { name: "Today workspace" })).toBeTruthy();
   expect(onSave).not.toHaveBeenCalled();
@@ -157,7 +162,7 @@ test.each([
   render(page(onSave));
   edit();
   edit("New business", "Legal business name");
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   await waitFor(() =>
     expect(
@@ -174,7 +179,7 @@ test.each([
     (screen.getByLabelText("Legal business name") as HTMLInputElement).value,
   ).toBe("New business");
   expect(screen.getByText(error.message)).toBeTruthy();
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   await screen.findByRole("heading", { name: "Today workspace" });
   expect(onSave).toHaveBeenCalledTimes(2);
@@ -184,7 +189,7 @@ test("invalid save stays in the dialog and Stay focuses the invalid field for co
   const onSave = vi.fn();
   render(page(onSave));
   edit("", "Legal business name");
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   await waitFor(() =>
     expect(
@@ -207,7 +212,7 @@ test("normalization-only edits leave after Save without issuing an empty PATCH",
   const onSave = vi.fn();
   render(page(onSave));
   edit(" Acme Ltd ", "Legal business name");
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   await screen.findByRole("heading", { name: "Today workspace" });
   expect(onSave).not.toHaveBeenCalled();
@@ -224,7 +229,7 @@ test("manual save and dialog Save share one request; Stay cancels navigation wit
   render(page(onSave));
   edit();
   fireEvent.submit(screen.getByRole("form"));
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   fireEvent.click(dialogButton("Save"));
   expect(dialogButton("Discard").hasAttribute("disabled")).toBe(true);
@@ -248,7 +253,7 @@ test("permission change cancels the pending navigation and refuses stale save su
   );
   const view = render(page(onSave));
   edit();
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   view.rerender(page(onSave, "Refresh account permissions."));
   expect(screen.queryByRole("alertdialog")).toBeNull();
@@ -258,7 +263,7 @@ test("permission change cancels the pending navigation and refuses stale save su
     "Abuja",
   );
   expect(screen.getByText("Unsaved changes")).toBeTruthy();
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   await waitFor(() =>
     expect(
@@ -268,11 +273,11 @@ test("permission change cancels the pending navigation and refuses stale save su
   expect(onSave).toHaveBeenCalledOnce();
 });
 
-test("party replacement and unmount clear pending handlers and unload warnings", () => {
+test("party replacement and unmount clear pending handlers and unload warnings", async () => {
   const onSave = vi.fn();
   const view = render(page(onSave));
   edit();
-  leave();
+  await openSavePrompt();
   view.rerender(
     page(onSave, undefined, { ...party, id: "another", city: "Kano" }),
   );
@@ -305,7 +310,7 @@ test("owner removal while a save runs cannot navigate a replacement screen", asy
   }
   render(<Removable />);
   edit();
-  leave();
+  await openSavePrompt();
   fireEvent.click(dialogButton("Save"));
   fireEvent.click(screen.getByText("Remove owner"));
   await act(async () => finish({ ...party, city: "Abuja" }));

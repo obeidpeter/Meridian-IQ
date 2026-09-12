@@ -4,7 +4,7 @@ import {
   clearLegacySessionCaches,
   SessionBoundary,
   webSession,
-} from "@workspace/web-ui";
+} from "@workspace/web-ui/runtime";
 import {
   MutationCache,
   QueryClient,

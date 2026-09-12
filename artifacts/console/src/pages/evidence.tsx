@@ -25,7 +25,7 @@ import {
   EvidenceHub,
   createEvidenceApi,
   type EvidenceOption,
-} from "@workspace/web-ui";
+} from "@workspace/web-ui/evidence";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
 

@@ -242,11 +242,11 @@ test("a 409 from a newer save refetches the record and keeps the unsaved edit (R
   });
 });
 
-test("wouter back link supports Stay and Discard without sending a save", () => {
+test("wouter back link supports Stay and Discard without sending a save", async () => {
   render(page());
   editCity();
   fireEvent.click(screen.getByRole("link", { name: "Back to Today" }));
-  expect(screen.getByRole("alertdialog")).toBeTruthy();
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Stay" }));
   expect((screen.getByLabelText("City") as HTMLInputElement).value).toBe(
     "Abuja",
@@ -263,10 +263,10 @@ test("programmatic navigation keeps the user on network failure and resumes only
   render(page());
   editCity();
   fireEvent.click(screen.getByRole("button", { name: "Open invoices" }));
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Save" }));
   await screen.findByText("Connection interrupted.");
   expect(window.location.pathname).toBe("/business");
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Save" }));
   await screen.findByRole("heading", { name: "Today workspace" });
   expect(window.location.search).toBe("?status=draft");
   expect(h.mutate).toHaveBeenCalledTimes(2);
@@ -283,7 +283,7 @@ test("an account switch cancels pending navigation, drops the old draft and igno
   const view = render(page());
   editCity();
   fireEvent.click(screen.getByRole("button", { name: "Open invoices" }));
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Save" }));
   await waitFor(() => expect(h.mutate).toHaveBeenCalledOnce());
   h.me = { ...h.me!, userId: "user-b" };
   view.rerender(page());

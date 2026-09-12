@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts",
+    "./evidence": "./src/evidence.ts",
     "./csv": "./src/csv.ts",
     "./team-work-page-suite": "./src/team-work-page.suite.tsx",
     "./query-error": "./src/query-error.tsx",

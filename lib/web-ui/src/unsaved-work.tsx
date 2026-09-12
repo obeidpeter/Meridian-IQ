@@ -1,78 +1,16 @@
 import {
-  createContext,
-  useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
-  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type ComponentType,
 } from "react";
-import { Save, Trash2 } from "lucide-react";
 import { ProtectedNavigation } from "./protected-navigation";
-import type { UnsavedWorkHandler } from "./unsaved-work-controller";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
-import { Button } from "./ui/button";
-
-const NavigationContext = createContext<ProtectedNavigation | null>(null);
-
-const queryChangeEvent = "valo:querychange";
-function subscribeQuery(listener: () => void) {
-  window.addEventListener("popstate", listener);
-  window.addEventListener(queryChangeEvent, listener);
-  return () => {
-    window.removeEventListener("popstate", listener);
-    window.removeEventListener(queryChangeEvent, listener);
-  };
-}
-
-// Existing URL-backed tabs/filters share the accepted router snapshot. Their
-// query must not jump to a blocked Back target while history is being restored.
-export function useNavigationQuery(): [
-  string,
-  (param: string, value: string | null) => void,
-] {
-  const navigation = useContext(NavigationContext);
-  const read = useCallback(
-    () =>
-      navigation ? navigation.getSnapshot().search : window.location.search,
-    [navigation],
-  );
-  const search = useSyncExternalStore(
-    navigation?.subscribe ?? subscribeQuery,
-    read,
-  );
-  const replace = useCallback(
-    (param: string, value: string | null) => {
-      const snapshot = navigation?.getSnapshot();
-      const url = new URL(
-        snapshot
-          ? snapshot.pathname + snapshot.search + snapshot.hash
-          : window.location.href,
-        window.location.origin,
-      );
-      if (value === null) url.searchParams.delete(param);
-      else url.searchParams.set(param, value);
-      if (navigation) {
-        navigation.navigate(url, { replace: true, state: snapshot?.state });
-      } else {
-        window.history.replaceState(window.history.state, "", url);
-        window.dispatchEvent(new Event(queryChangeEvent));
-      }
-    },
-    [navigation],
-  );
-  return [search, replace];
-}
-
+import { NavigationContext } from "./navigation-context";
+export { useNavigationQuery } from "./use-navigation-query";
+export { useUnsavedWork } from "./use-unsaved-work";
 export function UnsavedWorkProvider({ children }: { children: ReactNode }) {
   const [navigation] = useState(() => new ProtectedNavigation(window));
   useLayoutEffect(() => navigation.start(), [navigation]);
@@ -115,51 +53,6 @@ export function useProtectedHistoryState() {
     .state;
 }
 
-/** Register while mounted, not only while dirty: successful saves must be able
- * to clear dirty state without invalidating their pending navigation request. */
-export function useUnsavedWork({
-  dirty,
-  save,
-  discard,
-  disabledReason,
-}: {
-  dirty: boolean;
-  save: () => Promise<boolean>;
-  discard: () => boolean;
-  disabledReason?: string | null;
-}) {
-  const navigation = useContext(NavigationContext);
-  const current = useRef({ dirty, save, discard, disabledReason });
-  useLayoutEffect(() => {
-    current.current = { dirty, save, discard, disabledReason };
-  });
-  useLayoutEffect(() => {
-    const handler: UnsavedWorkHandler = {
-      isDirty: () => current.current.dirty,
-      save: async () => {
-        const saved = await current.current.save();
-        if (saved) current.current.dirty = false;
-        return saved;
-      },
-      discard: () => {
-        const discarded = current.current.discard();
-        if (discarded) current.current.dirty = false;
-        return discarded;
-      },
-      saveDisabledReason: () => current.current.disabledReason,
-    };
-    if (navigation) return navigation.work.register(handler);
-    // Standalone form consumers retain the existing tab-close safeguard.
-    const warn = (event: BeforeUnloadEvent) => {
-      if (!handler.isDirty()) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [navigation, disabledReason]);
-}
-
 function UnsavedWorkDialog({
   navigation,
 }: {
@@ -167,67 +60,37 @@ function UnsavedWorkDialog({
 }) {
   const work = navigation.work;
   const prompt = useSyncExternalStore(work.subscribe, work.getSnapshot);
-  const returnFocus = useRef<HTMLElement | null>(null);
-  return (
-    <AlertDialog
-      open={Boolean(prompt)}
-      onOpenChange={(open) => {
-        if (!open) work.stay();
-      }}
-    >
-      <AlertDialogContent
-        className="w-[calc(100%-2rem)]"
-        onOpenAutoFocus={() => {
-          returnFocus.current =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : null;
-        }}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          const invalid = document.querySelector<HTMLElement>(
-            '[aria-invalid="true"]',
-          );
-          if (invalid) invalid.focus();
-          else if (returnFocus.current?.isConnected)
-            returnFocus.current.focus();
-        }}
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>Save your changes?</AlertDialogTitle>
-          <AlertDialogDescription>
-            You have unsaved changes. Save them before leaving, discard them, or
-            stay on this page.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {prompt?.error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {prompt.error}
-          </p>
-        ) : null}
-        <p role="status" className="text-sm text-muted-foreground">
-          {prompt?.busy ? "Saving changes..." : ""}
-        </p>
-        <AlertDialogFooter className="gap-2 sm:space-x-0">
-          <AlertDialogCancel onClick={work.stay}>Stay</AlertDialogCancel>
-          <Button
-            variant="outline"
-            disabled={prompt?.busy}
-            onClick={work.discard}
-          >
-            <Trash2 aria-hidden="true" />
-            Discard
-          </Button>
-          <Button
-            aria-disabled={prompt?.busy || undefined}
-            aria-busy={prompt?.busy || undefined}
-            onClick={() => void work.save()}
-          >
-            <Save aria-hidden="true" />
-            Save
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  const pending = Boolean(prompt);
+  const [Dialog, setDialog] = useState<ComponentType<{
+    navigation: ProtectedNavigation;
+  }> | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!pending || Dialog) return;
+    let active = true;
+    setFailed(false);
+    void import("./unsaved-work-dialog").then(
+      (module) => {
+        if (active) setDialog(() => module.UnsavedWorkDialog);
+      },
+      () => {
+        if (!active) return;
+        setFailed(true);
+        work.stay();
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [pending, Dialog, work]);
+  // Keep the loaded dialog mounted so Radix can restore focus when it closes.
+  if (Dialog) return <Dialog navigation={navigation} />;
+  return failed ? (
+    <p role="alert">
+      Unable to open the save prompt. Your changes are still here. Try
+      navigating again.
+    </p>
+  ) : pending ? (
+    <p role="status">Opening save prompt...</p>
+  ) : null;
 }

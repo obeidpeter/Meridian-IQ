@@ -88,7 +88,7 @@ test("protected tab replacements keep router search, state, other params and has
   expect(window.history.length).toBe(length);
 });
 
-test("a tab replacement cannot update local state ahead of a blocked navigation", () => {
+test("a tab replacement cannot update local state ahead of a blocked navigation", async () => {
   setSearch("?tab=money");
   const { result } = renderHook(
     () => {
@@ -104,6 +104,6 @@ test("a tab replacement cannot update local state ahead of a blocked navigation"
   act(() => result.current[1]("compliance"));
   expect(result.current[0]).toBe("money");
   expect(window.location.search).toBe("?tab=money");
-  fireEvent.click(screen.getByRole("button", { name: "Stay" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Stay" }));
   expect(result.current[0]).toBe("money");
 });

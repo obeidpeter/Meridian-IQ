@@ -14,6 +14,7 @@ import {
   createOperationRecoveryFetcher,
   operationSessionKey,
   SessionActivityCenter,
+  SessionOperationRecovery,
   useSessionOperations,
 } from "./session-operation-recovery";
 import { beginOperation } from "./operation-journal";
@@ -21,6 +22,26 @@ const me = { userId: "A", firmId: "firm-A", clientPartyId: "client-A" };
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+});
+
+test("the history trigger defers recovery until opened and restores focus after first load", async () => {
+  const request = vi.fn(async () => ({ operations: [] }));
+  render(
+    <SessionOperationRecovery me={me} request={request} onOpen={vi.fn()} />,
+  );
+  const trigger = screen.getByRole("button", { name: "Operation history" });
+  expect(request).not.toHaveBeenCalled();
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = screen.getByRole("dialog", { name: "Operation history" });
+  await screen.findByText("Server history checked");
+  expect(request).toHaveBeenCalledOnce();
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Close operation history" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(trigger);
 });
 
 test.each(["firmId", "userId", "clientPartyId"] as const)(

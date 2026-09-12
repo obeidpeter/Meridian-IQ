@@ -137,7 +137,8 @@ export {
 } from "./readiness";
 export { NavigationSection } from "./navigation-section";
 export { ValoMark } from "./valo-mark";
-export { EvidenceHub, type EvidenceHubProps } from "./evidence-hub";
+export { EvidenceHub } from "./evidence-lazy";
+export type { EvidenceHubProps } from "./evidence-hub";
 export { createEvidenceApi } from "./evidence-api";
 export type {
   EvidenceApi,
