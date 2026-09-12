@@ -1783,6 +1783,18 @@
     display: none;
   }
 }
+@media (max-width: 359px) and (max-height: 700px) {
+  .editorial-hero-actions {
+    column-gap: 4px;
+  }
+  .editorial-hero-actions .editorial-button {
+    padding-inline: 8px;
+    gap: 4px;
+  }
+  .editorial-hero-actions .editorial-text-link {
+    gap: 4px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .valo-editorial *,
   .valo-editorial *::before,
