@@ -9,13 +9,15 @@ navigation events, analytics or local storage. Returning to Today resumes from
 the latest supplied record proofs; opening a step never completes it.
 
 Invoice steps are ordered as access, business details, customer, draft,
-validation and recorded evidence, followed by other workspace setup. Only steps
+validation, submission consent, internal approval, live service configuration,
+submission, live acceptance and recorded evidence. Only steps
 returned by the server appear. Role, capability, feature and client-scope gates
 remain authoritative on the server. Buyer and operator setup retain their own
 actions; roles with no applicable setup do not receive invented invoice steps.
 
-The recommendation skips steps with outstanding returned prerequisites. Waiting
-steps remain openable so an existing form can resolve their requirements. Access
+The recommendation skips steps with outstanding returned prerequisites or a
+server-supplied `blockedReason`. Waiting steps remain openable unless explicitly
+blocked, so an existing form can resolve their requirements. Access
 recommendations, consent decisions, ERP connections, bank statements and work
 items are not hard prerequisites to preparing or validating an invoice.
 
@@ -46,11 +48,24 @@ that step is present. Draft waits for returned client/customer steps. Validation
 waits for returned business, customer and draft prerequisites. Evidence waits
 only for a persisted invoice, not validation or provider submission.
 
-Submission is not currently included as an onboarding action: transport
-configuration alone does not establish invoice-specific consent, approval and
-submission readiness. No live provider or ERP connection is required to complete
-draft validation and recorded-history steps. Provider setup remains separately
-feature- and role-gated; saved configuration is not proof of a successful test.
+Submission guidance reads current invoice-specific consent, the submitter's
+capability, the firm's invoice feature flag and its existing independent-approval
+policy. A self-approval, revoked approval or approval of older invoice content
+does not satisfy a required second review. A declined consent choice still
+completes access setup, but does not grant submission consent.
+
+Service configuration is explicitly not proof of connectivity or successful
+submission. It is complete only for a configured, non-simulator transport whose
+canonical environment is `live`. A recorded submitted state means processing,
+not tax-authority acceptance. Acceptance requires this scoped invoice to be in
+an accepted state with its own `live` stamp, non-simulator provider and nonempty
+IRN, CSID and signed-artifact reference. Sandbox, missing and incomplete records
+never complete acceptance, even after the configured service changes.
+
+These are advisory reads, not authorization tokens. Opening Today never calls a
+provider or submits an invoice. The existing locked submission command rechecks
+permission, consent, approval and current state. No live provider or ERP
+connection is required to prepare drafts, validate them or retain their history.
 
 ## Business Details
 
@@ -66,7 +81,8 @@ only from `me.clientPartyId`, never the URL or a form field, and it does not
 require `party.write`. The API still enforces authorization and party scope on
 every request. Merged records cannot be edited through these pages.
 
-The shared `BusinessDetailsForm` contains no API, session or router dependency.
+The shared `BusinessDetailsForm` makes no API or session calls; it registers its
+save/discard handlers with the shared unsaved-work provider when available.
 It edits only legal name, TIN, CAC number, street, city and country code.
 PATCH requests contain only normalized, locally changed fields; clearing an
 optional value sends null. TIN/CAC checks mirror the server's structural format
@@ -88,10 +104,25 @@ newer saved values appear beside the unsaved ones for the user to reconcile.
 Sending changed fields still keeps unrelated values untouched. The guard is a
 refusal, not a merge: the user decides what to keep after a conflict.
 
-App pages install a `beforeunload` warning only while dirty and remove it after
-save, discard or unmount. No persisted business-PII draft is created. **In-app
-navigation does not preserve unsaved business details** and is not intercepted
-by custom router infrastructure.
+Console and SME wrap their Wouter routers with `UnsavedWorkProvider` and its
+supported location/search hooks. Leaving an edited business form through an
+in-app link or owned Back/Forward entry opens **Save / Discard / Stay**. Save
+continues only after a successful response; validation, network errors and
+conflicts retain the draft. Discard is explicit; Stay keeps the current page.
+An in-flight save cannot be duplicated. Scope changes and unmounts invalidate
+pending navigation. URL-backed tabs and filters use the same accepted snapshot.
+
+The router indexes owned history entries without patching global history
+methods. History contains only navigation metadata, never form values. A
+document exit or an entry from before the router was mounted uses the browser's
+native unload warning, not the custom dialog. A warning does not recover a
+closed or crashed tab, and browsers may suppress it without prior interaction.
+For an unknown same-document history entry, dismissing the native warning keeps
+the form mounted but may leave the older URL visible until Forward restores the
+owned entry. Other forms are not implicitly protected: they must deliberately
+register compatible save/discard handlers.
+No business-PII draft is persisted or sent to telemetry. Standalone form users
+without the provider retain the native unload warning.
 
 ## Accessibility and Verification
 
@@ -104,7 +135,8 @@ completion refers only to available setup steps, never fiscal compliance.
 The editor associates labels and validation errors with each input, focuses the
 first invalid field on submit and clears the summary when all errors are fixed.
 Save errors and outcomes are announced. Existing shared classes and app design
-tokens provide styling; neither workflow uses tours or new modal infrastructure.
+tokens provide styling. The leave-page prompt uses the existing accessible alert
+dialog with focus restoration, error announcements and explicit decision buttons.
 
 Focused Vitest coverage:
 
@@ -116,6 +148,8 @@ Focused Vitest coverage:
   validation correction and record switching.
 - Each app's `src/pages/business-details.test.tsx`: permitted scope, API arguments,
   retries, cache refresh, merged/mismatched records and unload-listener cleanup.
+- Shared unsaved-work controller and protected-navigation tests cover duplicate
+  requests, failed saves, stale decisions, query synchronization and cleanup.
 
 `node --test lib/web-ui/src/first-invoice.browser.test.mjs` exercises the shared
 Today component without an API or database. It checks native keyboard activation,
@@ -128,6 +162,8 @@ the fixture shuts down its browser and loopback server.
 built Console and SME routes at 320/1440px in light/dark modes. It checks native
 keyboard use, validation correction, save-error retention, duplicate-submit
 protection, changed-fields-only PATCH requests, load retry, axe and reflow.
+It also covers Save / Discard / Stay, real router links, Back/Forward, failed
+navigation saves and optimistic-concurrency conflicts.
 API responses are mocked, external requests are blocked, and SME scope is
 checked against a conflicting URL parameter. Build both apps before running it.
 Screenshots go under ignored `tmp/business-details/<timestamp>/`; its browser
@@ -138,3 +174,7 @@ Run the shared UI and both app unit suites, TypeScript, lint and the architectur
 gate after changes. `TodaySetupStepView` lives in neutral `today-types.ts` and is
 re-exported from `today.tsx` to preserve existing imports without a type-import
 cycle. API route tests separately cover persisted-proof and tenant-scope rules.
+The API's `submission-journey.test.ts` and database-backed
+`today.integration.test.ts` cover live/sandbox provenance, current consent and
+approval, and isolation between clients and firms. See
+[Invoice and Clerk workspaces](invoice-review-workflows.md) for the related UI.

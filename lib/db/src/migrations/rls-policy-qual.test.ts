@@ -342,6 +342,24 @@ const PINNED: Record<string, PinnedPolicy> = {
     qual: "5074b35259440c75",
     withCheck: "5074b35259440c75",
   },
+  "evidence_requests/meridian_tenant_isolation": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "5074b35259440c75",
+    withCheck: "5074b35259440c75",
+  },
+  "evidence_files/meridian_tenant_isolation": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "5074b35259440c75",
+    withCheck: "5074b35259440c75",
+  },
+  "evidence_events/meridian_tenant_isolation": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "5074b35259440c75",
+    withCheck: "5074b35259440c75",
+  },
   "filing_returns/meridian_tenant_isolation": {
     cmd: "ALL",
     roles: "public",

@@ -1,0 +1,93 @@
+import { useMemo } from "react";
+import { ActivityCenter } from "./operation-status";
+import {
+  useOperationJournal,
+  type OperationRecoveryClient,
+} from "./operation-journal";
+import { webSession } from "./session-coordinator";
+import { RouteErrorBoundary } from "./route-recovery";
+
+interface OperationIdentity {
+  userId: string;
+  firmId?: string | null;
+  clientPartyId?: string | null;
+}
+type RequestOperations = (
+  path: string,
+  options: RequestInit & { responseType: "json" },
+) => Promise<unknown>;
+export function operationSessionKey(
+  me: OperationIdentity | undefined,
+): string | null {
+  return me
+    ? `meridianiq:operations:${me.firmId ?? null}:${me.userId}:${me.clientPartyId ?? null}`
+    : null;
+}
+export function createOperationRecoveryFetcher(
+  me: OperationIdentity,
+  request: RequestOperations,
+): OperationRecoveryClient["fetcher"] {
+  const epoch = webSession.getGeneration();
+  return async (path, options) => {
+    const current = () =>
+      !webSession.isEnding() &&
+      epoch === webSession.getGeneration() &&
+      !options.signal.aborted;
+    if (!current()) throw new DOMException("Session changed", "AbortError");
+    if (!/^\/api\/operations(?:\/lookup|\/[0-9a-f-]{36})?(?:\?|$)/i.test(path))
+      throw new Error("Invalid operation recovery path");
+    const result = await request(path, {
+      ...options,
+      credentials: "same-origin",
+      responseType: "json",
+      headers: me.firmId ? { "x-firm-id": me.firmId } : {},
+    });
+    if (!current()) throw new DOMException("Session changed", "AbortError");
+    return result;
+  };
+}
+export interface RecoveryProps {
+  me: OperationIdentity | undefined;
+  request: RequestOperations;
+  onOpen: (route: string) => void;
+}
+export function useSessionOperations(
+  me: OperationIdentity | undefined,
+  request: RequestOperations,
+) {
+  const userId = me?.userId;
+  const firmId = me?.firmId;
+  const clientPartyId = me?.clientPartyId;
+  const fetcher = useMemo(
+    () =>
+      userId
+        ? createOperationRecoveryFetcher(
+            { userId, firmId, clientPartyId },
+            request,
+          )
+        : undefined,
+    [userId, firmId, clientPartyId, request],
+  );
+  return useOperationJournal(
+    operationSessionKey(me),
+    fetcher ? { fetcher } : undefined,
+  );
+}
+export function SessionActivityCenter({ me, request, onOpen }: RecoveryProps) {
+  const key = operationSessionKey(me);
+  const journal = useSessionOperations(me, request);
+  return (
+    <RouteErrorBoundary key={key}>
+      <ActivityCenter
+        key={key}
+        operations={journal.operations}
+        onOpen={onOpen}
+        onDismiss={journal.dismiss}
+        onClearCompleted={journal.clearCompleted}
+        syncState={journal.syncState}
+        onRefresh={journal.refresh}
+        onRecover={journal.recover}
+      />
+    </RouteErrorBoundary>
+  );
+}

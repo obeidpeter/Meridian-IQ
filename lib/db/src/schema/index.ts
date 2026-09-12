@@ -28,6 +28,7 @@ export * from "./onboarding.ts";
 export * from "./memory.ts";
 export * from "./assignments.ts";
 export * from "./work.ts";
+export * from "./evidence.ts";
 export * from "./invoice-room.ts";
 export * from "./operations.ts";
 export * from "./invoice-drafts.ts";

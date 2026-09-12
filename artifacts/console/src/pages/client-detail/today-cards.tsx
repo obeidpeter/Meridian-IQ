@@ -2,10 +2,15 @@ import type {
   ClientRisk,
   ComplianceDeadline,
   ConsoleInvoice,
+  Me,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InvoiceStatusLight } from "@/components/status-light";
 import { CalendarClock, FileText } from "lucide-react";
+import {
+  ClientInvoiceSelection,
+  useClientInvoiceSelection,
+} from "./invoice-selection";
 import {
   formatNaira,
   formatDate,
@@ -19,11 +24,21 @@ import {
 export function ClientInvoicesCard({
   client,
   invoices,
+  clientPartyId,
+  me,
 }: {
   client: ClientRisk;
   invoices: ConsoleInvoice[];
+  clientPartyId: string;
+  me: Me | undefined;
 }) {
   const failingIds = new Set(client.failingInvoiceIds);
+  const selection = useClientInvoiceSelection({
+    clientPartyId,
+    client,
+    invoices,
+    me,
+  });
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
@@ -35,6 +50,11 @@ export function ClientInvoicesCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="px-0 sm:px-6">
+        <ClientInvoiceSelection
+          selection={selection}
+          clientPartyId={clientPartyId}
+          clientName={client.legalName}
+        />
         {invoices.length === 0 ? (
           <p className="px-6 text-sm text-muted-foreground sm:px-0">
             No invoices yet.
@@ -63,7 +83,15 @@ export function ClientInvoicesCard({
                       className={failing ? "bg-destructive/5" : ""}
                     >
                       <td className="px-3 py-2.5">
-                        <p className="font-medium">{inv.invoiceNumber}</p>
+                        <button
+                          type="button"
+                          id={`open-client-invoice-${inv.id}`}
+                          className="min-h-11 rounded-sm text-left font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]"
+                          onClick={() => selection.setInvoiceId(inv.id)}
+                          aria-haspopup="dialog"
+                        >
+                          {inv.invoiceNumber}
+                        </button>
                         {failing && (
                           <span
                             className="text-[11px] font-bold text-destructive"

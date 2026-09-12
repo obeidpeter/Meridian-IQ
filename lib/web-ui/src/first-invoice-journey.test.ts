@@ -109,3 +109,33 @@ test("unknown roles and future steps keep the server order and destinations", ()
     setup.map((item) => item.href),
   );
 });
+
+test("submission waits on current consent, approval and service, without blocking evidence", () => {
+  const journey = firstInvoiceJourney([
+    step("first_invoice", true),
+    step("invoice_validation", true),
+    step("invoice_consent"),
+    step("invoice_approval"),
+    {
+      ...step("invoice_service"),
+      blockedReason: "Only test processing is available.",
+    },
+    step("invoice_submission"),
+    step("invoice_acknowledgement"),
+    step("invoice_evidence"),
+  ]);
+  expect(journey.next?.id).toBe("invoice_consent");
+  expect(
+    journey.steps
+      .find((item) => item.id === "invoice_submission")
+      ?.waitingFor.map((item) => item.id),
+  ).toEqual(["invoice_consent", "invoice_approval", "invoice_service"]);
+  expect(
+    journey.steps
+      .find((item) => item.id === "invoice_acknowledgement")
+      ?.waitingFor.map((item) => item.id),
+  ).toEqual(["invoice_submission"]);
+  expect(
+    journey.steps.find((item) => item.id === "invoice_evidence")?.waitingFor,
+  ).toEqual([]);
+});

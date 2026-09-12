@@ -1,6 +1,15 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { RotateCcw, Save } from "lucide-react";
 import { LiveStatus } from "./live-status";
+import { useUnsavedWork } from "./unsaved-work";
 
 export interface BusinessDetailsRecord {
   id: string;
@@ -22,6 +31,38 @@ export type BusinessDetailsPatch = Partial<
    *  else answers 409 instead of being overwritten. */
   expectedUpdatedAt?: string;
 };
+
+export function useBusinessDetailsSaveScope(
+  account: { userId: string; firmId?: string | null } | undefined,
+  partyId: string,
+  canEdit: boolean,
+  permissionError: unknown,
+  party: { mergedIntoId?: string | null } | undefined,
+) {
+  const key = JSON.stringify([account?.userId, account?.firmId, partyId]);
+  const scope = JSON.stringify([
+    key,
+    canEdit,
+    Boolean(permissionError),
+    party?.mergedIntoId,
+  ]);
+  const token = useMemo(() => ({}), [scope]);
+  const active = useRef<object | null>(token);
+  useLayoutEffect(() => {
+    active.current = token;
+    return () => {
+      active.current = null;
+    };
+  }, [token]);
+  const isCurrent = () => active.current === token;
+  const assertCurrent = () => {
+    if (!isCurrent())
+      throw new Error(
+        "Business access changed. Review this account before saving again.",
+      );
+  };
+  return { key, isCurrent, assertCurrent };
+}
 
 const fields = [
   {
@@ -118,6 +159,7 @@ function BusinessDetailsEditor({
   const id = useId();
   const [observedParty, setObservedParty] = useState(party);
   const [latestSaved, setLatestSaved] = useState(() => valuesFor(party));
+  const [latestStamp, setLatestStamp] = useState(party.updatedAt);
   const [baseline, setBaseline] = useState(() => valuesFor(party));
   // The stamp travels with the baseline, never with the latest refetch: a
   // newer record that arrived while the user was typing is exactly the case
@@ -129,10 +171,21 @@ function BusinessDetailsEditor({
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const savePromise = useRef<Promise<boolean> | null>(null);
+  const lifetime = useRef(0);
   const inputs = useRef<Partial<Record<Field, HTMLInputElement | null>>>({});
   const dirty = !sameValues(baseline, values);
   const patch = changedFields(baseline, values);
   const newerDetails = dirty && !sameValues(latestSaved, baseline);
+
+  useLayoutEffect(() => {
+    lifetime.current += 1;
+    return () => {
+      lifetime.current += 1;
+    };
+  }, [disabledReason]);
+
+  useUnsavedWork({ dirty, save, discard, disabledReason });
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -144,6 +197,7 @@ function BusinessDetailsEditor({
   if (observedParty !== party) {
     setObservedParty(party);
     setLatestSaved(valuesFor(party));
+    setLatestStamp(party.updatedAt);
     if (!dirty && !savingRef.current) {
       setBaseline(valuesFor(party));
       setValues(valuesFor(party));
@@ -151,25 +205,57 @@ function BusinessDetailsEditor({
     }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (savingRef.current || disabledReason || !Object.keys(patch).length)
-      return;
+    void save();
+  }
+
+  function discard() {
+    if (savingRef.current) return false;
+    setBaseline(latestSaved);
+    setValues(latestSaved);
+    setBaselineStamp(latestStamp);
+    setErrors({});
+    setSaveError(null);
+    setSaved(false);
+    return true;
+  }
+
+  function save(): Promise<boolean> {
+    if (savePromise.current) return savePromise.current;
+    if (disabledReason) return Promise.resolve(false);
+    // Whitespace/case-only edits have no server patch, but are safe to leave
+    // only after explicitly normalizing them back to the saved baseline.
+    if (!Object.keys(patch).length) {
+      setValues(baseline);
+      return Promise.resolve(true);
+    }
     const nextErrors = validate(patch);
     setErrors(nextErrors);
     const invalid = fields.find(({ key }) => nextErrors[key]);
     if (invalid) {
       inputs.current[invalid.key]?.focus();
-      return;
+      return Promise.resolve(false);
     }
     savingRef.current = true;
     setSaving(true);
     setSaveError(null);
     setSaved(false);
+    const version = lifetime.current;
+    const promise = persist(version);
+    savePromise.current = promise;
+    void promise.then(() => {
+      if (savePromise.current === promise) savePromise.current = null;
+    });
+    return promise;
+  }
+
+  async function persist(version: number): Promise<boolean> {
     try {
       const updated = await onSave(
         baselineStamp ? { ...patch, expectedUpdatedAt: baselineStamp } : patch,
       );
+      if (version !== lifetime.current) return false;
       if (updated.id !== party.id)
         throw new Error(
           "The saved business record did not match this business.",
@@ -177,14 +263,18 @@ function BusinessDetailsEditor({
       setBaseline(valuesFor(updated));
       setValues(valuesFor(updated));
       setLatestSaved(valuesFor(updated));
+      setLatestStamp(updated.updatedAt);
       setBaselineStamp(updated.updatedAt);
       setSaved(true);
+      return true;
     } catch (error) {
+      if (version !== lifetime.current) return false;
       setSaveError(
         error instanceof Error
           ? error.message
           : "Business details could not be saved. Please try again.",
       );
+      return false;
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -323,12 +413,7 @@ function BusinessDetailsEditor({
           className="mi-today__text-action"
           onClick={() => {
             if (!dirty || saving) return;
-            setBaseline(latestSaved);
-            setValues(latestSaved);
-            setBaselineStamp(party.updatedAt);
-            setErrors({});
-            setSaveError(null);
-            setSaved(false);
+            discard();
           }}
         >
           <RotateCcw aria-hidden="true" />

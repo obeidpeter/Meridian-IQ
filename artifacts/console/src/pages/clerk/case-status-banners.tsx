@@ -104,7 +104,14 @@ export function CaseStatusBanners({
             </p>
             <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-300">
               {selected.preflight.map((issue, i) => (
-                <li key={`${issue.field}-${i}`}>{issue.message}</li>
+                <li
+                  key={`${issue.field}-${i}`}
+                  tabIndex={-1}
+                  data-review-field={issue.field}
+                  className="[overflow-wrap:anywhere] focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {issue.message}
+                </li>
               ))}
             </ul>
           </div>

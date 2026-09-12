@@ -68,6 +68,9 @@ test("every tenant-keyed table has an RLS policy or a documented exemption", asy
       "clerk_reservations",
       "import_runs",
       "import_run_chunks",
+      "evidence_requests",
+      "evidence_files",
+      "evidence_events",
     ]) {
       const row = rows.find((entry) => entry.table_name === table);
       assert.ok(

@@ -148,6 +148,13 @@ const NAV_GROUPS: NavGroup[] = [
         capability: "work.read",
       },
       {
+        href: "/evidence",
+        label: "Evidence Hub",
+        icon: FileText,
+        capability: "evidence.read",
+        feature: "evidence_hub",
+      },
+      {
         href: "/pipeline",
         label: "Onboarding",
         icon: GitBranch,

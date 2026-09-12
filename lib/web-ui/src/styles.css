@@ -384,6 +384,12 @@
   cursor: pointer;
 }
 
+.mi-segmented__item,
+.mi-segmented__item > span {
+  /* Keep selection colors atomic even when a global motion rule sets a duration. */
+  transition-property: none;
+}
+
 .mi-segmented__item[aria-pressed="true"] {
   background: var(--mi-ink);
   color: var(--mi-paper);

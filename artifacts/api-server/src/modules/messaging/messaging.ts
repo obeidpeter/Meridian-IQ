@@ -13,13 +13,50 @@ import { DomainError } from "../errors";
 // API only accepts a template key + opaque entity pointer; a registry defines
 // which templates exist and which channels they may use.
 
+export type OutboundMessageChannel = Exclude<MessageChannel, "in_app">;
+
 export interface MessageTemplate {
   key: string;
-  channels: MessageChannel[];
+  channels: OutboundMessageChannel[];
   description: string;
 }
 
 export const TEMPLATES: Record<string, MessageTemplate> = {
+  document_request_created: {
+    key: "document_request_created",
+    channels: [],
+    description: "A document has been requested.",
+  },
+  document_request_uploaded: {
+    key: "document_request_uploaded",
+    channels: [],
+    description: "A document is ready for review.",
+  },
+  document_request_needs_changes: {
+    key: "document_request_needs_changes",
+    channels: [],
+    description: "A requested document needs changes.",
+  },
+  document_request_accepted: {
+    key: "document_request_accepted",
+    channels: [],
+    description: "A requested document has been accepted.",
+  },
+  document_request_cancelled: {
+    key: "document_request_cancelled",
+    channels: [],
+    description: "A document request has been cancelled.",
+  },
+  document_request_due: {
+    key: "document_request_due",
+    channels: [],
+    description: "A document request is due.",
+  },
+  document_request_overdue: {
+    key: "document_request_overdue",
+    channels: [],
+    description: "A document request is overdue.",
+  },
   deadline_reminder: {
     key: "deadline_reminder",
     channels: ["whatsapp", "sms", "email", "push"],
@@ -167,15 +204,16 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
 // Channel failover order when a provider fails. Push is terminal: if the Expo
 // push provider rejects, there is no cheaper channel to fall back to that the
 // user has not already opted into separately.
-const FAILOVER: Record<MessageChannel, MessageChannel | null> = {
-  whatsapp: "sms",
-  sms: "email",
-  email: null,
-  push: null,
-};
+const FAILOVER: Record<OutboundMessageChannel, OutboundMessageChannel | null> =
+  {
+    whatsapp: "sms",
+    sms: "email",
+    email: null,
+    push: null,
+  };
 
 export interface SendInput {
-  channel: MessageChannel;
+  channel: OutboundMessageChannel;
   recipientRef: string; // opaque pointer (user id / hashed contact), never raw PII
   // The REAL recipient identity for the ledger row (exactly one per rail):
   // party-scoped alert rails set recipientPartyId, staff-notification rails
@@ -228,7 +266,7 @@ export interface MessageTransportResult {
 }
 
 export type MessageTransport = (
-  channel: MessageChannel,
+  channel: OutboundMessageChannel,
   recipientRef: string,
   templateKey: string,
   entityRef: string | null,
@@ -364,6 +402,15 @@ export function resetMessageTransport(): void {
 }
 
 export async function sendMessage(input: SendInput): Promise<Message> {
+  // Inbox entries are written by scoped domain transactions, never by relays
+  // or the public outbound sender, including untyped callers of this function.
+  if (!["whatsapp", "sms", "email", "push"].includes(input.channel)) {
+    throw new DomainError(
+      "CHANNEL_NOT_ALLOWED",
+      "Channel is not available for outbound delivery",
+      400,
+    );
+  }
   const template = TEMPLATES[input.templateKey];
   if (!template) {
     throw new DomainError("UNKNOWN_TEMPLATE", "No such message template", 400);
@@ -378,8 +425,8 @@ export async function sendMessage(input: SendInput): Promise<Message> {
   assertPointerOnly(input.recipientRef, "recipientRef");
   if (input.entityId) assertPointerOnly(input.entityId, "entityId");
 
-  let channel: MessageChannel | null = input.channel;
-  let failoverFrom: MessageChannel | null = null;
+  let channel: OutboundMessageChannel | null = input.channel;
+  let failoverFrom: OutboundMessageChannel | null = null;
 
   while (channel) {
     // A channel the template does not permit is SKIPPED, not terminal: the

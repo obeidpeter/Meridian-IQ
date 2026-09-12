@@ -1,4 +1,11 @@
-import { webSession, lazyRoute, SessionBoundary } from "@workspace/web-ui";
+import {
+  webSession,
+  lazyRoute,
+  SessionBoundary,
+  UnsavedWorkProvider,
+  useProtectedLocation,
+  useProtectedSearch,
+} from "@workspace/web-ui";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import {
   MutationCache,
@@ -17,6 +24,7 @@ const Dashboard = lazyRoute(() =>
   import("@/pages/dashboard").then((module) => ({ default: module.Dashboard })),
 );
 const BusinessDetails = lazyRoute(() => import("@/pages/business-details"));
+const EvidencePage = lazyRoute(() => import("@/pages/evidence"));
 const Invoices = lazyRoute(() =>
   import("@/pages/invoices").then((module) => ({ default: module.Invoices })),
 );
@@ -137,6 +145,7 @@ function Router() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/business" component={BusinessDetails} />
         <Route path="/work" component={WorkPage} />
+        <Route path="/evidence" component={EvidencePage} />
         <Route path="/month-end" component={MonthEnd} />
         <Route path="/collections" component={Collections} />
         <Route path="/analytics" component={Analytics} />
@@ -175,15 +184,21 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <SessionBoundary client={queryClient}>
         <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <RequireSession>
-              {/* CORE-03 first landing (D15): a business decides on its
+          <UnsavedWorkProvider>
+            <WouterRouter
+              base={import.meta.env.BASE_URL.replace(/\/$/, "")}
+              hook={useProtectedLocation}
+              searchHook={useProtectedSearch}
+            >
+              <RequireSession>
+                {/* CORE-03 first landing (D15): a business decides on its
                 consent layers once, before the workspace ever renders. */}
-              <RequireConsentCapture>
-                <Router />
-              </RequireConsentCapture>
-            </RequireSession>
-          </WouterRouter>
+                <RequireConsentCapture>
+                  <Router />
+                </RequireConsentCapture>
+              </RequireSession>
+            </WouterRouter>
+          </UnsavedWorkProvider>
           <Toaster />
         </TooltipProvider>
       </SessionBoundary>

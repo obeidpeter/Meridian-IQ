@@ -57,6 +57,7 @@ import whtRouter from "./wht";
 import onboardingRouter from "./onboarding";
 import workspaceRouter from "./workspace";
 import workRouter from "./work";
+import evidenceRouter from "./evidence";
 import invoiceRoomRouter from "./invoice-room";
 import creditRouter from "./credit";
 import operationsRouter from "./operations";
@@ -97,6 +98,7 @@ import "../modules/clerk/memory";
 import "../modules/clerk/retrieval-eval";
 import "../modules/messaging/retention";
 import "../modules/invoice-room/register";
+import "../modules/evidence/register";
 
 const router: IRouter = Router();
 
@@ -146,6 +148,7 @@ router.use(whtRouter);
 router.use(onboardingRouter);
 router.use(workspaceRouter);
 router.use(workRouter);
+router.use(evidenceRouter);
 router.use(invoiceRoomRouter);
 router.use(creditRouter);
 router.use(operationsRouter);

@@ -15,7 +15,13 @@
 //  - line items with the naira equivalent for a foreign-currency invoice.
 //  - "New from this invoice" asks before replacing a stored draft with work.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { renderWithClient } from "../test-utils";
 import type {
   ErrorCatalogueEntry,
@@ -47,6 +53,8 @@ const harness = vi.hoisted(() => ({
   stamp: undefined as unknown,
   catalogue: undefined as unknown,
   me: undefined as unknown,
+  queries: {} as Record<string, Record<string, unknown>>,
+  pending: "",
   validateResult: { ok: true, errors: [] } as unknown,
   // Every mutation call in the order it was made, with its variables.
   calls: [] as Array<{ name: string; vars: unknown }>,
@@ -61,6 +69,8 @@ const harness = vi.hoisted(() => ({
     this.stamp = undefined;
     this.catalogue = undefined;
     this.me = undefined;
+    this.queries = {};
+    this.pending = "";
     this.validateResult = { ok: true, errors: [] };
     this.calls = [];
   },
@@ -88,9 +98,15 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     mutateAsync: vi.fn(),
     reset: vi.fn(),
   });
+  const query = (name: string, data: unknown = []) => ({
+    ...emptyQuery(),
+    data,
+    isSuccess: true,
+    ...harness.queries[name],
+  });
   const recording = (name: string, result: () => unknown) => () => ({
     data: undefined,
-    isPending: false,
+    isPending: harness.pending === name,
     isError: false,
     mutate: (vars: unknown) => {
       harness.calls.push({ name, vars });
@@ -111,13 +127,13 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
       refetch: harness.invoice.refetch,
     }),
     useGetParty: () => ({ data: harness.party }),
-    useListSubmissionAttempts: () => ({ data: harness.attempts }),
-    useGetInvoiceStamp: () => ({ data: harness.stamp }),
+    useListSubmissionAttempts: () => query("attempts", harness.attempts),
+    useGetInvoiceStamp: () => query("stamp", harness.stamp),
     useGetErrorCatalogueEntry: () => ({ data: harness.catalogue }),
     useGetMe: () => ({ data: harness.me }),
-    useListEscalations: emptyQuery,
-    useListConfirmations: emptyQuery,
-    useListSettlements: emptyQuery,
+    useListEscalations: () => query("escalations"),
+    useListConfirmations: () => query("confirmations"),
+    useListSettlements: () => query("settlements"),
     useGetInvoiceStatusLight: emptyQuery,
     useGetInvoiceRejectionRisk: emptyQuery,
     useValidateInvoice: recording("validate", () => harness.validateResult),
@@ -129,7 +145,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     useCreditNoteInvoice: idleMutation,
     useCreateConfirmation: idleMutation,
     // The cards the shell mounts (ApprovalsCard, PaymentReminderCard).
-    useListInvoiceApprovals: emptyQuery,
+    useListInvoiceApprovals: () => query("approvals"),
     useApproveInvoice: idleMutation,
     useDraftPaymentChaser: idleMutation,
     useRecordChaseReminder: idleMutation,
@@ -149,7 +165,13 @@ function me(over: Partial<Me> = {}): Me {
     firmId: "f-1",
     clientPartyId: "cp-1",
     buyerPartyId: null,
-    capabilities: ["invoice.read", "clerk.capture"],
+    capabilities: [
+      "invoice.read",
+      "invoice.write",
+      "invoice.submit",
+      "confirmation.write",
+      "clerk.capture",
+    ],
     features: ["invoice_lifecycle"],
     ...over,
   };
@@ -416,12 +438,44 @@ describe("stamped invoice", () => {
     harness.stamp = stamp();
   });
 
-  test("the FIRS stamp card shows the IRN and CSID", () => {
+  test("the neutral stamp record shows the IRN and CSID without claiming live evidence", () => {
     renderWithClient(<InvoiceDetail />);
-    expect(screen.getByText(/FIRS\s+stamped/)).toBeTruthy();
-    expect(screen.getByText("IRN-2026-0001")).toBeTruthy();
-    expect(screen.getByText("CSID-ABCDEF")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Documents" }));
+    const documents = within(screen.getByRole("tabpanel"));
+    expect(screen.queryByText(/FIRS\s+stamped/)).toBeNull();
+    expect(documents.getByText("Stamp provenance unverified")).toBeTruthy();
+    expect(documents.getByText("IRN-2026-0001")).toBeTruthy();
+    expect(documents.getByText("CSID-ABCDEF")).toBeTruthy();
   });
+
+  test.each([
+    {
+      environment: "live",
+      provider: "accredited-provider",
+      label: "Live stamp evidence",
+    },
+    {
+      environment: "sandbox",
+      provider: "simulator",
+      label: "Sandbox / simulated stamp",
+    },
+    {
+      environment: "production",
+      provider: "accredited-provider",
+      label: "Stamp provenance unverified",
+    },
+  ])(
+    "Documents distinguishes $environment provenance",
+    ({ environment, provider, label }) => {
+      harness.stamp = { ...stamp(), environment, provider };
+      renderWithClient(<InvoiceDetail />);
+      fireEvent.click(screen.getByRole("tab", { name: "Documents" }));
+      const documents = within(screen.getByRole("tabpanel"));
+      expect(documents.getByText(label)).toBeTruthy();
+      expect(documents.getByText("IRN-2026-0001")).toBeTruthy();
+      expect(documents.getByText("CSID-ABCDEF")).toBeTruthy();
+    },
+  );
 
   test("the action row offers a credit note and cancellation, no submit or edit", () => {
     renderWithClient(<InvoiceDetail />);
@@ -506,5 +560,237 @@ describe("New from this invoice", () => {
     expect(loadInvoiceDraft(key).draft.buyerPartyId).toBe("buy-9");
     fireEvent.click(screen.getByTestId("button-confirm-new-from-invoice"));
     expect(loadInvoiceDraft(key).draft.buyerPartyId).toBe("buy-1");
+  });
+});
+
+describe("invoice workspace", () => {
+  test("read-only drafts stay drafts and offer review without mutation controls", () => {
+    harness.invoice.data = detail();
+    harness.me = me({ capabilities: ["invoice.read"] });
+    renderWithClient(<InvoiceDetail />);
+    expect(
+      screen.getByRole("region", { name: "Next action" }).textContent,
+    ).toContain("Submission is not available for this account");
+    expect(
+      screen.getByRole("region", { name: "Next action" }).textContent,
+    ).not.toContain("invoice is closed");
+    expect(
+      screen.queryByRole("button", { name: "Submit for stamping" }),
+    ).toBeNull();
+    expect(screen.queryByTestId("button-edit-invoice")).toBeNull();
+    expect(screen.queryByTestId("button-cancel-invoice")).toBeNull();
+  });
+  test("tabs expose one panel, support roving keyboard focus and retain edits", () => {
+    harness.invoice.data = detail();
+    renderWithClient(<InvoiceDetail />);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Overview",
+      "Documents",
+      "Approvals",
+      "Payments",
+      "History",
+    ]);
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+    fireEvent.click(screen.getByTestId("button-edit-invoice"));
+    const number = screen.getByDisplayValue("INV-001");
+    fireEvent.change(number, { target: { value: "INV-unsaved" } });
+    fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(
+      tabs[1].id,
+    );
+    expect(
+      screen.queryByRole("textbox", { name: /Invoice number/i }),
+    ).toBeNull();
+    fireEvent.keyDown(tabs[1], { key: "End" });
+    expect(document.activeElement).toBe(tabs[4]);
+    fireEvent.keyDown(tabs[4], { key: "ArrowRight" });
+    expect(document.activeElement).toBe(tabs[0]);
+    expect(screen.getByDisplayValue("INV-unsaved")).toBe(number);
+    expect(screen.getByTestId("button-next-action").textContent).toContain(
+      "Review changes",
+    );
+    expect(harness.calls).toEqual([]);
+  });
+
+  test("a document deep link opens the requested tab and preserves a safe filtered return URL", () => {
+    harness.invoice.data = detail();
+    const back =
+      "/invoices?q=Ada+%26+Co&filter=failed&minAmount=100&advanced=1";
+    window.history.replaceState(
+      null,
+      "",
+      `/invoices/inv-1?tab=documents&${new URLSearchParams({ returnTo: back })}`,
+    );
+    renderWithClient(<InvoiceDetail />);
+    expect(
+      screen
+        .getByRole("tab", { name: "Documents" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("link", { name: "Back to vault" }).getAttribute("href"),
+    ).toBe(back);
+    fireEvent.click(screen.getByRole("tab", { name: "History" }));
+    expect(new URLSearchParams(window.location.search).get("returnTo")).toBe(
+      back,
+    );
+  });
+
+  test("pending submission offers history, never another transmission", () => {
+    harness.invoice.data = detail({ status: "submitted" });
+    harness.attempts = [attempt({ status: "pending", errorCode: null })];
+    renderWithClient(<InvoiceDetail />);
+    expect(screen.getByTestId("button-next-action").textContent).toContain(
+      "View submission history",
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: /Submit for stamping|Retry transmission/,
+      }),
+    ).toBeNull();
+    fireEvent.click(screen.getByTestId("button-next-action"));
+    expect(screen.getByRole("tabpanel").textContent).toContain("Attempt 1");
+    expect(harness.calls).toEqual([]);
+  });
+
+  test("the primary action stays disabled while submission is pending", () => {
+    harness.invoice.data = detail();
+    harness.pending = "submit";
+    renderWithClient(<InvoiceDetail />);
+    const action = screen.getByTestId(
+      "button-next-action",
+    ) as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    fireEvent.click(action);
+    expect(harness.calls).toEqual([]);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  test("non-retriable rejection prioritizes correction without removing guarded retry", () => {
+    harness.invoice.data = detail({ status: "failed" });
+    harness.catalogue = catalogue();
+    renderWithClient(<InvoiceDetail />);
+    expect(screen.getByTestId("button-next-action").textContent).toContain(
+      "Review and fix invoice",
+    );
+    fireEvent.click(screen.getByTestId("button-next-action"));
+    expect(screen.getByTestId("fix-form")).toBeTruthy();
+    expect(harness.calls).toEqual([]);
+  });
+
+  test("only non-revoked current-version approvals count, independently from stamps and payments", () => {
+    harness.invoice.data = detail({ contentRevision: 3 });
+    harness.queries.approvals = {
+      data: [
+        {
+          id: "old",
+          contentRevision: 2,
+          revokedAt: null,
+          createdAt: "2026-08-01",
+          approvedByUserId: "u-2",
+        },
+        {
+          id: "revoked",
+          contentRevision: 3,
+          revokedAt: "2026-08-02",
+          createdAt: "2026-08-01",
+          approvedByUserId: "u-3",
+        },
+      ],
+    };
+    renderWithClient(<InvoiceDetail />);
+    const overview = screen.getByRole("region", { name: "Invoice overview" });
+    expect(overview.textContent).toContain("No current-version approval");
+    expect(overview.textContent).toContain("Not submitted");
+    expect(overview.textContent).toContain("No stamp verified");
+    expect(overview.textContent).toContain("0 recorded event(s)");
+    fireEvent.click(screen.getByRole("tab", { name: "Approvals" }));
+    expect(
+      screen.queryByRole("button", { name: "Approve for submission" }),
+    ).toBeNull();
+    expect(screen.getByRole("tabpanel").textContent).toContain("Revoked");
+  });
+
+  test.each(["confirmations", "settlements", "attempts", "stamp"])(
+    "%s failures show retry rather than empty or stale evidence",
+    (name) => {
+      harness.invoice.data = detail({ status: "stamped" });
+      const refetch = vi.fn();
+      harness.queries[name] = {
+        isError: true,
+        error: { status: 500 },
+        refetch,
+      };
+      renderWithClient(<InvoiceDetail />);
+      const tab = {
+        confirmations: "Approvals",
+        settlements: "Payments",
+        attempts: "History",
+        stamp: "Documents",
+      }[name]!;
+      expect(
+        screen.getByTestId("invoice-workspace-issues").textContent,
+      ).toContain(tab);
+      const trigger = screen.getByRole("tab", { name: tab });
+      const descriptionId = trigger.getAttribute("aria-describedby");
+      expect(descriptionId).toBeTruthy();
+      expect(document.getElementById(descriptionId!)?.textContent).toContain(
+        "could not be loaded",
+      );
+      expect(
+        screen.getByRole("tabpanel").getAttribute("aria-labelledby"),
+      ).not.toBe(trigger.id);
+      fireEvent.click(screen.getByRole("tab", { name: tab }));
+      const panel = screen.getByRole("tabpanel");
+      expect(panel.textContent).toContain("Unable to load");
+      fireEvent.click(within(panel).getByRole("button", { name: "Try again" }));
+      expect(refetch).toHaveBeenCalledOnce();
+      if (name === "confirmations")
+        expect(
+          screen.queryByRole("button", { name: "Request confirmation" }),
+        ).toBeNull();
+    },
+  );
+
+  test("confirmation loading and feature-disabled states cannot create another request", () => {
+    harness.invoice.data = detail({ status: "stamped" });
+    harness.queries.confirmations = { data: undefined, isPending: true };
+    renderWithClient(<InvoiceDetail />);
+    expect(
+      screen.queryByRole("button", { name: "Request confirmation" }),
+    ).toBeNull();
+    harness.queries.confirmations = {
+      data: undefined,
+      isError: true,
+      error: { status: 404, data: { code: "FEATURE_DISABLED" } },
+    };
+    cleanup();
+    renderWithClient(<InvoiceDetail />);
+    expect(
+      screen.queryByRole("button", { name: "Request confirmation" }),
+    ).toBeNull();
+  });
+
+  test("empty payments and history remain explicit; terminal invoices cannot submit", () => {
+    harness.invoice.data = detail({ status: "cancelled" });
+    renderWithClient(<InvoiceDetail />);
+    expect(
+      screen.queryByRole("button", {
+        name: /Submit for stamping|Retry transmission/,
+      }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Payments" }));
+    expect(screen.getByRole("tabpanel").textContent).toContain(
+      "No payment events recorded",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "History" }));
+    expect(screen.getByRole("tabpanel").textContent).toContain(
+      "No submission attempts recorded",
+    );
+    expect(screen.getByRole("tabpanel").textContent).toContain(
+      "No escalations recorded",
+    );
   });
 });

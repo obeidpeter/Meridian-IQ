@@ -3,9 +3,569 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.102.0
+ * OpenAPI spec version: 0.104.0
  */
 import * as zod from 'zod';
+
+
+/**
+ * Requires evidence_hub and evidence.read. Client principals are restricted to their business.
+ * @summary List scoped evidence requests
+ */
+export const listEvidenceRequestsQueryOffsetDefault = 0;
+export const listEvidenceRequestsQueryOffsetMin = 0;
+
+export const listEvidenceRequestsQueryLimitDefault = 20;
+export const listEvidenceRequestsQueryLimitMax = 50;
+
+
+
+export const ListEvidenceRequestsQueryParams = zod.object({
+  "clientPartyId": zod.uuid().optional(),
+  "invoiceId": zod.uuid().optional(),
+  "filingId": zod.uuid().optional(),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']).optional(),
+  "offset": zod.coerce.number().min(listEvidenceRequestsQueryOffsetMin).default(listEvidenceRequestsQueryOffsetDefault),
+  "limit": zod.coerce.number().min(1).max(listEvidenceRequestsQueryLimitMax).default(listEvidenceRequestsQueryLimitDefault)
+})
+
+export const listEvidenceRequestsResponseItemsItemPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const listEvidenceRequestsResponseItemsItemTitleMax = 160;
+
+export const listEvidenceRequestsResponseItemsItemDescriptionMax = 2000;
+
+
+export const listEvidenceRequestsResponseTotalMin = 0;
+
+
+
+export const ListEvidenceRequestsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(listEvidenceRequestsResponseItemsItemPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(listEvidenceRequestsResponseItemsItemTitleMax),
+  "description": zod.string().max(listEvidenceRequestsResponseItemsItemDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number().min(listEvidenceRequestsResponseTotalMin),
+  "uploadAvailable": zod.boolean(),
+  "scanAvailable": zod.boolean(),
+  "notice": zod.string().nullable()
+})
+
+
+/**
+ * Requires evidence_hub and staff evidence.request. Exactly one invoice, filing or period anchor is validated by the server. clientRequestId makes retries idempotent.
+ * @summary Request evidence from an active client
+ */
+export const createEvidenceRequestBodyPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const createEvidenceRequestBodyTitleMax = 160;
+
+export const createEvidenceRequestBodyDescriptionMax = 2000;
+
+
+
+export const CreateEvidenceRequestBody = zod.object({
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().optional(),
+  "filingId": zod.uuid().optional(),
+  "period": zod.string().regex(createEvidenceRequestBodyPeriodRegExp).optional(),
+  "title": zod.string().min(1).max(createEvidenceRequestBodyTitleMax),
+  "description": zod.string().max(createEvidenceRequestBodyDescriptionMax).optional(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "dueAt": zod.coerce.date().optional(),
+  "ownerId": zod.uuid().optional(),
+  "clientRequestId": zod.uuid()
+})
+
+export const createEvidenceRequestResponseRequestPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const createEvidenceRequestResponseRequestTitleMax = 160;
+
+export const createEvidenceRequestResponseRequestDescriptionMax = 2000;
+
+
+export const createEvidenceRequestResponseFilesItemFilenameMax = 160;
+
+export const createEvidenceRequestResponseFilesItemByteSizeMax = 5242880;
+
+
+
+export const CreateEvidenceRequestResponse = zod.object({
+  "request": zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(createEvidenceRequestResponseRequestPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(createEvidenceRequestResponseRequestTitleMax),
+  "description": zod.string().max(createEvidenceRequestResponseRequestDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "files": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "filename": zod.string().max(createEvidenceRequestResponseFilesItemFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "byteSize": zod.number().min(1).max(createEvidenceRequestResponseFilesItemByteSizeMax),
+  "sha256": zod.string(),
+  "scanStatus": zod.enum(['quarantined', 'clean', 'rejected']),
+  "scanError": zod.string().nullable(),
+  "uploadedBy": zod.uuid(),
+  "createdAt": zod.coerce.date(),
+  "scannedAt": zod.coerce.date().nullable()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "actorId": zod.uuid().nullable(),
+  "action": zod.string(),
+  "comment": zod.string().nullable(),
+  "fileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * Requires staff evidence.request. Closed requests cannot be changed. The server validates a workspace owner with access to this client and expectedVersion. Retries reuse clientRequestId.
+ * @summary Update an open evidence request's owner or deadline
+ */
+export const UpdateEvidenceRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+
+
+
+export const UpdateEvidenceRequestBody = zod.object({
+  "clientRequestId": zod.uuid(),
+  "expectedVersion": zod.number().min(1),
+  "ownerId": zod.uuid().optional(),
+  "dueAt": zod.coerce.date().nullish()
+})
+
+export const updateEvidenceRequestResponseRequestPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const updateEvidenceRequestResponseRequestTitleMax = 160;
+
+export const updateEvidenceRequestResponseRequestDescriptionMax = 2000;
+
+
+export const updateEvidenceRequestResponseFilesItemFilenameMax = 160;
+
+export const updateEvidenceRequestResponseFilesItemByteSizeMax = 5242880;
+
+
+
+export const UpdateEvidenceRequestResponse = zod.object({
+  "request": zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(updateEvidenceRequestResponseRequestPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(updateEvidenceRequestResponseRequestTitleMax),
+  "description": zod.string().max(updateEvidenceRequestResponseRequestDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "files": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "filename": zod.string().max(updateEvidenceRequestResponseFilesItemFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "byteSize": zod.number().min(1).max(updateEvidenceRequestResponseFilesItemByteSizeMax),
+  "sha256": zod.string(),
+  "scanStatus": zod.enum(['quarantined', 'clean', 'rejected']),
+  "scanError": zod.string().nullable(),
+  "uploadedBy": zod.uuid(),
+  "createdAt": zod.coerce.date(),
+  "scannedAt": zod.coerce.date().nullable()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "actorId": zod.uuid().nullable(),
+  "action": zod.string(),
+  "comment": zod.string().nullable(),
+  "fileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Read an evidence request, file versions and review history
+ */
+export const GetEvidenceRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const getEvidenceRequestResponseRequestPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const getEvidenceRequestResponseRequestTitleMax = 160;
+
+export const getEvidenceRequestResponseRequestDescriptionMax = 2000;
+
+
+export const getEvidenceRequestResponseFilesItemFilenameMax = 160;
+
+export const getEvidenceRequestResponseFilesItemByteSizeMax = 5242880;
+
+
+
+export const GetEvidenceRequestResponse = zod.object({
+  "request": zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(getEvidenceRequestResponseRequestPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(getEvidenceRequestResponseRequestTitleMax),
+  "description": zod.string().max(getEvidenceRequestResponseRequestDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "files": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "filename": zod.string().max(getEvidenceRequestResponseFilesItemFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "byteSize": zod.number().min(1).max(getEvidenceRequestResponseFilesItemByteSizeMax),
+  "sha256": zod.string(),
+  "scanStatus": zod.enum(['quarantined', 'clean', 'rejected']),
+  "scanError": zod.string().nullable(),
+  "uploadedBy": zod.uuid(),
+  "createdAt": zod.coerce.date(),
+  "scannedAt": zod.coerce.date().nullable()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "actorId": zod.uuid().nullable(),
+  "action": zod.string(),
+  "comment": zod.string().nullable(),
+  "fileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * Requires evidence.upload. Server validates type, magic bytes, a decoded 5 MiB limit, scope and expectedVersion. Retries reuse the same clientRequestId and payload.
+ * @summary Upload a new quarantined evidence version
+ */
+export const UploadEvidenceFileParams = zod.object({
+  "id": zod.uuid()
+})
+
+
+export const uploadEvidenceFileBodyFilenameMax = 160;
+
+export const uploadEvidenceFileBodyContentBase64Max = 7000000;
+
+
+
+export const UploadEvidenceFileBody = zod.object({
+  "clientRequestId": zod.uuid(),
+  "expectedVersion": zod.number().min(1),
+  "filename": zod.string().min(1).max(uploadEvidenceFileBodyFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "contentBase64": zod.string().min(1).max(uploadEvidenceFileBodyContentBase64Max)
+})
+
+export const uploadEvidenceFileResponseRequestPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const uploadEvidenceFileResponseRequestTitleMax = 160;
+
+export const uploadEvidenceFileResponseRequestDescriptionMax = 2000;
+
+
+export const uploadEvidenceFileResponseFilesItemFilenameMax = 160;
+
+export const uploadEvidenceFileResponseFilesItemByteSizeMax = 5242880;
+
+
+
+export const UploadEvidenceFileResponse = zod.object({
+  "request": zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(uploadEvidenceFileResponseRequestPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(uploadEvidenceFileResponseRequestTitleMax),
+  "description": zod.string().max(uploadEvidenceFileResponseRequestDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "files": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "filename": zod.string().max(uploadEvidenceFileResponseFilesItemFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "byteSize": zod.number().min(1).max(uploadEvidenceFileResponseFilesItemByteSizeMax),
+  "sha256": zod.string(),
+  "scanStatus": zod.enum(['quarantined', 'clean', 'rejected']),
+  "scanError": zod.string().nullable(),
+  "uploadedBy": zod.uuid(),
+  "createdAt": zod.coerce.date(),
+  "scannedAt": zod.coerce.date().nullable()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "actorId": zod.uuid().nullable(),
+  "action": zod.string(),
+  "comment": zod.string().nullable(),
+  "fileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * Requires staff evidence.review. Acceptance requires a clean file; it is not automatic verification or proof of payment. Server validates transitions and expectedVersion.
+ * @summary Record an explicit staff review decision
+ */
+export const ReviewEvidenceRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+
+export const reviewEvidenceRequestBodyCommentMax = 2000;
+
+
+
+export const ReviewEvidenceRequestBody = zod.object({
+  "clientRequestId": zod.uuid(),
+  "expectedVersion": zod.number().min(1),
+  "fileId": zod.uuid().optional(),
+  "decision": zod.enum(['accepted', 'needs_changes', 'cancelled']),
+  "comment": zod.string().max(reviewEvidenceRequestBodyCommentMax).optional()
+})
+
+export const reviewEvidenceRequestResponseRequestPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const reviewEvidenceRequestResponseRequestTitleMax = 160;
+
+export const reviewEvidenceRequestResponseRequestDescriptionMax = 2000;
+
+
+export const reviewEvidenceRequestResponseFilesItemFilenameMax = 160;
+
+export const reviewEvidenceRequestResponseFilesItemByteSizeMax = 5242880;
+
+
+
+export const ReviewEvidenceRequestResponse = zod.object({
+  "request": zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(reviewEvidenceRequestResponseRequestPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(reviewEvidenceRequestResponseRequestTitleMax),
+  "description": zod.string().max(reviewEvidenceRequestResponseRequestDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "files": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "filename": zod.string().max(reviewEvidenceRequestResponseFilesItemFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "byteSize": zod.number().min(1).max(reviewEvidenceRequestResponseFilesItemByteSizeMax),
+  "sha256": zod.string(),
+  "scanStatus": zod.enum(['quarantined', 'clean', 'rejected']),
+  "scanError": zod.string().nullable(),
+  "uploadedBy": zod.uuid(),
+  "createdAt": zod.coerce.date(),
+  "scannedAt": zod.coerce.date().nullable()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "actorId": zod.uuid().nullable(),
+  "action": zod.string(),
+  "comment": zod.string().nullable(),
+  "fileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * Requires evidence.read. Quarantined and rejected files cannot be downloaded. PDFs are download-only; clean JPEG and PNG files may be previewed.
+ * @summary Download a clean, authorised evidence file as an attachment
+ */
+export const DownloadEvidenceFileParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DownloadEvidenceFileResponse = zod.unknown()
+
+
+/**
+ * Requires staff evidence.review. Scan errors remain quarantined; queueing a scan never marks a file clean.
+ * @summary Queue a staff-requested scan retry
+ */
+export const RetryEvidenceScanParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const RetryEvidenceScanBody = zod.object({
+  "clientRequestId": zod.uuid()
+})
+
+export const retryEvidenceScanResponseRequestPeriodRegExp = new RegExp('^\\d{4}-(0[1-9]|1[0-2])$');
+export const retryEvidenceScanResponseRequestTitleMax = 160;
+
+export const retryEvidenceScanResponseRequestDescriptionMax = 2000;
+
+
+export const retryEvidenceScanResponseFilesItemFilenameMax = 160;
+
+export const retryEvidenceScanResponseFilesItemByteSizeMax = 5242880;
+
+
+
+export const RetryEvidenceScanResponse = zod.object({
+  "request": zod.object({
+  "id": zod.uuid(),
+  "firmId": zod.uuid(),
+  "clientPartyId": zod.uuid(),
+  "invoiceId": zod.uuid().nullable(),
+  "filingId": zod.uuid().nullable(),
+  "period": zod.string().regex(retryEvidenceScanResponseRequestPeriodRegExp).nullable(),
+  "title": zod.string().min(1).max(retryEvidenceScanResponseRequestTitleMax),
+  "description": zod.string().max(retryEvidenceScanResponseRequestDescriptionMax).nullable(),
+  "documentType": zod.enum(['purchase_order', 'delivery_note', 'payment_receipt', 'tax_acknowledgement', 'contract', 'other']),
+  "status": zod.enum(['requested', 'uploaded', 'needs_changes', 'accepted', 'cancelled']),
+  "ownerId": zod.uuid(),
+  "createdBy": zod.uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "version": zod.number().min(1),
+  "latestFileId": zod.uuid().nullable(),
+  "acceptedFileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "files": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "filename": zod.string().max(retryEvidenceScanResponseFilesItemFilenameMax),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'application/pdf']),
+  "byteSize": zod.number().min(1).max(retryEvidenceScanResponseFilesItemByteSizeMax),
+  "sha256": zod.string(),
+  "scanStatus": zod.enum(['quarantined', 'clean', 'rejected']),
+  "scanError": zod.string().nullable(),
+  "uploadedBy": zod.uuid(),
+  "createdAt": zod.coerce.date(),
+  "scannedAt": zod.coerce.date().nullable()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.uuid(),
+  "requestId": zod.uuid(),
+  "actorId": zod.uuid().nullable(),
+  "action": zod.string(),
+  "comment": zod.string().nullable(),
+  "fileId": zod.uuid().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * Requires evidence.read and staff evidence.review. Assistance is advisory, never acceptance or automatic verification, and may only use clean files.
+ * @summary Explicitly request staff evidence assistance
+ */
+export const AssistEvidenceRequestParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const AssistEvidenceRequestBody = zod.object({
+  "fileId": zod.uuid()
+})
+
+export const AssistEvidenceRequestResponse = zod.object({
+  "summary": zod.string(),
+  "suggestedDocumentType": zod.string().nullable(),
+  "extractedText": zod.string().nullable(),
+  "clerkCaseId": zod.string().nullish(),
+  "checks": zod.array(zod.object({
+  "label": zod.string(),
+  "status": zod.enum(['match', 'mismatch', 'unknown']),
+  "sourceValue": zod.string().nullable(),
+  "expectedValue": zod.string().nullable()
+}))
+})
+
+
+/**
+ * Requires evidence.read. Contains authorised clean files and the review record; quarantined and rejected content is excluded.
+ * @summary Download an authorised evidence pack
+ */
+export const DownloadEvidencePackParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const DownloadEvidencePackResponse = zod.unknown()
 
 
 /**
@@ -462,7 +1022,8 @@ export const GetWorkspaceTodayResponse = zod.object({
   "label": zod.string(),
   "description": zod.string(),
   "complete": zod.boolean(),
-  "href": zod.string()
+  "href": zod.string(),
+  "blockedReason": zod.string().nullish().describe('Current server-checked reason this step cannot be continued. Omitted when the destination remains actionable.')
 }))
 })
 
@@ -1994,7 +2555,7 @@ export const ListNotificationsQueryParams = zod.object({
 export const ListNotificationsResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string(),
-  "channel": zod.string(),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push', 'in_app']),
   "templateKey": zod.string(),
   "title": zod.string(),
   "entityType": zod.string().nullish(),
@@ -2017,7 +2578,7 @@ export const MarkNotificationsReadBody = zod.object({
 export const MarkNotificationsReadResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.string(),
-  "channel": zod.string(),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push', 'in_app']),
   "templateKey": zod.string(),
   "title": zod.string(),
   "entityType": zod.string().nullish(),
@@ -3752,7 +4313,7 @@ export const VerifyStampResponse = zod.object({
  */
 export const ListMessagesResponseItem = zod.object({
   "id": zod.string(),
-  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push']),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push', 'in_app']),
   "recipientRef": zod.string(),
   "templateKey": zod.string(),
   "entityType": zod.string().nullish(),
@@ -3775,7 +4336,7 @@ export const SendMessageBody = zod.object({
 
 export const SendMessageResponse = zod.object({
   "id": zod.string(),
-  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push']),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push', 'in_app']),
   "recipientRef": zod.string(),
   "templateKey": zod.string(),
   "entityType": zod.string().nullish(),

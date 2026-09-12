@@ -10,9 +10,12 @@ import {
   featureFlagsTable,
   filingReturnsTable,
   firmsTable,
+  firmPoliciesTable,
   getDb,
   invoiceLifecycleEventsTable,
   invoicesTable,
+  invoiceApprovalsTable,
+  stampRecordsTable,
   obligationsTable,
   partiesTable,
   usersTable,
@@ -20,6 +23,7 @@ import {
 } from "@workspace/db";
 import workspaceRouter from "../../routes/workspace.ts";
 import type { Principal } from "../auth/rbac.ts";
+import { setRailTransport } from "../rails/adapter.ts";
 import {
   appFor,
   closeAllServers,
@@ -47,6 +51,7 @@ type TodayResponse = {
     complete: boolean;
     href: string;
     description: string;
+    blockedReason?: string | null;
   }>;
 };
 
@@ -107,6 +112,7 @@ async function makeScope(statutory = true) {
     },
   ]);
   for (const [key, enabled] of [
+    ["invoice_lifecycle", true],
     ["statutory_desks", statutory],
     ["erp_connectors", false],
     ["reconciliation", false],
@@ -597,8 +603,10 @@ test("declined consent is a recorded decision, not a submission capability or pr
   assert.equal(step(body, "first_invoice").complete, true);
   assert.equal(
     body.setup.some((item) => item.id === "invoice_submission"),
-    false,
+    true,
   );
+  assert.equal(step(body, "invoice_consent").complete, false);
+  assert.equal(step(body, "invoice_submission").complete, false);
   await getDb()
     .update(featureFlagOverridesTable)
     .set({ enabled: true })
@@ -668,7 +676,7 @@ test("firm onboarding skips the oldest archived client and anchors all proofs to
       `${id} must not inherit archived-client proof`,
     );
   }
-  await invoice(scope, {
+  const siblingInvoice = await invoice(scope, {
     supplierPartyId: scope.siblingId,
     buyerPartyId: scope.otherBuyerId,
   });
@@ -676,10 +684,167 @@ test("firm onboarding skips the oldest archived client and anchors all proofs to
   assert.equal(step(body, "first_invoice").complete, true);
   assert.equal(
     step(body, "first_invoice").href,
-    `/clients/${scope.siblingId}?view=invoices`,
+    `/clients/${scope.siblingId}?view=invoices&invoiceId=${siblingInvoice}`,
   );
   assert.equal(step(body, "invoice_validation").complete, false);
   assert.equal(step(body, "invoice_evidence").complete, false);
+});
+
+test("submission setup honours current consent and a different approver on the current revision", async (t) => {
+  setRailTransport({
+    name: "test-live-provider",
+    environment: "live",
+    async submit() {
+      throw new Error("Readiness must not call a provider");
+    },
+    async lookup() {
+      throw new Error("Readiness must not call a provider");
+    },
+  });
+  t.after(() => setRailTransport(null));
+  const scope = await makeScope(false);
+  const db = getDb();
+  const id = await invoice(scope, { status: "validated", contentRevision: 2 });
+  const principal = clientPrincipal(scope.firmId, scope.clientId, {
+    userId: scope.userId,
+  });
+  await db
+    .insert(firmPoliciesTable)
+    .values({ firmId: scope.firmId, submitApprovalRequired: true });
+  await db.insert(invoiceApprovalsTable).values([
+    {
+      firmId: scope.firmId,
+      invoiceId: id,
+      approvedByUserId: scope.userId,
+      contentRevision: 2,
+    },
+    {
+      firmId: scope.firmId,
+      invoiceId: id,
+      approvedByUserId: scope.siblingUserId,
+      contentRevision: 1,
+    },
+  ]);
+  let body = await today(principal);
+  assert.equal(step(body, "invoice_approval").complete, false);
+  assert.equal(step(body, "invoice_consent").complete, false);
+  assert.match(
+    step(body, "invoice_submission").blockedReason ?? "",
+    /different authorised reviewer/,
+  );
+  await db.insert(invoiceApprovalsTable).values({
+    firmId: scope.firmId,
+    invoiceId: id,
+    approvedByUserId: scope.siblingUserId,
+    contentRevision: 2,
+  });
+  await db.insert(consentRecordsTable).values({
+    partyId: scope.clientId,
+    layer: 1,
+    action: "grant",
+    scope: "compliance_submission",
+    basis: "consent",
+    channel: "test",
+    createdAt: new Date("2026-01-01"),
+  });
+  body = await today(principal);
+  assert.equal(step(body, "invoice_service").complete, true);
+  assert.equal(step(body, "invoice_approval").complete, true);
+  assert.equal(step(body, "invoice_consent").complete, true);
+  assert.equal(step(body, "invoice_submission").blockedReason, undefined);
+  assert.equal(step(body, "invoice_submission").complete, false);
+  assert.equal(step(body, "invoice_acknowledgement").complete, false);
+  await db.insert(consentRecordsTable).values({
+    partyId: scope.clientId,
+    layer: 1,
+    action: "revoke",
+    scope: "compliance_submission",
+    basis: "withdrawn",
+    channel: "test",
+    createdAt: new Date("2026-01-02"),
+  });
+  body = await today(principal);
+  assert.equal(step(body, "invoice_consent").complete, false);
+  assert.match(
+    step(body, "invoice_submission").blockedReason ?? "",
+    /grant submission consent/,
+  );
+});
+
+test("live acceptance is tied to the same client's production stamp, not a sibling or service cutover", async (t) => {
+  setRailTransport({
+    name: "test-live-provider",
+    environment: "live",
+    async submit() {
+      throw new Error("No live calls");
+    },
+    async lookup() {
+      throw new Error("No live calls");
+    },
+  });
+  t.after(() => setRailTransport(null));
+  const scope = await makeScope(false);
+  const db = getDb();
+  const sibling = await invoice(scope, {
+    supplierPartyId: scope.siblingId,
+    status: "stamped",
+  });
+  const id = await invoice(scope, { status: "stamped" });
+  await db.insert(stampRecordsTable).values([
+    {
+      invoiceId: sibling,
+      irn: "private-sibling-irn",
+      csid: "sibling-csid",
+      qrPayload: "cXI=",
+      signedArtifactRef: "sibling-artifact",
+      rail: "rail_primary",
+      provider: "test-provider",
+      environment: "live",
+    },
+    {
+      invoiceId: id,
+      irn: "test-irn",
+      csid: "test-csid",
+      qrPayload: "cXI=",
+      signedArtifactRef: "test-artifact",
+      rail: "rail_primary",
+      provider: "simulator",
+      environment: "sandbox",
+    },
+  ]);
+  const principal = clientPrincipal(scope.firmId, scope.clientId, {
+    userId: scope.userId,
+  });
+  let body = await today(principal);
+  assert.equal(step(body, "invoice_acknowledgement").complete, false);
+  assert.match(
+    step(body, "invoice_acknowledgement").description,
+    /test or incomplete/,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(body),
+    /private-sibling-irn|sibling-artifact/,
+  );
+  const other = await makeScope(false);
+  const liveId = await invoice(other, { status: "stamped" });
+  await db.insert(stampRecordsTable).values({
+    invoiceId: liveId,
+    irn: "live-irn",
+    csid: "live-csid",
+    qrPayload: "cXI=",
+    signedArtifactRef: "live-artifact",
+    rail: "rail_primary",
+    provider: "test-provider",
+    environment: "live",
+  });
+  body = await today(
+    clientPrincipal(other.firmId, other.clientId, { userId: other.userId }),
+  );
+  assert.equal(step(body, "invoice_acknowledgement").complete, true);
+  assert.equal(
+    step(body, "invoice_acknowledgement").href,
+    `/invoices/${liveId}`,
+  );
 });
 
 test("all-archived firm onboarding stays incomplete until that firm re-engages a client", async () => {

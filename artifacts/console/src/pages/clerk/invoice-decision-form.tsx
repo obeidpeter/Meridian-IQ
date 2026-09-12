@@ -25,6 +25,7 @@ import {
 } from "@/pages/clerk-shared";
 import { CATEGORIES } from "./constants";
 import { FirmSelect, PartySelect } from "./selects";
+import { InvoiceApprovalSummary } from "./approval-summary";
 
 export function InvoiceDecisionForm({
   form,
@@ -66,7 +67,7 @@ export function InvoiceDecisionForm({
         Review and approve — creates a draft invoice only
       </p>
       {claimControls}
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="clerk-review-fields">
         <FirmSelect
           firms={firms}
           value={form.firmId}
@@ -104,7 +105,7 @@ export function InvoiceDecisionForm({
           />
         </PartySelect>
       </div>
-      <div className="grid sm:grid-cols-4 gap-3">
+      <div className="clerk-review-fields">
         <div className="space-y-1">
           <Label htmlFor="apr-number">Invoice number</Label>
           <Input
@@ -140,6 +141,17 @@ export function InvoiceDecisionForm({
           />
         </div>
         <div className="space-y-1">
+          <Label htmlFor="apr-currency">Currency</Label>
+          <Input
+            id="apr-currency"
+            value={form.currency}
+            onChange={(event) =>
+              setForm({ ...form, currency: event.target.value })
+            }
+            data-testid="input-approve-currency"
+          />
+        </div>
+        <div className="space-y-1">
           <Label htmlFor="apr-category">Category</Label>
           <Select
             value={form.category}
@@ -164,7 +176,11 @@ export function InvoiceDecisionForm({
         </div>
       </div>
       <div
-        className={`space-y-2${
+        id="apr-lines"
+        tabIndex={-1}
+        role="group"
+        aria-label="Invoice items"
+        className={`space-y-3 focus:outline-none focus:ring-2 focus:ring-ring${
           linesPreflightHit
             ? " rounded-md border border-amber-300 bg-amber-50/50 p-2 dark:border-amber-800 dark:bg-amber-950/20"
             : ""
@@ -174,37 +190,52 @@ export function InvoiceDecisionForm({
         {form.lines.map((line, i) => (
           <div
             key={i}
-            className="grid grid-cols-12 gap-2"
+            className="grid grid-cols-2 gap-2 border-b pb-3"
             data-testid={`row-line-${i}`}
           >
-            <Input
-              className="col-span-6"
-              aria-label={`Line ${i + 1} description`}
-              placeholder="Description"
-              value={line.description}
-              onChange={(e) => setLine(i, { description: e.target.value })}
-            />
-            <Input
-              className="col-span-2"
-              aria-label={`Line ${i + 1} quantity`}
-              placeholder="Qty"
-              value={line.quantity}
-              onChange={(e) => setLine(i, { quantity: e.target.value })}
-            />
-            <Input
-              className="col-span-2"
-              aria-label={`Line ${i + 1} unit price`}
-              placeholder="Unit price"
-              value={line.unitPrice}
-              onChange={(e) => setLine(i, { unitPrice: e.target.value })}
-            />
-            <Input
-              className="col-span-2"
-              aria-label={`Line ${i + 1} VAT rate`}
-              placeholder="VAT %"
-              value={line.vatRate}
-              onChange={(e) => setLine(i, { vatRate: e.target.value })}
-            />
+            <p className="col-span-2 text-xs font-medium text-muted-foreground">
+              Item {i + 1}
+            </p>
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor={`apr-line-${i}-description`}>Description</Label>
+              <Input
+                id={`apr-line-${i}-description`}
+                aria-label={`Line ${i + 1} description`}
+                placeholder="Description"
+                value={line.description}
+                onChange={(e) => setLine(i, { description: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`apr-line-${i}-quantity`}>Quantity</Label>
+              <Input
+                id={`apr-line-${i}-quantity`}
+                aria-label={`Line ${i + 1} quantity`}
+                placeholder="Qty"
+                value={line.quantity}
+                onChange={(e) => setLine(i, { quantity: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`apr-line-${i}-unitPrice`}>Unit price</Label>
+              <Input
+                id={`apr-line-${i}-unitPrice`}
+                aria-label={`Line ${i + 1} unit price`}
+                placeholder="Unit price"
+                value={line.unitPrice}
+                onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`apr-line-${i}-vatRate`}>VAT %</Label>
+              <Input
+                id={`apr-line-${i}-vatRate`}
+                aria-label={`Line ${i + 1} VAT rate`}
+                placeholder="VAT %"
+                value={line.vatRate}
+                onChange={(e) => setLine(i, { vatRate: e.target.value })}
+              />
+            </div>
           </div>
         ))}
       </div>
@@ -220,8 +251,12 @@ export function InvoiceDecisionForm({
           data-testid="input-decision-reason"
         />
       </div>
+      <InvoiceApprovalSummary form={form} firms={firms} parties={parties} />
       <div className="flex gap-2 flex-wrap">
         <Button
+          type="button"
+          className="h-auto min-h-11 whitespace-normal"
+          aria-describedby="invoice-approval-summary"
           onClick={() =>
             decideCase.mutate({
               id: caseId,

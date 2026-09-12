@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState } from "react";
-import { RouteErrorBoundary } from "@workspace/web-ui";
+import { RouteErrorBoundary } from "@workspace/web-ui/runtime";
 import { CalculatorLoading } from "./calculator-loading";
 
 export function CalculatorRoot() {

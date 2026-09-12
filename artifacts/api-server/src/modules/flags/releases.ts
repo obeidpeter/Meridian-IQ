@@ -54,6 +54,14 @@ export const RELEASE_FLAGS: ReleaseFlag[] = [
   },
   // --- R1 — Compliance MVP: lights on the platform gates. -----------------
   {
+    key: "evidence_hub",
+    releaseTag: "R1",
+    description:
+      "Private client evidence requests, scanned uploads and human review",
+    launchDefault: false,
+    devDefault: true,
+  },
+  {
     key: "buyer_confirmations",
     releaseTag: "R1",
     description: "Buyer confirmation workflow",

@@ -25,16 +25,16 @@ export function LineItemsCard({
         {data?.lines.map((l) => (
           <div
             key={l.id}
-            className="flex justify-between text-sm border-b last:border-0 py-2"
+            className="flex flex-col justify-between gap-2 border-b py-2 text-sm last:border-0 sm:flex-row sm:gap-4"
           >
-            <div>
+            <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <p className="font-medium">{l.description}</p>
               <p className="text-muted-foreground text-xs">
                 {l.quantity} × {formatAmount(l.unitPrice, invoice.currency)} ·
                 VAT {formatPct(l.vatRate)}
               </p>
             </div>
-            <span className="font-medium tabular-nums">
+            <span className="shrink-0 font-medium tabular-nums sm:max-w-[50%] sm:text-right [overflow-wrap:anywhere]">
               {formatAmount(
                 Number(l.lineExtension) + Number(l.vatAmount),
                 invoice.currency,
@@ -42,7 +42,7 @@ export function LineItemsCard({
             </span>
           </div>
         ))}
-        <div className="flex justify-between pt-2 font-semibold">
+        <div className="flex flex-wrap justify-between gap-3 pt-2 font-semibold">
           <span>Total</span>
           <span className="tabular-nums">
             {formatAmount(invoice.grandTotal, invoice.currency)}

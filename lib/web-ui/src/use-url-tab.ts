@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
+import { useNavigationQuery } from "./unsaved-work";
 
 /**
  * Tab state backed by a query parameter, so a reload, a deep link or
@@ -19,30 +20,20 @@ export function useUrlTab<T extends string>(
   const latest = useRef({ param, fallback, values });
   latest.current = { param, fallback, values };
 
-  const read = useCallback((): T => {
-    const { param, fallback, values } = latest.current;
-    const raw = new URLSearchParams(window.location.search).get(param);
-    return raw !== null && (values as readonly string[]).includes(raw)
+  const [search, replace] = useNavigationQuery();
+  const raw = new URLSearchParams(search).get(param);
+  const tab =
+    raw !== null && (values as readonly string[]).includes(raw)
       ? (raw as T)
       : fallback;
-  }, []);
 
-  const [tab, setTab] = useState<T>(read);
-
-  useEffect(() => {
-    const onPopState = () => setTab(read());
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [read]);
-
-  const select = useCallback((next: T) => {
-    setTab(next);
-    const { param, fallback } = latest.current;
-    const url = new URL(window.location.href);
-    if (next === fallback) url.searchParams.delete(param);
-    else url.searchParams.set(param, next);
-    window.history.replaceState(window.history.state, "", url);
-  }, []);
+  const select = useCallback(
+    (next: T) => {
+      const { param, fallback } = latest.current;
+      replace(param, next === fallback ? null : next);
+    },
+    [replace],
+  );
 
   return [tab, select];
 }

@@ -65,7 +65,9 @@ export function SubmissionFailedCard({
             (PATCH keeps it failed), then resubmit (failed → submitted). */}
         {fixForm}
 
-        <EscalatePanel state={state} />
+        {abilities.canWrite && (
+          <EscalatePanel state={state} canEdit={abilities.canEdit} />
+        )}
       </CardContent>
     </Card>
   );
@@ -117,7 +119,13 @@ function ClerkExplanation({ state }: { state: InvoiceDetailState }) {
   );
 }
 
-function EscalatePanel({ state }: { state: InvoiceDetailState }) {
+function EscalatePanel({
+  state,
+  canEdit,
+}: {
+  state: InvoiceDetailState;
+  canEdit: boolean;
+}) {
   const {
     fix,
     openFix,
@@ -130,7 +138,7 @@ function EscalatePanel({ state }: { state: InvoiceDetailState }) {
   } = state;
   return !showEscalate ? (
     <div className="flex flex-wrap gap-2">
-      {!fix && (
+      {!fix && canEdit && (
         <Button size="sm" onClick={openFix} data-testid="button-open-fix">
           <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Fix & resubmit
         </Button>

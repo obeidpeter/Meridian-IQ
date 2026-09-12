@@ -1,0 +1,40 @@
+.clerk-review-pane {
+  container-type: inline-size;
+}
+
+.clerk-review-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.clerk-review-fields > *,
+.clerk-review-pane input,
+.clerk-review-pane [role="combobox"] {
+  min-width: 0;
+}
+
+.clerk-review-pane [role="combobox"] > span {
+  display: block;
+  min-width: 0;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  text-align: left;
+}
+
+.clerk-review-pane [role="combobox"] > svg {
+  flex-shrink: 0;
+}
+
+.clerk-review-pane [role="combobox"] {
+  height: auto;
+  min-height: 2.75rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@container (min-width: 28rem) {
+  .clerk-review-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

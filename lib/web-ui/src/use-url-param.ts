@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
+import { useNavigationQuery } from "./unsaved-work";
 
 /**
  * Free-text state backed by a query parameter — the useUrlTab pattern without
@@ -15,28 +16,16 @@ export function useUrlParam(
   const latest = useRef({ param, fallback });
   latest.current = { param, fallback };
 
-  const read = useCallback((): string => {
-    const { param, fallback } = latest.current;
-    const raw = new URLSearchParams(window.location.search).get(param);
-    return raw ?? fallback;
-  }, []);
+  const [search, replace] = useNavigationQuery();
+  const value = new URLSearchParams(search).get(param) ?? fallback;
 
-  const [value, setValue] = useState<string>(read);
-
-  useEffect(() => {
-    const onPopState = () => setValue(read());
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [read]);
-
-  const set = useCallback((next: string) => {
-    setValue(next);
-    const { param, fallback } = latest.current;
-    const url = new URL(window.location.href);
-    if (next === fallback) url.searchParams.delete(param);
-    else url.searchParams.set(param, next);
-    window.history.replaceState(window.history.state, "", url);
-  }, []);
+  const set = useCallback(
+    (next: string) => {
+      const { param, fallback } = latest.current;
+      replace(param, next === fallback ? null : next);
+    },
+    [replace],
+  );
 
   return [value, set];
 }

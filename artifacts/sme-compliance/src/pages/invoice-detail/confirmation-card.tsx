@@ -29,7 +29,7 @@ export function ConfirmationCard({
 }) {
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
           <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer
           confirmation

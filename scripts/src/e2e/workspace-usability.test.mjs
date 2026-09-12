@@ -1,4 +1,4 @@
-/* global document, getComputedStyle */
+/* global document, getComputedStyle, MutationObserver */
 import assert from "node:assert/strict";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -209,6 +209,16 @@ async function measureWorkspace(page) {
         });
     };
     checkColor("#connections", "backgroundColor", "--mi-paper");
+    checkColor(
+      '.mi-segmented__item[aria-pressed="true"]',
+      "backgroundColor",
+      "--mi-ink",
+    );
+    checkColor(
+      '.mi-segmented__item[aria-pressed="true"], .mi-segmented__item[aria-pressed="true"] > span',
+      "color",
+      "--mi-paper",
+    );
     checkColor("#connections h2, .mi-reliability__name", "color", "--mi-ink");
     checkColor("dt", "color", "--mi-muted");
     checkColor(".mi-reliability__issue", "color", "--mi-warning");
@@ -312,6 +322,43 @@ async function keyboardActivate(page, target) {
   await page.keyboard.press("Enter");
 }
 
+async function keyboardSelectSegment(page, target) {
+  await target.evaluate((element) => {
+    // Sample in the selection mutation's microtask, before transitions can settle.
+    const observer = new MutationObserver(() => {
+      if (element.getAttribute("aria-pressed") !== "true") return;
+      element.selectionColors = {
+        foreground: getComputedStyle(element.closest(".mi-segmented"))
+          .backgroundColor,
+        background: getComputedStyle(element.closest(".mi-reliability")).color,
+        actualBackground: getComputedStyle(element).backgroundColor,
+        actualForegrounds: [element, ...element.children].map(
+          (child) => getComputedStyle(child).color,
+        ),
+      };
+      observer.disconnect();
+    });
+    observer.observe(element, {
+      attributes: true,
+      attributeFilter: ["aria-pressed"],
+    });
+  });
+  await keyboardActivate(page, target);
+  const colors = await target.evaluate((element) => {
+    const snapshot = element.selectionColors;
+    delete element.selectionColors;
+    return snapshot;
+  });
+  assert.ok(colors, "Keyboard selection produced an immediate color snapshot");
+  assert.equal(colors.actualBackground, colors.background);
+  for (const foreground of colors.actualForegrounds)
+    assert.equal(
+      foreground,
+      colors.foreground,
+      "Immediate selected text color",
+    );
+}
+
 async function checkFilters(page, data) {
   const group = page.getByRole("group", { name: "Filter connections" });
   for (const [label, expected] of [
@@ -325,7 +372,7 @@ async function checkFilters(page, data) {
       name: `${label} ${count}`,
       exact: true,
     });
-    await keyboardActivate(page, button);
+    await keyboardSelectSegment(page, button);
     assert.equal(await button.getAttribute("aria-pressed"), "true");
     assert.equal(await group.locator('[aria-pressed="true"]').count(), 1);
     assert.equal(
@@ -475,7 +522,7 @@ test(
                 .innerText(),
               "No connections in this view.",
             );
-            await keyboardActivate(
+            await keyboardSelectSegment(
               page,
               page.getByRole("button", { name: "ERP 0", exact: true }),
             );

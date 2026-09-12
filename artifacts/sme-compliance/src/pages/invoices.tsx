@@ -33,6 +33,11 @@ import { serverErrorMessage } from "@/lib/errors";
 import { CustomerName } from "@/components/customer-directory-picker";
 import { useInvoicePages } from "@/lib/invoice-pages";
 import {
+  invoiceListUrl,
+  invoiceWorkspaceHref,
+  useInvoiceListReturn,
+} from "./invoice-list-navigation";
+import {
   Search,
   FileText,
   ChevronRight,
@@ -67,6 +72,13 @@ export const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 const FILTER_KEYS: readonly FilterKey[] = FILTERS.map((f) => f.key);
+
+function toggleAdvancedFilters(
+  expanded: boolean,
+  select: (value: string) => void,
+) {
+  select(expanded ? "" : "1");
+}
 
 // Which tab a row belongs to. Off-contract "unknown" tones match only All.
 // Exported for the unit tests.
@@ -111,6 +123,8 @@ function BulkSubmitDialog({
   triggerRef,
   onConfirm,
   onClose,
+  returnTo,
+  onOpenInvoice,
 }: {
   open: boolean;
   report: { rows: BulkSubmitRowResult[]; remaining: number } | null;
@@ -118,6 +132,8 @@ function BulkSubmitDialog({
   triggerRef: RefObject<HTMLButtonElement | null>;
   onConfirm: () => void;
   onClose: () => void;
+  returnTo: string;
+  onOpenInvoice: () => void;
 }) {
   const bulkRows = report?.rows ?? [];
   const bulkSubmitted = bulkRows.filter(
@@ -192,8 +208,11 @@ function BulkSubmitDialog({
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <Link
-                          href={`/invoices/${r.invoiceId}`}
-                          onClick={onClose}
+                          href={invoiceWorkspaceHref(r.invoiceId, returnTo)}
+                          onClick={() => {
+                            onOpenInvoice();
+                            onClose();
+                          }}
                           className="font-semibold truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                           data-testid={`link-bulk-row-${r.invoiceId}`}
                         >
@@ -369,11 +388,14 @@ export function Invoices() {
     "all",
     FILTER_KEYS,
   );
-  const [showFilters, setShowFilters] = useState(false);
+  const [advanced, setAdvanced] = useUrlParam("advanced");
+  const showFilters = advanced === "1";
   const [fromDate, setFromDate] = useUrlParam("fromDate");
   const [toDate, setToDate] = useUrlParam("toDate");
   const [minAmount, setMinAmount] = useUrlParam("minAmount");
   const [maxAmount, setMaxAmount] = useUrlParam("maxAmount");
+  const scope = me ? `${me.firmId}:${me.userId}:${me.clientPartyId}` : "";
+  const returnTo = invoiceListUrl(window.location.search);
 
   const {
     loaded,
@@ -391,8 +413,18 @@ export function Invoices() {
   } = useInvoicePages(
     search,
     { statusGroup: filter, fromDate, toDate, minAmount, maxAmount },
-    me ? `${me.firmId}:${me.userId}:${me.clientPartyId}` : "",
+    scope,
   );
+  const rememberList = useInvoiceListReturn({
+    scope,
+    url: returnTo,
+    count: loaded.length,
+    ready: hasLoaded,
+    hasMore,
+    loadingMore,
+    isError,
+    loadMore,
+  });
 
   const hasAdvanced = !!fromDate || !!toDate || !!minAmount || !!maxAmount;
   const hasAnyFilter = hasAdvanced || !!search.trim() || filter !== "all";
@@ -509,6 +541,8 @@ export function Invoices() {
         triggerRef={bulkTriggerRef}
         onConfirm={runBulkSubmit}
         onClose={closeBulk}
+        returnTo={returnTo}
+        onOpenInvoice={rememberList}
       />
 
       <div className="relative">
@@ -556,8 +590,9 @@ export function Invoices() {
           variant={hasAdvanced ? "default" : "outline"}
           size="sm"
           className="ml-auto rounded-full"
-          onClick={() => setShowFilters((s) => !s)}
-          aria-pressed={showFilters}
+          onClick={() => toggleAdvancedFilters(showFilters, setAdvanced)}
+          aria-expanded={showFilters}
+          aria-controls="invoice-advanced-filters"
         >
           <SlidersHorizontal className="w-4 h-4 mr-1.5" aria-hidden="true" />
           Filters{hasAdvanced ? " (on)" : ""}
@@ -574,16 +609,18 @@ export function Invoices() {
       </p>
 
       {showFilters && (
-        <AdvancedFiltersCard
-          values={{ fromDate, toDate, minAmount, maxAmount }}
-          onChange={(next) => {
-            setFromDate(next.fromDate);
-            setToDate(next.toDate);
-            setMinAmount(next.minAmount);
-            setMaxAmount(next.maxAmount);
-          }}
-          onClear={clearAdvanced}
-        />
+        <div id="invoice-advanced-filters">
+          <AdvancedFiltersCard
+            values={{ fromDate, toDate, minAmount, maxAmount }}
+            onChange={(next) => {
+              setFromDate(next.fromDate);
+              setToDate(next.toDate);
+              setMinAmount(next.minAmount);
+              setMaxAmount(next.maxAmount);
+            }}
+            onClear={clearAdvanced}
+          />
+        </div>
       )}
 
       {initialLoading ? (
@@ -643,14 +680,15 @@ export function Invoices() {
           {rows.map((inv) => (
             <Link
               key={inv.id}
-              href={`/invoices/${inv.id}`}
+              href={invoiceWorkspaceHref(inv.id, returnTo)}
+              onClick={rememberList}
               className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-                <CardContent className="flex items-center justify-between p-4 gap-3">
+                <CardContent className="flex flex-col items-stretch justify-between p-4 gap-3 sm:flex-row sm:items-center">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold truncate">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">
                         {inv.invoiceNumber}
                       </span>
                       <span className={badgeClasses(inv.status)}>
@@ -664,9 +702,9 @@ export function Invoices() {
                       · Issued {formatDate(inv.issueDate)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <span className="font-semibold tabular-nums">
+                  <div className="flex min-w-0 items-center justify-between gap-3 sm:max-w-[50%]">
+                    <div className="min-w-0 sm:text-right">
+                      <span className="font-semibold tabular-nums [overflow-wrap:anywhere]">
                         {formatAmount(inv.grandTotal, inv.currency)}
                       </span>
                       {nairaApproxLine(inv) && (

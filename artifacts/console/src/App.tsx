@@ -3,6 +3,9 @@ import {
   lazyRoute,
   SessionBoundary,
   RouteLoading,
+  UnsavedWorkProvider,
+  useProtectedLocation,
+  useProtectedSearch,
 } from "@workspace/web-ui";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import {
@@ -28,6 +31,7 @@ const ClientDetail = lazyRoute(() =>
   })),
 );
 const BusinessDetails = lazyRoute(() => import("@/pages/business-details"));
+const EvidencePage = lazyRoute(() => import("@/pages/evidence"));
 const ClientImport = lazyRoute(() =>
   import("@/pages/client-import").then((module) => ({
     default: module.ClientImport,
@@ -274,6 +278,11 @@ function ConsoleRoutes() {
           </CapabilityGate>
         </Route>
         <Route path="/notifications" component={Notifications} />
+        <Route path="/evidence">
+          <CapabilityGate capability="evidence.read">
+            <EvidencePage />
+          </CapabilityGate>
+        </Route>
         <Route path="/activity" component={ActivityPage} />
         <Route path="/help" component={Help} />
         <Route path="/data-room">
@@ -466,9 +475,15 @@ function App() {
               "bank_user",
             ]}
           >
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
+            <UnsavedWorkProvider>
+              <WouterRouter
+                base={import.meta.env.BASE_URL.replace(/\/$/, "")}
+                hook={useProtectedLocation}
+                searchHook={useProtectedSearch}
+              >
+                <Router />
+              </WouterRouter>
+            </UnsavedWorkProvider>
           </RequireSession>
           <Toaster />
         </TooltipProvider>

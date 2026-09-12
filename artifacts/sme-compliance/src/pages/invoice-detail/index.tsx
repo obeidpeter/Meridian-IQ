@@ -7,6 +7,7 @@
 // "./invoice-detail": this module is the page's surface.
 
 import { errorStatus } from "@/lib/errors";
+import { useUrlTab } from "@workspace/web-ui";
 import { ValidationErrorsCard } from "./validation-errors-card";
 import { AdjustDialog } from "./adjust-dialog";
 import { invoiceAbilities } from "./abilities";
@@ -23,10 +24,27 @@ import { StatusSection } from "./status-section";
 import { SubmissionFailedCard } from "./failure-card";
 import { ConnectedFixForm, EditInvoiceCard } from "./edit-card";
 import { LineItemsCard } from "./line-items-card";
-import { TrailSection } from "./trail-section";
+import {
+  ApprovalsPanel,
+  DocumentsPanel,
+  HistoryPanel,
+  PaymentsPanel,
+} from "./workspace-panels";
+import { INVOICE_TABS, WorkspaceTabs, type InvoiceTab } from "./workspace-tabs";
+import { NextAction } from "./next-action";
+import { WorkspaceSummary } from "./workspace-summary";
+import { invoiceWorkspaceIssues } from "./workspace-issues";
 
 export function InvoiceDetail() {
-  const state = useInvoiceDetail();
+  const detail = useInvoiceDetail();
+  const [tab, setTab] = useUrlTab<InvoiceTab>("tab", "overview", INVOICE_TABS);
+  const state = {
+    ...detail,
+    openFix: () => {
+      setTab("overview");
+      detail.openFix();
+    },
+  };
   const {
     isLoading,
     isError,
@@ -72,13 +90,20 @@ export function InvoiceDetail() {
   ) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <BackToVault />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <DetailHeader invoice={invoice} />
         <DetailActions state={state} invoice={invoice} abilities={abilities} />
       </div>
+
+      <NextAction
+        state={state}
+        invoice={invoice}
+        abilities={abilities}
+        onTabChange={setTab}
+      />
 
       <SubmitConfirmDialog state={state} invoice={invoice} />
 
@@ -93,27 +118,66 @@ export function InvoiceDetail() {
         isPending={cancelInvoice.isPending || creditNote.isPending}
       />
 
-      <StatusSection state={state} invoice={invoice} abilities={abilities} />
+      <WorkspaceTabs
+        value={tab}
+        onChange={setTab}
+        issues={invoiceWorkspaceIssues(state, abilities)}
+        panels={{
+          overview: (
+            <>
+              <WorkspaceSummary state={state} invoice={invoice} />
+              <StatusSection state={state} />
+              {tone === "failed" && (
+                <SubmissionFailedCard
+                  state={state}
+                  abilities={abilities}
+                  fixForm={fixForm}
+                />
+              )}
 
-      {tone === "failed" && (
-        <SubmissionFailedCard
-          state={state}
-          abilities={abilities}
-          fixForm={fixForm}
-        />
-      )}
+              <ValidationErrorsCard
+                errors={validationErrors}
+                onFix={openFix}
+                showFixButton={!fix && abilities.canSubmit}
+              />
 
-      <ValidationErrorsCard
-        errors={validationErrors}
-        onFix={openFix}
-        showFixButton={!fix}
+              {tone !== "failed" && fixForm && (
+                <EditInvoiceCard fixForm={fixForm} />
+              )}
+
+              <LineItemsCard invoice={invoice} data={data} />
+            </>
+          ),
+          documents: (
+            <DocumentsPanel
+              state={state}
+              invoice={invoice}
+              abilities={abilities}
+            />
+          ),
+          approvals: (
+            <ApprovalsPanel
+              state={state}
+              invoice={invoice}
+              abilities={abilities}
+            />
+          ),
+          payments: (
+            <PaymentsPanel
+              state={state}
+              invoice={invoice}
+              abilities={abilities}
+            />
+          ),
+          history: (
+            <HistoryPanel
+              state={state}
+              invoice={invoice}
+              abilities={abilities}
+            />
+          ),
+        }}
       />
-
-      {tone !== "failed" && fixForm && <EditInvoiceCard fixForm={fixForm} />}
-
-      <LineItemsCard invoice={invoice} data={data} />
-
-      <TrailSection state={state} invoice={invoice} abilities={abilities} />
     </div>
   );
 }

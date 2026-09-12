@@ -3,8 +3,248 @@
  * Do not edit manually.
  * Api
  * Valo platform API — data spine, compliance rails and consent. Browser-facing mutations require x-valo-csrf (x-meridian-csrf is retained for compatibility). Native clients identify with x-valo-client, and buyer membership selection uses x-valo-workspace; their legacy x-meridian names remain accepted. Supplying conflicting aliases is rejected. Webhook deliveries include matching x-valo-signature/x-meridian-signature and x-valo-event/x-meridian-event headers during the rebrand transition.
- * OpenAPI spec version: 0.102.0
+ * OpenAPI spec version: 0.104.0
  */
+export type EvidenceDocumentType = typeof EvidenceDocumentType[keyof typeof EvidenceDocumentType];
+
+
+export const EvidenceDocumentType = {
+  purchase_order: 'purchase_order',
+  delivery_note: 'delivery_note',
+  payment_receipt: 'payment_receipt',
+  tax_acknowledgement: 'tax_acknowledgement',
+  contract: 'contract',
+  other: 'other',
+} as const;
+
+export type EvidenceRequestStatus = typeof EvidenceRequestStatus[keyof typeof EvidenceRequestStatus];
+
+
+export const EvidenceRequestStatus = {
+  requested: 'requested',
+  uploaded: 'uploaded',
+  needs_changes: 'needs_changes',
+  accepted: 'accepted',
+  cancelled: 'cancelled',
+} as const;
+
+export interface EvidenceRequest {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  /** @nullable */
+  invoiceId: string | null;
+  /** @nullable */
+  filingId: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-(0[1-9]|1[0-2])$
+     */
+  period: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  title: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  description: string | null;
+  documentType: EvidenceDocumentType;
+  status: EvidenceRequestStatus;
+  ownerId: string;
+  createdBy: string;
+  /** @nullable */
+  dueAt: string | null;
+  /** @minimum 1 */
+  version: number;
+  /** @nullable */
+  latestFileId: string | null;
+  /** @nullable */
+  acceptedFileId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EvidenceFileContentType = typeof EvidenceFileContentType[keyof typeof EvidenceFileContentType];
+
+
+export const EvidenceFileContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'application/pdf': 'application/pdf',
+} as const;
+
+export type EvidenceFileScanStatus = typeof EvidenceFileScanStatus[keyof typeof EvidenceFileScanStatus];
+
+
+export const EvidenceFileScanStatus = {
+  quarantined: 'quarantined',
+  clean: 'clean',
+  rejected: 'rejected',
+} as const;
+
+export interface EvidenceFile {
+  id: string;
+  requestId: string;
+  /** @maxLength 160 */
+  filename: string;
+  contentType: EvidenceFileContentType;
+  /**
+     * @minimum 1
+     * @maximum 5242880
+     */
+  byteSize: number;
+  sha256: string;
+  scanStatus: EvidenceFileScanStatus;
+  /** @nullable */
+  scanError: string | null;
+  uploadedBy: string;
+  createdAt: string;
+  /** @nullable */
+  scannedAt: string | null;
+}
+
+export interface EvidenceEvent {
+  id: string;
+  requestId: string;
+  /** @nullable */
+  actorId: string | null;
+  action: string;
+  /** @nullable */
+  comment: string | null;
+  /** @nullable */
+  fileId: string | null;
+  createdAt: string;
+}
+
+export interface EvidenceDetail {
+  request: EvidenceRequest;
+  files: EvidenceFile[];
+  events: EvidenceEvent[];
+}
+
+export interface EvidenceRequestList {
+  items: EvidenceRequest[];
+  /** @minimum 0 */
+  total: number;
+  uploadAvailable: boolean;
+  scanAvailable: boolean;
+  /** @nullable */
+  notice: string | null;
+}
+
+export interface CreateEvidenceRequestInput {
+  clientPartyId: string;
+  invoiceId?: string;
+  filingId?: string;
+  /** @pattern ^\d{4}-(0[1-9]|1[0-2])$ */
+  period?: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  title: string;
+  /** @maxLength 2000 */
+  description?: string;
+  documentType: EvidenceDocumentType;
+  dueAt?: string;
+  ownerId?: string;
+  clientRequestId: string;
+}
+
+export type UploadEvidenceFileInputContentType = typeof UploadEvidenceFileInputContentType[keyof typeof UploadEvidenceFileInputContentType];
+
+
+export const UploadEvidenceFileInputContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'application/pdf': 'application/pdf',
+} as const;
+
+export interface UploadEvidenceFileInput {
+  clientRequestId: string;
+  /** @minimum 1 */
+  expectedVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  filename: string;
+  contentType: UploadEvidenceFileInputContentType;
+  /**
+     * @minLength 1
+     * @maxLength 7000000
+     */
+  contentBase64: string;
+}
+
+export interface UpdateEvidenceRequestInput {
+  clientRequestId: string;
+  /** @minimum 1 */
+  expectedVersion: number;
+  ownerId?: string;
+  /** @nullable */
+  dueAt?: string | null;
+}
+
+export type ReviewEvidenceRequestInputDecision = typeof ReviewEvidenceRequestInputDecision[keyof typeof ReviewEvidenceRequestInputDecision];
+
+
+export const ReviewEvidenceRequestInputDecision = {
+  accepted: 'accepted',
+  needs_changes: 'needs_changes',
+  cancelled: 'cancelled',
+} as const;
+
+export interface ReviewEvidenceRequestInput {
+  clientRequestId: string;
+  /** @minimum 1 */
+  expectedVersion: number;
+  fileId?: string;
+  decision: ReviewEvidenceRequestInputDecision;
+  /** @maxLength 2000 */
+  comment?: string;
+}
+
+export interface RetryEvidenceScanInput {
+  clientRequestId: string;
+}
+
+export interface AssistEvidenceRequestInput {
+  fileId: string;
+}
+
+export type EvidenceAssistanceChecksItemStatus = typeof EvidenceAssistanceChecksItemStatus[keyof typeof EvidenceAssistanceChecksItemStatus];
+
+
+export const EvidenceAssistanceChecksItemStatus = {
+  match: 'match',
+  mismatch: 'mismatch',
+  unknown: 'unknown',
+} as const;
+
+export type EvidenceAssistanceChecksItem = {
+  label: string;
+  status: EvidenceAssistanceChecksItemStatus;
+  /** @nullable */
+  sourceValue: string | null;
+  /** @nullable */
+  expectedValue: string | null;
+};
+
+export interface EvidenceAssistance {
+  summary: string;
+  /** @nullable */
+  suggestedDocumentType: string | null;
+  /** @nullable */
+  extractedText: string | null;
+  /** @nullable */
+  clerkCaseId?: string | null;
+  checks: EvidenceAssistanceChecksItem[];
+}
+
 export interface HealthStatus {
   status: string;
   contractVersion: string;
@@ -442,6 +682,11 @@ export interface WorkspaceSetupStep {
   description: string;
   complete: boolean;
   href: string;
+  /**
+     * Current server-checked reason this step cannot be continued. Omitted when the destination remains actionable.
+     * @nullable
+     */
+  blockedReason?: string | null;
 }
 
 export interface WorkspaceToday {
@@ -2354,6 +2599,7 @@ export const MessageChannel = {
   sms: 'sms',
   email: 'email',
   push: 'push',
+  in_app: 'in_app',
 } as const;
 
 export type MessageStatus = typeof MessageStatus[keyof typeof MessageStatus];
@@ -7321,9 +7567,20 @@ export interface BillingStatement {
   note: string;
 }
 
+export type NotificationFeedItemsItemChannel = typeof NotificationFeedItemsItemChannel[keyof typeof NotificationFeedItemsItemChannel];
+
+
+export const NotificationFeedItemsItemChannel = {
+  whatsapp: 'whatsapp',
+  sms: 'sms',
+  email: 'email',
+  push: 'push',
+  in_app: 'in_app',
+} as const;
+
 export type NotificationFeedItemsItem = {
   id: string;
-  channel: string;
+  channel: NotificationFeedItemsItemChannel;
   templateKey: string;
   title: string;
   /** @nullable */
@@ -8915,6 +9172,22 @@ export type ImportRunSuccessResponse = ImportRunDetail;
 export type OperationRequestKeyParameter = OperationIdempotencyKey;
 
 export type InvoiceDraftClientParameter = string;
+
+export type ListEvidenceRequestsParams = {
+clientPartyId?: string;
+invoiceId?: string;
+filingId?: string;
+status?: EvidenceRequestStatus;
+/**
+ * @minimum 0
+ */
+offset?: number;
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+};
 
 export type ListBankDataRoomAccessParams = {
 /**
